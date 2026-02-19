@@ -28,6 +28,8 @@ build/
 
 # Logs
 logs/
+*.log
+backend/error.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
