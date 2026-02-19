@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Testing
+coverage/
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Production
+dist/
+build/
+
+# Misc
+.DS_Store
+*.pem
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env.local
+.env.*.local
+
+# Logs
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Mobile
+mobile/node_modules/
+mobile/build/
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.local
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
