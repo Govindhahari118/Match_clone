@@ -11,12 +11,12 @@ import LoginPromptModal from "../../../components/LoginPromptModal";
 
 const RELIGIONS = ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist", "Parsi"];
 const CASTES = ["Any", "Brahmin", "Kshatriya", "Vaishya", "Kayastha", "Rajput", "Reddy", "Naidu", "Chettiar", "Jat"];
-const INCOME_OPT = ["Any", "Below 3L", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"];
+const INCOME_OPTIONS = ["Any", "Below 3L", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"];
 const EDUCATIONS = ["Any", "10th", "12th", "Diploma", "Graduate", "Post Graduate", "Doctorate"];
 const PROFESSIONS = ["Any", "Engineer", "Doctor", "CA/Finance", "Govt/PSU", "Lawyer", "Teacher", "Business", "NRI", "Other"];
-const MARITAL = ["Any", "Never Married", "Divorced", "Widowed", "Separated"];
-const HEIGHTS = ["Any", "Below 5ft", "5ft–5.5ft", "5.5ft–6ft", "6ft–6.5ft", "Above 6.5ft"];
-const BODIES = ["Any", "Slim", "Average", "Athletic", "Heavy"];
+const MARITAL_STATUS = ["Any", "Never Married", "Divorced", "Widowed", "Separated"];
+const HEIGHTS = ["Any", "Below 5ft", "5ft-5.5ft", "5.5ft-6ft", "6ft-6.5ft", "Above 6.5ft"];
+const BODY_TYPES = ["Any", "Slim", "Average", "Athletic", "Heavy"];
 
 const MOCK_RESULTS = [
   {
@@ -34,7 +34,7 @@ const MOCK_RESULTS = [
     match: 92,
     education: "Graduate",
     income: "10-25L",
-    height: "5.5ft–6ft",
+    height: "5.5ft-6ft",
     body: "Average",
   },
   {
@@ -52,7 +52,7 @@ const MOCK_RESULTS = [
     match: 87,
     education: "Graduate",
     income: "5-10L",
-    height: "5ft–5.5ft",
+    height: "5ft-5.5ft",
     body: "Slim",
   },
   {
@@ -70,7 +70,7 @@ const MOCK_RESULTS = [
     match: 81,
     education: "Post Graduate",
     income: "5-10L",
-    height: "5.5ft–6ft",
+    height: "5.5ft-6ft",
     body: "Average",
   },
   {
@@ -88,7 +88,7 @@ const MOCK_RESULTS = [
     match: 78,
     education: "Graduate",
     income: "10-25L",
-    height: "5ft–5.5ft",
+    height: "5ft-5.5ft",
     body: "Athletic",
   },
   {
@@ -106,7 +106,7 @@ const MOCK_RESULTS = [
     match: 75,
     education: "Post Graduate",
     income: "5-10L",
-    height: "5.5ft–6ft",
+    height: "5.5ft-6ft",
     body: "Average",
   },
   {
@@ -124,133 +124,10 @@ const MOCK_RESULTS = [
     match: 70,
     education: "Graduate",
     income: "3-5L",
-    height: "5ft–5.5ft",
+    height: "5ft-5.5ft",
     body: "Slim",
   },
 ];
-
-function toApiGender(lookingFor) {
-  if (!lookingFor) return undefined;
-  return lookingFor.toLowerCase().includes("groom") ? "male" : "female";
-}
-
-function clampNumber(value, min, max) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return min;
-  return Math.min(max, Math.max(min, num));
-}
-
-function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, viewMode }) {
-  if (viewMode === "list") {
-    return (
-      <article className="panel panel-hover anim-rise" style={{ overflow: "hidden", display: "flex" }}>
-        <div style={{ width: 170, flexShrink: 0, position: "relative" }}>
-          <Image
-            src={profile.photo}
-            alt={`${profile.firstName} profile`}
-            width={600}
-            height={760}
-            unoptimized
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        </div>
-        <div style={{ flex: 1, padding: "0.9rem", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.7rem" }}>
-            <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: "1.06rem" }}>
-                {profile.firstName}, {profile.age}
-              </h3>
-              <p style={{ margin: "0.25rem 0 0", color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-                {profile.profession} · {profile.city}
-              </p>
-            </div>
-            <span className="chip chip-brand" style={{ flexShrink: 0 }}>
-              {profile.match}% Match
-            </span>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.65rem" }}>
-            {profile.isVerified && <span className="chip chip-support">Verified</span>}
-            {profile.religion && <span className="chip chip-brand">{profile.religion}</span>}
-            {profile.caste && <span className="chip chip-brand">{profile.caste}</span>}
-            {profile.education && <span className="chip chip-brand">{profile.education}</span>}
-            {profile.income && <span className="chip chip-brand">{profile.income}</span>}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "0.52rem", marginTop: "0.85rem" }}>
-            <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
-              Send Interest
-            </button>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => onShortlist(profile.userId)}
-              style={{ padding: "0.74rem 0.95rem" }}
-            >
-              {isShortlisted ? "Saved" : "Save"}
-            </button>
-            <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.74rem 0.95rem" }}>
-              View
-            </Link>
-          </div>
-        </div>
-      </article>
-    );
-  }
-
-  return (
-    <article className="panel panel-hover anim-rise" style={{ overflow: "hidden" }}>
-      <div style={{ position: "relative", height: 210 }}>
-        <Image
-          src={profile.photo}
-          alt={`${profile.firstName} profile`}
-          width={640}
-          height={900}
-          unoptimized
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(12,20,40,0.75), transparent 58%)" }} />
-        <div style={{ position: "absolute", top: 10, left: 10 }}>
-          <span className="chip chip-brand">{profile.match}% Match</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => onShortlist(profile.userId)}
-          className="button button-secondary"
-          style={{ position: "absolute", top: 10, right: 10, width: 36, height: 36, borderRadius: "50%", padding: 0 }}
-        >
-          {isShortlisted ? "Saved" : "Save"}
-        </button>
-        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white" }}>
-          <h3 style={{ margin: 0, fontSize: "1.08rem" }}>
-            {profile.firstName}, {profile.age}
-          </h3>
-          <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
-            {profile.profession} · {profile.city}
-          </p>
-        </div>
-      </div>
-
-      <div style={{ padding: "0.9rem" }}>
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.7rem" }}>
-          {profile.isVerified && <span className="chip chip-support">Verified</span>}
-          {profile.religion && <span className="chip chip-brand">{profile.religion}</span>}
-          {profile.caste && <span className="chip chip-brand">{profile.caste}</span>}
-          {profile.education && <span className="chip chip-brand">{profile.education}</span>}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem" }}>
-          <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
-            Send Interest
-          </button>
-          <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.74rem 0.9rem" }}>
-            View
-          </Link>
-        </div>
-      </div>
-    </article>
-  );
-}
 
 const INITIAL_FILTERS = {
   query: "",
@@ -269,6 +146,111 @@ const INITIAL_FILTERS = {
   state: "",
 };
 
+function toApiGender(lookingFor) {
+  if (!lookingFor) return undefined;
+  return lookingFor.toLowerCase().includes("groom") ? "male" : "female";
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return min;
+  return Math.min(max, Math.max(min, number));
+}
+
+function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, viewMode }) {
+  if (viewMode === "list") {
+    return (
+      <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden", display: "flex" }}>
+        <div style={{ width: 186, flexShrink: 0, position: "relative" }}>
+          <Image src={profile.photo} alt={`${profile.firstName} profile`} width={620} height={760} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        </div>
+
+        <div style={{ flex: 1, padding: "1rem", minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ margin: 0, fontSize: "1.05rem" }}>
+                {profile.firstName}, {profile.age}
+              </h3>
+              <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.88rem" }}>
+                {profile.profession} - {profile.city}
+              </p>
+            </div>
+            <span className="chip chip-support" style={{ flexShrink: 0 }}>
+              {profile.match}% Match
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.65rem" }}>
+            {profile.isVerified && <span className="chip chip-support">Verified</span>}
+            {profile.religion && <span className="chip chip-brand">{profile.religion}</span>}
+            {profile.caste && <span className="chip chip-brand">{profile.caste}</span>}
+            {profile.education && <span className="chip chip-brand">{profile.education}</span>}
+            {profile.income && <span className="chip chip-brand">{profile.income}</span>}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "0.55rem", marginTop: "0.9rem" }}>
+            <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
+              Send Interest
+            </button>
+            <button type="button" className="button button-secondary" onClick={() => onShortlist(profile.userId)} style={{ padding: "0.72rem 0.92rem" }}>
+              {isShortlisted ? "Saved" : "Save"}
+            </button>
+            <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.72rem 0.92rem" }}>
+              View
+            </Link>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden" }}>
+      <div style={{ position: "relative", height: 220 }}>
+        <Image src={profile.photo} alt={`${profile.firstName} profile`} width={640} height={920} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.76), transparent 58%)" }} />
+        <div style={{ position: "absolute", top: 10, left: 10 }}>
+          <span className="chip chip-support">{profile.match}% Match</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onShortlist(profile.userId)}
+          className="button button-secondary"
+          style={{ position: "absolute", top: 10, right: 10, width: 38, height: 38, borderRadius: 12, padding: 0 }}
+        >
+          {isShortlisted ? "Saved" : "Save"}
+        </button>
+        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white" }}>
+          <h3 style={{ margin: 0, fontSize: "1.08rem" }}>
+            {profile.firstName}, {profile.age}
+          </h3>
+          <p style={{ margin: "0.22rem 0 0", fontSize: "0.82rem", opacity: 0.92 }}>
+            {profile.profession} - {profile.city}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ padding: "0.95rem" }}>
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.74rem" }}>
+          {profile.isVerified && <span className="chip chip-support">Verified</span>}
+          {profile.religion && <span className="chip chip-brand">{profile.religion}</span>}
+          {profile.caste && <span className="chip chip-brand">{profile.caste}</span>}
+          {profile.education && <span className="chip chip-brand">{profile.education}</span>}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.52rem" }}>
+          <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
+            Send Interest
+          </button>
+          <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.74rem 0.9rem" }}>
+            View
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default function SearchPage() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -285,7 +267,7 @@ export default function SearchPage() {
   useEffect(() => {
     const incoming = searchParams.get("q") || "";
     if (incoming) {
-      setFilters((prev) => ({ ...prev, query: incoming }));
+      setFilters((previous) => ({ ...previous, query: incoming }));
     }
   }, [searchParams]);
 
@@ -308,16 +290,13 @@ export default function SearchPage() {
       if (state && !(profile.state || "").toLowerCase().includes(state)) return false;
 
       if (!query) return true;
-      const haystack = [profile.firstName, profile.city, profile.state, profile.profession, profile.religion, profile.caste]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const haystack = [profile.firstName, profile.city, profile.state, profile.profession, profile.religion, profile.caste].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(query);
     });
   }, [results, filters]);
 
   const onChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    setFilters((previous) => ({ ...previous, [key]: value }));
   };
 
   const onReset = () => {
@@ -337,10 +316,11 @@ export default function SearchPage() {
         return;
       }
 
-      const params = {};
-      params.gender = toApiGender(filters.lookingFor);
-      params.minAge = clampNumber(filters.minAge, 18, 70);
-      params.maxAge = clampNumber(filters.maxAge, 18, 70);
+      const params = {
+        gender: toApiGender(filters.lookingFor),
+        minAge: clampNumber(filters.minAge, 18, 70),
+        maxAge: clampNumber(filters.maxAge, 18, 70),
+      };
 
       if (filters.religion !== "Any") params.religion = filters.religion;
       if (filters.caste !== "Any") params.caste = filters.caste;
@@ -381,16 +361,16 @@ export default function SearchPage() {
       return;
     }
 
-    const exists = shortlisted.has(userId);
-    setShortlisted((prev) => {
-      const next = new Set(prev);
+    const alreadySaved = shortlisted.has(userId);
+    setShortlisted((previous) => {
+      const next = new Set(previous);
       if (next.has(userId)) next.delete(userId);
       else next.add(userId);
       return next;
     });
 
     try {
-      if (exists) {
+      if (alreadySaved) {
         await api.post("/shortlist/remove", { shortlistedUserId: userId });
         toast.info("Removed from shortlist.");
       } else {
@@ -403,14 +383,15 @@ export default function SearchPage() {
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: "0.95rem" }} className="search-shell-grid">
-      <aside className="panel" style={{ padding: "0.9rem", position: "sticky", top: "5.35rem", height: "fit-content" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.7rem", gap: "0.5rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "1rem" }} className="search-shell-grid">
+      <aside className="panel filter-panel" style={{ padding: "1rem", position: "sticky", top: "5.35rem", height: "fit-content" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.78rem", gap: "0.5rem" }}>
           <p className="section-label" style={{ margin: 0 }}>
             Filters
           </p>
-          <div style={{ display: "flex", gap: "0.4rem" }}>
-            <button type="button" className="button button-secondary" onClick={() => setShowAdvanced((prev) => !prev)}>
+
+          <div style={{ display: "flex", gap: "0.42rem" }}>
+            <button type="button" className="button button-secondary" onClick={() => setShowAdvanced((previous) => !previous)}>
               {showAdvanced ? "Hide" : "Advanced"}
             </button>
             <button type="button" className="button button-secondary" onClick={onReset}>
@@ -419,7 +400,7 @@ export default function SearchPage() {
           </div>
         </div>
 
-        <form onSubmit={onSearch} style={{ display: "grid", gap: "0.6rem" }}>
+        <form onSubmit={onSearch} style={{ display: "grid", gap: "0.65rem" }}>
           <div>
             <label className="form-label">Keyword</label>
             <input className="form-input" value={filters.query} onChange={(event) => onChange("query", event.target.value)} placeholder="Name, city, profession" />
@@ -433,28 +414,14 @@ export default function SearchPage() {
             </select>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.48rem" }}>
             <div>
               <label className="form-label">Min age</label>
-              <input
-                className="form-input"
-                type="number"
-                min={18}
-                max={70}
-                value={filters.minAge}
-                onChange={(event) => onChange("minAge", clampNumber(event.target.value, 18, 70))}
-              />
+              <input className="form-input" type="number" min={18} max={70} value={filters.minAge} onChange={(event) => onChange("minAge", clampNumber(event.target.value, 18, 70))} />
             </div>
             <div>
               <label className="form-label">Max age</label>
-              <input
-                className="form-input"
-                type="number"
-                min={18}
-                max={70}
-                value={filters.maxAge}
-                onChange={(event) => onChange("maxAge", clampNumber(event.target.value, 18, 70))}
-              />
+              <input className="form-input" type="number" min={18} max={70} value={filters.maxAge} onChange={(event) => onChange("maxAge", clampNumber(event.target.value, 18, 70))} />
             </div>
           </div>
 
@@ -479,7 +446,7 @@ export default function SearchPage() {
           <div>
             <label className="form-label">Marital status</label>
             <select className="form-input" value={filters.maritalStatus} onChange={(event) => onChange("maritalStatus", event.target.value)}>
-              {MARITAL.map((value) => (
+              {MARITAL_STATUS.map((value) => (
                 <option key={value}>{value}</option>
               ))}
             </select>
@@ -508,13 +475,13 @@ export default function SearchPage() {
               <div>
                 <label className="form-label">Annual income</label>
                 <select className="form-input" value={filters.income} onChange={(event) => onChange("income", event.target.value)}>
-                  {INCOME_OPT.map((value) => (
+                  {INCOME_OPTIONS.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.48rem" }}>
                 <div>
                   <label className="form-label">Height</label>
                   <select className="form-input" value={filters.height} onChange={(event) => onChange("height", event.target.value)}>
@@ -526,7 +493,7 @@ export default function SearchPage() {
                 <div>
                   <label className="form-label">Body type</label>
                   <select className="form-input" value={filters.body} onChange={(event) => onChange("body", event.target.value)}>
-                    {BODIES.map((value) => (
+                    {BODY_TYPES.map((value) => (
                       <option key={value}>{value}</option>
                     ))}
                   </select>
@@ -545,19 +512,19 @@ export default function SearchPage() {
             </>
           )}
 
-          <button type="submit" className="button button-primary" style={{ width: "100%", marginTop: "0.25rem" }}>
+          <button type="submit" className="button button-primary" style={{ width: "100%", marginTop: "0.35rem" }}>
             {loading ? "Searching..." : "Search Profiles"}
           </button>
         </form>
       </aside>
 
       <section>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.8rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
+        <div className="listing-hero">
           <div>
-            <p className="section-label" style={{ marginBottom: "0.2rem" }}>
+            <p className="section-label" style={{ marginBottom: "0.22rem" }}>
               Discovery
             </p>
-            <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.7rem, 3vw, 2.3rem)" }}>
+            <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
               Advanced Search Results
             </h1>
             <p className="section-copy" style={{ marginTop: "0.4rem", fontSize: "0.92rem" }}>
@@ -566,38 +533,28 @@ export default function SearchPage() {
           </div>
 
           <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
-            <button
-              type="button"
-              className={`button ${viewMode === "grid" ? "button-primary" : "button-secondary"}`}
-              onClick={() => setViewMode("grid")}
-              style={{ padding: "0.65rem 0.9rem" }}
-            >
+            <button type="button" className={`button ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "0.66rem 0.92rem" }}>
               Grid
             </button>
-            <button
-              type="button"
-              className={`button ${viewMode === "list" ? "button-primary" : "button-secondary"}`}
-              onClick={() => setViewMode("list")}
-              style={{ padding: "0.65rem 0.9rem" }}
-            >
+            <button type="button" className={`button ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "0.66rem 0.92rem" }}>
               List
             </button>
           </div>
         </div>
 
         {!searched ? (
-          <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>
+          <div className="panel listing-stage" style={{ padding: "2.1rem", textAlign: "center" }}>
             <h2 style={{ marginTop: 0 }}>Use filters to discover focused matches</h2>
-            <p style={{ color: "var(--ink-muted)" }}>Basic + advanced filters help you get better results (community, career, and more).</p>
+            <p style={{ color: "var(--ink-muted)" }}>Basic and advanced filters help you get better results across community, career, and location.</p>
           </div>
         ) : loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.75rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.9rem" }}>
             {Array.from({ length: 8 }).map((_, index) => (
-              <div key={`load-${index}`} className="panel" style={{ height: 330, background: "rgba(240, 107, 78, 0.06)" }} />
+              <div key={`loading-${index}`} className="panel listing-stage" style={{ height: 332, background: "rgba(29, 78, 216, 0.06)" }} />
             ))}
           </div>
         ) : visibleResults.length === 0 ? (
-          <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>
+          <div className="panel listing-stage" style={{ padding: "2.1rem", textAlign: "center" }}>
             <h2 style={{ marginTop: 0 }}>No profiles match this combination yet</h2>
             <p style={{ color: "var(--ink-muted)" }}>Try widening age range, keeping caste as Any, or turning off some advanced filters.</p>
             <button type="button" className="button button-primary" onClick={onReset}>
@@ -605,13 +562,7 @@ export default function SearchPage() {
             </button>
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr",
-              gap: "0.75rem",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
             {visibleResults.map((profile) => (
               <SearchResultCard
                 key={profile.id || profile.userId}

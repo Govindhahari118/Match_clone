@@ -47,30 +47,25 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="page-shell" style={{ background: "var(--bg-soft)" }}>
-      <div className="container-shell" style={{ paddingTop: "1rem" }}>
+      <div className="container-shell" style={{ paddingTop: "1.08rem" }}>
         <header
-          className="panel"
+          className="panel app-topbar"
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: "0.9rem",
-            padding: "0.75rem 0.9rem",
             position: "sticky",
-            top: "0.75rem",
+            top: "0.85rem",
             zIndex: 30,
-            marginBottom: "0.95rem",
+            marginBottom: "1rem",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", minWidth: 0 }}>
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="button button-secondary"
-              style={{ padding: "0.5rem 0.78rem" }}
-            >
+            <button type="button" onClick={() => setDrawerOpen(true)} className="button button-secondary" style={{ padding: "0.62rem 0.86rem" }}>
               Menu
             </button>
+
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.55rem", textDecoration: "none" }}>
               <div
                 style={{
@@ -87,11 +82,11 @@ export default function MainLayout({ children }) {
               >
                 M
               </div>
-              <strong style={{ fontSize: "0.98rem", letterSpacing: "0.01em" }}>MatrimonyConnect</strong>
+              <strong style={{ fontSize: "0.99rem", letterSpacing: "0.005em", fontWeight: 780 }}>MatrimonyConnect</strong>
             </Link>
           </div>
 
-          <form onSubmit={onSearchSubmit} style={{ flex: 1, maxWidth: 540 }}>
+          <form onSubmit={onSearchSubmit} style={{ flex: 1, maxWidth: 620 }}>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -105,16 +100,18 @@ export default function MainLayout({ children }) {
             <Link className="button button-secondary" href="/notifications">
               Alerts
             </Link>
+
             <button
               type="button"
               className="button button-secondary"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              style={{ width: 38, height: 38, padding: 0, borderRadius: "50%", fontSize: 16, fontWeight: 800 }}
-              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+              style={{ padding: "0.62rem 0.78rem", minWidth: 64, fontWeight: 700 }}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {theme === "dark" ? "🌙" : "☀️"}
+              {theme === "dark" ? "Dark" : "Light"}
             </button>
+
             {user ? (
               <>
                 <Link
@@ -146,11 +143,11 @@ export default function MainLayout({ children }) {
           style={{
             display: "grid",
             gridTemplateColumns: "220px minmax(0, 1fr)",
-            gap: "0.95rem",
+            gap: "1rem",
             paddingBottom: "5.2rem",
           }}
         >
-          <aside className="panel desktop-nav-shell" style={{ height: "fit-content", padding: "0.8rem", position: "sticky", top: "5.35rem" }}>
+          <aside className="panel desktop-nav-shell app-sidebar" style={{ height: "fit-content", padding: "0.9rem", position: "sticky", top: "5.45rem" }}>
             <p className="section-label" style={{ marginBottom: "0.65rem" }}>
               Navigation
             </p>
@@ -165,8 +162,8 @@ export default function MainLayout({ children }) {
                     padding: "0.6rem 0.72rem",
                     borderRadius: 12,
                     color: isActive(item.href) ? "var(--ink)" : "var(--ink-muted)",
-                    background: isActive(item.href) ? "rgba(240, 107, 78, 0.14)" : "transparent",
-                    border: isActive(item.href) ? "1px solid rgba(240, 107, 78, 0.35)" : "1px solid transparent",
+                    background: isActive(item.href) ? "rgba(29, 78, 216, 0.12)" : "transparent",
+                    border: isActive(item.href) ? "1px solid rgba(29, 78, 216, 0.3)" : "1px solid transparent",
                     textDecoration: "none",
                   }}
                 >
@@ -188,17 +185,17 @@ export default function MainLayout({ children }) {
           left: "50%",
           transform: "translateX(-50%)",
           bottom: "0.7rem",
-          width: "min(680px, calc(100% - 1rem))",
+          width: "min(700px, calc(100% - 1rem))",
           zIndex: 60,
           background: "var(--bg-elevated)",
           backdropFilter: "blur(10px)",
           border: "1px solid var(--line)",
-          borderRadius: 16,
+          borderRadius: 14,
           boxShadow: "var(--shadow-md)",
-          padding: "0.4rem",
+          padding: "0.38rem",
           display: "grid",
           gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: "0.34rem",
+          gap: "0.32rem",
         }}
       >
         {NAV_ITEMS.filter((item) => MOBILE_PRIMARY.includes(item.href)).map((item) => (
@@ -206,30 +203,31 @@ export default function MainLayout({ children }) {
             key={item.href}
             href={item.href}
             style={{
-              borderRadius: 12,
+              borderRadius: 10,
               textAlign: "center",
               textDecoration: "none",
               fontSize: "0.74rem",
               fontWeight: 700,
               padding: "0.5rem 0.3rem",
               color: isActive(item.href) ? "var(--ink)" : "var(--ink-muted)",
-              background: isActive(item.href) ? "rgba(240, 107, 78, 0.16)" : "transparent",
+              background: isActive(item.href) ? "rgba(29, 78, 216, 0.13)" : "transparent",
             }}
           >
             {item.label}
           </Link>
         ))}
+
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
           style={{
-            borderRadius: 12,
+            borderRadius: 10,
             textAlign: "center",
             fontSize: "0.74rem",
             fontWeight: 700,
             padding: "0.5rem 0.3rem",
             color: drawerOpen ? "var(--ink)" : "var(--ink-muted)",
-            background: drawerOpen ? "rgba(240, 107, 78, 0.16)" : "transparent",
+            background: drawerOpen ? "rgba(29, 78, 216, 0.13)" : "transparent",
             border: "none",
             cursor: "pointer",
           }}
@@ -244,14 +242,14 @@ export default function MainLayout({ children }) {
             position: "fixed",
             inset: 0,
             zIndex: 80,
-            background: "rgba(8, 16, 32, 0.45)",
+            background: "rgba(5, 12, 22, 0.48)",
             backdropFilter: "blur(2px)",
             display: "flex",
           }}
           onClick={() => setDrawerOpen(false)}
         >
           <aside
-            className="panel"
+            className="panel app-sidebar"
             style={{
               width: "min(320px, calc(100% - 2.2rem))",
               margin: "0.8rem",
@@ -267,6 +265,7 @@ export default function MainLayout({ children }) {
                 Close
               </button>
             </div>
+
             <nav style={{ display: "grid", gap: "0.42rem" }}>
               {NAV_ITEMS.map((item) => (
                 <Link
@@ -276,9 +275,9 @@ export default function MainLayout({ children }) {
                   style={{
                     textDecoration: "none",
                     borderRadius: 12,
-                    border: "1px solid rgba(23, 33, 59, 0.1)",
+                    border: "1px solid rgba(15, 23, 42, 0.12)",
                     padding: "0.62rem 0.72rem",
-                    background: isActive(item.href) ? "rgba(240, 107, 78, 0.14)" : "var(--bg-elevated)",
+                    background: isActive(item.href) ? "rgba(29, 78, 216, 0.12)" : "var(--bg-elevated)",
                     color: "var(--ink)",
                     fontWeight: 700,
                   }}
@@ -311,3 +310,4 @@ export default function MainLayout({ children }) {
     </div>
   );
 }
+
