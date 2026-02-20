@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", short: "HM" },
@@ -12,6 +13,8 @@ const NAV_ITEMS = [
   { href: "/interests", label: "Interests", short: "IN" },
   { href: "/shortlists", label: "Shortlists", short: "SL" },
   { href: "/chat", label: "Messages", short: "MS" },
+  { href: "/who-viewed", label: "Viewed", short: "VW" },
+  { href: "/kundli", label: "Kundli", short: "KD" },
   { href: "/profile", label: "Profile", short: "PF" },
   { href: "/settings", label: "Settings", short: "ST" },
 ];
@@ -22,6 +25,7 @@ export default function MainLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -101,6 +105,16 @@ export default function MainLayout({ children }) {
             <Link className="button button-secondary" href="/notifications">
               Alerts
             </Link>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              style={{ width: 38, height: 38, padding: 0, borderRadius: "50%", fontSize: 16, fontWeight: 800 }}
+              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            >
+              {theme === "dark" ? "🌙" : "☀️"}
+            </button>
             {user ? (
               <>
                 <Link
@@ -176,14 +190,14 @@ export default function MainLayout({ children }) {
           bottom: "0.7rem",
           width: "min(680px, calc(100% - 1rem))",
           zIndex: 60,
-          background: "rgba(255,255,255,0.94)",
+          background: "var(--bg-elevated)",
           backdropFilter: "blur(10px)",
-          border: "1px solid rgba(23, 33, 59, 0.12)",
+          border: "1px solid var(--line)",
           borderRadius: 16,
           boxShadow: "var(--shadow-md)",
           padding: "0.4rem",
           display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
           gap: "0.34rem",
         }}
       >
@@ -205,6 +219,23 @@ export default function MainLayout({ children }) {
             {item.label}
           </Link>
         ))}
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          style={{
+            borderRadius: 12,
+            textAlign: "center",
+            fontSize: "0.74rem",
+            fontWeight: 700,
+            padding: "0.5rem 0.3rem",
+            color: drawerOpen ? "var(--ink)" : "var(--ink-muted)",
+            background: drawerOpen ? "rgba(240, 107, 78, 0.16)" : "transparent",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          Menu
+        </button>
       </nav>
 
       {drawerOpen && (
@@ -247,7 +278,7 @@ export default function MainLayout({ children }) {
                     borderRadius: 12,
                     border: "1px solid rgba(23, 33, 59, 0.1)",
                     padding: "0.62rem 0.72rem",
-                    background: isActive(item.href) ? "rgba(240, 107, 78, 0.14)" : "#fff",
+                    background: isActive(item.href) ? "rgba(240, 107, 78, 0.14)" : "var(--bg-elevated)",
                     color: "var(--ink)",
                     fontWeight: 700,
                   }}

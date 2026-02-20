@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -107,6 +107,16 @@ const dashboardActions = [
     href: "/search",
     title: "Advanced Search",
     desc: "Filter by location, profession, language, and intent.",
+  },
+  {
+    href: "/who-viewed",
+    title: "Profile Views",
+    desc: "See who recently visited your profile.",
+  },
+  {
+    href: "/kundli",
+    title: "Kundli Matching",
+    desc: "Compare horoscope compatibility in minutes.",
   },
   {
     href: "/interests",
