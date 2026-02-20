@@ -1,44 +1,54 @@
 # Matrimony App
 
-## Project Structure
-- `backend/`: Node.js + Express + Prisma
-- `frontend/`: Next.js 14 Web App
-- `mobile/`: React Native (Expo)
-- `docs/`: Documentation
+Full-stack matrimony platform with web, backend API, and mobile app placeholders.
+
+## Stack
+- `backend/`: Node.js + Express + Prisma + PostgreSQL
+- `frontend/`: Next.js app (runs on port `8000`)
+- `mobile/`: React Native/Expo placeholder
+- `docs/`: product and API documentation
+- `scripts/`: local lifecycle scripts (`dev-up`, `dev-down`, `dev-status`)
 
 ## Prerequisites
-- Docker & Docker Compose
-- Node.js 20+
+- Docker Desktop (running)
+- Node.js 20+ (22 is also supported)
 
-## Getting Started
+## Quick Start (Recommended)
+From repo root:
 
-### 1. Start Infrastructure (DB, Redis)
-Run the database and redis containers:
 ```bash
-docker-compose up -d postgres redis
+npm run dev:up
 ```
 
-### 2. Backend Setup
-Navigate to the backend folder:
-```bash
-cd backend
-npm install
-# Set up the database schema
-npx prisma migrate dev --name init
-# Start the server
-npm run dev
-```
-The backend will run on http://localhost:5000.
+This does:
+1. Starts postgres + redis via Docker
+2. Ensures env files exist
+3. Syncs Prisma schema
+4. Starts backend and frontend in background
 
-### 3. Frontend Setup
-Navigate to the frontend folder:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-The frontend will run on http://localhost:3000.
+Then open:
+- Frontend: `http://localhost:8000`
+- Backend health: `http://localhost:4000/health`
 
-## API Documentation
-See `docs/matrimony-api-postman.json` for Postman collection.
-See `docs/matrimony-app-prd.md` for full requirements.
+## Useful Commands
+```bash
+npm run dev:status   # show app/container status
+npm run dev:down     # stop frontend/backend + postgres/redis
+npm run infra:up     # start only postgres/redis
+npm run infra:down   # stop only postgres/redis
+```
+
+## Environment Files
+- Backend template: `backend/.env.example`
+- Frontend template: `frontend/.env.local.example`
+
+If missing, `npm run dev:up` auto-creates:
+- `backend/.env`
+- `frontend/.env.local`
+
+## Project Structure
+See `docs/PROJECT_STRUCTURE.md`.
+
+## API Docs
+- Postman collection: `docs/matrimony-api-postman.json`
+- PRD: `docs/matrimony-app-prd.md`

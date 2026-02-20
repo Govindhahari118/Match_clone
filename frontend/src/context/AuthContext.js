@@ -7,6 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import io from "socket.io-client";
 
 const AuthContext = createContext();
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -33,7 +34,7 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         if (user && !socket) {
             // Initiate socket connection
-            const newSocket = io("http://localhost:4000"); // Use env var in prod
+            const newSocket = io(SOCKET_URL);
             newSocket.on("connect", () => {
                 newSocket.emit("join_room", user.id);
             });

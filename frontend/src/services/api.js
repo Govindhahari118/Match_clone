@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 const api = axios.create({
-    baseURL: "http://localhost:4000/api",
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -11,7 +13,7 @@ const api = axios.create({
 api.interceptors.request.use(
     (config) => {
         if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('access_token');
+            const token = localStorage.getItem('accessToken') || localStorage.getItem('access_token');
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;
             }
@@ -33,6 +35,7 @@ api.interceptors.response.use(
             // Handle unauthorized access (e.g., redirect to login)
             // For now, just clear token and reject
             if (typeof window !== 'undefined') {
+                localStorage.removeItem('accessToken');
                 localStorage.removeItem('access_token');
                 localStorage.removeItem('user');
                 // window.location.href = '/login'; // Optional: force redirect

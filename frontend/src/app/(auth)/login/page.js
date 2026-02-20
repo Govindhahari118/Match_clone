@@ -6,10 +6,12 @@ import { useForm } from "react-hook-form";
 import api from "../../../services/api";
 import { auth, googleProvider } from "../../../config/firebase";
 import { signInWithPopup } from "firebase/auth";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { login } = useAuth();
     const { register, handleSubmit, formState: { errors } } = useForm();
 
     const onSubmit = async (data) => {
@@ -39,16 +41,10 @@ export default function LoginPage() {
             const backendResponse = await api.post("/auth/login-firebase", { idToken });
 
             if (backendResponse.data.success) {
-                // Store tokens (Assuming backend returns access_token)
-                localStorage.setItem("token", backendResponse.data.access_token);
-                localStorage.setItem("user", JSON.stringify(backendResponse.data.user));
-
-                // Redirect based on profile completion
-                if (backendResponse.data.user.profileCompletion < 50) {
-                    router.push("/profile/edit");
-                } else {
-                    router.push("/dashboard");
-                }
+                const accessToken = backendResponse.data.access_token || backendResponse.data.accessToken;
+                const refreshToken = backendResponse.data.refresh_token || backendResponse.data.refreshToken;
+                await login(backendResponse.data.user, accessToken, refreshToken);
+                router.push("/");
             }
         } catch (error) {
             console.error("Google Login Error:", error);

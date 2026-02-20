@@ -1,0 +1,13 @@
+{
+  "name": "matrimony-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Workspace utilities for running Matrimony App locally",
+  "scripts": {
+    "dev:up": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-up.ps1",
+    "dev:down": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-down.ps1",
+    "dev:status": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-status.ps1",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose stop postgres redis"
+  }
+}

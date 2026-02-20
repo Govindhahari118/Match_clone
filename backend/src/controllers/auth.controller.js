@@ -81,7 +81,12 @@ const loginFirebase = async (req, res) => {
         const result = await authService.loginWithFirebase(idToken);
         res.status(200).json({
             success: true,
-            ...result
+            user: result.user,
+            access_token: result.accessToken,
+            refresh_token: result.refreshToken,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            expires_in: 3600
         });
     } catch (error) {
         console.error('Firebase Login Error:', error);
