@@ -139,9 +139,9 @@ function normalizeOptions(source, fallback, ensureAny = true) {
 function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }) {
   if (viewMode === "list") {
     return (
-      <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden", display: "flex" }}>
-        <div style={{ width: 192, flexShrink: 0, position: "relative" }}>
-          <Image src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <article className="panel panel-hover anim-rise listing-stage match-card match-card-list" style={{ overflow: "hidden", display: "flex" }}>
+        <div className="match-media" style={{ width: 192, flexShrink: 0, position: "relative" }}>
+          <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
         <div style={{ padding: "1rem", flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.72rem", alignItems: "flex-start" }}>
@@ -182,14 +182,14 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
   }
 
   return (
-    <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden" }}>
-      <div style={{ position: "relative", height: 220 }}>
-        <Image src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    <article className="panel panel-hover anim-rise listing-stage match-card" style={{ overflow: "hidden" }}>
+      <div className="match-media" style={{ position: "relative", height: 220 }}>
+        <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.78), rgba(9, 18, 36, 0.1) 58%, transparent)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
           <span className="chip chip-support">{profile.match}% Match</span>
         </div>
-        <button type="button" onClick={() => onShortlist(profile.userId)} className="button button-secondary" style={{ position: "absolute", top: 10, right: 10, width: 38, height: 38, padding: 0, borderRadius: 12, fontWeight: 700 }}>
+        <button type="button" onClick={() => onShortlist(profile.userId)} className="button button-secondary shortlist-fab" style={{ position: "absolute", top: 10, right: 10, width: 38, height: 38, padding: 0, borderRadius: 12, fontWeight: 700 }}>
           {isShortlisted ? "Saved" : "Save"}
         </button>
         <div style={{ position: "absolute", left: 12, bottom: 12, color: "white" }}>
@@ -329,6 +329,38 @@ function MatchesContent() {
     });
   }, [rawProfiles, filters]);
 
+  const profileInsights = useMemo(() => {
+    const total = visibleProfiles.length;
+    const verified = visibleProfiles.filter((item) => item.isVerified).length;
+    const highCompatibility = visibleProfiles.filter((item) => Number(item.match) >= 85).length;
+    return { total, verified, highCompatibility };
+  }, [visibleProfiles]);
+
+  const activeFilterCount = useMemo(() => {
+    const checks = [
+      filters.query.trim() !== "",
+      Number(filters.minAge) !== INITIAL_FILTERS.minAge,
+      Number(filters.maxAge) !== INITIAL_FILTERS.maxAge,
+      filters.religion !== INITIAL_FILTERS.religion,
+      filters.caste !== INITIAL_FILTERS.caste,
+      filters.subCaste !== INITIAL_FILTERS.subCaste,
+      filters.gothra !== INITIAL_FILTERS.gothra,
+      filters.nakshatra !== INITIAL_FILTERS.nakshatra,
+      filters.rashi !== INITIAL_FILTERS.rashi,
+      filters.dosha !== INITIAL_FILTERS.dosha,
+      filters.income !== INITIAL_FILTERS.income,
+      filters.city !== INITIAL_FILTERS.city,
+      filters.education !== INITIAL_FILTERS.education,
+      filters.profession !== INITIAL_FILTERS.profession,
+      Number(filters.minHeight) !== INITIAL_FILTERS.minHeight,
+      Number(filters.maxHeight) !== INITIAL_FILTERS.maxHeight,
+      filters.maritalStatus !== INITIAL_FILTERS.maritalStatus,
+      filters.motherTongue !== INITIAL_FILTERS.motherTongue,
+      filters.diet !== INITIAL_FILTERS.diet,
+    ];
+    return checks.filter(Boolean).length;
+  }, [filters]);
+
   const onInterest = async (userId) => {
     if (!user) {
       setShowLoginModal(true);
@@ -372,11 +404,14 @@ function MatchesContent() {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "1rem" }} className="matches-shell-grid">
-      <aside className="panel filter-panel" style={{ padding: "1rem", height: "fit-content", position: "sticky", top: "5.4rem" }}>
+      <aside className="panel filter-panel premium-filter-panel" style={{ padding: "1rem", height: "fit-content", position: "sticky", top: "5.4rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.78rem", gap: "0.5rem" }}>
-          <p className="section-label" style={{ margin: 0 }}>
-            Filters
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+            <p className="section-label" style={{ margin: 0 }}>
+              Filters
+            </p>
+            <span className="filter-count-chip">{activeFilterCount} active</span>
+          </div>
           <div style={{ display: "flex", gap: "0.42rem" }}>
             <button type="button" className="button button-secondary" onClick={() => setShowAdvanced((previous) => !previous)}>
               {showAdvanced ? "Hide" : "Advanced"}
@@ -557,16 +592,23 @@ function MatchesContent() {
             <p className="section-copy" style={{ margin: "0.35rem 0 0", fontSize: "0.9rem" }}>
               {loading ? "Finding your best matches..." : `${visibleProfiles.length} profiles available`}
             </p>
+            {!loading && (
+              <div className="result-metrics">
+                <span className="metric-chip">{profileInsights.verified} verified</span>
+                <span className="metric-chip">{profileInsights.highCompatibility} high compatibility</span>
+                <span className="metric-chip">Live filters: {activeFilterCount}</span>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+          <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
             <Link href="/search" className="button button-secondary">
               Advanced Search
             </Link>
-            <button type="button" className={`button ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "0.66rem 0.92rem" }}>
+            <button type="button" className={`button view-switch-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "0.66rem 0.92rem" }}>
               Grid
             </button>
-            <button type="button" className={`button ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "0.66rem 0.92rem" }}>
+            <button type="button" className={`button view-switch-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "0.66rem 0.92rem" }}>
               List
             </button>
           </div>
@@ -587,7 +629,7 @@ function MatchesContent() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
+          <div className="results-grid" style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
             {visibleProfiles.map((profile) => (
               <MatchCard key={profile.userId} profile={profile} isShortlisted={shortlisted.has(profile.userId)} onShortlist={onShortlist} onInterest={onInterest} viewMode={viewMode} />
             ))}
@@ -598,6 +640,108 @@ function MatchesContent() {
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
       <style jsx>{`
+        .premium-filter-panel {
+          border: 1px solid rgba(29, 78, 216, 0.18);
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.94));
+          box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+        }
+
+        .filter-count-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.22rem 0.58rem;
+          border-radius: 999px;
+          border: 1px solid rgba(29, 78, 216, 0.26);
+          background: rgba(29, 78, 216, 0.1);
+          color: var(--brand-deep);
+          font-size: 0.73rem;
+          font-weight: 760;
+          letter-spacing: 0.01em;
+        }
+
+        .listing-hero {
+          padding: 0.96rem 1rem;
+          border-radius: 20px;
+          border: 1px solid rgba(29, 78, 216, 0.16);
+          background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(245, 249, 255, 0.94));
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+          margin-bottom: 1rem;
+        }
+
+        .result-metrics {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+          margin-top: 0.62rem;
+        }
+
+        .metric-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.24rem 0.6rem;
+          border-radius: 999px;
+          border: 1px solid rgba(148, 163, 184, 0.42);
+          background: rgba(248, 250, 252, 0.95);
+          color: var(--ink-muted);
+          font-size: 0.76rem;
+          font-weight: 650;
+        }
+
+        .hero-actions {
+          flex-wrap: wrap;
+        }
+
+        .view-switch-btn {
+          min-width: 70px;
+        }
+
+        .results-grid {
+          align-items: stretch;
+        }
+
+        .listing-stage {
+          transition:
+            transform 0.24s ease,
+            box-shadow 0.24s ease,
+            border-color 0.24s ease,
+            background 0.24s ease;
+        }
+
+        .match-media {
+          overflow: hidden;
+        }
+
+        .match-photo {
+          transition: transform 0.36s ease;
+        }
+
+        .match-card:hover {
+          transform: translateY(-4px);
+          border-color: rgba(29, 78, 216, 0.26);
+          box-shadow: 0 20px 38px rgba(15, 23, 42, 0.14);
+        }
+
+        .match-card:hover .match-photo {
+          transform: scale(1.04);
+        }
+
+        .shortlist-fab {
+          backdrop-filter: blur(10px);
+          background: rgba(255, 255, 255, 0.9) !important;
+          border: 1px solid rgba(29, 78, 216, 0.2) !important;
+        }
+
+        .shortlist-fab:hover {
+          background: rgba(255, 255, 255, 0.98) !important;
+          border-color: rgba(29, 78, 216, 0.34) !important;
+        }
+
+        .match-card-list .match-media {
+          border-top-left-radius: 18px;
+          border-bottom-left-radius: 18px;
+        }
+
         @media (max-width: 980px) {
           .matches-shell-grid {
             grid-template-columns: 1fr !important;
@@ -605,6 +749,30 @@ function MatchesContent() {
 
           .matches-shell-grid aside {
             position: static !important;
+          }
+
+          .listing-hero {
+            padding: 0.86rem;
+          }
+        }
+
+        @media (max-width: 680px) {
+          .result-metrics {
+            gap: 0.34rem;
+          }
+
+          .metric-chip {
+            font-size: 0.72rem;
+          }
+
+          .hero-actions {
+            width: 100%;
+          }
+
+          .hero-actions > :global(a),
+          .hero-actions > :global(button) {
+            flex: 1;
+            justify-content: center;
           }
         }
       `}</style>

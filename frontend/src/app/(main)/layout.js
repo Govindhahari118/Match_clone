@@ -17,9 +17,14 @@ const NAV_ITEMS = [
   { href: "/kundli", label: "Kundli", short: "KD" },
   { href: "/profile", label: "Profile", short: "PF" },
   { href: "/settings", label: "Settings", short: "ST" },
+  { href: "/notifications", label: "Alerts", short: "AL" },
+  { href: "/pricing", label: "Pricing", short: "PR" },
+  { href: "/help", label: "Help", short: "HP" },
+  { href: "/success-stories", label: "Stories", short: "SS" },
 ];
 
 const MOBILE_PRIMARY = ["/", "/matches", "/search", "/chat", "/profile"];
+const QUICK_NAV_ITEMS = ["/matches", "/search", "/interests", "/chat", "/profile", "/notifications", "/pricing", "/help"];
 
 export default function MainLayout({ children }) {
   const pathname = usePathname();
@@ -62,7 +67,12 @@ export default function MainLayout({ children }) {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", minWidth: 0 }}>
-            <button type="button" onClick={() => setDrawerOpen(true)} className="button button-secondary" style={{ padding: "0.62rem 0.86rem" }}>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="menu-trigger button button-secondary"
+              style={{ padding: "0.62rem 0.86rem" }}
+            >
               Menu
             </button>
 
@@ -86,7 +96,7 @@ export default function MainLayout({ children }) {
             </Link>
           </div>
 
-          <form onSubmit={onSearchSubmit} style={{ flex: 1, maxWidth: 620 }}>
+          <form onSubmit={onSearchSubmit} className="topbar-search" style={{ flex: 1, maxWidth: 620 }}>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -96,8 +106,8 @@ export default function MainLayout({ children }) {
             />
           </form>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.48rem" }}>
-            <Link className="button button-secondary" href="/notifications">
+          <div className="topbar-actions" style={{ display: "flex", alignItems: "center", gap: "0.48rem" }}>
+            <Link className="button button-secondary hide-mobile-xs" href="/notifications">
               Alerts
             </Link>
 
@@ -137,6 +147,34 @@ export default function MainLayout({ children }) {
             )}
           </div>
         </header>
+
+        <nav
+          className="panel context-quick-nav"
+          style={{
+            marginBottom: "0.82rem",
+            padding: "0.5rem",
+            display: "flex",
+            gap: "0.45rem",
+            overflowX: "auto",
+            scrollbarWidth: "none",
+          }}
+        >
+          {NAV_ITEMS.filter((item) => QUICK_NAV_ITEMS.includes(item.href)).map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="button button-secondary"
+              style={{
+                whiteSpace: "nowrap",
+                background: isActive(item.href) ? "rgba(29, 78, 216, 0.16)" : undefined,
+                borderColor: isActive(item.href) ? "rgba(29, 78, 216, 0.35)" : undefined,
+                color: isActive(item.href) ? "var(--ink)" : undefined,
+              }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
 
         <div
           className="main-shell-grid"
@@ -291,7 +329,36 @@ export default function MainLayout({ children }) {
       )}
 
       <style jsx>{`
+        .topbar-actions a,
+        .topbar-actions button {
+          white-space: nowrap;
+        }
+
+        @media (max-width: 560px) {
+          .topbar-search {
+            display: none !important;
+          }
+
+          .hide-mobile-xs {
+            display: none !important;
+          }
+        }
+
         @media (max-width: 980px) {
+          .main-shell-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .desktop-nav-shell {
+            display: none !important;
+          }
+
+          .context-quick-nav {
+            display: none !important;
+          }
+        }
+
+        @media (min-width: 981px) and (max-width: 1200px) {
           .main-shell-grid {
             grid-template-columns: 1fr !important;
           }
@@ -301,8 +368,16 @@ export default function MainLayout({ children }) {
           }
         }
 
-        @media (min-width: 981px) {
+        @media (min-width: 1201px) {
           .mobile-bottom-nav {
+            display: none !important;
+          }
+
+          .context-quick-nav {
+            display: none !important;
+          }
+
+          .menu-trigger {
             display: none !important;
           }
         }
@@ -310,4 +385,3 @@ export default function MainLayout({ children }) {
     </div>
   );
 }
-

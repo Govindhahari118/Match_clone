@@ -140,6 +140,25 @@ const dashboardActions = [
   },
 ];
 
+const dashboardNavLinks = [
+  { href: "/", label: "Home" },
+  { href: "/matches", label: "Matches" },
+  { href: "/search", label: "Search" },
+  { href: "/interests", label: "Interests" },
+  { href: "/chat", label: "Messages" },
+  { href: "/profile", label: "Profile" },
+  { href: "/settings", label: "Settings" },
+  { href: "/notifications", label: "Alerts" },
+];
+
+const guestNavLinks = [
+  { href: "/matches", label: "Matches" },
+  { href: "/search", label: "Search" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/help", label: "Help" },
+  { href: "/success-stories", label: "Stories" },
+];
+
 const recommended = [
   {
     id: "u1",
@@ -247,6 +266,25 @@ function LandingPage() {
               </Link>
             </nav>
           </header>
+
+          <nav
+            className="panel"
+            style={{
+              marginTop: "0.72rem",
+              display: "flex",
+              gap: "0.45rem",
+              overflowX: "auto",
+              padding: "0.5rem",
+              background: "rgba(12,22,44,0.38)",
+              borderColor: "rgba(255,255,255,0.2)",
+            }}
+          >
+            {guestNavLinks.map((item) => (
+              <Link key={item.href} href={item.href} className="button button-ghost-light" style={{ whiteSpace: "nowrap" }}>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
           <div
             className="anim-rise"
@@ -569,6 +607,29 @@ function Dashboard({ user, logout }) {
       </section>
 
       <main className="container-shell" style={{ marginTop: "-1.7rem", paddingBottom: "2rem" }}>
+        <section className="panel" style={{ padding: "0.9rem" }}>
+          <p className="section-label">Quick navigation</p>
+          <nav
+            style={{
+              marginTop: "0.65rem",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              gap: "0.55rem",
+            }}
+          >
+            {dashboardNavLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="button button-secondary"
+                style={{ justifyContent: "center", textAlign: "center" }}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        </section>
+
         <section className="panel" style={{ padding: "1rem" }}>
           <p className="section-label">Dashboard overview</p>
           <h1 className="section-title" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", marginTop: "0.5rem" }}>
