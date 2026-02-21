@@ -1,12 +1,17 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import io from "socket.io-client";
 
 const AuthContext = createContext();
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+const authListeners = new Set();
+
+function notifyAuthChange() {
+  authListeners.forEach((listener) => listener());
+}
 
 function readStoredUser() {
   if (typeof window === "undefined") return null;
@@ -21,9 +26,38 @@ function readStoredUser() {
   }
 }
 
+function subscribeAuth(listener) {
+  authListeners.add(listener);
+
+  const onStorage = (event) => {
+    if (event.key === "user" || event.key === "accessToken" || event.key === "refreshToken") {
+      listener();
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage);
+  }
+
+  return () => {
+    authListeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", onStorage);
+    }
+  };
+}
+
+function getAuthSnapshot() {
+  return readStoredUser();
+}
+
+function getAuthServerSnapshot() {
+  return null;
+}
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => readStoredUser());
-  const [loading] = useState(false);
+  const user = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getAuthServerSnapshot);
+  const loading = false;
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
@@ -46,16 +80,17 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       newSocket.disconnect();
+      setSocket(null);
     };
   }, [user]);
 
   const login = async (userDetails, accessToken, refreshToken) => {
-    setUser(userDetails);
     localStorage.setItem("user", JSON.stringify(userDetails));
     localStorage.setItem("accessToken", accessToken);
     if (refreshToken) {
       localStorage.setItem("refreshToken", refreshToken);
     }
+    notifyAuthChange();
   };
 
   const logout = () => {
@@ -64,16 +99,16 @@ export const AuthProvider = ({ children }) => {
       setSocket(null);
     }
 
-    setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+    notifyAuthChange();
     window.location.href = "/login";
   };
 
   return (
     <AuthContext.Provider value={{ user, login, logout, loading, socket }}>
-      {!loading && children}
+      {children}
       <ToastContainer position="top-right" autoClose={3000} />
     </AuthContext.Provider>
   );

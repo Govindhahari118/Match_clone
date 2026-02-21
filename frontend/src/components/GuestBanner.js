@@ -9,21 +9,27 @@ export default function GuestBanner() {
   const router = useRouter();
   const pathname = usePathname();
   const [hidden, setHidden] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return sessionStorage.getItem("guest_banner_dismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
 
-  const isAuthPage = ["/login", "/signup", "/forgot-password"].includes(pathname);
-  const isDismissed =
-    typeof window !== "undefined" &&
-    sessionStorage.getItem("guest_banner_dismissed") === "true";
+  const isAuthPage = ["/login", "/step-1", "/forgot-password"].includes(pathname);
 
-  if (loading || user || hidden || isDismissed || isAuthPage) {
+  if (loading || user || hidden || dismissed || isAuthPage) {
     return null;
   }
 
   const handleDismiss = () => {
     setHidden(true);
-    if (typeof window !== "undefined") {
+    setDismissed(true);
+    try {
       sessionStorage.setItem("guest_banner_dismissed", "true");
-    }
+    } catch {}
   };
 
   return (
@@ -48,7 +54,7 @@ export default function GuestBanner() {
       </span>
       <div style={{ display: "flex", gap: 8 }}>
         <button
-          onClick={() => router.push("/signup")}
+          onClick={() => router.push("/step-1")}
           style={{
             padding: "6px 14px",
             background: "#e11d48",

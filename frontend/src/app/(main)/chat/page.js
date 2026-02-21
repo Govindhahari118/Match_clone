@@ -445,13 +445,6 @@ export default function ChatPage() {
 
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
-      <style jsx>{`
-        @media (max-width: 980px) {
-          .chat-shell-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

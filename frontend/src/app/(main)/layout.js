@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -33,6 +33,15 @@ export default function MainLayout({ children }) {
   const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const prefetchTargets = ["/matches", "/search", "/interests", "/chat", "/profile"];
+    const timer = setTimeout(() => {
+      prefetchTargets.forEach((target) => router.prefetch(target));
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [router]);
 
   const initial = useMemo(() => {
     const source = user?.profile?.firstName || user?.firstName || user?.email || "U";
@@ -150,7 +159,7 @@ export default function MainLayout({ children }) {
                 <Link className="button button-secondary" href="/login">
                   Login
                 </Link>
-                <Link className="button button-primary" href="/signup">
+                <Link className="button button-primary" href="/step-1">
                   Sign Up
                 </Link>
               </>
@@ -186,43 +195,10 @@ export default function MainLayout({ children }) {
           ))}
         </nav>
 
-        <div
-          className="main-shell-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "220px minmax(0, 1fr)",
-            gap: "1rem",
-            paddingBottom: "5.2rem",
-          }}
-        >
-          <aside className="panel desktop-nav-shell app-sidebar" style={{ height: "fit-content", padding: "0.9rem", position: "sticky", top: "5.45rem" }}>
-            <p className="section-label" style={{ marginBottom: "0.65rem" }}>
-              Navigation
-            </p>
-            <nav style={{ display: "grid", gap: "0.38rem" }}>
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="nav-link"
-                  style={{
-                    justifyContent: "space-between",
-                    padding: "0.6rem 0.72rem",
-                    borderRadius: 12,
-                    color: isActive(item.href) ? "var(--ink)" : "var(--ink-muted)",
-                    background: isActive(item.href) ? "rgba(29, 78, 216, 0.12)" : "transparent",
-                    border: isActive(item.href) ? "1px solid rgba(29, 78, 216, 0.3)" : "1px solid transparent",
-                    textDecoration: "none",
-                  }}
-                >
-                  <span>{item.label}</span>
-                  <span style={{ fontSize: "0.72rem", opacity: 0.75 }}>{item.short}</span>
-                </Link>
-              ))}
-            </nav>
-          </aside>
-
-          <main style={{ minWidth: 0 }}>{children}</main>
+        <div className="main-shell-grid" style={{ paddingBottom: "5.2rem" }}>
+          <main className="main-content-shell" style={{ minWidth: 0 }}>
+            {children}
+          </main>
         </div>
       </div>
 
@@ -338,85 +314,6 @@ export default function MainLayout({ children }) {
         </div>
       )}
 
-      <style jsx>{`
-        .premium-topbar {
-          border: 1px solid rgba(29, 78, 216, 0.22);
-          background: linear-gradient(160deg, rgba(255, 255, 255, 0.97), rgba(245, 249, 255, 0.95));
-          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
-        }
-
-        .premium-quick-nav {
-          border: 1px solid rgba(29, 78, 216, 0.18);
-          background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.93));
-          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
-        }
-
-        .quick-nav-link {
-          padding: 0.62rem 0.92rem;
-          font-weight: 700;
-          line-height: 1.2;
-          min-height: 40px;
-        }
-
-        .topbar-search :global(.form-input) {
-          background: rgba(255, 255, 255, 0.86);
-        }
-
-        .topbar-actions a,
-        .topbar-actions button {
-          white-space: nowrap;
-        }
-
-        @media (max-width: 680px) {
-          .hide-mobile-sm {
-            display: none !important;
-          }
-        }
-
-        @media (max-width: 560px) {
-          .topbar-search {
-            display: none !important;
-          }
-
-          .hide-mobile-xs {
-            display: none !important;
-          }
-        }
-
-        @media (max-width: 980px) {
-          .main-shell-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .desktop-nav-shell {
-            display: none !important;
-          }
-
-          .context-quick-nav {
-            display: none !important;
-          }
-        }
-
-        @media (min-width: 981px) and (max-width: 1200px) {
-          .main-shell-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .desktop-nav-shell {
-            display: none !important;
-          }
-        }
-
-        @media (min-width: 1201px) {
-          .mobile-bottom-nav {
-            display: none !important;
-          }
-
-          .menu-trigger {
-            display: none !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

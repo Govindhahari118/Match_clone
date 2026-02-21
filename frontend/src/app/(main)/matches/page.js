@@ -257,6 +257,7 @@ function MatchesContent() {
   const [shortlisted, setShortlisted] = useState(new Set());
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("compatibility");
+  const [showFilters, setShowFilters] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [filterMeta, setFilterMeta] = useState(FALLBACK_FILTER_META);
@@ -442,8 +443,12 @@ function MatchesContent() {
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "1rem" }} className="matches-shell-grid">
-      <aside className="panel filter-panel premium-filter-panel" style={{ padding: "1rem", height: "fit-content", position: "sticky", top: "5.4rem" }}>
+    <div
+      style={{ display: "grid", gridTemplateColumns: showFilters ? "320px minmax(0, 1fr)" : "1fr", gap: "1rem" }}
+      className={`matches-shell-grid ${showFilters ? "filters-open" : "filters-collapsed"}`}
+    >
+      {showFilters && (
+        <aside className="panel filter-panel premium-filter-panel" style={{ padding: "1rem", height: "fit-content", position: "sticky", top: "5.4rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.78rem", gap: "0.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
             <p className="section-label" style={{ margin: 0 }}>
@@ -452,8 +457,11 @@ function MatchesContent() {
             <span className="filter-count-chip">{activeFilterCount > 0 ? `${activeFilterCount} active` : "No filters"}</span>
           </div>
           <div style={{ display: "flex", gap: "0.42rem" }}>
+            <button type="button" className="button button-secondary" onClick={() => setShowFilters(false)}>
+              Close
+            </button>
             <button type="button" className="button button-secondary" onClick={() => setShowAdvanced((previous) => !previous)}>
-              {showAdvanced ? "Hide" : "Advanced"}
+              {showAdvanced ? "Basic" : "Advanced"}
             </button>
             <button type="button" className="button button-secondary" onClick={resetFilters}>
               Reset
@@ -618,6 +626,7 @@ function MatchesContent() {
           )}
         </div>
       </aside>
+      )}
 
       <section>
         <div className="listing-hero">
@@ -642,6 +651,13 @@ function MatchesContent() {
           </div>
 
           <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+            <button
+              type="button"
+              className={`button ${showFilters ? "button-primary" : "button-secondary"}`}
+              onClick={() => setShowFilters((previous) => !previous)}
+            >
+              {showFilters ? "Hide Filters" : activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+            </button>
             <div className="sort-control">
               <label className="form-label" htmlFor="sortBy" style={{ marginBottom: "0.25rem" }}>
                 Sort by
@@ -675,9 +691,16 @@ function MatchesContent() {
           <div className="panel listing-stage" style={{ padding: "2.1rem", textAlign: "center" }}>
             <h2 style={{ marginTop: 0 }}>No matches found with current filters</h2>
             <p style={{ color: "var(--ink-muted)" }}>Try broadening caste or city filters, or disable horoscope filters.</p>
-            <button type="button" className="button button-primary" onClick={resetFilters}>
-              Reset Filters
-            </button>
+            <div style={{ display: "inline-flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "center" }}>
+              {!showFilters && (
+                <button type="button" className="button button-secondary" onClick={() => setShowFilters(true)}>
+                  Open Filters
+                </button>
+              )}
+              <button type="button" className="button button-primary" onClick={resetFilters}>
+                Reset Filters
+              </button>
+            </div>
           </div>
         ) : (
           <div className="results-grid" style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
@@ -690,272 +713,6 @@ function MatchesContent() {
 
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
-      <style jsx>{`
-        .premium-filter-panel {
-          position: relative;
-          overflow: hidden;
-          border: 1px solid rgba(227, 68, 117, 0.2);
-          background: linear-gradient(175deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 251, 0.96) 52%, rgba(246, 250, 255, 0.95) 100%);
-          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.1);
-        }
-
-        .premium-filter-panel::before {
-          content: "";
-          position: absolute;
-          inset: 0 auto auto 0;
-          width: 100%;
-          height: 2px;
-          background: linear-gradient(90deg, rgba(227, 68, 117, 0.35), rgba(29, 78, 216, 0.3), transparent);
-          pointer-events: none;
-        }
-
-        .filter-count-chip {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.24rem 0.58rem;
-          border-radius: 999px;
-          border: 1px solid rgba(227, 68, 117, 0.26);
-          background: rgba(227, 68, 117, 0.11);
-          color: #b32458;
-          font-size: 0.73rem;
-          font-weight: 740;
-          letter-spacing: 0.01em;
-        }
-
-        .listing-hero {
-          padding: 1rem;
-          border-radius: 22px;
-          border: 1px solid rgba(29, 78, 216, 0.2);
-          background: linear-gradient(142deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.93));
-          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
-          margin-bottom: 1rem;
-        }
-
-        .hero-copy {
-          min-width: 0;
-        }
-
-        .result-metrics {
-          display: flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 0.42rem;
-          margin-top: 0.62rem;
-        }
-
-        .metric-chip {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.24rem 0.6rem;
-          border-radius: 999px;
-          border: 1px solid rgba(148, 163, 184, 0.4);
-          background: rgba(255, 255, 255, 0.9);
-          color: var(--ink-muted);
-          font-size: 0.74rem;
-          font-weight: 680;
-        }
-
-        .metric-chip-highlight {
-          border-color: rgba(227, 68, 117, 0.3);
-          background: rgba(227, 68, 117, 0.13);
-          color: #b32458;
-        }
-
-        .hero-actions {
-          display: flex;
-          align-items: flex-end;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          margin-left: auto;
-        }
-
-        .sort-control {
-          min-width: 188px;
-          max-width: 208px;
-        }
-
-        .sort-control :global(.form-input) {
-          height: 40px;
-          padding-top: 0.5rem;
-          padding-bottom: 0.5rem;
-        }
-
-        .view-switch-btn {
-          min-width: 72px;
-        }
-
-        .results-grid {
-          align-items: stretch;
-          grid-auto-rows: 1fr;
-        }
-
-        .skeleton-tile {
-          overflow: hidden;
-          background: linear-gradient(100deg, rgba(238, 244, 253, 0.95) 8%, rgba(255, 255, 255, 0.98) 40%, rgba(238, 244, 253, 0.95) 72%);
-          background-size: 200% 100%;
-          animation: shimmer 1.3s linear infinite;
-        }
-
-        .listing-stage {
-          transition:
-            transform 0.22s ease,
-            box-shadow 0.22s ease,
-            border-color 0.22s ease,
-            background 0.22s ease;
-        }
-
-        .match-card {
-          position: relative;
-        }
-
-        .match-media {
-          overflow: hidden;
-          background: #0f172a;
-        }
-
-        .match-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 0.35rem 0.7rem;
-          border-radius: 999px;
-          border: 1px solid transparent;
-          font-size: 0.82rem;
-          font-weight: 760;
-          backdrop-filter: blur(8px);
-          line-height: 1;
-        }
-
-        .match-badge-elite {
-          color: #066848;
-          border-color: rgba(6, 104, 72, 0.22);
-          background: rgba(194, 241, 224, 0.95);
-        }
-
-        .match-badge-strong {
-          color: #b32458;
-          border-color: rgba(227, 68, 117, 0.3);
-          background: rgba(254, 217, 231, 0.95);
-        }
-
-        .match-badge-rising {
-          color: #945b09;
-          border-color: rgba(196, 131, 18, 0.26);
-          background: rgba(255, 238, 202, 0.95);
-        }
-
-        .match-photo {
-          transition: transform 0.32s ease;
-          transform-origin: center;
-        }
-
-        .profile-meta {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .match-card:hover {
-          transform: translateY(-3px);
-          border-color: rgba(227, 68, 117, 0.24);
-          box-shadow: 0 20px 36px rgba(15, 23, 42, 0.13);
-        }
-
-        .match-card:hover .match-photo {
-          transform: scale(1.035);
-        }
-
-        .shortlist-fab {
-          backdrop-filter: blur(10px);
-          background: rgba(255, 255, 255, 0.9) !important;
-          border: 1px solid rgba(227, 68, 117, 0.22) !important;
-          color: #8f2a4c;
-          font-size: 0.72rem;
-        }
-
-        .shortlist-fab:hover {
-          background: rgba(255, 255, 255, 0.98) !important;
-          border-color: rgba(227, 68, 117, 0.38) !important;
-        }
-
-        .match-card-list .match-media {
-          border-top-left-radius: 20px;
-          border-bottom-left-radius: 20px;
-        }
-
-        .match-card-list .match-card-content {
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-        }
-
-        @keyframes shimmer {
-          0% {
-            background-position: 200% 0;
-          }
-          100% {
-            background-position: -200% 0;
-          }
-        }
-
-        @media (max-width: 1180px) {
-          .hero-actions {
-            width: 100%;
-            justify-content: flex-start;
-          }
-        }
-
-        @media (max-width: 980px) {
-          .matches-shell-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .matches-shell-grid aside {
-            position: static !important;
-          }
-
-          .listing-hero {
-            padding: 0.86rem;
-          }
-        }
-
-        @media (max-width: 760px) {
-          .match-card-list {
-            flex-direction: column !important;
-          }
-
-          .match-card-list .match-media {
-            width: 100% !important;
-            height: 220px;
-            border-top-right-radius: 20px;
-            border-bottom-left-radius: 0;
-          }
-        }
-
-        @media (max-width: 680px) {
-          .result-metrics {
-            gap: 0.34rem;
-          }
-
-          .metric-chip {
-            font-size: 0.72rem;
-          }
-
-          .hero-actions {
-            width: 100%;
-          }
-
-          .hero-actions > :global(a),
-          .hero-actions > :global(button) {
-            flex: 1;
-            justify-content: center;
-          }
-
-          .sort-control {
-            min-width: 100%;
-            max-width: 100%;
-          }
-        }
-      `}</style>
     </div>
   );
 }

@@ -290,13 +290,6 @@ export default function UserProfilePage() {
 
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
-      <style jsx>{`
-        @media (max-width: 980px) {
-          .profile-view-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

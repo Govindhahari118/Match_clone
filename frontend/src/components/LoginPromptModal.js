@@ -33,7 +33,7 @@ export default function LoginPromptModal({ isOpen, onClose, triggerText = "Sign 
                     }}>
                         Log In
                     </button>
-                    <button onClick={() => router.push("/signup")} style={{
+                    <button onClick={() => router.push("/step-1")} style={{
                         padding: "12px", background: "white", border: "1.5px solid #e2e8f0",
                         color: "#374151", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15
                     }}>
