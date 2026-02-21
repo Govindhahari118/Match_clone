@@ -8,6 +8,10 @@ require('dotenv').config({ quiet: true });
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const postRoutes = require('./routes/post.routes');
+const metaRoutes = require('./routes/meta.routes');
+const searchRoutes = require('./routes/search.routes');
+const subscriptionRoutes = require('./routes/subscription.routes');
+const callRoutes = require('./routes/call.routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,6 +42,10 @@ app.use(limiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/meta', metaRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/call', callRoutes);
 app.use('/api/users', userRoutes);
 const profileRoutes = require('./routes/profile.routes');
 app.use('/api/profiles', profileRoutes); // For viewing others

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../../../services/api";
 import { toast } from "react-toastify";
 
@@ -57,14 +57,28 @@ export default function SettingsPage() {
     const [passwd, setPasswd] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
     const [saving, setSaving] = useState(false);
 
+    useEffect(() => {
+        const loadPrivacy = async () => {
+            try {
+                const response = await api.get("/users/privacy");
+                if (response?.data?.settings) {
+                    setPrivacy(prev => ({ ...prev, ...response.data.settings }));
+                }
+            } catch {
+                // Keep local defaults when API is unavailable.
+            }
+        };
+        loadPrivacy();
+    }, []);
+
     const save = async (label) => {
         setSaving(true);
         try {
-            if (section === "privacy") await api.post("/user/privacy", privacy);
+            if (section === "privacy") await api.post("/users/privacy", privacy);
             if (section === "password") {
                 if (!passwd.currentPassword || !passwd.newPassword) { toast.error("Fill all fields"); setSaving(false); return; }
                 if (passwd.newPassword !== passwd.confirmPassword) { toast.error("Passwords don't match"); setSaving(false); return; }
-                await api.put("/user/password", { currentPassword: passwd.currentPassword, newPassword: passwd.newPassword });
+                await api.put("/users/password", { currentPassword: passwd.currentPassword, newPassword: passwd.newPassword });
                 setPasswd({ currentPassword: "", newPassword: "", confirmPassword: "" });
             }
             toast.success(`✅ ${label || "Settings"} saved!`);

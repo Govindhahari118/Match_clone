@@ -10,8 +10,15 @@ import { useAuth } from "../../../context/AuthContext";
 import { useGuestScrollGate } from "../../../hooks/useGuestScrollGate";
 import LoginPromptModal from "../../../components/LoginPromptModal";
 
-const RELIGIONS = ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist"];
-const CASTES = ["Any", "Brahmin", "Kshatriya", "Vaisya", "Kayastha", "Rajput", "Reddy", "Naidu", "Chettiar", "Jat", "Maratha", "Vanniyar", "Yadav", "Ezhava", "Nair", "SC", "ST", "OBC", "General"];
+const FALLBACK_FILTER_META = {
+  religion: ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist"],
+  caste: ["Any", "Brahmin", "Kshatriya", "Vaisya", "Kayastha", "Rajput", "Reddy", "Naidu", "Chettiar", "Jat", "Maratha", "Vanniyar", "Yadav", "Ezhava", "Nair", "SC", "ST", "OBC", "General"],
+  income: ["Any", "Below 3L", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"],
+  maritalStatus: ["Any", "Never Married", "Divorced", "Widowed", "Awaiting Divorce", "Separated"],
+  motherTongue: ["Any", "Hindi", "English", "Marathi", "Tamil", "Telugu", "Kannada", "Malayalam", "Bengali", "Gujarati", "Punjabi", "Urdu"],
+  education: ["Any", "MBBS", "MD", "B.Tech", "M.Tech", "MBA", "CA", "B.Arch", "B.Des", "LLB", "PhD", "IAS", "IPS", "B.Com", "M.Com", "B.Sc", "M.Sc", "Other"],
+  profession: ["Any", "Doctor", "Engineer", "Software Engineer", "Architect", "Designer", "Lawyer", "Teacher", "Professor", "Govt. Officer", "Business", "Student", "Self Employed", "Other"],
+};
 
 const SUBCASTE_MAP = {
   Brahmin: ["Iyer", "Iyengar", "Gaur", "Saraswat", "Maithil", "Kanyakubja", "Nambootiri", "Deshastha", "Smartha"],
@@ -65,13 +72,8 @@ const NAKSHATRAS = [
 const RASHIS = ["Any", "Aries (Mesha)", "Taurus (Vrishabha)", "Gemini (Mithuna)", "Cancer (Karka)", "Leo (Simha)", "Virgo (Kanya)", "Libra (Tula)", "Scorpio (Vrishchika)", "Sagittarius (Dhanu)", "Capricorn (Makara)", "Aquarius (Kumbha)", "Pisces (Meena)"];
 const GOTRAS = ["Any", "Bharadwaj", "Kashyap", "Shandilya", "Vashishtha", "Vishwamitra", "Garga", "Atri", "Gautam", "Harita", "Jamadagni", "Kaushik", "Srivatsa", "Kaundinya", "Moudgalya", "Parashara", "Agastya", "Bhrigu", "Angirasa"];
 const DOSHAS = ["Any", "No", "Manglik", "Sarpa Dosha", "Don't Know"];
-const INCOMES = ["Any", "Below 3L", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"];
-const MARITAL_STATUS = ["Any", "Never Married", "Divorced", "Widowed", "Awaiting Divorce", "Separated"];
 const DIETS = ["Any", "Vegetarian", "Non-Vegetarian", "Vegan", "Eggetarian"];
-const TONGUES = ["Any", "Hindi", "English", "Marathi", "Tamil", "Telugu", "Kannada", "Malayalam", "Bengali", "Gujarati", "Punjabi", "Urdu"];
 const CITIES = ["Any", "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Chennai", "Kolkata", "Pune", "Jaipur", "Ahmedabad", "Surat", "Lucknow", "Kanpur", "Nagpur", "Indore", "Thane", "Bhopal", "Visakhapatnam", "Patna", "Vadodara", "Ghaziabad", "Ludhiana", "Agra", "Nashik", "Faridabad", "Meerut", "Rajkot", "Varanasi", "Srinagar"];
-const EDUCATIONS = ["Any", "MBBS", "MD", "B.Tech", "M.Tech", "MBA", "CA", "B.Arch", "B.Des", "LLB", "PhD", "IAS", "IPS", "B.Com", "M.Com", "B.Sc", "M.Sc", "Other"];
-const PROFESSIONS = ["Any", "Doctor", "Engineer", "Software Engineer", "Architect", "Designer", "Lawyer", "Teacher", "Professor", "Govt. Officer", "Business", "Student", "Self Employed", "Other"];
 
 const MOCK_PROFILES = [
   { userId: "u1", firstName: "Priya", age: 26, city: "Mumbai", profession: "Doctor", religion: "Hindu", caste: "Brahmin", subCaste: "Iyer", gothra: "Bharadwaj", nakshatra: "Rohini", rashi: "Taurus (Vrishabha)", dosha: "No", photo: "https://randomuser.me/api/portraits/women/44.jpg", isVerified: true, match: 94, education: "MBBS", income: "10-25L", height: 165, maritalStatus: "Never Married", motherTongue: "Tamil", foodHabit: "Vegetarian" },
@@ -108,6 +110,30 @@ function clampNumber(value, min, max) {
   const number = Number(value);
   if (Number.isNaN(number)) return min;
   return Math.min(max, Math.max(min, number));
+}
+
+function normalizeOptions(source, fallback, ensureAny = true) {
+  if (!Array.isArray(source) || source.length === 0) {
+    return fallback;
+  }
+
+  const normalized = Array.from(
+    new Set(
+      source
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (!ensureAny) {
+    return normalized;
+  }
+
+  if (!normalized.some((item) => item.toLowerCase() === "any")) {
+    normalized.unshift("Any");
+  }
+
+  return normalized;
 }
 
 function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }) {
@@ -207,11 +233,43 @@ function MatchesContent() {
   const [viewMode, setViewMode] = useState("grid");
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [filterMeta, setFilterMeta] = useState(FALLBACK_FILTER_META);
 
   useEffect(() => {
     const religionFromQuery = searchParams.get("religion");
     if (religionFromQuery) setFilters((previous) => ({ ...previous, religion: religionFromQuery }));
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFilterMeta = async () => {
+      try {
+        const response = await api.get("/meta/filters");
+        const payload = response?.data?.data || response?.data || {};
+        if (cancelled) return;
+
+        setFilterMeta({
+          religion: normalizeOptions(payload.religion, FALLBACK_FILTER_META.religion),
+          caste: normalizeOptions(payload.caste, FALLBACK_FILTER_META.caste),
+          income: normalizeOptions(payload.income, FALLBACK_FILTER_META.income),
+          maritalStatus: normalizeOptions(payload.maritalStatus, FALLBACK_FILTER_META.maritalStatus),
+          motherTongue: normalizeOptions(payload.motherTongue, FALLBACK_FILTER_META.motherTongue),
+          education: normalizeOptions(payload.education, FALLBACK_FILTER_META.education),
+          profession: normalizeOptions(payload.profession, FALLBACK_FILTER_META.profession),
+        });
+      } catch {
+        if (!cancelled) {
+          setFilterMeta(FALLBACK_FILTER_META);
+        }
+      }
+    };
+
+    loadFilterMeta();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const loadMatches = async () => {
@@ -349,7 +407,7 @@ function MatchesContent() {
           <div>
             <label className="form-label">Religion</label>
             <select className="form-input" value={filters.religion} onChange={(event) => onFilterChange("religion", event.target.value)}>
-              {RELIGIONS.map((value) => (
+              {filterMeta.religion.map((value) => (
                 <option key={value}>{value}</option>
               ))}
             </select>
@@ -359,7 +417,7 @@ function MatchesContent() {
             <div>
               <label className="form-label">Caste</label>
               <select className="form-input" value={filters.caste} onChange={(event) => onFilterChange("caste", event.target.value)}>
-                {CASTES.map((value) => (
+                {filterMeta.caste.map((value) => (
                   <option key={value}>{value}</option>
                 ))}
               </select>
@@ -386,7 +444,7 @@ function MatchesContent() {
           <div>
             <label className="form-label">Profession</label>
             <select className="form-input" value={filters.profession} onChange={(event) => onFilterChange("profession", event.target.value)}>
-              {PROFESSIONS.map((value) => (
+              {filterMeta.profession.map((value) => (
                 <option key={value}>{value}</option>
               ))}
             </select>
@@ -397,7 +455,7 @@ function MatchesContent() {
               <div>
                 <label className="form-label">Education</label>
                 <select className="form-input" value={filters.education} onChange={(event) => onFilterChange("education", event.target.value)}>
-                  {EDUCATIONS.map((value) => (
+                  {filterMeta.education.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
@@ -405,7 +463,7 @@ function MatchesContent() {
               <div>
                 <label className="form-label">Income</label>
                 <select className="form-input" value={filters.income} onChange={(event) => onFilterChange("income", event.target.value)}>
-                  {INCOMES.map((value) => (
+                  {filterMeta.income.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
@@ -423,7 +481,7 @@ function MatchesContent() {
               <div>
                 <label className="form-label">Marital status</label>
                 <select className="form-input" value={filters.maritalStatus} onChange={(event) => onFilterChange("maritalStatus", event.target.value)}>
-                  {MARITAL_STATUS.map((value) => (
+                  {filterMeta.maritalStatus.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
@@ -431,7 +489,7 @@ function MatchesContent() {
               <div>
                 <label className="form-label">Mother tongue</label>
                 <select className="form-input" value={filters.motherTongue} onChange={(event) => onFilterChange("motherTongue", event.target.value)}>
-                  {TONGUES.map((value) => (
+                  {filterMeta.motherTongue.map((value) => (
                     <option key={value}>{value}</option>
                   ))}
                 </select>
@@ -561,4 +619,3 @@ export default function MatchesPage() {
     </Suspense>
   );
 }
-

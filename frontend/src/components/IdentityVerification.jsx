@@ -8,6 +8,7 @@ export default function IdentityVerification() {
     const [status, setStatus] = useState('loading');
     const [rejectionReason, setRejectionReason] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [badges, setBadges] = useState(null);
 
     useEffect(() => {
         fetchStatus();
@@ -19,6 +20,12 @@ export default function IdentityVerification() {
             if (res.data.success) {
                 setStatus(res.data.status);
                 setRejectionReason(res.data.rejectionReason);
+            }
+            try {
+                const badgeRes = await api.get('/verification/badges');
+                setBadges(badgeRes?.data?.badges || null);
+            } catch {
+                setBadges(null);
             }
         } catch (err) {
             console.error(err);
@@ -83,6 +90,23 @@ export default function IdentityVerification() {
             <h2 className="text-xl font-semibold mb-4 flex items-center">
                 <span className="mr-2">🛡️</span> Identity Verification
             </h2>
+
+            {badges && (
+                <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
+                    <div className={`p-2 rounded border ${badges.phoneVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                        Phone {badges.phoneVerified ? 'Verified' : 'Pending'}
+                    </div>
+                    <div className={`p-2 rounded border ${badges.emailVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                        Email {badges.emailVerified ? 'Verified' : 'Pending'}
+                    </div>
+                    <div className={`p-2 rounded border ${badges.idVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                        ID {badges.idVerified ? 'Verified' : 'Pending'}
+                    </div>
+                    <div className={`p-2 rounded border ${badges.blueTick ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                        Blue Tick {badges.blueTick ? 'Active' : 'Locked'}
+                    </div>
+                </div>
+            )}
 
             {status === 'verified' && (
                 <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-md flex items-center">

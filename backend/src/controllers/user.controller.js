@@ -1,5 +1,9 @@
 ﻿const prisma = require('../config/prisma');
 
+const privacyService = require('../services/privacy.service');
+
+const profileExtensionService = require('../services/profile-extension.service');
+
 const userController = {
     async getProfile(req, res) {
         try {
@@ -8,6 +12,7 @@ const userController = {
                 include: { profile: true, photos: true, partnerPreference: true }
             });
             if (!user) return res.status(404).json({ error: 'User not found' });
+            const { extension } = await profileExtensionService.getUserProfileExtension(req.user.sub);
 
             const response = {
                 id: user.id,
@@ -17,7 +22,10 @@ const userController = {
                 isVerified: user.isVerified,
                 ...(user.profile || {}),
                 photos: user.photos,
-                partnerPreference: user.partnerPreference
+                partnerPreference: user.partnerPreference,
+                hasChildren: extension.hasChildren,
+                residentialStatus: extension.residentialStatus,
+                district: extension.district
             };
 
             res.json(response);
@@ -52,7 +60,10 @@ const userController = {
                 birthPlace,
                 gothra,
                 zodiacSign,
-                nakshatra
+                nakshatra,
+                hasChildren,
+                residentialStatus,
+                district
             } = req.body;
 
             const dob = dateOfBirth ? new Date(dateOfBirth) : undefined;
@@ -117,7 +128,21 @@ const userController = {
                 }
             });
 
-            res.json(updatedProfile);
+            const extensionPayload = {};
+            if (hasChildren !== undefined) extensionPayload.hasChildren = hasChildren;
+            if (residentialStatus !== undefined) extensionPayload.residentialStatus = residentialStatus;
+            if (district !== undefined) extensionPayload.district = district;
+
+            const extension = Object.keys(extensionPayload).length > 0
+                ? await profileExtensionService.saveUserProfileExtension(req.user.sub, extensionPayload)
+                : (await profileExtensionService.getUserProfileExtension(req.user.sub)).extension;
+
+            res.json({
+                ...updatedProfile,
+                hasChildren: extension.hasChildren,
+                residentialStatus: extension.residentialStatus,
+                district: extension.district
+            });
         } catch (error) {
             console.error('Update Profile Error:', error);
             res.status(500).json({ error: 'Update failed' });
@@ -127,6 +152,43 @@ const userController = {
     async updatePassword(req, res) {
         // Mock implementation
         res.json({ message: 'Password updated successfully (Demo)' });
+    },
+
+    async getPrivacySettings(req, res) {
+        try {
+            const { settings, updatedAt } = await privacyService.getUserPrivacySettings(req.user.sub);
+
+            res.json({
+                success: true,
+                settings,
+                updatedAt,
+            });
+        } catch (error) {
+            console.error('Get privacy settings error:', error);
+            res.status(500).json({ error: 'Failed to load privacy settings' });
+        }
+    },
+
+    async updatePrivacySettings(req, res) {
+        try {
+            const settings = privacyService.normalizePrivacySettings(
+                req.body && typeof req.body === 'object' ? req.body : {}
+            );
+            await prisma.auditLog.create({
+                data: {
+                    userId: req.user.sub,
+                    action: 'privacy_settings_updated',
+                    resourceType: 'user',
+                    resourceId: req.user.sub,
+                    changes: settings,
+                },
+            });
+
+            res.json({ success: true, settings });
+        } catch (error) {
+            console.error('Update privacy settings error:', error);
+            res.status(500).json({ error: 'Failed to update privacy settings' });
+        }
     },
 
     async submitVerification(req, res) {

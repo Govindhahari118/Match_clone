@@ -3,7 +3,7 @@ const prisma = require('../config/prisma');
 const submitIdDoc = async (req, res) => {
     try {
         const { docUrl } = req.body;
-        const userId = req.user.id;
+        const userId = req.user.sub;
 
         if (!docUrl) {
             return res.status(400).json({ error: 'Document URL is required' });
@@ -15,15 +15,13 @@ const submitIdDoc = async (req, res) => {
             data: {
                 identityDocUrl: docUrl,
                 identityStatus: 'pending',
-                // Create a Verification record for history
-                verifications: {
-                    create: {
-                        type: 'id_card',
-                        status: 'pending',
-                        documentUrl: docUrl
-                    }
-                }
             }
+        });
+
+        await prisma.verification.upsert({
+            where: { userId_type: { userId, type: 'id_card' } },
+            update: { status: 'pending', documentUrl: docUrl, rejectionReason: null },
+            create: { userId, type: 'id_card', status: 'pending', documentUrl: docUrl },
         });
 
         res.status(200).json({
@@ -40,7 +38,7 @@ const submitIdDoc = async (req, res) => {
 const getStatus = async (req, res) => {
     try {
         const verification = await prisma.verification.findFirst({
-            where: { userId: req.user.id, type: 'id_card' },
+            where: { userId: req.user.sub, type: 'id_card' },
             orderBy: { createdAt: 'desc' }
         });
 
@@ -55,4 +53,47 @@ const getStatus = async (req, res) => {
     }
 };
 
-module.exports = { submitIdDoc, getStatus };
+const getBadges = async (req, res) => {
+    try {
+        const userId = req.user.sub;
+        const [user, verifications] = await Promise.all([
+            prisma.user.findUnique({
+                where: { id: userId },
+                select: {
+                    phone: true,
+                    email: true,
+                    isVerified: true,
+                    identityStatus: true,
+                },
+            }),
+            prisma.verification.findMany({
+                where: { userId },
+                select: { type: true, status: true, updatedAt: true },
+            }),
+        ]);
+
+        const byType = new Map(verifications.map((entry) => [entry.type, entry]));
+        const phoneVerification = byType.get('phone');
+        const emailVerification = byType.get('email');
+        const idVerification = byType.get('id') || byType.get('id_card');
+
+        const badges = {
+            phoneVerified: Boolean(user?.phone && (phoneVerification?.status === 'verified' || user?.isVerified)),
+            emailVerified: Boolean(user?.email && (emailVerification?.status === 'verified' || user?.isVerified)),
+            idVerified: idVerification?.status === 'verified' || user?.identityStatus === 'verified',
+            profileScreened: user?.identityStatus === 'verified',
+            blueTick: (idVerification?.status === 'verified' || user?.identityStatus === 'verified') && Boolean(user?.isVerified),
+        };
+
+        res.status(200).json({
+            success: true,
+            badges,
+            details: verifications,
+        });
+    } catch (error) {
+        console.error('Get verification badges error:', error);
+        res.status(500).json({ error: 'Failed to fetch verification badges' });
+    }
+};
+
+module.exports = { submitIdDoc, getStatus, getBadges };

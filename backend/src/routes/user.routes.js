@@ -17,6 +17,10 @@ router.post('/profile/preferences', preferenceController.savePreferences); // Fa
 // Password
 router.put('/password', userController.updatePassword);
 
+// Privacy Settings
+router.get('/privacy', userController.getPrivacySettings);
+router.post('/privacy', userController.updatePrivacySettings);
+
 // Verification
 router.post('/verification', userController.submitVerification);
 
