@@ -29,8 +29,8 @@ export default function Step3() {
                     >
                         <option value="">Select Qualification</option>
                         <option value="high_school">High School</option>
-                        <option value="bachelors">Bachelor's Degree</option>
-                        <option value="masters">Master's Degree</option>
+                        <option value="bachelors">Bachelor&apos;s Degree</option>
+                        <option value="masters">Master&apos;s Degree</option>
                         <option value="phd">PhD / Doctorate</option>
                         <option value="other">Other</option>
                     </select>

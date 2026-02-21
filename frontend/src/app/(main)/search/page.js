@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
@@ -207,27 +207,46 @@ function normalizeOptions(source, fallback, ensureAny = true) {
   return normalized;
 }
 
+function getMatchTier(matchScore) {
+  if (matchScore >= 90) return "elite";
+  if (matchScore >= 80) return "strong";
+  return "rising";
+}
+
 function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, viewMode }) {
+  const matchTier = getMatchTier(Number(profile.match) || 0);
+  const metaLine = [profile.profession, profile.city].filter(Boolean).join(" | ");
+
   if (viewMode === "list") {
     return (
-      <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden", display: "flex" }}>
-        <div style={{ width: 186, flexShrink: 0, position: "relative" }}>
-          <Image src={profile.photo} alt={`${profile.firstName} profile`} width={620} height={760} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      <article className="panel panel-hover anim-rise listing-stage search-result-card search-result-list" style={{ overflow: "hidden", display: "flex" }}>
+        <div className="result-media" style={{ width: 200, flexShrink: 0, position: "relative" }}>
+          <Image className="result-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={620} height={760} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
+          <div style={{ position: "absolute", top: 10, left: 10 }}>
+            <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
+          </div>
         </div>
 
-        <div style={{ flex: 1, padding: "1rem", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
+        <div className="result-content" style={{ flex: 1, padding: "1rem", minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.65rem" }}>
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: "1.05rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1.08rem", lineHeight: 1.16 }}>
                 {profile.firstName}, {profile.age}
               </h3>
-              <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-                {profile.profession} - {profile.city}
+              <p className="profile-meta" style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.85rem" }}>
+                {metaLine}
               </p>
             </div>
-            <span className="chip chip-support" style={{ flexShrink: 0 }}>
-              {profile.match}% Match
-            </span>
+            <button
+              type="button"
+              onClick={() => onShortlist(profile.userId)}
+              className="button button-secondary shortlist-fab"
+              style={{ width: 40, height: 40, padding: 0, borderRadius: 12, fontWeight: 700, flexShrink: 0 }}
+              aria-label={isShortlisted ? "Unsave profile" : "Save profile"}
+            >
+              {isShortlisted ? "Saved" : "Save"}
+            </button>
           </div>
 
           <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.65rem" }}>
@@ -241,16 +260,13 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
 
           {Array.isArray(profile.reasons) && profile.reasons.length > 0 && (
             <p style={{ margin: "0.55rem 0 0", color: "var(--ink-muted)", fontSize: "0.78rem" }}>
-              {profile.reasons.join(" • ")}
+              {profile.reasons.join(" | ")}
             </p>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "0.55rem", marginTop: "0.9rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.55rem", marginTop: "0.9rem" }}>
             <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
               Send Interest
-            </button>
-            <button type="button" className="button button-secondary" onClick={() => onShortlist(profile.userId)} style={{ padding: "0.72rem 0.92rem" }}>
-              {isShortlisted ? "Saved" : "Save"}
             </button>
             <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.72rem 0.92rem" }}>
               View
@@ -262,27 +278,28 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
   }
 
   return (
-    <article className="panel panel-hover anim-rise listing-stage" style={{ overflow: "hidden" }}>
-      <div style={{ position: "relative", height: 220 }}>
-        <Image src={profile.photo} alt={`${profile.firstName} profile`} width={640} height={920} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    <article className="panel panel-hover anim-rise listing-stage search-result-card" style={{ overflow: "hidden" }}>
+      <div className="result-media" style={{ position: "relative", height: 220 }}>
+        <Image className="result-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={640} height={920} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.76), transparent 58%)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
-          <span className="chip chip-support">{profile.match}% Match</span>
+          <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
         </div>
         <button
           type="button"
           onClick={() => onShortlist(profile.userId)}
-          className="button button-secondary"
-          style={{ position: "absolute", top: 10, right: 10, width: 38, height: 38, borderRadius: 12, padding: 0 }}
+          className="button button-secondary shortlist-fab"
+          style={{ position: "absolute", top: 10, right: 10, width: 40, height: 40, borderRadius: 12, padding: 0 }}
+          aria-label={isShortlisted ? "Unsave profile" : "Save profile"}
         >
           {isShortlisted ? "Saved" : "Save"}
         </button>
-        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white" }}>
-          <h3 style={{ margin: 0, fontSize: "1.08rem" }}>
+        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white", right: 12 }}>
+          <h3 style={{ margin: 0, fontSize: "1.12rem", lineHeight: 1.14 }}>
             {profile.firstName}, {profile.age}
           </h3>
-          <p style={{ margin: "0.22rem 0 0", fontSize: "0.82rem", opacity: 0.92 }}>
-            {profile.profession} - {profile.city}
+          <p className="profile-meta" style={{ margin: "0.22rem 0 0", fontSize: "0.82rem", opacity: 0.92 }}>
+            {metaLine}
           </p>
         </div>
       </div>
@@ -298,7 +315,7 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
 
         {Array.isArray(profile.reasons) && profile.reasons.length > 0 && (
           <p style={{ margin: "0 0 0.7rem", color: "var(--ink-muted)", fontSize: "0.78rem" }}>
-            {profile.reasons.join(" • ")}
+            {profile.reasons.join(" | ")}
           </p>
         )}
 
@@ -314,8 +331,7 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
     </article>
   );
 }
-
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
@@ -607,6 +623,7 @@ export default function SearchPage() {
     if (filters.withHoroscopeOnly) chips.push({ key: "withHoroscopeOnly", label: "With horoscope" });
     return chips;
   }, [filters]);
+  const activeFilterCount = activeFilterChips.length;
 
   const removeFilterChip = (key) => {
     const defaultValue = INITIAL_FILTERS[key];
@@ -659,13 +676,16 @@ export default function SearchPage() {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "1rem" }} className="search-shell-grid">
-      <aside className="panel filter-panel" style={{ padding: "1rem", position: "sticky", top: "5.35rem", height: "fit-content" }}>
+      <aside className="panel filter-panel premium-filter-panel" style={{ padding: "1rem", position: "sticky", top: "5.35rem", height: "fit-content" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.78rem", gap: "0.5rem" }}>
-          <p className="section-label" style={{ margin: 0 }}>
-            Filters
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+            <p className="section-label" style={{ margin: 0 }}>
+              Filters
+            </p>
+            <span className="filter-count-chip">{activeFilterCount > 0 ? `${activeFilterCount} active` : "No filters"}</span>
+          </div>
 
-          <div style={{ display: "flex", gap: "0.42rem" }}>
+          <div style={{ display: "flex", gap: "0.42rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button type="button" className="button button-secondary" onClick={saveCurrentSearch}>
               Save Search
             </button>
@@ -887,30 +907,42 @@ export default function SearchPage() {
 
       <section>
         <div className="listing-hero">
-          <div>
+          <div className="hero-copy">
             <p className="section-label" style={{ marginBottom: "0.22rem" }}>
-              Discovery
+              Intent-Based Discovery
             </p>
             <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
-              Advanced Search Results
+              Smart Search
             </h1>
             <p className="section-copy" style={{ marginTop: "0.4rem", fontSize: "0.92rem" }}>
-              {searched ? `${visibleResults.length} profiles found` : "Run a search to see compatible profiles."}
+              {searched ? `${visibleResults.length} profiles found` : "Run a search to surface the most relevant profiles."}
             </p>
+            {searched && (
+              <div className="result-metrics">
+                <span className="metric-chip metric-chip-highlight">{visibleResults.length} results</span>
+                <span className="metric-chip">{shortlisted.size} saved</span>
+                <span className="metric-chip">{activeFilterCount} active filters</span>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
-            <select className="form-input" style={{ minWidth: 160 }} value={sort} onChange={(event) => setSort(event.target.value)}>
-              {SORT_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  Sort: {item.label}
-                </option>
-              ))}
-            </select>
-            <button type="button" className={`button ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "0.66rem 0.92rem" }}>
+          <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+            <div className="sort-control">
+              <label className="form-label" htmlFor="searchSort" style={{ marginBottom: "0.25rem" }}>
+                Sort by
+              </label>
+              <select id="searchSort" className="form-input" value={sort} onChange={(event) => setSort(event.target.value)}>
+                {SORT_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="button" className={`button view-switch-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} style={{ padding: "0.66rem 0.92rem" }}>
               Grid
             </button>
-            <button type="button" className={`button ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "0.66rem 0.92rem" }}>
+            <button type="button" className={`button view-switch-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} style={{ padding: "0.66rem 0.92rem" }}>
               List
             </button>
           </div>
@@ -924,7 +956,7 @@ export default function SearchPage() {
         ) : loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.9rem" }}>
             {Array.from({ length: 8 }).map((_, index) => (
-              <div key={`loading-${index}`} className="panel listing-stage" style={{ height: 332, background: "rgba(29, 78, 216, 0.06)" }} />
+              <div key={`loading-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 332 }} />
             ))}
           </div>
         ) : visibleResults.length === 0 ? (
@@ -938,22 +970,22 @@ export default function SearchPage() {
         ) : (
           <>
             {activeFilterChips.length > 0 && (
-              <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.8rem" }}>
+              <div className="active-chip-row" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.8rem" }}>
                 {activeFilterChips.map((chip) => (
                   <button
                     key={chip.key}
                     type="button"
                     className="button button-secondary"
-                    style={{ padding: "0.32rem 0.58rem", fontSize: "0.75rem" }}
+                    style={{ padding: "0.34rem 0.58rem", fontSize: "0.75rem" }}
                     onClick={() => removeFilterChip(chip.key)}
                   >
-                    {chip.label} ×
+                    {chip.label} x
                   </button>
                 ))}
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
+            <div className="results-grid" style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
               {visibleResults.map((profile) => (
                 <SearchResultCard
                   key={profile.id || profile.userId}
@@ -967,9 +999,9 @@ export default function SearchPage() {
             </div>
 
             {user && searched && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
+              <div className="pagination-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
                 <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.84rem" }}>
-                  Page {pagination.page} • Total {pagination.total}
+                  Page {pagination.page} | Total {pagination.total}
                 </p>
                 <div style={{ display: "flex", gap: "0.45rem" }}>
                   <button
@@ -998,6 +1030,227 @@ export default function SearchPage() {
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
       <style jsx>{`
+        .premium-filter-panel {
+          position: relative;
+          overflow: hidden;
+          border: 1px solid rgba(227, 68, 117, 0.2);
+          background: linear-gradient(175deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 251, 0.96) 52%, rgba(246, 250, 255, 0.95) 100%);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.1);
+        }
+
+        .premium-filter-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto auto 0;
+          width: 100%;
+          height: 2px;
+          background: linear-gradient(90deg, rgba(227, 68, 117, 0.35), rgba(29, 78, 216, 0.3), transparent);
+          pointer-events: none;
+        }
+
+        .filter-count-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.24rem 0.58rem;
+          border-radius: 999px;
+          border: 1px solid rgba(227, 68, 117, 0.26);
+          background: rgba(227, 68, 117, 0.11);
+          color: #b32458;
+          font-size: 0.73rem;
+          font-weight: 740;
+          letter-spacing: 0.01em;
+        }
+
+        .listing-hero {
+          padding: 1rem;
+          border-radius: 22px;
+          border: 1px solid rgba(29, 78, 216, 0.2);
+          background: linear-gradient(142deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.93));
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
+          margin-bottom: 1rem;
+        }
+
+        .hero-copy {
+          min-width: 0;
+        }
+
+        .result-metrics {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.42rem;
+          margin-top: 0.62rem;
+        }
+
+        .metric-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.24rem 0.6rem;
+          border-radius: 999px;
+          border: 1px solid rgba(148, 163, 184, 0.4);
+          background: rgba(255, 255, 255, 0.9);
+          color: var(--ink-muted);
+          font-size: 0.74rem;
+          font-weight: 680;
+        }
+
+        .metric-chip-highlight {
+          border-color: rgba(227, 68, 117, 0.3);
+          background: rgba(227, 68, 117, 0.13);
+          color: #b32458;
+        }
+
+        .hero-actions {
+          display: flex;
+          align-items: flex-end;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          margin-left: auto;
+        }
+
+        .sort-control {
+          min-width: 186px;
+          max-width: 210px;
+        }
+
+        .sort-control :global(.form-input) {
+          height: 40px;
+          padding-top: 0.5rem;
+          padding-bottom: 0.5rem;
+        }
+
+        .view-switch-btn {
+          min-width: 72px;
+        }
+
+        .active-chip-row :global(.button) {
+          border-color: rgba(227, 68, 117, 0.22);
+          background: rgba(255, 255, 255, 0.94);
+        }
+
+        .results-grid {
+          align-items: stretch;
+          grid-auto-rows: 1fr;
+        }
+
+        .skeleton-tile {
+          overflow: hidden;
+          background: linear-gradient(100deg, rgba(238, 244, 253, 0.95) 8%, rgba(255, 255, 255, 0.98) 40%, rgba(238, 244, 253, 0.95) 72%);
+          background-size: 200% 100%;
+          animation: shimmer 1.3s linear infinite;
+        }
+
+        .search-result-card {
+          transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease,
+            border-color 0.22s ease,
+            background 0.22s ease;
+        }
+
+        .search-result-card:hover {
+          transform: translateY(-3px);
+          border-color: rgba(227, 68, 117, 0.24);
+          box-shadow: 0 20px 36px rgba(15, 23, 42, 0.13);
+        }
+
+        .result-media {
+          overflow: hidden;
+          background: #0f172a;
+        }
+
+        .result-photo {
+          transition: transform 0.32s ease;
+          transform-origin: center;
+        }
+
+        .search-result-card:hover .result-photo {
+          transform: scale(1.035);
+        }
+
+        .profile-meta {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .match-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.35rem 0.7rem;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          font-size: 0.82rem;
+          font-weight: 760;
+          backdrop-filter: blur(8px);
+          line-height: 1;
+        }
+
+        .match-badge-elite {
+          color: #066848;
+          border-color: rgba(6, 104, 72, 0.22);
+          background: rgba(194, 241, 224, 0.95);
+        }
+
+        .match-badge-strong {
+          color: #b32458;
+          border-color: rgba(227, 68, 117, 0.3);
+          background: rgba(254, 217, 231, 0.95);
+        }
+
+        .match-badge-rising {
+          color: #945b09;
+          border-color: rgba(196, 131, 18, 0.26);
+          background: rgba(255, 238, 202, 0.95);
+        }
+
+        .shortlist-fab {
+          backdrop-filter: blur(10px);
+          background: rgba(255, 255, 255, 0.9) !important;
+          border: 1px solid rgba(227, 68, 117, 0.22) !important;
+          color: #8f2a4c;
+          font-size: 0.72rem;
+        }
+
+        .shortlist-fab:hover {
+          background: rgba(255, 255, 255, 0.98) !important;
+          border-color: rgba(227, 68, 117, 0.38) !important;
+        }
+
+        .search-result-list .result-media {
+          border-top-left-radius: 20px;
+          border-bottom-left-radius: 20px;
+        }
+
+        .search-result-list .result-content {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+
+        .pagination-row {
+          border: 1px solid rgba(29, 78, 216, 0.16);
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.86);
+          padding: 0.62rem 0.72rem;
+        }
+
+        @keyframes shimmer {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+
+        @media (max-width: 1180px) {
+          .hero-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
+        }
+
         @media (max-width: 980px) {
           .search-shell-grid {
             grid-template-columns: 1fr !important;
@@ -1007,7 +1260,52 @@ export default function SearchPage() {
             position: static !important;
           }
         }
+
+        @media (max-width: 760px) {
+          .search-result-list {
+            flex-direction: column !important;
+          }
+
+          .search-result-list .result-media {
+            width: 100% !important;
+            height: 220px;
+            border-top-right-radius: 20px;
+            border-bottom-left-radius: 0;
+          }
+        }
+
+        @media (max-width: 680px) {
+          .metric-chip {
+            font-size: 0.72rem;
+          }
+
+          .sort-control {
+            min-width: 100%;
+            max-width: 100%;
+          }
+
+          .hero-actions > :global(button) {
+            flex: 1;
+            justify-content: center;
+          }
+
+          .pagination-row {
+            flex-direction: column;
+            align-items: flex-start !important;
+            gap: 0.5rem;
+          }
+        }
       `}</style>
     </div>
   );
 }
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="panel" style={{ padding: "1.2rem" }}>Loading search...</div>}>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+

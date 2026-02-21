@@ -95,7 +95,7 @@ export default function PricingPage() {
             const isConfirmed = confirm(`Proceed to pay ₹${plan.price} for ${plan.name} plan (${plan.durationMonths} months)?`);
             if (isConfirmed) {
                 const verifyRes = await api.post("/payment/verify", {
-                    paymentId: `pay_mock_${Date.now()}`,
+                    paymentId: `pay_mock_${plan.id}_${order.orderId || "ord_mock"}`,
                     orderId: order.orderId || `ord_mock`,
                     planId: plan.id,
                 });

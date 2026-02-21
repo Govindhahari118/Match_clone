@@ -16,7 +16,7 @@ export default function VerificationPage() {
             <div className="mt-8 bg-blue-50 p-4 rounded-md text-sm text-blue-800">
                 <h3 className="font-semibold mb-2">Why Verify?</h3>
                 <ul className="list-disc list-inside space-y-1">
-                    <li>Get the "Verified" Blue Tick badge</li>
+                    <li>Get the &quot;Verified&quot; Blue Tick badge</li>
                     <li>Appear higher in search results</li>
                     <li>Unlock unlimited connection requests</li>
                     <li>Build trust with potential matches</li>

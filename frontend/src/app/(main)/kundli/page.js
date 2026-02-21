@@ -54,7 +54,7 @@ export default function KundliPage() {
                         <div>
                             <h3 style={{ fontSize: 16, fontWeight: 800, color: "#1e40af", marginBottom: "1rem", display: "flex", alignItems: "center", gap: 8 }}>
                                 <span style={{ background: "#dbeafe", width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>♂</span>
-                                Boy's Details
+                                Boy&apos;s Details
                             </h3>
                             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                                 <input name="mName" placeholder="Name" required className="k-input" onChange={handleChange} />
@@ -68,7 +68,7 @@ export default function KundliPage() {
                         <div>
                             <h3 style={{ fontSize: 16, fontWeight: 800, color: "#be123c", marginBottom: "1rem", display: "flex", alignItems: "center", gap: 8 }}>
                                 <span style={{ background: "#fce7f3", width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>♀</span>
-                                Girl's Details
+                                Girl&apos;s Details
                             </h3>
                             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                                 <input name="fName" placeholder="Name" required className="k-input" onChange={handleChange} />

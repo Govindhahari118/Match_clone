@@ -1,8 +1,8 @@
 import { Plus_Jakarta_Sans, Fraunces } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
-import GuestBanner from "@/components/GuestBanner";
 import { ThemeProvider } from "@/context/ThemeContext";
+import GuestBannerGate from "@/components/GuestBannerGate";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -42,7 +42,7 @@ export default function RootLayout({ children }) {
       <body className={`${plusJakarta.variable} ${fraunces.variable}`}>
         <ThemeProvider>
           <AuthProvider>
-            <GuestBanner />
+            <GuestBannerGate />
             {children}
           </AuthProvider>
         </ThemeProvider>

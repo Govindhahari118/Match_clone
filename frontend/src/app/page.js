@@ -727,7 +727,7 @@ function Dashboard({ user, logout }) {
                     {person.firstName}, {person.age}
                   </h3>
                   <p style={{ margin: "0.3rem 0 0", fontSize: "0.84rem", color: "var(--ink-muted)" }}>
-                    {person.role} · {person.city}
+                    {person.role} | {person.city}
                   </p>
                   <div style={{ marginTop: "0.55rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span className="chip chip-brand">{person.score}% Match</span>

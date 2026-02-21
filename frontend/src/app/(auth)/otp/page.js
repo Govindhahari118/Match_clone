@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 
-export default function OtpPage() {
+function OtpPageContent() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
@@ -99,5 +99,13 @@ export default function OtpPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function OtpPage() {
+  return (
+    <Suspense fallback={<div className="auth-shell"><div className="auth-card">Loading verification...</div></div>}>
+      <OtpPageContent />
+    </Suspense>
   );
 }

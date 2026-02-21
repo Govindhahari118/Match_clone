@@ -136,26 +136,47 @@ function normalizeOptions(source, fallback, ensureAny = true) {
   return normalized;
 }
 
+function getMatchTier(matchScore) {
+  if (matchScore >= 90) return "elite";
+  if (matchScore >= 80) return "strong";
+  return "rising";
+}
+
 function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }) {
+  const matchTier = getMatchTier(Number(profile.match) || 0);
+  const metaLine = [profile.profession, profile.city, profile.height ? `${profile.height}cm` : null]
+    .filter(Boolean)
+    .join(" | ");
+
   if (viewMode === "list") {
     return (
       <article className="panel panel-hover anim-rise listing-stage match-card match-card-list" style={{ overflow: "hidden", display: "flex" }}>
-        <div className="match-media" style={{ width: 192, flexShrink: 0, position: "relative" }}>
+        <div className="match-media" style={{ width: 208, flexShrink: 0, position: "relative" }}>
           <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
+          <div style={{ position: "absolute", top: 10, left: 10 }}>
+            <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
+          </div>
         </div>
-        <div style={{ padding: "1rem", flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.72rem", alignItems: "flex-start" }}>
+        <div className="match-card-content" style={{ padding: "1rem", flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.72rem", alignItems: "flex-start", marginBottom: "0.7rem" }}>
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: "1.08rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1.12rem", lineHeight: 1.15 }}>
                 {profile.firstName}, {profile.age}
               </h3>
-              <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-                {profile.profession} - {profile.city} - {profile.height ? `${profile.height}cm` : "Height NA"}
+              <p className="profile-meta" style={{ margin: "0.26rem 0 0", color: "var(--ink-muted)", fontSize: "0.84rem" }}>
+                {metaLine}
               </p>
             </div>
-            <span className="chip chip-support" style={{ flexShrink: 0 }}>
-              {profile.match}% Match
-            </span>
+            <button
+              type="button"
+              onClick={() => onShortlist(profile.userId)}
+              className="button button-secondary shortlist-fab"
+              style={{ width: 40, height: 40, padding: 0, borderRadius: 12, fontWeight: 700, flexShrink: 0 }}
+              aria-label={isShortlisted ? "Unsave profile" : "Save profile"}
+            >
+              {isShortlisted ? "Saved" : "Save"}
+            </button>
           </div>
 
           <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.66rem" }}>
@@ -165,12 +186,9 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
             {profile.income && <span className="chip chip-brand">{profile.income}</span>}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "0.54rem", marginTop: "0.9rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.54rem", marginTop: "0.9rem" }}>
             <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
               Send Interest
-            </button>
-            <button type="button" className="button button-secondary" onClick={() => onShortlist(profile.userId)} style={{ padding: "0.72rem 0.92rem" }}>
-              {isShortlisted ? "Saved" : "Save"}
             </button>
             <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.72rem 0.92rem" }}>
               View
@@ -187,17 +205,23 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
         <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.78), rgba(9, 18, 36, 0.1) 58%, transparent)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
-          <span className="chip chip-support">{profile.match}% Match</span>
+          <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
         </div>
-        <button type="button" onClick={() => onShortlist(profile.userId)} className="button button-secondary shortlist-fab" style={{ position: "absolute", top: 10, right: 10, width: 38, height: 38, padding: 0, borderRadius: 12, fontWeight: 700 }}>
+        <button
+          type="button"
+          onClick={() => onShortlist(profile.userId)}
+          className="button button-secondary shortlist-fab"
+          style={{ position: "absolute", top: 10, right: 10, width: 40, height: 40, padding: 0, borderRadius: 12, fontWeight: 700 }}
+          aria-label={isShortlisted ? "Unsave profile" : "Save profile"}
+        >
           {isShortlisted ? "Saved" : "Save"}
         </button>
-        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white" }}>
-          <h3 style={{ margin: 0, fontSize: "1.12rem" }}>
+        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white", right: 12 }}>
+          <h3 style={{ margin: 0, fontSize: "1.16rem", lineHeight: 1.14 }}>
             {profile.firstName}, {profile.age}
           </h3>
-          <p style={{ margin: "0.2rem 0 0", opacity: 0.9, fontSize: "0.82rem" }}>
-            {profile.profession} - {profile.city}
+          <p className="profile-meta" style={{ margin: "0.2rem 0 0", opacity: 0.9, fontSize: "0.82rem" }}>
+            {metaLine}
           </p>
         </div>
       </div>
@@ -205,6 +229,7 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
       <div style={{ padding: "0.94rem" }}>
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.74rem" }}>
           {profile.isVerified && <span className="chip chip-support">Verified</span>}
+          {profile.religion && <span className="chip chip-brand">{profile.religion}</span>}
           {profile.education && <span className="chip chip-brand">{profile.education}</span>}
           {profile.income && <span className="chip chip-brand">{profile.income}</span>}
         </div>
@@ -231,6 +256,7 @@ function MatchesContent() {
   const [rawProfiles, setRawProfiles] = useState([]);
   const [shortlisted, setShortlisted] = useState(new Set());
   const [viewMode, setViewMode] = useState("grid");
+  const [sortBy, setSortBy] = useState("compatibility");
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [filterMeta, setFilterMeta] = useState(FALLBACK_FILTER_META);
@@ -307,7 +333,7 @@ function MatchesContent() {
 
   const visibleProfiles = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
-    return rawProfiles.filter((item) => {
+    const filtered = rawProfiles.filter((item) => {
       if (item.age < Number(filters.minAge) || item.age > Number(filters.maxAge)) return false;
       if (filters.religion !== "Any" && item.religion !== filters.religion) return false;
       if (filters.caste !== "Any" && item.caste !== filters.caste) return false;
@@ -327,7 +353,20 @@ function MatchesContent() {
       if (!query) return true;
       return [item.firstName, item.city, item.profession, item.religion, item.caste, item.subCaste, item.education].filter(Boolean).join(" ").toLowerCase().includes(query);
     });
-  }, [rawProfiles, filters]);
+
+    const sorted = [...filtered];
+    if (sortBy === "compatibility") {
+      sorted.sort((a, b) => Number(b.match || 0) - Number(a.match || 0));
+    } else if (sortBy === "verified") {
+      sorted.sort((a, b) => Number(Boolean(b.isVerified)) - Number(Boolean(a.isVerified)) || Number(b.match || 0) - Number(a.match || 0));
+    } else if (sortBy === "ageAsc") {
+      sorted.sort((a, b) => Number(a.age || 0) - Number(b.age || 0));
+    } else if (sortBy === "ageDesc") {
+      sorted.sort((a, b) => Number(b.age || 0) - Number(a.age || 0));
+    }
+
+    return sorted;
+  }, [rawProfiles, filters, sortBy]);
 
   const profileInsights = useMemo(() => {
     const total = visibleProfiles.length;
@@ -410,7 +449,7 @@ function MatchesContent() {
             <p className="section-label" style={{ margin: 0 }}>
               Filters
             </p>
-            <span className="filter-count-chip">{activeFilterCount} active</span>
+            <span className="filter-count-chip">{activeFilterCount > 0 ? `${activeFilterCount} active` : "No filters"}</span>
           </div>
           <div style={{ display: "flex", gap: "0.42rem" }}>
             <button type="button" className="button button-secondary" onClick={() => setShowAdvanced((previous) => !previous)}>
@@ -582,26 +621,38 @@ function MatchesContent() {
 
       <section>
         <div className="listing-hero">
-          <div>
+          <div className="hero-copy">
             <p className="section-label" style={{ marginBottom: "0.2rem" }}>
-              Compatible Profiles
+              Curated Profiles
             </p>
             <h1 className="section-title" style={{ fontSize: "clamp(1.64rem, 3vw, 2.24rem)", margin: 0 }}>
-              Match Discovery
+              My Matches
             </h1>
             <p className="section-copy" style={{ margin: "0.35rem 0 0", fontSize: "0.9rem" }}>
-              {loading ? "Finding your best matches..." : `${visibleProfiles.length} profiles available`}
+              {loading ? "Finding your best matches..." : `${visibleProfiles.length} compatible profiles found`}
             </p>
             {!loading && (
               <div className="result-metrics">
+                <span className="metric-chip metric-chip-highlight">{profileInsights.total} curated</span>
                 <span className="metric-chip">{profileInsights.verified} verified</span>
                 <span className="metric-chip">{profileInsights.highCompatibility} high compatibility</span>
-                <span className="metric-chip">Live filters: {activeFilterCount}</span>
+                <span className="metric-chip">{shortlisted.size} saved</span>
               </div>
             )}
           </div>
 
           <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+            <div className="sort-control">
+              <label className="form-label" htmlFor="sortBy" style={{ marginBottom: "0.25rem" }}>
+                Sort by
+              </label>
+              <select id="sortBy" className="form-input" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                <option value="compatibility">Top Compatibility</option>
+                <option value="verified">Verified First</option>
+                <option value="ageAsc">Age: Low to High</option>
+                <option value="ageDesc">Age: High to Low</option>
+              </select>
+            </div>
             <Link href="/search" className="button button-secondary">
               Advanced Search
             </Link>
@@ -617,7 +668,7 @@ function MatchesContent() {
         {loading ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.9rem" }}>
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={`skeleton-${index}`} className="panel listing-stage" style={{ height: 334, background: "rgba(29, 78, 216, 0.06)" }} />
+              <div key={`skeleton-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 334 }} />
             ))}
           </div>
         ) : visibleProfiles.length === 0 ? (
@@ -641,38 +692,54 @@ function MatchesContent() {
 
       <style jsx>{`
         .premium-filter-panel {
-          border: 1px solid rgba(29, 78, 216, 0.18);
-          background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.94));
-          box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+          position: relative;
+          overflow: hidden;
+          border: 1px solid rgba(227, 68, 117, 0.2);
+          background: linear-gradient(175deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 247, 251, 0.96) 52%, rgba(246, 250, 255, 0.95) 100%);
+          box-shadow: 0 18px 40px rgba(15, 23, 42, 0.1);
+        }
+
+        .premium-filter-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto auto 0;
+          width: 100%;
+          height: 2px;
+          background: linear-gradient(90deg, rgba(227, 68, 117, 0.35), rgba(29, 78, 216, 0.3), transparent);
+          pointer-events: none;
         }
 
         .filter-count-chip {
           display: inline-flex;
           align-items: center;
-          padding: 0.22rem 0.58rem;
+          padding: 0.24rem 0.58rem;
           border-radius: 999px;
-          border: 1px solid rgba(29, 78, 216, 0.26);
-          background: rgba(29, 78, 216, 0.1);
-          color: var(--brand-deep);
+          border: 1px solid rgba(227, 68, 117, 0.26);
+          background: rgba(227, 68, 117, 0.11);
+          color: #b32458;
           font-size: 0.73rem;
-          font-weight: 760;
+          font-weight: 740;
           letter-spacing: 0.01em;
         }
 
         .listing-hero {
-          padding: 0.96rem 1rem;
-          border-radius: 20px;
-          border: 1px solid rgba(29, 78, 216, 0.16);
-          background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(245, 249, 255, 0.94));
-          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+          padding: 1rem;
+          border-radius: 22px;
+          border: 1px solid rgba(29, 78, 216, 0.2);
+          background: linear-gradient(142deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.93));
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
           margin-bottom: 1rem;
+        }
+
+        .hero-copy {
+          min-width: 0;
         }
 
         .result-metrics {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
-          gap: 0.4rem;
+          gap: 0.42rem;
           margin-top: 0.62rem;
         }
 
@@ -681,65 +748,160 @@ function MatchesContent() {
           align-items: center;
           padding: 0.24rem 0.6rem;
           border-radius: 999px;
-          border: 1px solid rgba(148, 163, 184, 0.42);
-          background: rgba(248, 250, 252, 0.95);
+          border: 1px solid rgba(148, 163, 184, 0.4);
+          background: rgba(255, 255, 255, 0.9);
           color: var(--ink-muted);
-          font-size: 0.76rem;
-          font-weight: 650;
+          font-size: 0.74rem;
+          font-weight: 680;
+        }
+
+        .metric-chip-highlight {
+          border-color: rgba(227, 68, 117, 0.3);
+          background: rgba(227, 68, 117, 0.13);
+          color: #b32458;
         }
 
         .hero-actions {
+          display: flex;
+          align-items: flex-end;
           flex-wrap: wrap;
+          justify-content: flex-end;
+          margin-left: auto;
+        }
+
+        .sort-control {
+          min-width: 188px;
+          max-width: 208px;
+        }
+
+        .sort-control :global(.form-input) {
+          height: 40px;
+          padding-top: 0.5rem;
+          padding-bottom: 0.5rem;
         }
 
         .view-switch-btn {
-          min-width: 70px;
+          min-width: 72px;
         }
 
         .results-grid {
           align-items: stretch;
+          grid-auto-rows: 1fr;
+        }
+
+        .skeleton-tile {
+          overflow: hidden;
+          background: linear-gradient(100deg, rgba(238, 244, 253, 0.95) 8%, rgba(255, 255, 255, 0.98) 40%, rgba(238, 244, 253, 0.95) 72%);
+          background-size: 200% 100%;
+          animation: shimmer 1.3s linear infinite;
         }
 
         .listing-stage {
           transition:
-            transform 0.24s ease,
-            box-shadow 0.24s ease,
-            border-color 0.24s ease,
-            background 0.24s ease;
+            transform 0.22s ease,
+            box-shadow 0.22s ease,
+            border-color 0.22s ease,
+            background 0.22s ease;
+        }
+
+        .match-card {
+          position: relative;
         }
 
         .match-media {
           overflow: hidden;
+          background: #0f172a;
+        }
+
+        .match-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.35rem 0.7rem;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          font-size: 0.82rem;
+          font-weight: 760;
+          backdrop-filter: blur(8px);
+          line-height: 1;
+        }
+
+        .match-badge-elite {
+          color: #066848;
+          border-color: rgba(6, 104, 72, 0.22);
+          background: rgba(194, 241, 224, 0.95);
+        }
+
+        .match-badge-strong {
+          color: #b32458;
+          border-color: rgba(227, 68, 117, 0.3);
+          background: rgba(254, 217, 231, 0.95);
+        }
+
+        .match-badge-rising {
+          color: #945b09;
+          border-color: rgba(196, 131, 18, 0.26);
+          background: rgba(255, 238, 202, 0.95);
         }
 
         .match-photo {
-          transition: transform 0.36s ease;
+          transition: transform 0.32s ease;
+          transform-origin: center;
+        }
+
+        .profile-meta {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .match-card:hover {
-          transform: translateY(-4px);
-          border-color: rgba(29, 78, 216, 0.26);
-          box-shadow: 0 20px 38px rgba(15, 23, 42, 0.14);
+          transform: translateY(-3px);
+          border-color: rgba(227, 68, 117, 0.24);
+          box-shadow: 0 20px 36px rgba(15, 23, 42, 0.13);
         }
 
         .match-card:hover .match-photo {
-          transform: scale(1.04);
+          transform: scale(1.035);
         }
 
         .shortlist-fab {
           backdrop-filter: blur(10px);
           background: rgba(255, 255, 255, 0.9) !important;
-          border: 1px solid rgba(29, 78, 216, 0.2) !important;
+          border: 1px solid rgba(227, 68, 117, 0.22) !important;
+          color: #8f2a4c;
+          font-size: 0.72rem;
         }
 
         .shortlist-fab:hover {
           background: rgba(255, 255, 255, 0.98) !important;
-          border-color: rgba(29, 78, 216, 0.34) !important;
+          border-color: rgba(227, 68, 117, 0.38) !important;
         }
 
         .match-card-list .match-media {
-          border-top-left-radius: 18px;
-          border-bottom-left-radius: 18px;
+          border-top-left-radius: 20px;
+          border-bottom-left-radius: 20px;
+        }
+
+        .match-card-list .match-card-content {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+
+        @keyframes shimmer {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+
+        @media (max-width: 1180px) {
+          .hero-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
         }
 
         @media (max-width: 980px) {
@@ -753,6 +915,19 @@ function MatchesContent() {
 
           .listing-hero {
             padding: 0.86rem;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .match-card-list {
+            flex-direction: column !important;
+          }
+
+          .match-card-list .match-media {
+            width: 100% !important;
+            height: 220px;
+            border-top-right-radius: 20px;
+            border-bottom-left-radius: 0;
           }
         }
 
@@ -773,6 +948,11 @@ function MatchesContent() {
           .hero-actions > :global(button) {
             flex: 1;
             justify-content: center;
+          }
+
+          .sort-control {
+            min-width: 100%;
+            max-width: 100%;
           }
         }
       `}</style>

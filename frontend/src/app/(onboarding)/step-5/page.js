@@ -29,7 +29,7 @@ export default function Step5() {
     return (
         <div>
             <h2 className="text-2xl font-bold mb-6">Partner Preferences</h2>
-            <p className="text-gray-600 mb-6">Tell us who you're looking for to get better matches.</p>
+            <p className="text-gray-600 mb-6">Tell us who you&apos;re looking for to get better matches.</p>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
@@ -61,7 +61,7 @@ export default function Step5() {
                         {...register("marital_status")}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
-                        <option value="any">Doesn't Matter</option>
+                        <option value="any">Doesn&apos;t Matter</option>
                         <option value="never_married">Never Married</option>
                         <option value="divorced">Divorced</option>
                         <option value="widowed">Widowed</option>
@@ -98,7 +98,7 @@ export default function Step5() {
                         {...register("min_income_band")}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     >
-                        <option value="">Doesn't Matter</option>
+                        <option value="">Doesn&apos;t Matter</option>
                         <option value="5-10L">5 LPA+</option>
                         <option value="10-25L">10 LPA+</option>
                         <option value="25-50L">25 LPA+</option>

@@ -29,9 +29,7 @@ export default function GuestBanner() {
   return (
     <div
       style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 120,
+        position: "relative",
         background: "linear-gradient(90deg, #111827, #374151)",
         color: "white",
         padding: "10px 16px",

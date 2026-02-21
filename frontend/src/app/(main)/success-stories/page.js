@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 const STORIES = [
@@ -106,9 +107,9 @@ export default function SuccessStoriesPage() {
                         {/* Photos banner */}
                         <div style={{ position: "relative", height: 160, background: "linear-gradient(135deg, #1a0533, #7c1d6f)" }}>
                             <div style={{ position: "absolute", bottom: -28, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 0 }}>
-                                <img src={story.photo1} alt="" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "3px solid white", marginRight: -10, zIndex: 1 }} />
+                                <Image src={story.photo1} alt="" width={64} height={64} unoptimized style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "3px solid white", marginRight: -10, zIndex: 1 }} />
                                 <div style={{ width: 28, height: 28, background: "linear-gradient(135deg, #e11d48, #c2185b)", borderRadius: "50%", border: "3px solid white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, zIndex: 2, alignSelf: "center", marginTop: 18 }}>❤️</div>
-                                <img src={story.photo2} alt="" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "3px solid white", marginLeft: -10, zIndex: 1 }} />
+                                <Image src={story.photo2} alt="" width={64} height={64} unoptimized style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "3px solid white", marginLeft: -10, zIndex: 1 }} />
                             </div>
                             <div style={{ position: "absolute", top: 12, left: 14 }}>
                                 <span style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", color: "white", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, border: "1px solid rgba(255,255,255,0.2)" }}>{story.tag}</span>
@@ -123,7 +124,7 @@ export default function SuccessStoriesPage() {
                             <h3 style={{ fontWeight: 900, fontSize: 17, color: "#111827", textAlign: "center", marginBottom: 4 }}>{story.coupleNames}</h3>
                             <p style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", marginBottom: "1rem" }}>📍 {story.city} · Married {story.marriageYear}</p>
                             <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, display: expanded === story.id ? "block" : "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                "{story.story}"
+                                &ldquo;{story.story}&rdquo;
                             </p>
                             <button
                                 onClick={() => setExpanded(expanded === story.id ? null : story.id)}
@@ -153,7 +154,7 @@ export default function SuccessStoriesPage() {
                             <div style={{ textAlign: "center", padding: "1rem" }}>
                                 <div style={{ fontSize: 64, marginBottom: "1rem" }}>🎉</div>
                                 <h3 style={{ fontWeight: 900, fontSize: 20, color: "#111827", marginBottom: 8 }}>Story Submitted!</h3>
-                                <p style={{ color: "#64748b", fontSize: 14, marginBottom: "1.5rem" }}>Thank you for sharing. We'll review and publish your story soon.</p>
+                                <p style={{ color: "#64748b", fontSize: 14, marginBottom: "1.5rem" }}>Thank you for sharing. We&apos;ll review and publish your story soon.</p>
                                 <button onClick={() => { setShowForm(false); setSubmitted(false); }} style={{ padding: "10px 24px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 999, fontWeight: 700, cursor: "pointer" }}>Close</button>
                             </div>
                         ) : (

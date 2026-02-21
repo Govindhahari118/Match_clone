@@ -113,7 +113,7 @@ export default function IdentityVerification() {
                     <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
                     <div>
                         <p className="font-bold">Verified</p>
-                        <p className="text-sm">Your identity has been verified. You have the "Verified Badge" on your profile.</p>
+                        <p className="text-sm">Your identity has been verified. You have the &quot;Verified Badge&quot; on your profile.</p>
                     </div>
                 </div>
             )}

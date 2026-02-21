@@ -24,12 +24,12 @@ const NAV_ITEMS = [
 ];
 
 const MOBILE_PRIMARY = ["/", "/matches", "/search", "/chat", "/profile"];
-const QUICK_NAV_ITEMS = ["/matches", "/search", "/interests", "/chat", "/profile", "/notifications", "/pricing", "/help"];
+const QUICK_NAV_ITEMS = ["/", "/matches", "/search", "/interests", "/shortlists", "/chat", "/profile", "/notifications", "/pricing", "/help"];
 
 export default function MainLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -54,7 +54,7 @@ export default function MainLayout({ children }) {
     <div className="page-shell" style={{ background: "var(--bg-soft)" }}>
       <div className="container-shell" style={{ paddingTop: "1.08rem" }}>
         <header
-          className="panel app-topbar"
+          className="panel app-topbar premium-topbar"
           style={{
             display: "flex",
             alignItems: "center",
@@ -101,12 +101,18 @@ export default function MainLayout({ children }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="form-input"
-              placeholder="Search by name, city, or profile keyword"
+              placeholder="Search by ID, name, or profile keyword"
               aria-label="Global search"
             />
           </form>
 
           <div className="topbar-actions" style={{ display: "flex", alignItems: "center", gap: "0.48rem" }}>
+            {user && (
+              <Link className="button button-primary hide-mobile-sm" href="/pricing">
+                Upgrade
+              </Link>
+            )}
+
             <Link className="button button-secondary hide-mobile-xs" href="/notifications">
               Alerts
             </Link>
@@ -122,7 +128,11 @@ export default function MainLayout({ children }) {
               {theme === "dark" ? "Dark" : "Light"}
             </button>
 
-            {user ? (
+            {loading ? (
+              <span className="button button-secondary" style={{ opacity: 0.7, cursor: "default" }}>
+                Account
+              </span>
+            ) : user ? (
               <>
                 <Link
                   href="/profile"
@@ -149,7 +159,7 @@ export default function MainLayout({ children }) {
         </header>
 
         <nav
-          className="panel context-quick-nav"
+          className="panel context-quick-nav premium-quick-nav"
           style={{
             marginBottom: "0.82rem",
             padding: "0.5rem",
@@ -163,11 +173,11 @@ export default function MainLayout({ children }) {
             <Link
               key={item.href}
               href={item.href}
-              className="button button-secondary"
+              className="button button-secondary quick-nav-link"
               style={{
                 whiteSpace: "nowrap",
-                background: isActive(item.href) ? "rgba(29, 78, 216, 0.16)" : undefined,
-                borderColor: isActive(item.href) ? "rgba(29, 78, 216, 0.35)" : undefined,
+                background: isActive(item.href) ? "rgba(227, 68, 117, 0.15)" : undefined,
+                borderColor: isActive(item.href) ? "rgba(227, 68, 117, 0.36)" : undefined,
                 color: isActive(item.href) ? "var(--ink)" : undefined,
               }}
             >
@@ -329,9 +339,38 @@ export default function MainLayout({ children }) {
       )}
 
       <style jsx>{`
+        .premium-topbar {
+          border: 1px solid rgba(29, 78, 216, 0.22);
+          background: linear-gradient(160deg, rgba(255, 255, 255, 0.97), rgba(245, 249, 255, 0.95));
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+        }
+
+        .premium-quick-nav {
+          border: 1px solid rgba(29, 78, 216, 0.18);
+          background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.93));
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+        }
+
+        .quick-nav-link {
+          padding: 0.62rem 0.92rem;
+          font-weight: 700;
+          line-height: 1.2;
+          min-height: 40px;
+        }
+
+        .topbar-search :global(.form-input) {
+          background: rgba(255, 255, 255, 0.86);
+        }
+
         .topbar-actions a,
         .topbar-actions button {
           white-space: nowrap;
+        }
+
+        @media (max-width: 680px) {
+          .hide-mobile-sm {
+            display: none !important;
+          }
         }
 
         @media (max-width: 560px) {
@@ -370,10 +409,6 @@ export default function MainLayout({ children }) {
 
         @media (min-width: 1201px) {
           .mobile-bottom-nav {
-            display: none !important;
-          }
-
-          .context-quick-nav {
             display: none !important;
           }
 

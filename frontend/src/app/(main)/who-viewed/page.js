@@ -1,129 +1,283 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
+import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import api from "../../../services/api";
 
 const MOCK_VIEWERS = [
-    { id: "v1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, receivedAt: "5m ago" },
-    { id: "v2", userId: "u2", firstName: "Rohan", age: 27, city: "Bangalore", profession: "Engineer", photo: "https://randomuser.me/api/portraits/men/12.jpg", isVerified: true, receivedAt: "2h ago" },
-    { id: "v3", userId: "u3", firstName: "Karan", age: 31, city: "Delhi", profession: "Lawyer", photo: "https://randomuser.me/api/portraits/men/13.jpg", isVerified: false, receivedAt: "1d ago" },
-    { id: "v4", userId: "u4", firstName: "Vivek", age: 28, city: "Pune", profession: "MBA", photo: "https://randomuser.me/api/portraits/men/14.jpg", isVerified: true, receivedAt: "2d ago" },
-    { id: "v5", userId: "u5", firstName: "Rahul", age: 30, city: "Chennai", profession: "Architect", photo: "https://randomuser.me/api/portraits/men/15.jpg", isVerified: false, receivedAt: "3d ago" },
-    { id: "v6", userId: "u6", firstName: "Dev", age: 26, city: "Hyderabad", profession: "Designer", photo: "https://randomuser.me/api/portraits/men/16.jpg", isVerified: true, receivedAt: "5d ago" },
+  { id: "v1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, receivedAt: "5m ago" },
+  { id: "v2", userId: "u2", firstName: "Rohan", age: 27, city: "Bangalore", profession: "Engineer", photo: "https://randomuser.me/api/portraits/men/12.jpg", isVerified: true, receivedAt: "2h ago" },
+  { id: "v3", userId: "u3", firstName: "Karan", age: 31, city: "Delhi", profession: "Lawyer", photo: "https://randomuser.me/api/portraits/men/13.jpg", isVerified: false, receivedAt: "1d ago" },
+  { id: "v4", userId: "u4", firstName: "Vivek", age: 28, city: "Pune", profession: "MBA", photo: "https://randomuser.me/api/portraits/men/14.jpg", isVerified: true, receivedAt: "2d ago" },
+  { id: "v5", userId: "u5", firstName: "Rahul", age: 30, city: "Chennai", profession: "Architect", photo: "https://randomuser.me/api/portraits/men/15.jpg", isVerified: false, receivedAt: "3d ago" },
+  { id: "v6", userId: "u6", firstName: "Dev", age: 26, city: "Hyderabad", profession: "Designer", photo: "https://randomuser.me/api/portraits/men/16.jpg", isVerified: true, receivedAt: "5d ago" },
 ];
 
+function getViewerTier(index) {
+  if (index < 2) return "priority";
+  if (index < 4) return "standard";
+  return "gated";
+}
+
 export default function WhoViewedPage() {
-    const [viewers, setViewers] = useState([]);
-    const [loading, setLoading] = useState(true);
+  const [viewers, setViewers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetch = async () => {
-            try {
-                const res = await api.get("/interactions/profile-viewers");
-                setViewers(res.data?.length ? res.data : MOCK_VIEWERS);
-            } catch {
-                setViewers(MOCK_VIEWERS);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetch();
-    }, []);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await api.get("/interactions/profile-viewers");
+        setViewers(Array.isArray(res.data) && res.data.length > 0 ? res.data : MOCK_VIEWERS);
+      } catch {
+        setViewers(MOCK_VIEWERS);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return (
+    fetchData();
+  }, []);
+
+  const viewerStats = useMemo(() => {
+    const total = viewers.length;
+    const verified = viewers.filter((viewer) => viewer.isVerified).length;
+    const recent = viewers.filter((viewer) => /m ago|h ago/.test(viewer.receivedAt || "")).length;
+    return { total, verified, recent };
+  }, [viewers]);
+
+  return (
+    <div style={{ display: "grid", gap: "0.95rem" }}>
+      <section className="listing-hero">
         <div>
-            {/* Header */}
-            <div style={{ marginBottom: "1.5rem" }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827" }}>Who Viewed My Profile 👁</h1>
-                <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>
-                    These people recently visited your profile — {viewers.length} unique visitors
-                </p>
-            </div>
-
-            {/* Upgrade teaser banner */}
-            <div style={{ background: "linear-gradient(135deg, #fffbeb, #fef3c7)", border: "1px solid #fde68a", borderRadius: 20, padding: "1rem 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontSize: 28 }}>👑</span>
-                    <div>
-                        <p style={{ fontWeight: 800, fontSize: 14, color: "#78350f" }}>See all visitors in real-time</p>
-                        <p style={{ fontSize: 12, color: "#92400e", marginTop: 2 }}>Upgrade to Gold to see complete visitor list with contact details</p>
-                    </div>
-                </div>
-                <Link href="/pricing" style={{ padding: "9px 22px", background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "white", borderRadius: 12, fontSize: 13, fontWeight: 800, textDecoration: "none", flexShrink: 0, boxShadow: "0 4px 12px rgba(245,158,11,0.3)" }}>
-                    Upgrade Now →
-                </Link>
-            </div>
-
-            {loading ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1rem" }}>
-                    {Array(6).fill(0).map((_, i) => (
-                        <div key={i} style={{ display: "flex", gap: 12, padding: 16, background: "white", borderRadius: 20, border: "1px solid #f1f5f9" }}>
-                            <div className="skeleton" style={{ width: 64, height: 64, borderRadius: "50%", flexShrink: 0 }}></div>
-                            <div style={{ flex: 1 }}>
-                                <div className="skeleton" style={{ height: 13, width: "55%", marginBottom: 8 }}></div>
-                                <div className="skeleton" style={{ height: 11, width: "75%" }}></div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : viewers.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "5rem 2rem", background: "white", borderRadius: 24, border: "1.5px solid #f1f5f9" }}>
-                    <div style={{ fontSize: 64, marginBottom: "1rem" }}>👁</div>
-                    <h3 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: 8 }}>No profile views yet</h3>
-                    <p style={{ color: "#64748b", fontSize: 14, marginBottom: "1.5rem" }}>Complete your profile to attract more visitors</p>
-                    <Link href="/profile" style={{ display: "inline-block", padding: "10px 24px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", borderRadius: 999, textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
-                        Complete Profile →
-                    </Link>
-                </div>
-            ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1rem" }}>
-                    {viewers.map((viewer, idx) => {
-                        const blurred = idx >= 3; // Blur after 3 for non-premium
-                        return (
-                            <div
-                                key={viewer.id || viewer.userId}
-                                style={{
-                                    display: "flex", alignItems: "center", gap: 14,
-                                    background: "white", borderRadius: 20,
-                                    border: "1.5px solid #f1f5f9",
-                                    padding: "14px 16px",
-                                    boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
-                                    transition: "box-shadow 0.2s",
-                                    position: "relative",
-                                    overflow: "hidden",
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.boxShadow = "0 6px 24px rgba(0,0,0,0.09)"}
-                                onMouseLeave={e => e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,0.04)"}
-                            >
-                                {/* Blur overlay for non-premium */}
-                                {blurred && (
-                                    <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(6px)", background: "rgba(255,255,255,0.6)", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 20 }}>
-                                        <Link href="/pricing" style={{ padding: "7px 18px", background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "white", borderRadius: 999, fontSize: 12, fontWeight: 800, textDecoration: "none" }}>
-                                            👑 Unlock
-                                        </Link>
-                                    </div>
-                                )}
-                                <div style={{ position: "relative", flexShrink: 0 }}>
-                                    <img src={viewer.photo} alt={viewer.firstName} style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "2px solid #fce7f3" }} />
-                                    <span style={{ position: "absolute", bottom: 1, right: 1, width: 12, height: 12, background: "#10b981", borderRadius: "50%", border: "2px solid white" }}></span>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <h3 style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>{viewer.firstName}, {viewer.age}</h3>
-                                        {viewer.isVerified && <span style={{ fontSize: 12 }}>✅</span>}
-                                    </div>
-                                    <p style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{viewer.profession} · {viewer.city}</p>
-                                    <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>👁 Viewed {viewer.receivedAt}</p>
-                                </div>
-                                <Link href={`/profile/${viewer.userId}`} style={{ flexShrink: 0, padding: "7px 14px", background: "#fff1f2", border: "1.5px solid #fecdd3", color: "#e11d48", borderRadius: 10, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-                                    View
-                                </Link>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+          <p className="section-label" style={{ marginBottom: "0.22rem" }}>
+            Visibility Insights
+          </p>
+          <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
+            Who Viewed Your Profile
+          </h1>
+          <p className="section-copy" style={{ marginTop: "0.38rem", fontSize: "0.92rem" }}>
+            Monitor profile attention and convert high-intent visitors into conversations.
+          </p>
+          <div className="result-metrics">
+            <span className="metric-chip metric-chip-highlight">{viewerStats.total} visitors</span>
+            <span className="metric-chip">{viewerStats.recent} recent</span>
+            <span className="metric-chip">{viewerStats.verified} verified</span>
+          </div>
         </div>
-    );
+
+        <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+          <Link href="/pricing" className="button button-primary">
+            Upgrade Access
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel upgrade-banner" style={{ padding: "0.9rem" }}>
+        <p style={{ margin: 0, color: "#8a5b00", fontSize: "0.85rem", fontWeight: 650 }}>
+          Premium unlock: full visitor history, visitor intent scoring, and priority outreach suggestions.
+        </p>
+      </section>
+
+      {loading ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "0.9rem" }}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={`viewer-loading-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 110 }} />
+          ))}
+        </div>
+      ) : viewers.length === 0 ? (
+        <section className="panel listing-stage" style={{ textAlign: "center", padding: "2.2rem" }}>
+          <h2 style={{ marginTop: 0, marginBottom: "0.38rem" }}>No profile views yet</h2>
+          <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>
+            Complete your profile and stay active to increase discoverability.
+          </p>
+          <Link href="/profile" className="button button-primary" style={{ marginTop: "0.9rem" }}>
+            Complete Profile
+          </Link>
+        </section>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "0.9rem" }}>
+          {viewers.map((viewer, index) => {
+            const tier = getViewerTier(index);
+            const gated = tier === "gated";
+
+            return (
+              <article key={viewer.id || viewer.userId} className="panel listing-stage viewer-card" style={{ padding: "0.72rem", position: "relative", overflow: "hidden" }}>
+                {gated && (
+                  <div className="gated-overlay">
+                    <Link href="/pricing" className="button button-primary" style={{ paddingInline: "0.9rem" }}>
+                      Unlock Viewer
+                    </Link>
+                  </div>
+                )}
+
+                <div className="viewer-row">
+                  <div className="viewer-avatar-wrap">
+                    <Image src={viewer.photo} alt={viewer.firstName} width={64} height={64} unoptimized className="viewer-avatar" />
+                    <span className={`viewer-dot ${tier}`} />
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                      <h3 style={{ margin: 0, fontSize: "0.96rem", lineHeight: 1.14 }}>
+                        {viewer.firstName}, {viewer.age}
+                      </h3>
+                      {viewer.isVerified && <span className="chip chip-support">Verified</span>}
+                    </div>
+
+                    <p className="profile-meta" style={{ margin: "0.22rem 0 0", color: "var(--ink-muted)", fontSize: "0.83rem" }}>
+                      {viewer.profession} | {viewer.city}
+                    </p>
+                    <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.74rem" }}>
+                      Viewed {viewer.receivedAt}
+                    </p>
+                  </div>
+
+                  <Link href={`/profile/${viewer.userId}`} className="button button-secondary" style={{ padding: "0.52rem 0.72rem" }}>
+                    View
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <style jsx>{`
+        .listing-hero {
+          padding: 1rem;
+          border-radius: 22px;
+          border: 1px solid rgba(29, 78, 216, 0.2);
+          background: linear-gradient(142deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.93));
+          box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
+        }
+
+        .result-metrics {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.42rem;
+          margin-top: 0.62rem;
+        }
+
+        .metric-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.24rem 0.6rem;
+          border-radius: 999px;
+          border: 1px solid rgba(148, 163, 184, 0.4);
+          background: rgba(255, 255, 255, 0.9);
+          color: var(--ink-muted);
+          font-size: 0.74rem;
+          font-weight: 680;
+        }
+
+        .metric-chip-highlight {
+          border-color: rgba(227, 68, 117, 0.3);
+          background: rgba(227, 68, 117, 0.13);
+          color: #b32458;
+        }
+
+        .hero-actions {
+          margin-left: auto;
+        }
+
+        .upgrade-banner {
+          border: 1px solid rgba(196, 131, 18, 0.32);
+          background: linear-gradient(145deg, rgba(255, 248, 226, 0.94), rgba(255, 252, 238, 0.94));
+        }
+
+        .viewer-card {
+          transition:
+            transform 0.22s ease,
+            box-shadow 0.22s ease,
+            border-color 0.22s ease;
+        }
+
+        .viewer-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(29, 78, 216, 0.24);
+          box-shadow: 0 16px 30px rgba(15, 23, 42, 0.1);
+        }
+
+        .viewer-row {
+          display: flex;
+          align-items: center;
+          gap: 0.72rem;
+        }
+
+        .viewer-avatar-wrap {
+          position: relative;
+          width: 64px;
+          height: 64px;
+          flex-shrink: 0;
+        }
+
+        .viewer-avatar {
+          width: 64px;
+          height: 64px;
+          border-radius: 16px;
+          object-fit: cover;
+          border: 2px solid rgba(29, 78, 216, 0.16);
+        }
+
+        .viewer-dot {
+          position: absolute;
+          right: -2px;
+          bottom: -2px;
+          width: 13px;
+          height: 13px;
+          border-radius: 50%;
+          border: 2px solid #fff;
+          background: #94a3b8;
+        }
+
+        .viewer-dot.priority {
+          background: #16a34a;
+        }
+
+        .viewer-dot.standard {
+          background: #f59e0b;
+        }
+
+        .viewer-dot.gated {
+          background: #ef4444;
+        }
+
+        .profile-meta {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .gated-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.68);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .skeleton-tile {
+          overflow: hidden;
+          background: linear-gradient(100deg, rgba(238, 244, 253, 0.95) 8%, rgba(255, 255, 255, 0.98) 40%, rgba(238, 244, 253, 0.95) 72%);
+          background-size: 200% 100%;
+          animation: shimmer 1.3s linear infinite;
+        }
+
+        @keyframes shimmer {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+      `}</style>
+    </div>
+  );
 }
