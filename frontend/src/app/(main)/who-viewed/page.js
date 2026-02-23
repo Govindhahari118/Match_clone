@@ -113,7 +113,14 @@ export default function WhoViewedPage() {
 
                 <div className="viewer-row">
                   <div className="viewer-avatar-wrap">
-                    <Image src={viewer.photo} alt={viewer.firstName} width={64} height={64} unoptimized className="viewer-avatar" />
+                    <Image
+                      src={viewer.photo}
+                      alt={viewer.firstName}
+                      width={64}
+                      height={64}
+                      sizes="64px"
+                      className="viewer-avatar"
+                    />
                     <span className={`viewer-dot ${tier}`} />
                   </div>
 

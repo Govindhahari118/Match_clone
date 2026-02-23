@@ -1,13 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { memo, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
-import LoginPromptModal from "../../../components/LoginPromptModal";
+import { clearCachedRequest, getCachedRequest } from "../../../services/requestCache";
+
+const LoginPromptModal = dynamic(() => import("../../../components/LoginPromptModal"), {
+  ssr: false,
+});
 
 const FALLBACK_FILTER_META = {
   gender: ["Bride (Woman)", "Groom (Man)"],
@@ -213,7 +218,13 @@ function getMatchTier(matchScore) {
   return "rising";
 }
 
-function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, viewMode }) {
+const SearchResultCard = memo(function SearchResultCard({
+  profile,
+  onInterest,
+  onShortlist,
+  isShortlisted,
+  viewMode,
+}) {
   const matchTier = getMatchTier(Number(profile.match) || 0);
   const metaLine = [profile.profession, profile.city].filter(Boolean).join(" | ");
 
@@ -221,7 +232,15 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
     return (
       <article className="panel panel-hover anim-rise listing-stage search-result-card search-result-list" style={{ overflow: "hidden", display: "flex" }}>
         <div className="result-media" style={{ width: 200, flexShrink: 0, position: "relative" }}>
-          <Image className="result-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={620} height={760} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <Image
+            className="result-photo"
+            src={profile.photo}
+            alt={`${profile.firstName} profile`}
+            width={620}
+            height={760}
+            sizes="(max-width: 760px) 100vw, 200px"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
           <div style={{ position: "absolute", top: 10, left: 10 }}>
             <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -280,7 +299,15 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
   return (
     <article className="panel panel-hover anim-rise listing-stage search-result-card" style={{ overflow: "hidden" }}>
       <div className="result-media" style={{ position: "relative", height: 220 }}>
-        <Image className="result-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={640} height={920} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <Image
+          className="result-photo"
+          src={profile.photo}
+          alt={`${profile.firstName} profile`}
+          width={640}
+          height={920}
+          sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.76), transparent 58%)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
           <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -330,7 +357,7 @@ function SearchResultCard({ profile, onInterest, onShortlist, isShortlisted, vie
       </div>
     </article>
   );
-}
+});
 function SearchPageContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -346,6 +373,7 @@ function SearchPageContent() {
   const [results, setResults] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, hasNextPage: false });
   const [filterMeta, setFilterMeta] = useState(FALLBACK_FILTER_META);
+  const [hasLoadedFilterMeta, setHasLoadedFilterMeta] = useState(false);
   const [savedSearches, setSavedSearches] = useState([]);
   const [selectedSavedId, setSelectedSavedId] = useState("");
   const [shortlisted, setShortlisted] = useState(new Set());
@@ -363,11 +391,13 @@ function SearchPageContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (!showFilters || hasLoadedFilterMeta) return;
+
     let cancelled = false;
 
     const loadFilterMeta = async () => {
       try {
-        const response = await api.get("/meta/filters");
+        const response = await getCachedRequest("meta:filters", () => api.get("/meta/filters"), 5 * 60_000);
         const payload = response?.data?.data || response?.data || {};
         if (cancelled) return;
 
@@ -383,9 +413,11 @@ function SearchPageContent() {
           height: normalizeOptions(payload.height, FALLBACK_FILTER_META.height),
           bodyType: normalizeOptions(payload.bodyType, FALLBACK_FILTER_META.bodyType),
         });
+        setHasLoadedFilterMeta(true);
       } catch {
         if (!cancelled) {
           setFilterMeta(FALLBACK_FILTER_META);
+          setHasLoadedFilterMeta(true);
         }
       }
     };
@@ -394,7 +426,7 @@ function SearchPageContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showFilters, hasLoadedFilterMeta]);
 
   useEffect(() => {
     let cancelled = false;
@@ -406,7 +438,7 @@ function SearchPageContent() {
       }
 
       try {
-        const response = await api.get("/search/saved");
+        const response = await getCachedRequest("search:saved:list", () => api.get("/search/saved"), 20_000);
         if (!cancelled) {
           setSavedSearches(Array.isArray(response.data) ? response.data : []);
         }
@@ -522,7 +554,12 @@ function SearchPageContent() {
 
       const params = buildSearchParams(page);
       syncSearchUrl(params);
-      const response = await api.get("/search/execute", { params });
+      const cacheKey = `search:${JSON.stringify(params)}`;
+      const response = await getCachedRequest(
+        cacheKey,
+        () => api.get("/search/execute", { params }),
+        30_000
+      );
       const payload = response?.data?.items || [];
       setResults(payload);
       setPagination({
@@ -562,7 +599,8 @@ function SearchPageContent() {
           sort,
         },
       });
-      const response = await api.get("/search/saved");
+      clearCachedRequest("search:saved:list");
+      const response = await getCachedRequest("search:saved:list", () => api.get("/search/saved"), 20_000);
       setSavedSearches(Array.isArray(response.data) ? response.data : []);
       toast.success("Search saved.");
     } catch {
@@ -595,6 +633,7 @@ function SearchPageContent() {
     if (!selectedSavedId) return;
     try {
       await api.delete(`/search/saved/${selectedSavedId}`);
+      clearCachedRequest("search:saved:list");
       const updated = savedSearches.filter((item) => item.id !== selectedSavedId);
       setSavedSearches(updated);
       setSelectedSavedId("");

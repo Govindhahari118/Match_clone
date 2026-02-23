@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
 
@@ -21,7 +21,7 @@ function getMatchTier(matchScore) {
   return "rising";
 }
 
-function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
+const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
   const matchTier = getMatchTier(Number(profile.match) || 0);
   const metaLine = [profile.profession, profile.city].filter(Boolean).join(" | ");
 
@@ -29,7 +29,15 @@ function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
     return (
       <article className="panel panel-hover anim-rise listing-stage shortlist-card shortlist-list" style={{ overflow: "hidden", display: "flex" }}>
         <div className="shortlist-media" style={{ width: 196, flexShrink: 0, position: "relative" }}>
-          <Image className="shortlist-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={620} height={760} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <Image
+            className="shortlist-photo"
+            src={profile.photo}
+            alt={`${profile.firstName} profile`}
+            width={620}
+            height={760}
+            sizes="(max-width: 760px) 100vw, 196px"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
           <div style={{ position: "absolute", top: 10, left: 10 }}>
             <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -75,7 +83,15 @@ function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
   return (
     <article className="panel panel-hover anim-rise listing-stage shortlist-card" style={{ overflow: "hidden" }}>
       <div className="shortlist-media" style={{ position: "relative", height: 220 }}>
-        <Image className="shortlist-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={640} height={920} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <Image
+          className="shortlist-photo"
+          src={profile.photo}
+          alt={`${profile.firstName} profile`}
+          width={640}
+          height={920}
+          sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.76), transparent 58%)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
           <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -110,7 +126,7 @@ function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
       </div>
     </article>
   );
-}
+});
 
 export default function ShortlistsPage() {
   const [list, setList] = useState([]);

@@ -73,7 +73,7 @@ export default function ReviewsSection({ userId, userName }) {
                                             alt={r.reviewerName}
                                             width={24}
                                             height={24}
-                                            unoptimized
+                                            sizes="24px"
                                             style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }}
                                         />
                                     ) : (

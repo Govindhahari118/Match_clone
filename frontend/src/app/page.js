@@ -1,31 +1,30 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { useMemo, useState } from "react";
+import PublicTopNav from "@/components/PublicTopNav";
+import { APP_NAV_SECTIONS } from "@/config/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 const whyChooseCards = [
-  {
-    icon: "PR",
-    title: "100% Privacy",
-    desc: "Control who sees your info",
-  },
-  {
-    icon: "VP",
-    title: "Verified Profiles",
-    desc: "No fakes, only real people",
-  },
-  {
-    icon: "PM",
-    title: "Premium Matches",
-    desc: "Curated list of high-intent profiles",
-  },
-  {
-    icon: "24",
-    title: "24/7 Support",
-    desc: "Human support whenever needed",
-  },
+  { icon: "PR", title: "Private by Default", desc: "You control profile visibility and who can contact you." },
+  { icon: "VR", title: "Verified People", desc: "ID and profile checks reduce fake accounts and spam." },
+  { icon: "AI", title: "Smart Matching", desc: "Compatibility-first recommendations based on intent and lifestyle." },
+  { icon: "24", title: "Real Support", desc: "Human assistance for profile, safety, and subscription questions." },
+];
+
+const journeySteps = [
+  { step: "01", title: "Create your profile", desc: "Add details once and get better-quality recommendations quickly." },
+  { step: "02", title: "Discover and connect", desc: "Explore matches, send interests, and start meaningful chats." },
+  { step: "03", title: "Move forward safely", desc: "Use verification, filters, and privacy controls with confidence." },
+];
+
+const storyCards = [
+  { names: "Aarav & Nisha", city: "Bengaluru", copy: "Matched in 12 days, families met in 5 weeks." },
+  { names: "Rohan & Kavya", city: "London", copy: "Started with values-first filters and built trust through chat." },
+  { names: "Dev & Meera", city: "Hyderabad", copy: "Verified profiles helped both families decide faster." },
 ];
 
 const dashboardStats = [
@@ -36,57 +35,21 @@ const dashboardStats = [
 ];
 
 const dashboardActions = [
-  {
-    href: "/matches",
-    title: "Explore Matches",
-    desc: "Review your latest compatibility shortlist.",
-  },
-  {
-    href: "/search",
-    title: "Advanced Search",
-    desc: "Filter by location, profession, language, and intent.",
-  },
-  {
-    href: "/who-viewed",
-    title: "Profile Views",
-    desc: "See who recently visited your profile.",
-  },
-  {
-    href: "/kundli",
-    title: "Kundli Matching",
-    desc: "Compare horoscope compatibility in minutes.",
-  },
-  {
-    href: "/interests",
-    title: "Manage Interests",
-    desc: "Track sent, received, and accepted interests.",
-  },
-  {
-    href: "/chat",
-    title: "Open Conversations",
-    desc: "Continue meaningful chats with your top matches.",
-  },
-  {
-    href: "/shortlists",
-    title: "Shortlisted Profiles",
-    desc: "Revisit your favorites and compare details.",
-  },
-  {
-    href: "/profile",
-    title: "Refine Profile",
-    desc: "Improve profile quality for better recommendations.",
-  },
+  { href: "/matches", title: "Explore Matches", desc: "Review today's compatibility recommendations." },
+  { href: "/search", title: "Advanced Search", desc: "Filter by city, education, profession, and intent." },
+  { href: "/who-viewed", title: "Who Viewed You", desc: "See recent visitors and priority viewers." },
+  { href: "/interests", title: "Manage Interests", desc: "Track accepted, pending, and declined interests." },
+  { href: "/shortlists", title: "Shortlist Board", desc: "Compare favorites side-by-side before deciding." },
+  { href: "/chat", title: "Open Conversations", desc: "Continue active conversations with top matches." },
 ];
 
-const dashboardNavLinks = [
-  { href: "/", label: "Home" },
+const dashboardShortcuts = [
   { href: "/matches", label: "Matches" },
   { href: "/search", label: "Search" },
   { href: "/interests", label: "Interests" },
-  { href: "/chat", label: "Messages" },
-  { href: "/profile", label: "Profile" },
-  { href: "/settings", label: "Settings" },
+  { href: "/shortlists", label: "Shortlists" },
   { href: "/notifications", label: "Alerts" },
+  { href: "/profile", label: "Profile" },
 ];
 
 const recommended = [
@@ -128,6 +91,12 @@ const recommended = [
   },
 ];
 
+const heroSignals = [
+  { value: "5M+", label: "Members" },
+  { value: "220K+", label: "Monthly Matches" },
+  { value: "1.8M", label: "Verified Profiles" },
+];
+
 function LandingPage() {
   const router = useRouter();
   const [gender, setGender] = useState("female");
@@ -148,24 +117,14 @@ function LandingPage() {
     <div className="page-shell premium-landing">
       <section className="hero-backdrop home-hero">
         <div className="container-shell home-shell">
-          <header className="panel home-topbar">
-            <div className="home-brand">
-              <span className="brand-mark">M</span>
-              <strong>MatrimonyConnect</strong>
-            </div>
-            <div className="home-top-actions">
-              <Link className="button button-ghost-light" href="/login">
-                Login
-              </Link>
-              <Link className="button button-primary" href="/step-1">
-                Free Registration
-              </Link>
-            </div>
-          </header>
+          <PublicTopNav compact />
 
           <div className="hero-grid">
             <aside className="panel hero-form-card anim-rise delay-1">
-              <h2>Find your Special Someone</h2>
+              <p className="section-label" style={{ color: "#9f1239" }}>
+                Quick Match Search
+              </p>
+              <h2>Find your special someone</h2>
               <form onSubmit={onSearch} className="hero-form-grid">
                 <div className="hero-form-row">
                   <div>
@@ -224,20 +183,20 @@ function LandingPage() {
                 </div>
 
                 <button className="button home-primary-cta" type="submit">
-                  Let&apos;s Begin
+                  Find Matches
                 </button>
               </form>
             </aside>
 
             <div className="hero-copy anim-rise delay-2">
               <h1 className="hero-title">
-                <span className="hero-line hero-line-1">The World&apos;s No.1</span>
-                <span className="hero-line hero-line-2">Matchmaking</span>
-                <span className="hero-line hero-line-3">Service</span>
+                <span className="hero-line hero-line-1">Meaningful Matches.</span>
+                <span className="hero-line hero-line-2">Clear Intent.</span>
+                <span className="hero-line hero-line-3">Better Journeys.</span>
               </h1>
               <p className="hero-sub">
-                Millions of happy stories. Yours could be next. Join the trusted matrimony platform
-                where verified profiles and real intent come first.
+                MatrimonyConnect combines verified profiles, structured search, and focused
+                communication so your partner search is faster and more reliable.
               </p>
 
               <div className="hero-proof-row">
@@ -248,8 +207,26 @@ function LandingPage() {
                 </div>
                 <div>
                   <p className="proof-stars">*****</p>
-                  <p className="proof-copy">Trusted by 5M+ users</p>
+                  <p className="proof-copy">Trusted by families worldwide</p>
                 </div>
+              </div>
+
+              <div className="hero-signal-row">
+                {heroSignals.map((signal) => (
+                  <div key={signal.label} className="hero-signal-tile">
+                    <p>{signal.value}</p>
+                    <span>{signal.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hero-cta-row">
+                <Link className="button button-primary" href="/step-1">
+                  Start Free
+                </Link>
+                <Link className="button button-ghost-light" href="#all-pages">
+                  Browse All Pages
+                </Link>
               </div>
             </div>
           </div>
@@ -258,8 +235,7 @@ function LandingPage() {
 
       <section className="section-block why-section">
         <div className="container-shell">
-          <p className="section-label why-label">Why Choose MatrimonyConnect?</p>
-
+          <p className="section-label why-label">Why MatrimonyConnect</p>
           <div className="why-grid">
             {whyChooseCards.map((item, index) => (
               <article
@@ -275,17 +251,74 @@ function LandingPage() {
         </div>
       </section>
 
+      <section className="section-block journey-section">
+        <div className="container-shell">
+          <p className="section-label">How It Works</p>
+          <h2 className="section-title">Three steps to a stronger match journey</h2>
+          <div className="journey-grid">
+            {journeySteps.map((item, index) => (
+              <article
+                key={item.step}
+                className={`panel journey-card anim-rise delay-${Math.min(index + 1, 5)}`}
+              >
+                <span className="journey-step">{item.step}</span>
+                <h3>{item.title}</h3>
+                <p>{item.desc}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section-block home-nav-directory" id="all-pages">
+        <div className="container-shell">
+          <p className="section-label">Page Navigation</p>
+          <h2 className="section-title">All key pages in one place</h2>
+          <p className="section-copy">
+            Navigation buttons now include all important pages with a consistent visual style.
+          </p>
+
+          <div className="home-nav-sections">
+            {APP_NAV_SECTIONS.map((section) => (
+              <section key={section.title} className="panel home-nav-section">
+                <p className="home-nav-title">{section.title}</p>
+                <div className="home-nav-grid">
+                  {section.items.map((item) => (
+                    <Link key={item.href} href={item.href} className="button button-secondary home-nav-link">
+                      <span className="home-nav-code">{item.short}</span>
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section-block story-section">
+        <div className="container-shell">
+          <p className="section-label">Real Outcomes</p>
+          <h2 className="section-title">Success stories from recent members</h2>
+
+          <div className="story-grid">
+            {storyCards.map((item, index) => (
+              <article key={item.names} className={`panel story-card anim-rise delay-${Math.min(index + 1, 5)}`}>
+                <p className="story-names">{item.names}</p>
+                <p className="story-city">{item.city}</p>
+                <p className="story-copy">{item.copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
 
 function Dashboard({ user, logout }) {
   const firstName =
-    user?.profile?.firstName ||
-    user?.firstName ||
-    user?.email?.split("@")[0] ||
-    "Member";
-
+    user?.profile?.firstName || user?.firstName || user?.email?.split("@")[0] || "Member";
   const initial = useMemo(() => firstName.charAt(0).toUpperCase(), [firstName]);
 
   return (
@@ -339,26 +372,26 @@ function Dashboard({ user, logout }) {
 
       <main className="container-shell" style={{ marginTop: "-1.7rem", paddingBottom: "2rem" }}>
         <section className="panel" style={{ padding: "0.9rem" }}>
-          <p className="section-label">Quick navigation</p>
-          <nav
+          <p className="section-label">Quick access</p>
+          <div
             style={{
               marginTop: "0.65rem",
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              gap: "0.55rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: "0.5rem",
             }}
           >
-            {dashboardNavLinks.map((item) => (
+            {dashboardShortcuts.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className="button button-secondary"
-                style={{ justifyContent: "center", textAlign: "center" }}
+                style={{ justifyContent: "center", minHeight: 40 }}
               >
                 {item.label}
               </Link>
             ))}
-          </nav>
+          </div>
         </section>
 
         <section className="panel" style={{ padding: "1rem" }}>
@@ -381,10 +414,20 @@ function Dashboard({ user, logout }) {
                 className={`panel anim-rise delay-${Math.min(index + 1, 5)}`}
                 style={{ padding: "0.9rem", borderColor: `${item.tone}33` }}
               >
-                <p style={{ margin: 0, color: item.tone, fontFamily: "var(--font-display)", fontSize: "2rem", lineHeight: 1 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    color: item.tone,
+                    fontFamily: "var(--font-display)",
+                    fontSize: "2rem",
+                    lineHeight: 1,
+                  }}
+                >
                   {item.value}
                 </p>
-                <p style={{ margin: "0.32rem 0 0", color: "var(--ink-muted)", fontSize: "0.83rem" }}>{item.label}</p>
+                <p style={{ margin: "0.32rem 0 0", color: "var(--ink-muted)", fontSize: "0.83rem" }}>
+                  {item.label}
+                </p>
               </div>
             ))}
           </div>
@@ -444,6 +487,7 @@ function Dashboard({ user, logout }) {
                   alt={`${person.firstName} profile`}
                   width={640}
                   height={760}
+                  sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 25vw"
                   style={{
                     width: "100%",
                     height: 190,
@@ -451,7 +495,6 @@ function Dashboard({ user, logout }) {
                     borderTopRightRadius: "var(--radius-md)",
                     objectFit: "cover",
                   }}
-                  unoptimized
                 />
                 <div style={{ padding: "0.8rem" }}>
                   <h3 style={{ margin: 0, fontSize: "1rem" }}>
@@ -477,5 +520,11 @@ function Dashboard({ user, logout }) {
 }
 
 export default function HomePage() {
+  const { user, logout } = useAuth();
+
+  if (user) {
+    return <Dashboard user={user} logout={logout} />;
+  }
+
   return <LandingPage />;
 }

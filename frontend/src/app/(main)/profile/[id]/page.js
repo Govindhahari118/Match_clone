@@ -191,7 +191,14 @@ export default function UserProfilePage() {
               }}
             >
               {primaryPhoto ? (
-                <Image src={primaryPhoto} alt="Profile photo" width={240} height={240} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <Image
+                  src={primaryPhoto}
+                  alt="Profile photo"
+                  width={240}
+                  height={240}
+                  sizes="88px"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
               ) : (
                 <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontWeight: 800 }}>
                   {(profile.firstName || "U").charAt(0)}
@@ -204,9 +211,9 @@ export default function UserProfilePage() {
                 {profile.firstName} {profile.lastName}
               </h1>
               <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-                {age ? `${age} yrs · ` : ""}
+                {age ? `${age} yrs | ` : ""}
                 {profile.profession || "Professional"}
-                {profile.city ? ` · ${profile.city}` : ""}
+                {profile.city ? ` | ${profile.city}` : ""}
               </p>
               <div style={{ marginTop: "0.38rem", display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                 {profile.user?.isVerified && <span className="chip chip-support">Verified Profile</span>}

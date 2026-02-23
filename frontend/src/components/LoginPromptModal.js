@@ -1,51 +1,88 @@
 "use client";
+
 import { useRouter } from "next/navigation";
 
-export default function LoginPromptModal({ isOpen, onClose, triggerText = "Sign in to continue" }) {
-    const router = useRouter();
-    if (!isOpen) return null;
+export default function LoginPromptModal({
+  isOpen,
+  onClose,
+  triggerText = "Sign in to continue",
+}) {
+  const router = useRouter();
 
-    return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 9999,
-            background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: "1rem"
-        }} onClick={onClose}>
-            <div style={{
-                background: "white", borderRadius: 24, padding: "2rem",
-                width: "100%", maxWidth: 400, textAlign: "center",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-                animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
-            }} onClick={e => e.stopPropagation()}>
-                <div style={{ fontSize: 48, marginBottom: "1rem" }}>🔒</div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", marginBottom: "0.5rem" }}>
-                    {triggerText}
-                </h2>
-                <p style={{ color: "#64748b", fontSize: 14, marginBottom: "1.5rem", lineHeight: 1.6 }}>
-                    Join <strong>5M+ members</strong> to unlock full profiles, contact numbers, and chat with your matches.
-                </p>
+  if (!isOpen) return null;
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    <button onClick={() => router.push("/login")} style={{
-                        padding: "12px", background: "linear-gradient(135deg, #e11d48, #be123c)",
-                        color: "white", borderRadius: 12, fontWeight: 700, border: "none", cursor: "pointer", fontSize: 15
-                    }}>
-                        Log In
-                    </button>
-                    <button onClick={() => router.push("/step-1")} style={{
-                        padding: "12px", background: "white", border: "1.5px solid #e2e8f0",
-                        color: "#374151", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15
-                    }}>
-                        Create Free Account
-                    </button>
-                </div>
-
-                <p style={{ marginTop: "1.5rem", fontSize: 12, color: "#94a3b8", cursor: "pointer" }} onClick={onClose}>
-                    Maybe later
-                </p>
-                <style>{`@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
-            </div>
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "rgba(0,0,0,0.56)",
+        backdropFilter: "blur(4px)",
+        display: "grid",
+        placeItems: "center",
+        padding: "1rem",
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Login required"
+        onClick={(event) => event.stopPropagation()}
+        className="panel"
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          borderRadius: 18,
+          padding: "1.2rem",
+          textAlign: "center",
+          animation: "riseIn 0.24s ease both",
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 14,
+            margin: "0 auto 0.7rem",
+            display: "grid",
+            placeItems: "center",
+            color: "#9f1239",
+            fontWeight: 800,
+            border: "1px solid rgba(227,68,117,0.28)",
+            background: "rgba(255,235,244,0.84)",
+            fontSize: "1.1rem",
+          }}
+        >
+          LK
         </div>
-    );
+
+        <h2 style={{ margin: 0, fontSize: "1.2rem", lineHeight: 1.2 }}>{triggerText}</h2>
+        <p style={{ margin: "0.5rem 0 0", color: "var(--ink-muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>
+          Join 5M+ members to unlock full profile details and start direct conversations.
+        </p>
+
+        <div style={{ display: "grid", gap: "0.55rem", marginTop: "1rem" }}>
+          <button type="button" onClick={() => router.push("/login")} className="button button-primary" style={{ width: "100%" }}>
+            Log In
+          </button>
+          <button type="button" onClick={() => router.push("/step-1")} className="button button-secondary" style={{ width: "100%" }}>
+            Create Free Account
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="button button-secondary"
+          style={{ marginTop: "0.8rem", width: "100%" }}
+        >
+          Maybe Later
+        </button>
+      </div>
+    </div>
+  );
 }

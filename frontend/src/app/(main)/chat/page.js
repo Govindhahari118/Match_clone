@@ -331,7 +331,7 @@ export default function ChatPage() {
                       alt={`${conversation.name} photo`}
                       width={48}
                       height={48}
-                      unoptimized
+                      sizes="48px"
                       style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover" }}
                     />
                     <div style={{ minWidth: 0 }}>
@@ -376,13 +376,13 @@ export default function ChatPage() {
                   alt={`${selectedConversation.name} photo`}
                   width={46}
                   height={46}
-                  unoptimized
+                  sizes="46px"
                   style={{ borderRadius: 12, objectFit: "cover" }}
                 />
                 <div>
                   <strong>{selectedConversation.name}</strong>
                   <p style={{ margin: "0.2rem 0 0", fontSize: "0.78rem", color: "var(--ink-muted)" }}>
-                    {selectedConversation.role || "Professional"} · {selectedConversation.city || "India"}
+                    {selectedConversation.role || "Professional"} | {selectedConversation.city || "India"}
                   </p>
                 </div>
               </header>

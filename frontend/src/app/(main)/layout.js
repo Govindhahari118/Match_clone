@@ -2,29 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import {
+  APP_NAV_ITEMS,
+  APP_NAV_SECTIONS,
+  MOBILE_PRIMARY_NAV,
+  isRouteActive,
+} from "@/config/navigation";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Home", short: "HM" },
-  { href: "/matches", label: "Matches", short: "MT" },
-  { href: "/search", label: "Search", short: "SR" },
-  { href: "/interests", label: "Interests", short: "IN" },
-  { href: "/shortlists", label: "Shortlists", short: "SL" },
-  { href: "/chat", label: "Messages", short: "MS" },
-  { href: "/who-viewed", label: "Viewed", short: "VW" },
-  { href: "/kundli", label: "Kundli", short: "KD" },
-  { href: "/profile", label: "Profile", short: "PF" },
-  { href: "/settings", label: "Settings", short: "ST" },
-  { href: "/notifications", label: "Alerts", short: "AL" },
-  { href: "/pricing", label: "Pricing", short: "PR" },
-  { href: "/help", label: "Help", short: "HP" },
-  { href: "/success-stories", label: "Stories", short: "SS" },
-];
-
-const MOBILE_PRIMARY = ["/", "/matches", "/search", "/chat", "/profile"];
-const QUICK_NAV_ITEMS = ["/", "/matches", "/search", "/interests", "/shortlists", "/chat", "/profile", "/notifications", "/pricing", "/help"];
+const PRIMARY_NAV_ROUTES = ["/matches", "/search", "/interests", "/chat", "/shortlists", "/profile"];
 
 export default function MainLayout({ children }) {
   const pathname = usePathname();
@@ -34,24 +22,12 @@ export default function MainLayout({ children }) {
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    const prefetchTargets = ["/matches", "/search", "/interests", "/chat", "/profile"];
-    const timer = setTimeout(() => {
-      prefetchTargets.forEach((target) => router.prefetch(target));
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [router]);
-
   const initial = useMemo(() => {
     const source = user?.profile?.firstName || user?.firstName || user?.email || "U";
     return source.charAt(0).toUpperCase();
   }, [user]);
 
-  const isActive = (href) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
-  };
+  const isActive = (href) => isRouteActive(pathname, href);
 
   const onSearchSubmit = (event) => {
     event.preventDefault();
@@ -101,7 +77,9 @@ export default function MainLayout({ children }) {
               >
                 M
               </div>
-              <strong style={{ fontSize: "0.99rem", letterSpacing: "0.005em", fontWeight: 780 }}>MatrimonyConnect</strong>
+              <strong style={{ fontSize: "0.99rem", letterSpacing: "0.005em", fontWeight: 780 }}>
+                MatrimonyConnect
+              </strong>
             </Link>
           </div>
 
@@ -167,32 +145,27 @@ export default function MainLayout({ children }) {
           </div>
         </header>
 
-        <nav
-          className="panel context-quick-nav premium-quick-nav"
-          style={{
-            marginBottom: "0.82rem",
-            padding: "0.5rem",
-            display: "flex",
-            gap: "0.45rem",
-            overflowX: "auto",
-            scrollbarWidth: "none",
-          }}
-        >
-          {NAV_ITEMS.filter((item) => QUICK_NAV_ITEMS.includes(item.href)).map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="button button-secondary quick-nav-link"
-              style={{
-                whiteSpace: "nowrap",
-                background: isActive(item.href) ? "rgba(227, 68, 117, 0.15)" : undefined,
-                borderColor: isActive(item.href) ? "rgba(227, 68, 117, 0.36)" : undefined,
-                color: isActive(item.href) ? "var(--ink)" : undefined,
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav className="panel context-quick-nav premium-quick-nav quick-strip-shell" aria-label="Quick navigation">
+          <div className="quick-strip-head">
+            <p className="section-label">Quick Navigation</p>
+            <button type="button" className="button button-secondary" onClick={() => setDrawerOpen(true)}>
+              All Pages
+            </button>
+          </div>
+
+          <div className="quick-strip-row">
+            {APP_NAV_ITEMS.filter((item) => PRIMARY_NAV_ROUTES.includes(item.href)).map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`button button-secondary quick-strip-link ${
+                  isActive(item.href) ? "quick-strip-link-active" : ""
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </nav>
 
         <div className="main-shell-grid" style={{ paddingBottom: "5.2rem" }}>
@@ -222,7 +195,7 @@ export default function MainLayout({ children }) {
           gap: "0.32rem",
         }}
       >
-        {NAV_ITEMS.filter((item) => MOBILE_PRIMARY.includes(item.href)).map((item) => (
+        {APP_NAV_ITEMS.filter((item) => MOBILE_PRIMARY_NAV.includes(item.href)).map((item) => (
           <Link
             key={item.href}
             href={item.href}
@@ -275,7 +248,7 @@ export default function MainLayout({ children }) {
           <aside
             className="panel app-sidebar"
             style={{
-              width: "min(320px, calc(100% - 2.2rem))",
+              width: "min(420px, calc(100% - 2.2rem))",
               margin: "0.8rem",
               borderRadius: 18,
               padding: "0.95rem",
@@ -284,36 +257,35 @@ export default function MainLayout({ children }) {
             onClick={(event) => event.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-              <strong style={{ fontSize: "1rem" }}>Menu</strong>
+              <strong style={{ fontSize: "1rem" }}>All Pages</strong>
               <button type="button" className="button button-secondary" onClick={() => setDrawerOpen(false)}>
                 Close
               </button>
             </div>
 
-            <nav style={{ display: "grid", gap: "0.42rem" }}>
-              {NAV_ITEMS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setDrawerOpen(false)}
-                  style={{
-                    textDecoration: "none",
-                    borderRadius: 12,
-                    border: "1px solid rgba(15, 23, 42, 0.12)",
-                    padding: "0.62rem 0.72rem",
-                    background: isActive(item.href) ? "rgba(29, 78, 216, 0.12)" : "var(--bg-elevated)",
-                    color: "var(--ink)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {item.label}
-                </Link>
+            <div className="drawer-menu-groups">
+              {APP_NAV_SECTIONS.map((section) => (
+                <section className="drawer-menu-section" key={section.title}>
+                  <p className="drawer-menu-title">{section.title}</p>
+                  <nav className="drawer-menu-grid">
+                    {section.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`drawer-menu-link ${isActive(item.href) ? "drawer-menu-link-active" : ""}`}
+                        onClick={() => setDrawerOpen(false)}
+                      >
+                        <span className="drawer-menu-code">{item.short}</span>
+                        <strong>{item.label}</strong>
+                      </Link>
+                    ))}
+                  </nav>
+                </section>
               ))}
-            </nav>
+            </div>
           </aside>
         </div>
       )}
-
     </div>
   );
 }

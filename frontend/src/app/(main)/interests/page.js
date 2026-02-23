@@ -185,7 +185,14 @@ export default function InterestsPage() {
               <article key={item.id} className="panel listing-stage interest-card" style={{ padding: "0.8rem" }}>
                 <div className="interest-main-row">
                   <div className="interest-avatar-wrap">
-                    <Image src={item.photo} alt={item.firstName} width={74} height={74} unoptimized className="interest-avatar" />
+                    <Image
+                      src={item.photo}
+                      alt={item.firstName}
+                      width={74}
+                      height={74}
+                      sizes="74px"
+                      className="interest-avatar"
+                    />
                     <span className={`match-badge match-badge-${matchTier}`}>{item.match}%</span>
                   </div>
 

@@ -189,7 +189,14 @@ export default function ProfilePage() {
           <div className="profile-hero-head" style={{ display: "grid", gridTemplateColumns: "84px minmax(0,1fr) auto", gap: "0.8rem", alignItems: "end" }}>
             <div className="profile-avatar" style={{ width: 84, height: 84, borderRadius: "50%", overflow: "hidden", border: "4px solid #fff", boxShadow: "var(--shadow-md)", background: "#f1ede6" }}>
               {primaryPhoto ? (
-                <Image src={primaryPhoto} alt="Profile photo" width={200} height={200} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <Image
+                  src={primaryPhoto}
+                  alt="Profile photo"
+                  width={200}
+                  height={200}
+                  sizes="84px"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
               ) : (
                 <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontWeight: 800 }}>
                   {(profile.firstName || "U").charAt(0).toUpperCase()}

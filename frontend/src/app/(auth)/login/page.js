@@ -104,7 +104,7 @@ export default function LoginPage() {
               alt="Google"
               width={18}
               height={18}
-              unoptimized
+              sizes="18px"
             />
             Continue with Google
           </button>

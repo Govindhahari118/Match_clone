@@ -1,14 +1,19 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { memo, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import { useGuestScrollGate } from "../../../hooks/useGuestScrollGate";
-import LoginPromptModal from "../../../components/LoginPromptModal";
+import { getCachedRequest } from "../../../services/requestCache";
+
+const LoginPromptModal = dynamic(() => import("../../../components/LoginPromptModal"), {
+  ssr: false,
+});
 
 const FALLBACK_FILTER_META = {
   religion: ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist"],
@@ -142,7 +147,7 @@ function getMatchTier(matchScore) {
   return "rising";
 }
 
-function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }) {
+const MatchCard = memo(function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }) {
   const matchTier = getMatchTier(Number(profile.match) || 0);
   const metaLine = [profile.profession, profile.city, profile.height ? `${profile.height}cm` : null]
     .filter(Boolean)
@@ -152,7 +157,15 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
     return (
       <article className="panel panel-hover anim-rise listing-stage match-card match-card-list" style={{ overflow: "hidden", display: "flex" }}>
         <div className="match-media" style={{ width: 208, flexShrink: 0, position: "relative" }}>
-          <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <Image
+            className="match-photo"
+            src={profile.photo}
+            alt={`${profile.firstName} profile`}
+            width={720}
+            height={900}
+            sizes="(max-width: 760px) 100vw, 208px"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
           <div style={{ position: "absolute", top: 10, left: 10 }}>
             <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -202,7 +215,15 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
   return (
     <article className="panel panel-hover anim-rise listing-stage match-card" style={{ overflow: "hidden" }}>
       <div className="match-media" style={{ position: "relative", height: 220 }}>
-        <Image className="match-photo" src={profile.photo} alt={`${profile.firstName} profile`} width={720} height={900} unoptimized style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <Image
+          className="match-photo"
+          src={profile.photo}
+          alt={`${profile.firstName} profile`}
+          width={720}
+          height={900}
+          sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.78), rgba(9, 18, 36, 0.1) 58%, transparent)" }} />
         <div style={{ position: "absolute", top: 10, left: 10 }}>
           <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
@@ -245,7 +266,7 @@ function MatchCard({ profile, isShortlisted, onShortlist, onInterest, viewMode }
       </div>
     </article>
   );
-}
+});
 
 function MatchesContent() {
   const searchParams = useSearchParams();
@@ -261,6 +282,7 @@ function MatchesContent() {
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [filterMeta, setFilterMeta] = useState(FALLBACK_FILTER_META);
+  const [hasLoadedFilterMeta, setHasLoadedFilterMeta] = useState(false);
 
   useEffect(() => {
     const religionFromQuery = searchParams.get("religion");
@@ -268,11 +290,13 @@ function MatchesContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (!showFilters || hasLoadedFilterMeta) return;
+
     let cancelled = false;
 
     const loadFilterMeta = async () => {
       try {
-        const response = await api.get("/meta/filters");
+        const response = await getCachedRequest("meta:filters", () => api.get("/meta/filters"), 5 * 60_000);
         const payload = response?.data?.data || response?.data || {};
         if (cancelled) return;
 
@@ -285,9 +309,11 @@ function MatchesContent() {
           education: normalizeOptions(payload.education, FALLBACK_FILTER_META.education),
           profession: normalizeOptions(payload.profession, FALLBACK_FILTER_META.profession),
         });
+        setHasLoadedFilterMeta(true);
       } catch {
         if (!cancelled) {
           setFilterMeta(FALLBACK_FILTER_META);
+          setHasLoadedFilterMeta(true);
         }
       }
     };
@@ -296,7 +322,7 @@ function MatchesContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showFilters, hasLoadedFilterMeta]);
 
   useEffect(() => {
     const loadMatches = async () => {
@@ -307,7 +333,12 @@ function MatchesContent() {
           return;
         }
 
-        const response = await api.get("/matches", { params: { gender: searchParams.get("gender") || "female" } });
+        const gender = searchParams.get("gender") || "female";
+        const response = await getCachedRequest(
+          `matches:${gender}`,
+          () => api.get("/matches", { params: { gender } }),
+          45_000
+        );
         const list = Array.isArray(response.data) && response.data.length > 0 ? response.data : MOCK_PROFILES;
         setRawProfiles(list);
       } catch {
