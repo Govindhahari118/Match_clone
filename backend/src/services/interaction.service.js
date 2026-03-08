@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const safetyService = require('./safety.service');
 
 const incomeBands = ['below_5L', '5-10L', '10-25L', '25-50L', '50L+'];
 
@@ -56,11 +57,16 @@ const interactionService = {
     },
 
     // ── Get Interests ─────────────────────────────────────────────────────────
-    async getInterests(userId, type) {
+    async getInterests(userId, type, options = {}) {
+        const limit = Math.min(Math.max(Number.parseInt(options.limit, 10) || 20, 1), 50);
+        const skip = Math.max(Number.parseInt(options.skip, 10) || 0, 0);
+
         if (type === 'received') {
             const likes = await prisma.like.findMany({
                 where: { receiverId: userId, status: { notIn: ['rejected', 'accepted'] } },
                 orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
                 include: {
                     sender: {
                         select: { id: true, isVerified: true },
@@ -78,6 +84,8 @@ const interactionService = {
             const likes = await prisma.like.findMany({
                 where: { senderId: userId },
                 orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
                 include: {
                     receiver: {
                         select: { id: true, isVerified: true },
@@ -95,6 +103,8 @@ const interactionService = {
             const matches = await prisma.match.findMany({
                 where: { OR: [{ userAId: userId }, { userBId: userId }], isActive: true },
                 orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
                 include: {
                     userA: {
                         select: { id: true, isVerified: true },
@@ -122,11 +132,21 @@ const interactionService = {
     },
 
     // ── Report / Block ────────────────────────────────────────────────────────
-    async reportUser(reporterId, reportedUserId, reportType, description) {
-        const report = await prisma.report.create({
-            data: { reporterId, reportedUserId, reportType, description: description || null }
+    async reportUser(reporterId, reportedUserId, reportType, description, context = {}) {
+        return safetyService.createReportCase(reporterId, {
+            reportedUserId,
+            reportType,
+            description,
+            source: context.source || 'interaction_report',
+            channel: context.channel || 'profile',
+        }, {
+            ipAddress: context.ipAddress || null,
+            userAgent: context.userAgent || null,
         });
-        return { success: true, reportId: report.id };
+    },
+
+    async applySafetyAction(actorId, targetUserId, actionType, context = {}) {
+        return safetyService.applyUserSafetyAction(actorId, targetUserId, actionType, context);
     },
 
     // ── Compatibility Score ───────────────────────────────────────────────────
@@ -170,11 +190,14 @@ const interactionService = {
         });
     },
 
-    async getProfileViewers(userId, limit = 20) {
+    async getProfileViewers(userId, options = {}) {
+        const take = Math.min(Math.max(Number.parseInt(options.limit, 10) || 20, 1), 50);
+        const skip = Math.max(Number.parseInt(options.skip, 10) || 0, 0);
         const views = await prisma.auditLog.findMany({
             where: { action: 'profile_view', resourceId: userId },
             orderBy: { createdAt: 'desc' },
-            take: limit,
+            skip,
+            take,
             distinct: ['userId'],
             include: {
                 user: {

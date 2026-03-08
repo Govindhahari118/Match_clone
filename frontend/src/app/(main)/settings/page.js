@@ -1,352 +1,577 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import api from "../../../services/api";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import api from "../../../services/api";
+import { settingsRules } from "../../../validation/rules";
 
 const SECTIONS = [
-    { key: "account", icon: "👤", label: "Account" },
-    { key: "partner", icon: "💑", label: "Partner Preferences" },
-    { key: "privacy", icon: "🔒", label: "Privacy" },
-    { key: "notif", icon: "🔔", label: "Notifications" },
-    { key: "password", icon: "🔑", label: "Change Password" },
-    { key: "danger", icon: "⚠️", label: "Danger Zone" },
+  { key: "account", label: "Account" },
+  { key: "partner", label: "Partner Preferences" },
+  { key: "privacy", label: "Privacy" },
+  { key: "notif", label: "Notifications" },
+  { key: "password", label: "Change Password" },
+  { key: "danger", label: "Danger Zone" },
 ];
 
-function Toggle({ checked, onChange }) {
-    return (
-        <div
-            onClick={() => onChange(!checked)}
-            style={{
-                width: 44, height: 24,
-                background: checked ? "linear-gradient(135deg, #e11d48, #c2185b)" : "#e2e8f0",
-                borderRadius: 99, cursor: "pointer",
-                position: "relative", transition: "background 0.25s", flexShrink: 0,
-                boxShadow: checked ? "0 2px 8px rgba(225,29,72,0.3)" : "none",
-            }}
-        >
-            <div style={{
-                position: "absolute", top: 3, left: checked ? 23 : 3,
-                width: 18, height: 18, borderRadius: "50%",
-                background: "white", transition: "left 0.25s",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
-            }}></div>
-        </div>
-    );
+const RELIGIONS = ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist"];
+const INCOMES = ["Any", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"];
+const EDUCATIONS = ["Any", "Graduate", "Post Graduate", "Doctorate", "Professional"];
+const PROFESSIONS = ["Any", "Engineer", "Doctor", "CA/Finance", "Govt/PSU", "Lawyer", "Business", "NRI"];
+
+function toDateInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
-const inputStyle = {
-    width: "100%", padding: "10px 14px",
-    border: "1.5px solid #e2e8f0", borderRadius: 12,
-    fontSize: 14, color: "#1e293b", background: "#f8fafc",
-    fontFamily: "inherit", outline: "none",
-    transition: "border-color 0.2s, box-shadow 0.2s",
-};
+function formatGender(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "male") return "Male";
+  if (normalized === "female") return "Female";
+  if (normalized === "other") return "Other";
+  return "Male";
+}
+
+function Toggle({ checked, onChange, labelledBy }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={labelledBy}
+      onClick={() => onChange(!checked)}
+      className={`toggle-v2 ${checked ? "on" : ""}`}
+    >
+      <span />
+    </button>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div className="settings-field-v2">
+      <label className="form-label" htmlFor={children?.props?.id}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function SettingsPage() {
-    const [section, setSection] = useState("account");
+  const [section, setSection] = useState("account");
+  const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [passwordErrors, setPasswordErrors] = useState({});
 
-    const [account, setAccount] = useState({ firstName: "Lakshya", lastName: "Singh", phone: "+91 98765 43210", email: "lakshya@example.com", dob: "1998-04-15", gender: "Male" });
+  const [account, setAccount] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    dob: "",
+    gender: "Male",
+  });
 
-    const [partner, setPartner] = useState({ minAge: "22", maxAge: "30", religion: "Hindu", caste: "Any", minHeight: "Any", maxHeight: "Any", education: "Any", profession: "Any", income: "Any", maritalStatus: "Never Married", city: "" });
+  const [partner, setPartner] = useState({
+    minAge: "21",
+    maxAge: "35",
+    religion: "Any",
+    education: "Any",
+    profession: "Any",
+    income: "Any",
+    city: "",
+  });
 
-    const [privacy, setPrivacy] = useState({ showPhone: false, showPhoto: true, showProfile: true, allowSearch: true, showLastSeen: false, allowMessages: true });
+  const [privacy, setPrivacy] = useState({
+    showPhone: false,
+    showPhoto: true,
+    showProfile: true,
+    allowSearch: true,
+    showLastSeen: false,
+    allowMessages: true,
+  });
 
-    const [notif, setNotif] = useState({ emailNewMatch: true, emailInterest: true, emailMessage: false, pushNewMatch: true, pushInterest: true, pushMessage: true, smsAlert: false });
+  const [notif, setNotif] = useState({
+    emailNewMatch: true,
+    emailInterest: true,
+    emailMessage: false,
+    pushNewMatch: true,
+    pushInterest: true,
+    pushMessage: true,
+    smsAlert: false,
+  });
 
-    const [passwd, setPasswd] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-    const [saving, setSaving] = useState(false);
+  const [passwd, setPasswd] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
 
-    useEffect(() => {
-        const loadPrivacy = async () => {
-            try {
-                const response = await api.get("/users/privacy");
-                if (response?.data?.settings) {
-                    setPrivacy(prev => ({ ...prev, ...response.data.settings }));
-                }
-            } catch {
-                // Keep local defaults when API is unavailable.
-            }
-        };
-        loadPrivacy();
-    }, []);
+  useEffect(() => {
+    let mounted = true;
 
-    const save = async (label) => {
-        setSaving(true);
-        try {
-            if (section === "privacy") await api.post("/users/privacy", privacy);
-            if (section === "password") {
-                if (!passwd.currentPassword || !passwd.newPassword) { toast.error("Fill all fields"); setSaving(false); return; }
-                if (passwd.newPassword !== passwd.confirmPassword) { toast.error("Passwords don't match"); setSaving(false); return; }
-                await api.put("/users/password", { currentPassword: passwd.currentPassword, newPassword: passwd.newPassword });
-                setPasswd({ currentPassword: "", newPassword: "", confirmPassword: "" });
-            }
-            toast.success(`✅ ${label || "Settings"} saved!`);
-        } catch {
-            toast.success(`✅ ${label || "Settings"} saved! (Demo)`);
-        } finally {
-            setSaving(false);
+    const load = async () => {
+      try {
+        const [privacyResponse, profileResponse] = await Promise.all([
+          api.get("/users/privacy").catch(() => null),
+          api.get("/users/profile").catch(() => null),
+        ]);
+
+        if (!mounted) return;
+
+        if (privacyResponse?.data?.settings) {
+          setPrivacy((prev) => ({ ...prev, ...privacyResponse.data.settings }));
         }
+
+        const profile = profileResponse?.data;
+        if (!profile) return;
+
+        setAccount((prev) => ({
+          ...prev,
+          firstName: profile.firstName || "",
+          lastName: profile.lastName || "",
+          phone: profile.phone || "",
+          email: profile.email || "",
+          dob: toDateInput(profile.dateOfBirth),
+          gender: formatGender(profile.gender),
+        }));
+
+        const pref = profile.partnerPreference || {};
+        setPartner((prev) => ({
+          ...prev,
+          minAge: String(pref.minAge ?? prev.minAge),
+          maxAge: String(pref.maxAge ?? prev.maxAge),
+          religion: pref.preferredReligions?.[0] || "Any",
+          income: pref.minIncomeBand || "Any",
+          city: Array.isArray(pref.preferredLocations) ? pref.preferredLocations.join(", ") : "",
+        }));
+      } catch {
+        // Keep defaults when offline.
+      }
     };
 
-    const RELIGIONS = ["Any", "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist"];
-    const INCOMES = ["Any", "3-5L", "5-10L", "10-25L", "25-50L", "50L+"];
-    const EDUCATIONS = ["Any", "Graduate", "Post Graduate", "Doctorate", "Professional"];
-    const HEIGHTS = ["Any", "5ft", "5ft 2in", "5ft 4in", "5ft 6in", "5ft 8in", "6ft", "6ft 2in"];
-    const PROFESSIONS = ["Any", "Engineer", "Doctor", "CA/Finance", "Govt/PSU", "Lawyer", "Business", "NRI"];
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-    const selStyle = { ...inputStyle };
+  const save = async (label) => {
+    setSaving(true);
+    setStatusMessage("");
 
-    return (
-        <div>
-            <div style={{ marginBottom: "1.5rem" }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827" }}>Settings ⚙️</h1>
-                <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>Manage your account, preferences and privacy</p>
-            </div>
+    try {
+      if (section === "account") {
+        await api.put("/users/profile", {
+          firstName: account.firstName || undefined,
+          lastName: account.lastName || undefined,
+          dateOfBirth: account.dob || undefined,
+          gender: account.gender ? account.gender.toLowerCase() : undefined,
+        });
+      }
 
-            <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: "1.5rem" }} className="settings-layout">
+      if (section === "partner") {
+        await api.put("/users/profile/preferences", {
+          minAge: Number.parseInt(partner.minAge, 10) || 21,
+          maxAge: Number.parseInt(partner.maxAge, 10) || 35,
+          religion: partner.religion || "Any",
+          income: partner.income || "Any",
+          education: partner.education || "Any",
+          profession: partner.profession || "Any",
+          city: partner.city || "",
+        });
+      }
 
-                {/* ── Sidebar Nav ── */}
-                <aside>
-                    <div style={{ background: "white", borderRadius: 20, border: "1.5px solid #f1f5f9", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", position: "sticky", top: 80 }}>
-                        {SECTIONS.map(s => (
-                            <button key={s.key} onClick={() => setSection(s.key)} style={{
-                                width: "100%", display: "flex", alignItems: "center", gap: 10,
-                                padding: "12px 18px", border: "none", background: "none",
-                                cursor: "pointer", textAlign: "left", fontSize: 13, fontWeight: 700,
-                                color: section === s.key ? "#e11d48" : "#374151",
-                                background: section === s.key ? "#fff1f2" : "transparent",
-                                borderLeft: section === s.key ? "3px solid #e11d48" : "3px solid transparent",
-                                transition: "all 0.2s",
-                            }}>
-                                <span style={{ fontSize: 16 }}>{s.icon}</span>
-                                {s.label}
-                            </button>
-                        ))}
-                    </div>
-                </aside>
+      if (section === "privacy") {
+        await api.post("/users/privacy", privacy);
+      }
 
-                {/* ── Content Panel ── */}
-                <div style={{ background: "white", borderRadius: 20, border: "1.5px solid #f1f5f9", padding: "2rem", boxShadow: "0 2px 12px rgba(0,0,0,0.04)" }}>
+      if (section === "password") {
+        const errors = {};
 
-                    {/* ACCOUNT */}
-                    {section === "account" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: "0.25rem" }}>Account Details</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "1.5rem" }}>Update your personal information</p>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                                {[
-                                    { label: "First Name", field: "firstName" },
-                                    { label: "Last Name", field: "lastName" },
-                                    { label: "Phone", field: "phone" },
-                                    { label: "Email", field: "email" },
-                                    { label: "Date of Birth", field: "dob", type: "date" },
-                                    { label: "Gender", field: "gender", type: "select", options: ["Male", "Female", "Other"] },
-                                ].map(({ label, field, type = "text", options }) => (
-                                    <div key={field}>
-                                        <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>{label}</label>
-                                        {options ? (
-                                            <select value={account[field]} onChange={e => setAccount(p => ({ ...p, [field]: e.target.value }))} style={selStyle}>
-                                                {options.map(o => <option key={o}>{o}</option>)}
-                                            </select>
-                                        ) : (
-                                            <input type={type} value={account[field]} onChange={e => setAccount(p => ({ ...p, [field]: e.target.value }))}
-                                                style={inputStyle}
-                                                onFocus={e => { e.target.style.borderColor = "#e11d48"; e.target.style.boxShadow = "0 0 0 3px rgba(225,29,72,0.1)"; }}
-                                                onBlur={e => { e.target.style.borderColor = "#e2e8f0"; e.target.style.boxShadow = "none"; }}
-                                            />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                            <button onClick={() => save("Account")} disabled={saving} style={{ marginTop: "1.5rem", padding: "11px 28px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 14px rgba(225,29,72,0.3)" }}>
-                                {saving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* PARTNER PREFERENCES */}
-                    {section === "partner" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: "0.25rem" }}>Partner Preferences</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "1.5rem" }}>Help us find better matches for you</p>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                                <div style={{ gridColumn: "span 2" }}>
-                                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Age Range</label>
-                                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                        <input type="number" placeholder="Min age" value={partner.minAge} onChange={e => setPartner(p => ({ ...p, minAge: e.target.value }))} style={{ ...inputStyle, textAlign: "center" }} />
-                                        <span style={{ color: "#94a3b8", flexShrink: 0 }}>to</span>
-                                        <input type="number" placeholder="Max age" value={partner.maxAge} onChange={e => setPartner(p => ({ ...p, maxAge: e.target.value }))} style={{ ...inputStyle, textAlign: "center" }} />
-                                    </div>
-                                </div>
-                                {[
-                                    { label: "Religion", field: "religion", opts: RELIGIONS },
-                                    { label: "Income", field: "income", opts: INCOMES },
-                                    { label: "Education", field: "education", opts: EDUCATIONS },
-                                    { label: "Profession", field: "profession", opts: PROFESSIONS },
-                                ].map(({ label, field, opts }) => (
-                                    <div key={field}>
-                                        <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>{label}</label>
-                                        <select value={partner[field]} onChange={e => setPartner(p => ({ ...p, [field]: e.target.value }))} style={selStyle}>
-                                            {opts.map(o => <option key={o}>{o}</option>)}
-                                        </select>
-                                    </div>
-                                ))}
-                                <div style={{ gridColumn: "span 2" }}>
-                                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>Preferred City</label>
-                                    <input type="text" placeholder="Any city..." value={partner.city} onChange={e => setPartner(p => ({ ...p, city: e.target.value }))} style={inputStyle} />
-                                </div>
-                            </div>
-                            <button onClick={() => save("Partner Preferences")} style={{ marginTop: "1.5rem", padding: "11px 28px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 14px rgba(225,29,72,0.3)" }}>
-                                Save Preferences
-                            </button>
-                        </div>
-                    )}
-
-                    {/* PRIVACY */}
-                    {section === "privacy" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: "0.25rem" }}>Privacy Settings</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "1.5rem" }}>Control who can see your information</p>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-                                {[
-                                    { field: "showPhone", label: "Show Phone Number", desc: "Only matched users can see your number" },
-                                    { field: "showPhoto", label: "Show Photos", desc: "Allow others to view your profile photos" },
-                                    { field: "showProfile", label: "Public Profile", desc: "Appear in search results and suggestions" },
-                                    { field: "allowSearch", label: "Searchable", desc: "Allow users to find you via advanced search" },
-                                    { field: "showLastSeen", label: "Show Last Seen", desc: "Display when you were last active" },
-                                    { field: "allowMessages", label: "Allow Messages", desc: "Receive messages from matched users only" },
-                                ].map(({ field, label, desc }) => (
-                                    <div key={field} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0", borderBottom: "1px solid #f8fafc" }}>
-                                        <div>
-                                            <p style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{label}</p>
-                                            <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{desc}</p>
-                                        </div>
-                                        <Toggle checked={privacy[field]} onChange={val => setPrivacy(p => ({ ...p, [field]: val }))} />
-                                    </div>
-                                ))}
-                            </div>
-                            <button onClick={() => save("Privacy")} style={{ marginTop: "1.5rem", padding: "11px 28px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 14px rgba(225,29,72,0.3)" }}>
-                                Save Privacy Settings
-                            </button>
-                        </div>
-                    )}
-
-                    {/* NOTIFICATIONS */}
-                    {section === "notif" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: "0.25rem" }}>Notifications</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "1.5rem" }}>Choose how you want to be notified</p>
-                            {[
-                                {
-                                    group: "📧 Email Notifications", items: [
-                                        { field: "emailNewMatch", label: "New Match Found" },
-                                        { field: "emailInterest", label: "Interest Received" },
-                                        { field: "emailMessage", label: "New Message" },
-                                    ]
-                                },
-                                {
-                                    group: "📱 Push Notifications", items: [
-                                        { field: "pushNewMatch", label: "New Match Found" },
-                                        { field: "pushInterest", label: "Interest Received" },
-                                        { field: "pushMessage", label: "New Message" },
-                                    ]
-                                },
-                                {
-                                    group: "💬 SMS Alerts", items: [
-                                        { field: "smsAlert", label: "Important Alerts Only" },
-                                    ]
-                                },
-                            ].map(group => (
-                                <div key={group.group} style={{ marginBottom: "1.5rem" }}>
-                                    <h3 style={{ fontSize: 13, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "0.75rem" }}>{group.group}</h3>
-                                    <div style={{ background: "#f8fafc", borderRadius: 14, overflow: "hidden", border: "1px solid #f1f5f9" }}>
-                                        {group.items.map(({ field, label }, idx) => (
-                                            <div key={field} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderBottom: idx < group.items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                                                <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{label}</span>
-                                                <Toggle checked={notif[field]} onChange={val => setNotif(p => ({ ...p, [field]: val }))} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                            <button onClick={() => save("Notifications")} style={{ padding: "11px 28px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 14px rgba(225,29,72,0.3)" }}>
-                                Save Notifications
-                            </button>
-                        </div>
-                    )}
-
-                    {/* PASSWORD */}
-                    {section === "password" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: "0.25rem" }}>Change Password</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "1.5rem" }}>Use a strong password with 8+ characters</p>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxWidth: 440 }}>
-                                {[
-                                    { label: "Current Password", field: "currentPassword" },
-                                    { label: "New Password", field: "newPassword" },
-                                    { label: "Confirm Password", field: "confirmPassword" },
-                                ].map(({ label, field }) => (
-                                    <div key={field}>
-                                        <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>{label}</label>
-                                        <input type="password" value={passwd[field]} onChange={e => setPasswd(p => ({ ...p, [field]: e.target.value }))}
-                                            style={inputStyle}
-                                            onFocus={e => { e.target.style.borderColor = "#e11d48"; e.target.style.boxShadow = "0 0 0 3px rgba(225,29,72,0.1)"; }}
-                                            onBlur={e => { e.target.style.borderColor = "#e2e8f0"; e.target.style.boxShadow = "none"; }}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                            {/* Password strength tip */}
-                            <div style={{ marginTop: "1rem", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "12px 16px" }}>
-                                <p style={{ fontSize: 12, fontWeight: 700, color: "#166534" }}>💡 Password Tips</p>
-                                <ul style={{ marginTop: 6, paddingLeft: 16, color: "#15803d", fontSize: 12, lineHeight: 1.8 }}>
-                                    <li>At least 8 characters long</li>
-                                    <li>Mix of uppercase, lowercase, numbers</li>
-                                    <li>At least one special character (!@#$%)</li>
-                                </ul>
-                            </div>
-                            <button onClick={() => save("Password")} disabled={saving} style={{ marginTop: "1.25rem", padding: "11px 28px", background: "linear-gradient(135deg, #e11d48, #c2185b)", color: "white", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 14px rgba(225,29,72,0.3)" }}>
-                                {saving ? "Updating..." : "Update Password"}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* DANGER ZONE */}
-                    {section === "danger" && (
-                        <div>
-                            <h2 style={{ fontWeight: 800, fontSize: 18, color: "#dc2626", marginBottom: "0.25rem" }}>⚠️ Danger Zone</h2>
-                            <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: "2rem" }}>These actions are permanent and cannot be undone</p>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                                {[
-                                    { icon: "🙈", title: "Hide My Profile", desc: "Temporarily hide your profile from search results and suggestions.", btn: "Hide Profile", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
-                                    { icon: "🗑️", title: "Delete Account", desc: "Permanently delete your account and all associated data. This cannot be reversed.", btn: "Delete Account", color: "#ef4444", bg: "#fff1f2", border: "#fecdd3" },
-                                ].map(item => (
-                                    <div key={item.title} style={{ background: item.bg, border: `1px solid ${item.border}`, borderRadius: 16, padding: "1.25rem 1.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                            <span style={{ fontSize: 28 }}>{item.icon}</span>
-                                            <div>
-                                                <p style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>{item.title}</p>
-                                                <p style={{ fontSize: 12, color: "#64748b", marginTop: 2, maxWidth: 380 }}>{item.desc}</p>
-                                            </div>
-                                        </div>
-                                        <button onClick={() => toast.error(`⚠️ ${item.title} requires confirmation`)} style={{ padding: "9px 20px", background: "white", border: `2px solid ${item.border}`, color: item.color, borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: "pointer" }}>
-                                            {item.btn}
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                </div>
-            </div>
-
-            <style>{`
-        @media (max-width: 768px) {
-          .settings-layout { grid-template-columns: 1fr !important; }
+        if (!passwd.currentPassword) {
+          errors.currentPassword = settingsRules.password.currentPassword.required;
         }
-      `}</style>
-        </div>
-    );
+        if (!passwd.newPassword) {
+          errors.newPassword = settingsRules.password.newPassword.required;
+        } else if (passwd.newPassword.length < settingsRules.password.newPassword.minLength.value) {
+          errors.newPassword = settingsRules.password.newPassword.minLength.message;
+        }
+        if (!passwd.confirmPassword) {
+          errors.confirmPassword = "Confirm password is required";
+        } else if (passwd.newPassword !== passwd.confirmPassword) {
+          errors.confirmPassword = "Passwords do not match";
+        }
+
+        if (Object.keys(errors).length > 0) {
+          setPasswordErrors(errors);
+          const message = Object.values(errors)[0];
+          setStatusMessage(String(message));
+          toast.error(String(message));
+          setSaving(false);
+          return;
+        }
+
+        setPasswordErrors({});
+        await api.put("/users/password", {
+          currentPassword: passwd.currentPassword,
+          newPassword: passwd.newPassword,
+        });
+        setPasswd({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      }
+
+      toast.success(`${label} saved.`);
+      setStatusMessage(`${label} saved.`);
+    } catch (error) {
+      const message = error?.response?.data?.error || `Failed to save ${label.toLowerCase()}.`;
+      toast.error(message);
+      setStatusMessage(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sectionTitle = useMemo(() => SECTIONS.find((item) => item.key === section)?.label || "Settings", [section]);
+
+  return (
+    <div className="settings-page-v2">
+      <header className="panel settings-hero-v2">
+        <p className="section-label">Control Center</p>
+        <h1 className="section-title">Settings</h1>
+        <p className="section-copy">Manage your account details, discovery preferences, privacy controls, and security.</p>
+      </header>
+
+      <p aria-live="polite" className="settings-status-v2">
+        {statusMessage}
+      </p>
+
+      <div className="settings-layout-v2">
+        <aside className="panel settings-nav-v2" aria-label="Settings sections">
+          {SECTIONS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`settings-tab-v2 ${section === item.key ? "active" : ""}`}
+              onClick={() => setSection(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </aside>
+
+        <section className="panel settings-content-v2">
+          <header className="settings-content-head-v2">
+            <h2>{sectionTitle}</h2>
+            <p>
+              {section === "partner"
+                ? "Update recommendation preferences used by smart matching and search."
+                : "Customize this section and save changes instantly."}
+            </p>
+          </header>
+
+          {section === "account" && (
+            <div className="settings-grid-v2">
+              <Field label="First Name">
+                <input
+                  id="account_first_name"
+                  className="form-input"
+                  value={account.firstName}
+                  onChange={(event) => setAccount((prev) => ({ ...prev, firstName: event.target.value }))}
+                />
+              </Field>
+              <Field label="Last Name">
+                <input
+                  id="account_last_name"
+                  className="form-input"
+                  value={account.lastName}
+                  onChange={(event) => setAccount((prev) => ({ ...prev, lastName: event.target.value }))}
+                />
+              </Field>
+              <Field label="Phone">
+                <input id="account_phone" className="form-input input-readonly-v2" value={account.phone} readOnly />
+              </Field>
+              <Field label="Email">
+                <input id="account_email" className="form-input input-readonly-v2" value={account.email} readOnly />
+              </Field>
+              <Field label="Date of Birth">
+                <input
+                  id="account_dob"
+                  type="date"
+                  className="form-input"
+                  value={account.dob}
+                  onChange={(event) => setAccount((prev) => ({ ...prev, dob: event.target.value }))}
+                />
+              </Field>
+              <Field label="Gender">
+                <select
+                  id="account_gender"
+                  className="form-input"
+                  value={account.gender}
+                  onChange={(event) => setAccount((prev) => ({ ...prev, gender: event.target.value }))}
+                >
+                  <option>Male</option>
+                  <option>Female</option>
+                  <option>Other</option>
+                </select>
+              </Field>
+
+              <div className="settings-action-row-v2">
+                <button type="button" onClick={() => save("Account")} disabled={saving} className="button button-primary">
+                  {saving ? "Saving..." : "Save Account"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "partner" && (
+            <div className="settings-grid-v2">
+              <Field label="Min Age">
+                <input
+                  id="partner_min_age"
+                  type="number"
+                  className="form-input"
+                  value={partner.minAge}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, minAge: event.target.value }))}
+                />
+              </Field>
+              <Field label="Max Age">
+                <input
+                  id="partner_max_age"
+                  type="number"
+                  className="form-input"
+                  value={partner.maxAge}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, maxAge: event.target.value }))}
+                />
+              </Field>
+              <Field label="Religion">
+                <select
+                  id="partner_religion"
+                  className="form-input"
+                  value={partner.religion}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, religion: event.target.value }))}
+                >
+                  {RELIGIONS.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Income">
+                <select
+                  id="partner_income"
+                  className="form-input"
+                  value={partner.income}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, income: event.target.value }))}
+                >
+                  {INCOMES.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Education">
+                <select
+                  id="partner_education"
+                  className="form-input"
+                  value={partner.education}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, education: event.target.value }))}
+                >
+                  {EDUCATIONS.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Profession">
+                <select
+                  id="partner_profession"
+                  className="form-input"
+                  value={partner.profession}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, profession: event.target.value }))}
+                >
+                  {PROFESSIONS.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Preferred City">
+                <input
+                  id="partner_city"
+                  className="form-input"
+                  value={partner.city}
+                  onChange={(event) => setPartner((prev) => ({ ...prev, city: event.target.value }))}
+                />
+              </Field>
+
+              <div className="settings-action-row-v2">
+                <button
+                  type="button"
+                  onClick={() => save("Partner Preferences")}
+                  disabled={saving}
+                  className="button button-primary"
+                >
+                  {saving ? "Saving..." : "Save Preferences"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "privacy" && (
+            <div className="settings-toggle-list-v2">
+              {[
+                ["showPhone", "Show phone to matches"],
+                ["showPhoto", "Show photos"],
+                ["showProfile", "Profile visible"],
+                ["allowSearch", "Allow search listing"],
+                ["showLastSeen", "Show last seen"],
+                ["allowMessages", "Allow messages"],
+              ].map(([field, label]) => (
+                <div key={field} className="settings-toggle-row-v2">
+                  <span id={`privacy_${field}_label`}>{label}</span>
+                  <Toggle
+                    labelledBy={`privacy_${field}_label`}
+                    checked={privacy[field]}
+                    onChange={(value) => setPrivacy((prev) => ({ ...prev, [field]: value }))}
+                  />
+                </div>
+              ))}
+
+              <div className="settings-action-row-v2">
+                <button type="button" onClick={() => save("Privacy")} disabled={saving} className="button button-primary">
+                  {saving ? "Saving..." : "Save Privacy"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "notif" && (
+            <div className="settings-toggle-list-v2">
+              {[
+                ["emailNewMatch", "Email: new match"],
+                ["emailInterest", "Email: interest received"],
+                ["emailMessage", "Email: new message"],
+                ["pushNewMatch", "Push: new match"],
+                ["pushInterest", "Push: interest received"],
+                ["pushMessage", "Push: new message"],
+                ["smsAlert", "SMS alerts"],
+              ].map(([field, label]) => (
+                <div key={field} className="settings-toggle-row-v2">
+                  <span id={`notif_${field}_label`}>{label}</span>
+                  <Toggle
+                    labelledBy={`notif_${field}_label`}
+                    checked={notif[field]}
+                    onChange={(value) => setNotif((prev) => ({ ...prev, [field]: value }))}
+                  />
+                </div>
+              ))}
+
+              <div className="settings-action-row-v2">
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => {
+                    const message = "Notification preferences updated locally.";
+                    toast.success(message);
+                    setStatusMessage(message);
+                  }}
+                >
+                  Save Notifications
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "password" && (
+            <div className="settings-password-v2">
+              <Field label="Current Password">
+                <input
+                  id="password_current"
+                  type="password"
+                  className="form-input"
+                  value={passwd.currentPassword}
+                  onChange={(event) => {
+                    setPasswd((prev) => ({ ...prev, currentPassword: event.target.value }));
+                    setPasswordErrors((prev) => ({ ...prev, currentPassword: undefined }));
+                  }}
+                  aria-invalid={passwordErrors.currentPassword ? "true" : "false"}
+                  aria-describedby={passwordErrors.currentPassword ? "password_current_error" : undefined}
+                />
+              </Field>
+              {passwordErrors.currentPassword && (
+                <p id="password_current_error" role="alert" className="form-error">
+                  {passwordErrors.currentPassword}
+                </p>
+              )}
+
+              <Field label="New Password">
+                <input
+                  id="password_new"
+                  type="password"
+                  className="form-input"
+                  value={passwd.newPassword}
+                  onChange={(event) => {
+                    setPasswd((prev) => ({ ...prev, newPassword: event.target.value }));
+                    setPasswordErrors((prev) => ({ ...prev, newPassword: undefined }));
+                  }}
+                  aria-invalid={passwordErrors.newPassword ? "true" : "false"}
+                  aria-describedby={passwordErrors.newPassword ? "password_new_error" : undefined}
+                />
+              </Field>
+              {passwordErrors.newPassword && (
+                <p id="password_new_error" role="alert" className="form-error">
+                  {passwordErrors.newPassword}
+                </p>
+              )}
+
+              <Field label="Confirm Password">
+                <input
+                  id="password_confirm"
+                  type="password"
+                  className="form-input"
+                  value={passwd.confirmPassword}
+                  onChange={(event) => {
+                    setPasswd((prev) => ({ ...prev, confirmPassword: event.target.value }));
+                    setPasswordErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                  }}
+                  aria-invalid={passwordErrors.confirmPassword ? "true" : "false"}
+                  aria-describedby={passwordErrors.confirmPassword ? "password_confirm_error" : undefined}
+                />
+              </Field>
+              {passwordErrors.confirmPassword && (
+                <p id="password_confirm_error" role="alert" className="form-error">
+                  {passwordErrors.confirmPassword}
+                </p>
+              )}
+
+              <div className="settings-action-row-v2">
+                <button type="button" onClick={() => save("Password")} disabled={saving} className="button button-primary">
+                  {saving ? "Saving..." : "Update Password"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {section === "danger" && (
+            <div className="settings-danger-zone-v2">
+              <article className="danger-card-v2 soft">
+                <p>Hide profile</p>
+                <small>Temporarily remove your profile from discovery while keeping all your account data intact.</small>
+                <button type="button" className="button button-secondary" onClick={() => toast.info("Feature requires confirmation flow.")}>
+                  Hide Profile
+                </button>
+              </article>
+
+              <article className="danger-card-v2 hard">
+                <p>Delete account</p>
+                <small>Permanently delete your account and all related data after verification confirmation.</small>
+                <button type="button" className="button button-secondary" onClick={() => toast.warn("Account deletion requires verification flow.")}>
+                  Delete Account
+                </button>
+              </article>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }

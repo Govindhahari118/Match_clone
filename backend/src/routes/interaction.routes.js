@@ -13,6 +13,8 @@ router.post('/decline', interactionController.declineInterest);        // receiv
 
 // ── Report / Safety ────────────────────────────────────────
 router.post('/report', interactionController.reportUser);
+router.post('/safety-action', interactionController.applySafetyAction);
+router.get('/safety-status', interactionController.getSafetyStatus);
 
 // ── Profile Views ─────────────────────────────────────────
 // ── Profile Views ─────────────────────────────────────────

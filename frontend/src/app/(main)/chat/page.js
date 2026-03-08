@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import LoginPromptModal from "../../../components/LoginPromptModal";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const DEMO_CONVERSATIONS = [
   {
@@ -90,6 +92,10 @@ function formatTime(value) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function makeClientMessageId() {
+  return `cm_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
 export default function ChatPage() {
   const { user, socket } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -101,8 +107,10 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [infoMessage, setInfoMessage] = useState("");
+  const [typingPeer, setTypingPeer] = useState(false);
 
   const scrollAnchorRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.userId === selectedId) || null,
@@ -154,6 +162,10 @@ export default function ChatPage() {
         const response = await api.get(`/chat/${selectedId}`);
         const list = Array.isArray(response.data) ? response.data : [];
         setMessages(list.length ? list : DEMO_MESSAGES[selectedId] || []);
+        await api.post(`/chat/${selectedId}/read`);
+        if (socket?.connected) {
+          socket.emit("conversation_seen", { viewerId: myUserId, peerId: selectedId });
+        }
 
         setConversations((prev) =>
           prev.map((item) =>
@@ -173,7 +185,7 @@ export default function ChatPage() {
     };
 
     loadMessages();
-  }, [selectedId, user]);
+  }, [selectedId, user, socket, myUserId]);
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -200,11 +212,60 @@ export default function ChatPage() {
 
       if (peerId === selectedId) {
         setMessages((prev) => [...prev, message]);
+        socket.emit("conversation_seen", { viewerId: myUserId, peerId });
       }
     };
 
+    const onMessageAck = (ack = {}) => {
+      setMessages((prev) =>
+        prev.map((item) => {
+          const clientMatched = ack.clientMessageId && item.clientMessageId === ack.clientMessageId;
+          const idMatched = ack.messageId && item.id === ack.messageId;
+          if (!clientMatched && !idMatched) return item;
+          return {
+            ...item,
+            id: ack.messageId || item.id,
+            status: ack.status || item.status || "sent",
+          };
+        })
+      );
+    };
+
+    const onMessageStatus = (update = {}) => {
+      if (!update.messageId) return;
+      setMessages((prev) =>
+        prev.map((item) => (item.id === update.messageId ? { ...item, status: update.status || item.status } : item))
+      );
+    };
+
+    const onTyping = (payload = {}) => {
+      const isPeerTyping = payload.senderId === selectedId && payload.receiverId === myUserId && payload.isTyping;
+      if (!isPeerTyping) return;
+      setTypingPeer(true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => setTypingPeer(false), 1400);
+    };
+
+    const onConversationSeen = (payload = {}) => {
+      if (payload.viewerId !== selectedId) return;
+      setMessages((prev) =>
+        prev.map((item) => (item.senderId === myUserId ? { ...item, status: "seen" } : item))
+      );
+    };
+
     socket.on("receive_message", onReceiveMessage);
-    return () => socket.off("receive_message", onReceiveMessage);
+    socket.on("message_ack", onMessageAck);
+    socket.on("message_status", onMessageStatus);
+    socket.on("typing", onTyping);
+    socket.on("conversation_seen", onConversationSeen);
+
+    return () => {
+      socket.off("receive_message", onReceiveMessage);
+      socket.off("message_ack", onMessageAck);
+      socket.off("message_status", onMessageStatus);
+      socket.off("typing", onTyping);
+      socket.off("conversation_seen", onConversationSeen);
+    };
   }, [socket, myUserId, selectedId]);
 
   const filteredConversations = useMemo(() => {
@@ -227,11 +288,15 @@ export default function ChatPage() {
       return;
     }
 
+    const clientMessageId = makeClientMessageId();
     const payload = {
+      id: clientMessageId,
+      clientMessageId,
       senderId: myUserId,
       receiverId: selectedConversation.userId,
       content: newMessage.trim(),
       createdAt: new Date().toISOString(),
+      status: "sent",
     };
 
     setMessages((prev) => [...prev, payload]);
@@ -252,59 +317,65 @@ export default function ChatPage() {
       if (socket?.connected) {
         socket.emit("send_message", payload);
       } else {
-        await api.post("/chat/send", {
+        const response = await api.post("/chat/send", {
           receiverId: selectedConversation.userId,
           content: payload.content,
+          clientMessageId,
         });
+        const serverMessage = response?.data;
+        if (serverMessage?.id) {
+          setMessages((prev) =>
+            prev.map((item) =>
+              item.clientMessageId === clientMessageId
+                ? { ...item, id: serverMessage.id, status: serverMessage.status || "sent" }
+                : item
+            )
+          );
+        }
       }
     } catch {
       setInfoMessage("Message queued in demo mode.");
+      setMessages((prev) =>
+        prev.map((item) => (item.clientMessageId === clientMessageId ? { ...item, status: "failed" } : item))
+      );
     }
   };
 
   return (
-    <div className="panel" style={{ padding: "0.7rem", minHeight: "min(76vh, 760px)" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.8rem", marginBottom: "0.55rem" }}>
+    <div className="panel chat-page-v2">
+      <header className="chat-page-head-v2">
         <div>
-          <p className="section-label" style={{ marginBottom: "0.18rem" }}>
-            Conversations
-          </p>
-          <h1 style={{ margin: 0, fontSize: "1.6rem", fontFamily: "var(--font-display)" }}>Secure Messaging</h1>
+          <p className="section-label">Conversations</p>
+          <h1 className="chat-title-v2">Secure Messaging</h1>
         </div>
         {selectedConversation && (
           <Link href={`/profile/${selectedConversation.userId}`} className="button button-secondary">
             View Profile
           </Link>
         )}
-      </div>
+      </header>
 
-      {infoMessage && (
-        <div className="chip chip-brand" style={{ marginBottom: "0.55rem" }}>
-          {infoMessage}
-        </div>
-      )}
+      {infoMessage && <div className="chip chip-brand chat-info-v2">{infoMessage}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0,1fr)", gap: "0.65rem" }} className="chat-shell-grid">
-        <aside className="panel" style={{ padding: "0.65rem", overflow: "hidden" }}>
+      <div className="chat-shell-grid chat-grid-v2">
+        <aside className="panel chat-sidebar-v2">
           <input
-            className="form-input"
+            className="form-input chat-search-v2"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search conversations"
-            style={{ marginBottom: "0.55rem" }}
           />
 
-          <div style={{ display: "grid", gap: "0.4rem", maxHeight: "64vh", overflowY: "auto" }}>
+          <div className="chat-thread-list-v2">
             {loadingConversations ? (
-              Array.from({ length: 5 }).map((_, index) => (
-                <div key={`load-c-${index}`} className="panel" style={{ height: 72, background: "#f7f3ec" }} />
-              ))
+              <PageLoadingState title="Loading conversations..." description="Syncing your latest chat threads." compact />
             ) : filteredConversations.length === 0 ? (
-              <div className="panel" style={{ padding: "1rem", textAlign: "center" }}>
-                <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-                  No conversations yet.
-                </p>
-              </div>
+              <PageEmptyState
+                title="No conversations yet"
+                description="Your active chats will appear here after a mutual match."
+                primaryActionLabel="Explore Matches"
+                primaryActionHref="/matches"
+              />
             ) : (
               filteredConversations.map((conversation) => {
                 const active = conversation.userId === selectedId;
@@ -313,18 +384,7 @@ export default function ChatPage() {
                     key={conversation.userId}
                     type="button"
                     onClick={() => setSelectedId(conversation.userId)}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      borderRadius: 14,
-                      border: active ? "1px solid rgba(240,107,78,0.4)" : "1px solid rgba(23,33,59,0.08)",
-                      background: active ? "rgba(240,107,78,0.12)" : "#fff",
-                      padding: "0.55rem",
-                      cursor: "pointer",
-                      display: "grid",
-                      gridTemplateColumns: "48px minmax(0,1fr)",
-                      gap: "0.52rem",
-                    }}
+                    className={`chat-thread-v2 ${active ? "active" : ""}`}
                   >
                     <Image
                       src={conversation.photo}
@@ -332,29 +392,14 @@ export default function ChatPage() {
                       width={48}
                       height={48}
                       sizes="48px"
-                      style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover" }}
+                      className="chat-thread-avatar-v2"
                     />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.4rem" }}>
-                        <strong style={{ fontSize: "0.88rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {conversation.name}
-                        </strong>
-                        <span style={{ fontSize: "0.72rem", color: "var(--ink-muted)", flexShrink: 0 }}>
-                          {formatTime(conversation.updatedAt)}
-                        </span>
+                    <div className="chat-thread-copy-v2">
+                      <div className="chat-thread-row-v2">
+                        <strong>{conversation.name}</strong>
+                        <span>{formatTime(conversation.updatedAt)}</span>
                       </div>
-                      <p
-                        style={{
-                          margin: "0.2rem 0 0",
-                          fontSize: "0.76rem",
-                          color: "var(--ink-muted)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {conversation.lastMessage}
-                      </p>
+                      <p>{conversation.lastMessage}</p>
                     </div>
                   </button>
                 );
@@ -363,61 +408,45 @@ export default function ChatPage() {
           </div>
         </aside>
 
-        <section className="panel" style={{ padding: "0.75rem", display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", minHeight: "66vh" }}>
+        <section className="panel chat-main-v2">
           {!selectedConversation ? (
-            <div style={{ display: "grid", placeItems: "center", color: "var(--ink-muted)", minHeight: "62vh" }}>
-              Select a conversation to begin
-            </div>
+            <PageEmptyState title="Select a conversation" description="Pick a thread from the left panel to start messaging." />
           ) : (
             <>
-              <header style={{ display: "flex", alignItems: "center", gap: "0.6rem", paddingBottom: "0.58rem", borderBottom: "1px solid var(--line)" }}>
+              <header className="chat-main-head-v2">
                 <Image
                   src={selectedConversation.photo}
                   alt={`${selectedConversation.name} photo`}
                   width={46}
                   height={46}
                   sizes="46px"
-                  style={{ borderRadius: 12, objectFit: "cover" }}
+                  className="chat-main-avatar-v2"
                 />
                 <div>
                   <strong>{selectedConversation.name}</strong>
-                  <p style={{ margin: "0.2rem 0 0", fontSize: "0.78rem", color: "var(--ink-muted)" }}>
+                  <p>
                     {selectedConversation.role || "Professional"} | {selectedConversation.city || "India"}
                   </p>
+                  {typingPeer && <span className="chat-typing-v2">Typing...</span>}
                 </div>
               </header>
 
-              <div style={{ overflowY: "auto", padding: "0.72rem 0.2rem 0.72rem 0", display: "grid", gap: "0.48rem" }}>
+              <div className="chat-message-list-v2">
                 {loadingMessages ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <div key={`m-load-${index}`} className="panel" style={{ height: 56, background: "#f7f3ec" }} />
-                  ))
+                  <PageLoadingState title="Loading messages..." description="Opening this conversation." compact />
                 ) : messages.length === 0 ? (
-                  <div style={{ color: "var(--ink-muted)", textAlign: "center", marginTop: "2rem" }}>
-                    No messages yet. Start with a simple introduction.
-                  </div>
+                  <PageEmptyState title="No messages yet" description="Start with a simple introduction to break the ice." />
                 ) : (
                   messages.map((message, index) => {
                     const mine = message.senderId === myUserId || message.senderId === "me";
                     return (
-                      <div key={`${message.id || "m"}-${index}`} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
-                        <div
-                          style={{
-                            maxWidth: "72%",
-                            borderRadius: mine ? "16px 16px 6px 16px" : "16px 16px 16px 6px",
-                            background: mine
-                              ? "linear-gradient(135deg, var(--brand), var(--brand-deep))"
-                              : "#fff",
-                            border: mine ? "none" : "1px solid var(--line)",
-                            color: mine ? "#fff" : "var(--ink)",
-                            padding: "0.6rem 0.72rem",
-                            boxShadow: mine ? "0 10px 20px rgba(215,81,54,0.25)" : "var(--shadow-sm)",
-                          }}
-                        >
-                          <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.45 }}>{message.content}</p>
-                          <p style={{ margin: "0.22rem 0 0", fontSize: "0.68rem", opacity: 0.75, textAlign: "right" }}>
+                      <div key={`${message.id || "m"}-${index}`} className={`chat-message-row-v2 ${mine ? "mine" : "peer"}`}>
+                        <div className={`chat-bubble-v2 ${mine ? "mine" : "peer"} ${message.status === "failed" ? "failed" : ""}`}>
+                          <p>{message.content}</p>
+                          <small>
                             {formatTime(message.createdAt || Date.now())}
-                          </p>
+                            {mine && message.status ? ` | ${message.status}` : ""}
+                          </small>
                         </div>
                       </div>
                     );
@@ -426,11 +455,21 @@ export default function ChatPage() {
                 <div ref={scrollAnchorRef} />
               </div>
 
-              <form onSubmit={sendMessage} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.42rem", borderTop: "1px solid var(--line)", paddingTop: "0.62rem" }}>
+              <form onSubmit={sendMessage} className="chat-input-row-v2">
                 <input
                   className="form-input"
                   value={newMessage}
-                  onChange={(event) => setNewMessage(event.target.value)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setNewMessage(value);
+                    if (socket?.connected && selectedConversation && user) {
+                      socket.emit("typing", {
+                        senderId: myUserId,
+                        receiverId: selectedConversation.userId,
+                        isTyping: value.trim().length > 0,
+                      });
+                    }
+                  }}
                   placeholder={user ? `Message ${selectedConversation.name}...` : "Login to chat"}
                   disabled={!selectedConversation}
                 />
@@ -444,7 +483,6 @@ export default function ChatPage() {
       </div>
 
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
-
     </div>
   );
 }

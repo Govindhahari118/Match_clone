@@ -5,30 +5,32 @@ import PublicTopNav from "@/components/PublicTopNav";
 
 export default function OnboardingLayout({ children }) {
   const pathname = usePathname();
-  const currentStep = parseInt(pathname.split("/").pop().replace("step-", ""), 10) || 1;
+  const currentStep = Number(pathname.split("/").pop()?.replace("step-", "")) || 1;
   const totalSteps = 5;
 
   return (
-    <div className="page-shell" style={{ padding: "1rem 0 2rem" }}>
-      <div className="container-shell">
+    <div className="public-flow-shell onboarding-flow-shell">
+      <div className="container-shell public-flow-top">
         <PublicTopNav compact />
+      </div>
 
-        <section className="panel onboarding-shell">
-          <div className="onboarding-progress-head">
-            <p className="section-label">Onboarding</p>
-            <p className="onboarding-progress-text">
+      <div className="container-shell">
+        <section className="panel onboarding-shell-v2">
+          <div className="onboarding-head-v2">
+            <p className="section-label">Onboarding Journey</p>
+            <p className="onboarding-progress-text-v2">
               Step {currentStep} of {totalSteps}
             </p>
           </div>
 
-          <div className="onboarding-progress-track">
+          <div className="onboarding-progress-track-v2" aria-label={`Progress ${currentStep} of ${totalSteps}`}>
             <div
-              className="onboarding-progress-fill"
+              className="onboarding-progress-fill-v2"
               style={{ width: `${(currentStep / totalSteps) * 100}%` }}
             />
           </div>
 
-          <div style={{ marginTop: "1rem" }}>{children}</div>
+          <div className="onboarding-content-v2">{children}</div>
         </section>
       </div>
     </div>

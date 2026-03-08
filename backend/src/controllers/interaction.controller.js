@@ -1,4 +1,6 @@
 const interactionService = require('../services/interaction.service');
+const safetyService = require('../services/safety.service');
+const { parsePagination } = require('../utils/pagination');
 
 const likeUser = async (req, res) => {
     try {
@@ -47,7 +49,8 @@ const getInterests = async (req, res) => {
     try {
         const userId = req.user.sub;
         const { type = 'received' } = req.query;
-        const data = await interactionService.getInterests(userId, type);
+        const { limit, skip } = parsePagination(req.query, { defaultLimit: 20, maxLimit: 50 });
+        const data = await interactionService.getInterests(userId, type, { limit, skip });
         res.status(200).json(data);
     } catch (error) {
         console.error('Get interests error:', error);
@@ -60,7 +63,13 @@ const reportUser = async (req, res) => {
         const reporterId = req.user.sub;
         const { reportedUserId, reportType, description } = req.body;
         if (!reportedUserId || !reportType) return res.status(400).json({ error: 'reportedUserId and reportType are required' });
-        const result = await interactionService.reportUser(reporterId, reportedUserId, reportType, description);
+        const result = await interactionService.reportUser(reporterId, reportedUserId, reportType, description, {
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            source: req.body?.source || 'interaction_report',
+            channel: req.body?.channel || 'profile',
+        });
+        if (result.error) return res.status(result.statusCode || 400).json({ error: result.error });
         res.status(200).json(result);
     } catch (error) {
         console.error('Report user error:', error);
@@ -68,10 +77,40 @@ const reportUser = async (req, res) => {
     }
 };
 
+const applySafetyAction = async (req, res) => {
+    try {
+        const actorId = req.user.sub;
+        const { targetUserId, action } = req.body || {};
+        const result = await interactionService.applySafetyAction(actorId, targetUserId, action, {
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+        });
+        if (result.error) return res.status(result.statusCode || 400).json({ error: result.error });
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error('Apply safety action error:', error);
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+const getSafetyStatus = async (req, res) => {
+    try {
+        const actorId = req.user.sub;
+        const targetUserId = String(req.query.targetUserId || '').trim();
+        if (!targetUserId) return res.status(400).json({ error: 'targetUserId is required' });
+        const status = await safetyService.getSafetyRelationship(actorId, targetUserId);
+        return res.status(200).json(status);
+    } catch (error) {
+        console.error('Get safety status error:', error);
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 const getProfileViewers = async (req, res) => {
     try {
         const userId = req.user.sub;
-        const viewers = await interactionService.getProfileViewers(userId);
+        const { limit, skip } = parsePagination(req.query, { defaultLimit: 20, maxLimit: 50 });
+        const viewers = await interactionService.getProfileViewers(userId, { limit, skip });
         res.status(200).json(viewers);
     } catch (error) {
         console.error('Get profile viewers error:', error);
@@ -104,4 +143,4 @@ const getHoroscopeMatch = async (req, res) => {
     }
 };
 
-module.exports = { likeUser, rejectUser, declineInterest, getInterests, reportUser, getProfileViewers, getHoroscopeMatch };
+module.exports = { likeUser, rejectUser, declineInterest, getInterests, reportUser, applySafetyAction, getSafetyStatus, getProfileViewers, getHoroscopeMatch };

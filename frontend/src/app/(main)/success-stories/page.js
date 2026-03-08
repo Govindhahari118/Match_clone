@@ -98,7 +98,7 @@ export default function SuccessStoriesPage() {
         className="panel"
         style={{
           padding: "1.4rem",
-          background: "linear-gradient(135deg, #172554, #1d4ed8, #0f766e)",
+          background: "linear-gradient(135deg, #172554, #1d4ed8, #e11d48)",
           color: "white",
           borderColor: "rgba(255,255,255,0.18)",
         }}
@@ -147,7 +147,7 @@ export default function SuccessStoriesPage() {
       >
         {STORIES.map((story) => (
           <article key={story.id} className="panel panel-hover" style={{ overflow: "hidden" }}>
-            <div style={{ position: "relative", height: 160, background: "linear-gradient(135deg, #1e3a8a, #0f766e)" }}>
+            <div style={{ position: "relative", height: 160, background: "linear-gradient(135deg, #1e3a8a, #e11d48)" }}>
               <div
                 style={{
                   position: "absolute",
@@ -260,7 +260,7 @@ export default function SuccessStoriesPage() {
                   overflow: "hidden",
                 }}
               >
-                "{story.story}"
+                &ldquo;{story.story}&rdquo;
               </p>
               <button
                 type="button"
@@ -384,3 +384,4 @@ export default function SuccessStoriesPage() {
     </div>
   );
 }
+

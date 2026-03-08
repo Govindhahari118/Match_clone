@@ -24,6 +24,22 @@ const submitIdDoc = async (req, res) => {
             create: { userId, type: 'id_card', status: 'pending', documentUrl: docUrl },
         });
 
+        await prisma.auditLog.create({
+            data: {
+                userId,
+                action: 'verification_submitted',
+                resourceType: 'verification',
+                resourceId: userId,
+                changes: {
+                    type: 'id_card',
+                    status: 'pending',
+                    documentSubmitted: true,
+                },
+                ipAddress: req.ip || null,
+                userAgent: req.get('user-agent') || null,
+            },
+        });
+
         res.status(200).json({
             success: true,
             message: 'ID Document submitted for verification'

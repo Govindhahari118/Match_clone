@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const privacyService = require('./privacy.service');
 const profileExtensionService = require('./profile-extension.service');
+const recommendationService = require('./recommendation.service');
 
 const INCOME_ALIASES = {
     below_5L: ['below_5L', 'below 5l', 'below_3l', 'below 3l', '3-5l', '3-5L', 'Below 3L', 'Below 5L'],
@@ -113,18 +114,6 @@ function getAge(dateOfBirth) {
     return age;
 }
 
-function deterministicScore(viewerId, user, profile) {
-    const seed = `${viewerId}|${user.id}|${profile.religion || ''}|${profile.city || ''}|${profile.educationLevel || ''}|${profile.profession || ''}`;
-    const hash = seed.split('').reduce((acc, char) => ((acc * 31) + char.charCodeAt(0)) % 997, 7);
-    const qualityBoost =
-        (user.isVerified ? 8 : 0) +
-        (profile.educationLevel ? 5 : 0) +
-        (profile.profession ? 5 : 0) +
-        (profile.city ? 3 : 0) +
-        (profile.motherTongue ? 3 : 0);
-    return Math.min(99, Math.max(60, 60 + (hash % 21) + qualityBoost));
-}
-
 function parsePositiveInteger(value, fallback) {
     const parsed = parseInteger(value);
     if (!parsed || parsed < 1) {
@@ -177,15 +166,78 @@ function buildMatchReasons({ candidateUser, candidateProfile, filters, viewerPro
     return Array.from(new Set(reasons)).slice(0, 3);
 }
 
+function mergeReasons(priorityReasons = [], contextualReasons = []) {
+    return Array.from(new Set([...priorityReasons, ...contextualReasons])).slice(0, 4);
+}
+
+function summarizeIpAddress(ipAddress) {
+    if (!ipAddress) return null;
+    const raw = String(ipAddress).trim();
+    if (raw.includes(':')) {
+        const chunks = raw.split(':');
+        return `${chunks.slice(0, Math.max(0, chunks.length - 2)).join(':')}:*:*`;
+    }
+    const parts = raw.split('.');
+    if (parts.length === 4) {
+        return `${parts[0]}.${parts[1]}.${parts[2]}.*`;
+    }
+    return raw;
+}
+
 const matchingService = {
+    async submitFeedback(userId, payload = {}, context = {}) {
+        const targetUserId = String(payload.targetUserId || '').trim();
+        const action = String(payload.action || '').trim().toLowerCase();
+
+        if (!targetUserId) {
+            return { error: 'targetUserId is required', statusCode: 400 };
+        }
+        if (!recommendationService.FEEDBACK_ACTIONS.has(action)) {
+            return { error: 'action must be one of like, skip, hide, report, open', statusCode: 400 };
+        }
+        if (targetUserId === userId) {
+            return { error: 'Cannot submit feedback for your own profile', statusCode: 400 };
+        }
+
+        await recommendationService.recordFeedback({
+            userId,
+            targetUserId,
+            action,
+            metadata: {
+                source: payload.source || 'matches_feed',
+                rankingVariant: payload.rankingVariant || null,
+                position: Number.parseInt(payload.position, 10) || null,
+            },
+            ipAddress: summarizeIpAddress(context.ipAddress),
+            userAgent: context.userAgent ? String(context.userAgent).slice(0, 500) : null,
+        });
+
+        return {
+            success: true,
+            action,
+            targetUserId,
+            featureSchemaVersion: recommendationService.FEATURE_SCHEMA_VERSION,
+        };
+    },
+
     async getMatches(userId, filters = {}, options = {}) {
         const page = parsePositiveInteger(options.page ?? filters.page, 1);
         const limit = Math.min(parsePositiveInteger(options.limit ?? filters.limit, 20), 50);
         const sort = String(options.sort ?? filters.sort ?? 'relevance').toLowerCase();
         const includeMeta = Boolean(options.returnMeta);
+        const sessionSignals = recommendationService.parseSessionSignals(filters);
 
-        // 1. Get viewer context to exclude already-interacted profiles.
-        const [viewer, viewerProfile] = await Promise.all([
+        const cacheKey = recommendationService.buildCacheKey({
+            userId,
+            filters,
+            options: { page, limit, sort, includeMeta },
+        });
+        const cached = recommendationService.getCachedRecommendations(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const [viewer, viewerProfile, viewerPreference] = await Promise.all([
             prisma.user.findUnique({
                 where: { id: userId },
                 include: {
@@ -203,6 +255,7 @@ const matchingService = {
                 },
             }),
             prisma.profile.findUnique({ where: { userId } }),
+            prisma.partnerPreference.findUnique({ where: { userId } }),
         ]);
 
         if (!viewer) {
@@ -211,8 +264,10 @@ const matchingService = {
                 : [];
         }
 
+        const rankingVariant = recommendationService.getVariantForUser(userId);
         const viewerIsPremium = Boolean(viewer.subscriptions?.length);
         const viewerIsVerified = Boolean(viewer.isVerified);
+        const isColdStart = !viewerProfile || ((viewer.likesSent?.length || 0) + (viewer.matches?.length || 0) + (viewer.matchesAsUserB?.length || 0) < 3);
 
         const excludeIds = [
             userId,
@@ -221,7 +276,6 @@ const matchingService = {
             ...viewer.matchesAsUserB.map((item) => item.userAId),
         ];
 
-        // 2. Build query
         const where = {
             id: { notIn: excludeIds },
             isBanned: false,
@@ -341,13 +395,15 @@ const matchingService = {
                     take: 1,
                 },
             },
-            take: includeMeta ? Math.min(Math.max(limit * 5, 100), 500) : 80,
+            take: includeMeta ? Math.min(Math.max(limit * 5, 100), 500) : 120,
         });
 
         const candidateIds = users.map((userRow) => userRow.id);
-        const [privacyMap, extensionMap] = await Promise.all([
+        const [privacyMap, extensionMap, interactionSummary, manualOverrides] = await Promise.all([
             privacyService.getUsersPrivacySettings(candidateIds),
             profileExtensionService.getUsersProfileExtensions(candidateIds),
+            recommendationService.getInteractionSummary(userId, candidateIds),
+            recommendationService.getManualOverrides(userId, candidateIds),
         ]);
 
         const requestedPhotoVisibility = normalizePhotoVisibilityValue(filters.photoVisibility);
@@ -389,11 +445,25 @@ const matchingService = {
                 });
                 if (boolValue(filters.withPhotoOnly) && !canViewPhotos) return null;
 
-                const matchScore = deterministicScore(userId, userRow, profile);
+                const scoring = recommendationService.scoreCandidate({
+                    viewerId: userId,
+                    variant: rankingVariant,
+                    viewerProfile,
+                    viewerPreference,
+                    candidateUser: userRow,
+                    candidateProfile: profile,
+                    interactionSummary,
+                    sessionSignals,
+                    isColdStart,
+                    manualScoreDelta: manualOverrides.get(userRow.id) || 0,
+                });
+
                 const photo = canViewPhotos
                     ? (userRow.photos[0]?.thumbnailUrl || userRow.photos[0]?.photoUrl || 'https://via.placeholder.com/150')
                     : 'https://via.placeholder.com/150?text=Photo+Protected';
-                const reasons = buildMatchReasons({
+
+                const reasonLabels = recommendationService.reasonTagLabels(scoring.reasonTags);
+                const contextualReasons = buildMatchReasons({
                     candidateUser: userRow,
                     candidateProfile: profile,
                     filters,
@@ -416,7 +486,7 @@ const matchingService = {
                     photoLocked: !canViewPhotos,
                     isVerified: userRow.isVerified,
                     isPremium,
-                    match: matchScore,
+                    match: scoring.score,
                     religion: profile.religion,
                     caste: profile.caste,
                     motherTongue: profile.motherTongue,
@@ -427,12 +497,18 @@ const matchingService = {
                     hasChildren: extension.hasChildren,
                     residentialStatus: extension.residentialStatus,
                     lastActiveAt: privacySettings.showLastSeen ? userRow.lastLogin : null,
-                    reasons,
+                    reasons: mergeReasons(reasonLabels, contextualReasons),
+                    explainability: {
+                        schemaVersion: recommendationService.FEATURE_SCHEMA_VERSION,
+                        tags: scoring.reasonTags,
+                        components: scoring.components,
+                        rankingVariant,
+                    },
                 };
             })
             .filter(Boolean);
 
-        const sorted = [...mapped].sort((a, b) => {
+        let sorted = [...mapped].sort((a, b) => {
             switch (sort) {
                 case 'newest':
                     return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
@@ -445,21 +521,37 @@ const matchingService = {
             }
         });
 
-        if (!includeMeta) {
-            return sorted.slice(0, 50);
+        if (sort === 'relevance' || sort === 'compatibility') {
+            sorted = recommendationService.applyDiversityRerank(sorted, {
+                maxAttributeShare: filters.diversityCap || 0.45,
+                minimumPerAttribute: 2,
+            });
         }
 
-        const start = (page - 1) * limit;
-        const items = sorted.slice(start, start + limit);
-        const total = sorted.length;
-        return {
-            items,
-            page,
-            limit,
-            total,
-            hasNextPage: start + limit < total,
-            sort,
-        };
+        recommendationService.recordMonitoringSnapshot(userId, rankingVariant, sorted).catch(() => { });
+
+        let result;
+        if (!includeMeta) {
+            result = sorted.slice(0, 50);
+        } else {
+            const start = (page - 1) * limit;
+            const items = sorted.slice(start, start + limit);
+            const total = sorted.length;
+            result = {
+                items,
+                page,
+                limit,
+                total,
+                hasNextPage: start + limit < total,
+                sort,
+                rankingVariant,
+                featureSchemaVersion: recommendationService.FEATURE_SCHEMA_VERSION,
+                coldStartApplied: isColdStart,
+            };
+        }
+
+        recommendationService.cacheRecommendations(cacheKey, result);
+        return result;
     },
 };
 

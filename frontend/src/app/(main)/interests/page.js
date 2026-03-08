@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const MOCK_RECEIVED = [
   { id: "r1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, match: 92, receivedAt: "2h ago" },
@@ -155,21 +157,18 @@ export default function InterestsPage() {
       </section>
 
       {loading ? (
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={`interest-loading-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 110 }} />
-          ))}
-        </div>
+        <PageLoadingState
+          title="Loading interests..."
+          description="Fetching your latest incoming, sent, and mutual activity."
+          compact
+        />
       ) : currentList.length === 0 ? (
-        <section className="panel listing-stage" style={{ textAlign: "center", padding: "2.2rem" }}>
-          <h2 style={{ marginTop: 0, marginBottom: "0.38rem" }}>No {TABS.find((item) => item.key === activeTab)?.label.toLowerCase()} interests right now</h2>
-          <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-            Continue exploring profiles to keep your pipeline active and increase high-quality conversations.
-          </p>
-          <Link href="/matches" className="button button-primary" style={{ marginTop: "0.9rem" }}>
-            Browse Matches
-          </Link>
-        </section>
+        <PageEmptyState
+          title={`No ${TABS.find((item) => item.key === activeTab)?.label.toLowerCase()} interests right now`}
+          description="Continue exploring profiles to keep your pipeline active and increase high-quality conversations."
+          primaryActionLabel="Browse Matches"
+          primaryActionHref="/matches"
+        />
       ) : (
         <div style={{ display: "grid", gap: "0.72rem" }}>
           {currentList.map((item) => {
@@ -250,7 +249,7 @@ export default function InterestsPage() {
       )}
 
       {activeTab === "received" && currentList.length > 0 && (
-        <section className="panel" style={{ padding: "0.9rem", borderColor: "rgba(15, 118, 110, 0.24)", background: "linear-gradient(145deg, rgba(234, 250, 246, 0.9), rgba(248, 252, 255, 0.9))" }}>
+        <section className="panel" style={{ padding: "0.9rem", borderColor: "rgba(225, 29, 72, 0.24)", background: "linear-gradient(145deg, rgba(234, 250, 246, 0.9), rgba(248, 252, 255, 0.9))" }}>
           <p style={{ margin: 0, color: "#0f5f58", fontSize: "0.86rem", fontWeight: 650 }}>
             Tip: Accepting an interest unlocks faster conversation and helps momentum.
           </p>
@@ -260,3 +259,4 @@ export default function InterestsPage() {
     </div>
   );
 }
+

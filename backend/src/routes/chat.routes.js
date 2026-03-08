@@ -1,46 +1,70 @@
-const messageService = require('../services/message.service');
-
-// This should be in message.controller.js if doing REST for initial load
-// But for now keeping it related to routes or socket
 const express = require('express');
-const router = express.Router();
+const messageService = require('../services/message.service');
 const authMiddleware = require('../middleware/auth.middleware');
+const { parsePagination } = require('../utils/pagination');
 
+const router = express.Router();
 router.use(authMiddleware);
 
-// Get conversations list (Matched users)
 router.get('/conversations', async (req, res) => {
     try {
         const userId = req.user.sub;
-        const conversations = await messageService.getConnectedUsers(userId);
-        res.json(conversations);
+        const { limit, skip } = parsePagination(req.query, { defaultLimit: 20, maxLimit: 50 });
+        const conversations = await messageService.getConnectedUsers(userId, { limit, skip });
+        return res.json(conversations);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message });
     }
 });
 
-// Get messages for a specific user
 router.get('/:userId', async (req, res) => {
     try {
         const myId = req.user.sub;
         const otherId = req.params.userId;
-        const messages = await messageService.getMessages(myId, otherId);
-        res.json(messages);
+        const { limit, skip } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 200 });
+        const messages = await messageService.getMessages(myId, otherId, { limit, skip });
+        await messageService.markConversationDelivered(myId, otherId);
+        return res.json(messages);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message });
     }
 });
 
-// Send message (REST fallback)
 router.post('/send', async (req, res) => {
     try {
         const myId = req.user.sub;
-        const { receiverId, content } = req.body;
-        const message = await messageService.saveMessage(myId, receiverId, content);
-        // Ideally emit socket event here too via io instance
-        res.json(message);
+        const { receiverId, content, clientMessageId } = req.body || {};
+        const message = await messageService.saveMessage(myId, receiverId, content, { clientMessageId });
+        return res.json(message);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/status', async (req, res) => {
+    try {
+        const myId = req.user.sub;
+        const { messageId, status } = req.body || {};
+        const result = await messageService.updateMessageStatus(myId, messageId, status, {
+            source: 'rest_status_endpoint',
+        });
+        if (result.error) {
+            return res.status(result.statusCode || 400).json({ error: result.error });
+        }
+        return res.json(result);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:userId/read', async (req, res) => {
+    try {
+        const myId = req.user.sub;
+        const otherId = req.params.userId;
+        const result = await messageService.markConversationSeen(myId, otherId);
+        return res.json(result);
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
     }
 });
 

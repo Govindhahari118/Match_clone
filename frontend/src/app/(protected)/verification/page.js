@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import PublicTopNav from "@/components/PublicTopNav";
 import IdentityVerification from "@/components/IdentityVerification";
 
@@ -21,9 +20,6 @@ export default function VerificationPage() {
                 Verify your identity to improve trust and unlock better visibility across the platform.
               </p>
             </div>
-            <Link href="/profile" className="button button-secondary">
-              Back to Profile
-            </Link>
           </div>
 
           <IdentityVerification />

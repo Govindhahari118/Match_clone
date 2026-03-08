@@ -8,51 +8,80 @@ import PublicTopNav from "@/components/PublicTopNav";
 import { APP_NAV_SECTIONS } from "@/config/navigation";
 import { useAuth } from "@/context/AuthContext";
 
-const whyChooseCards = [
-  { icon: "PR", title: "Private by Default", desc: "You control profile visibility and who can contact you." },
-  { icon: "VR", title: "Verified People", desc: "ID and profile checks reduce fake accounts and spam." },
-  { icon: "AI", title: "Smart Matching", desc: "Compatibility-first recommendations based on intent and lifestyle." },
-  { icon: "24", title: "Real Support", desc: "Human assistance for profile, safety, and subscription questions." },
+const TRUST_FEATURES = [
+  {
+    title: "Identity-first profiles",
+    copy: "Verification checkpoints and moderation reduce fake accounts and low-intent messages.",
+    metric: "1.8M verified",
+  },
+  {
+    title: "Compatibility graph",
+    copy: "Intent, lifestyle, and cultural preferences are weighted to surface stronger conversations.",
+    metric: "220K monthly matches",
+  },
+  {
+    title: "Family-friendly controls",
+    copy: "Privacy, contact gating, and profile visibility can be tuned for personal or family-led journeys.",
+    metric: "4.9/5 trust score",
+  },
 ];
 
-const journeySteps = [
-  { step: "01", title: "Create your profile", desc: "Add details once and get better-quality recommendations quickly." },
-  { step: "02", title: "Discover and connect", desc: "Explore matches, send interests, and start meaningful chats." },
-  { step: "03", title: "Move forward safely", desc: "Use verification, filters, and privacy controls with confidence." },
+const PROCESS_STEPS = [
+  {
+    title: "Create a complete profile",
+    copy: "Add personal details, values, and partner preferences once for better long-term recommendations.",
+  },
+  {
+    title: "Prioritize quality matches",
+    copy: "Use filters and compatibility scores to focus on relevant profiles instead of scrolling endlessly.",
+  },
+  {
+    title: "Move safely to conversations",
+    copy: "Start with interests, verify intent, then continue through protected chat and family introductions.",
+  },
 ];
 
-const storyCards = [
-  { names: "Aarav & Nisha", city: "Bengaluru", copy: "Matched in 12 days, families met in 5 weeks." },
-  { names: "Rohan & Kavya", city: "London", copy: "Started with values-first filters and built trust through chat." },
-  { names: "Dev & Meera", city: "Hyderabad", copy: "Verified profiles helped both families decide faster." },
+const STORY_SNIPPETS = [
+  {
+    names: "Aarav + Nisha",
+    city: "Bengaluru",
+    copy: "Started with values and profession filters, then families connected in under six weeks.",
+  },
+  {
+    names: "Rohan + Kavya",
+    city: "London",
+    copy: "Verification badges helped both sides move from chat to clarity without uncertainty.",
+  },
+  {
+    names: "Dev + Meera",
+    city: "Hyderabad",
+    copy: "Shortlists and shared preferences narrowed options quickly and led to one right match.",
+  },
 ];
 
-const dashboardStats = [
-  { value: 18, label: "New Matches", tone: "#f06b4e" },
-  { value: 7, label: "Mutual Interests", tone: "#1f8a9e" },
-  { value: 42, label: "Profile Views", tone: "#334f86" },
-  { value: 5, label: "Unread Chats", tone: "#c38a22" },
+const LANDING_SIGNALS = [
+  { value: "5M+", label: "Members" },
+  { value: "220K+", label: "Monthly Matches" },
+  { value: "1.8M", label: "Verified Profiles" },
 ];
 
-const dashboardActions = [
-  { href: "/matches", title: "Explore Matches", desc: "Review today's compatibility recommendations." },
-  { href: "/search", title: "Advanced Search", desc: "Filter by city, education, profession, and intent." },
-  { href: "/who-viewed", title: "Who Viewed You", desc: "See recent visitors and priority viewers." },
-  { href: "/interests", title: "Manage Interests", desc: "Track accepted, pending, and declined interests." },
-  { href: "/shortlists", title: "Shortlist Board", desc: "Compare favorites side-by-side before deciding." },
-  { href: "/chat", title: "Open Conversations", desc: "Continue active conversations with top matches." },
+const DASHBOARD_STATS = [
+  { value: "18", label: "New Matches" },
+  { value: "7", label: "Mutual Interests" },
+  { value: "42", label: "Profile Views" },
+  { value: "5", label: "Unread Chats" },
 ];
 
-const dashboardShortcuts = [
-  { href: "/matches", label: "Matches" },
-  { href: "/search", label: "Search" },
-  { href: "/interests", label: "Interests" },
-  { href: "/shortlists", label: "Shortlists" },
-  { href: "/notifications", label: "Alerts" },
-  { href: "/profile", label: "Profile" },
+const DASHBOARD_ACTIONS = [
+  { href: "/matches", title: "Review curated matches", copy: "Open compatibility-ranked recommendations for today." },
+  { href: "/matches?filters=1", title: "Open advanced filters", copy: "Filter by city, profession, education, and lifestyle preferences." },
+  { href: "/interests", title: "Manage interests", copy: "Respond to pending requests and revisit accepted connections." },
+  { href: "/chat", title: "Continue conversations", copy: "Pick up active threads and message high-intent profiles." },
+  { href: "/shortlists", title: "Refine shortlist", copy: "Compare favorites and narrow your top conversation candidates." },
+  { href: "/who-viewed", title: "Check profile visitors", copy: "See who viewed your profile recently and who is most aligned." },
 ];
 
-const recommended = [
+const DASHBOARD_RECOMMENDED = [
   {
     id: "u1",
     firstName: "Ananya",
@@ -91,17 +120,11 @@ const recommended = [
   },
 ];
 
-const heroSignals = [
-  { value: "5M+", label: "Members" },
-  { value: "220K+", label: "Monthly Matches" },
-  { value: "1.8M", label: "Verified Profiles" },
-];
-
 function LandingPage() {
   const router = useRouter();
   const [gender, setGender] = useState("female");
-  const [ageMin, setAgeMin] = useState(20);
-  const [ageMax, setAgeMax] = useState(30);
+  const [ageMin, setAgeMin] = useState(24);
+  const [ageMax, setAgeMax] = useState(31);
   const [religion, setReligion] = useState("Hindu");
 
   const onSearch = (event) => {
@@ -114,51 +137,80 @@ function LandingPage() {
   };
 
   return (
-    <div className="page-shell premium-landing">
-      <section className="hero-backdrop home-hero">
-        <div className="container-shell home-shell">
+    <div className="page-shell landing-v2">
+      <section className="landing-hero-v2">
+        <div className="container-shell landing-shell-v2">
           <PublicTopNav compact />
 
-          <div className="hero-grid">
-            <aside className="panel hero-form-card anim-rise delay-1">
-              <p className="section-label" style={{ color: "#9f1239" }}>
-                Quick Match Search
+          <div className="landing-grid-v2">
+            <div className="landing-copy-v2 anim-rise delay-1">
+              <p className="landing-kicker-v2">Trusted Global Matrimony Platform</p>
+              <h1 className="landing-title-v2">
+                Better Navigation.
+                <br />
+                Better Match Decisions.
+              </h1>
+              <p className="landing-subtitle-v2">
+                Explore the full platform with a cleaner route system, stronger filters, and focused profile workflows.
+                Every page is optimized for clarity across mobile and desktop.
               </p>
-              <h2>Find your special someone</h2>
-              <form onSubmit={onSearch} className="hero-form-grid">
-                <div className="hero-form-row">
-                  <div>
-                    <label className="form-label">I&apos;m looking for</label>
-                    <select
-                      className="form-input"
-                      value={gender}
-                      onChange={(event) => setGender(event.target.value)}
-                    >
-                      <option value="female">Woman</option>
-                      <option value="male">Man</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label">Religion</label>
-                    <select
-                      className="form-input"
-                      value={religion}
-                      onChange={(event) => setReligion(event.target.value)}
-                    >
-                      <option>Hindu</option>
-                      <option>Muslim</option>
-                      <option>Christian</option>
-                      <option>Sikh</option>
-                      <option>Jain</option>
-                      <option>Buddhist</option>
-                      <option>Any</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div className="hero-form-row age-row">
-                  <div>
-                    <label className="form-label">Age</label>
+              <div className="landing-signals-v2">
+                {LANDING_SIGNALS.map((item) => (
+                  <article key={item.label} className="landing-signal-v2">
+                    <strong>{item.value}</strong>
+                    <span>{item.label}</span>
+                  </article>
+                ))}
+              </div>
+
+              <div className="landing-cta-row-v2">
+                <Link className="button button-primary" href="/step-1">
+                  Create Free Account
+                </Link>
+                <Link className="button button-secondary" href="/matches">
+                  Explore Matches
+                </Link>
+              </div>
+            </div>
+
+            <aside className="panel landing-form-v2 anim-rise delay-2">
+              <p className="section-label">Quick Start</p>
+              <h2>Find profiles that fit your intent</h2>
+
+              <form onSubmit={onSearch} className="landing-form-grid-v2">
+                <label>
+                  <span className="form-label">Looking for</span>
+                  <select
+                    className="form-input"
+                    value={gender}
+                    onChange={(event) => setGender(event.target.value)}
+                  >
+                    <option value="female">Woman</option>
+                    <option value="male">Man</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span className="form-label">Religion</span>
+                  <select
+                    className="form-input"
+                    value={religion}
+                    onChange={(event) => setReligion(event.target.value)}
+                  >
+                    <option>Hindu</option>
+                    <option>Muslim</option>
+                    <option>Christian</option>
+                    <option>Sikh</option>
+                    <option>Jain</option>
+                    <option>Buddhist</option>
+                    <option>Any</option>
+                  </select>
+                </label>
+
+                <div className="landing-age-row-v2">
+                  <label>
+                    <span className="form-label">Min age</span>
                     <input
                       className="form-input"
                       type="number"
@@ -167,10 +219,9 @@ function LandingPage() {
                       value={ageMin}
                       onChange={(event) => setAgeMin(event.target.value)}
                     />
-                  </div>
-                  <span className="age-separator">to</span>
-                  <div>
-                    <label className="form-label">&nbsp;</label>
+                  </label>
+                  <label>
+                    <span className="form-label">Max age</span>
                     <input
                       className="form-input"
                       type="number"
@@ -179,114 +230,65 @@ function LandingPage() {
                       value={ageMax}
                       onChange={(event) => setAgeMax(event.target.value)}
                     />
-                  </div>
+                  </label>
                 </div>
 
-                <button className="button home-primary-cta" type="submit">
-                  Find Matches
+                <button type="submit" className="button button-primary landing-submit-v2">
+                  Show Matches
                 </button>
               </form>
             </aside>
-
-            <div className="hero-copy anim-rise delay-2">
-              <h1 className="hero-title">
-                <span className="hero-line hero-line-1">Meaningful Matches.</span>
-                <span className="hero-line hero-line-2">Clear Intent.</span>
-                <span className="hero-line hero-line-3">Better Journeys.</span>
-              </h1>
-              <p className="hero-sub">
-                MatrimonyConnect combines verified profiles, structured search, and focused
-                communication so your partner search is faster and more reliable.
-              </p>
-
-              <div className="hero-proof-row">
-                <div className="proof-avatars">
-                  {[0, 1, 2, 3].map((dot) => (
-                    <span key={dot} className="proof-avatar" />
-                  ))}
-                </div>
-                <div>
-                  <p className="proof-stars">*****</p>
-                  <p className="proof-copy">Trusted by families worldwide</p>
-                </div>
-              </div>
-
-              <div className="hero-signal-row">
-                {heroSignals.map((signal) => (
-                  <div key={signal.label} className="hero-signal-tile">
-                    <p>{signal.value}</p>
-                    <span>{signal.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="hero-cta-row">
-                <Link className="button button-primary" href="/step-1">
-                  Start Free
-                </Link>
-                <Link className="button button-ghost-light" href="#all-pages">
-                  Browse All Pages
-                </Link>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
-      <section className="section-block why-section">
+      <section className="section-block">
         <div className="container-shell">
-          <p className="section-label why-label">Why MatrimonyConnect</p>
-          <div className="why-grid">
-            {whyChooseCards.map((item, index) => (
-              <article
-                key={item.title}
-                className={`panel why-card anim-rise delay-${Math.min(index + 1, 5)}`}
-              >
-                <span className="why-icon">{item.icon}</span>
+          <p className="section-label">Why this redesign helps</p>
+          <h2 className="section-title">A faster way to move from browsing to meaningful conversations</h2>
+
+          <div className="trust-grid-v2">
+            {TRUST_FEATURES.map((item) => (
+              <article key={item.title} className="panel trust-card-v2 panel-hover anim-rise delay-1">
+                <p className="trust-metric-v2">{item.metric}</p>
                 <h3>{item.title}</h3>
-                <p>{item.desc}</p>
+                <p>{item.copy}</p>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="section-block journey-section">
+      <section className="section-block section-muted-v2">
         <div className="container-shell">
-          <p className="section-label">How It Works</p>
-          <h2 className="section-title">Three steps to a stronger match journey</h2>
-          <div className="journey-grid">
-            {journeySteps.map((item, index) => (
-              <article
-                key={item.step}
-                className={`panel journey-card anim-rise delay-${Math.min(index + 1, 5)}`}
-              >
-                <span className="journey-step">{item.step}</span>
+          <p className="section-label">How it works</p>
+          <h2 className="section-title">Three phases from profile setup to final shortlist</h2>
+
+          <div className="process-grid-v2">
+            {PROCESS_STEPS.map((item, index) => (
+              <article key={item.title} className="panel process-card-v2 panel-hover anim-rise delay-2">
+                <span className="process-index-v2">0{index + 1}</span>
                 <h3>{item.title}</h3>
-                <p>{item.desc}</p>
+                <p>{item.copy}</p>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="section-block home-nav-directory" id="all-pages">
+      <section className="section-block">
         <div className="container-shell">
-          <p className="section-label">Page Navigation</p>
-          <h2 className="section-title">All key pages in one place</h2>
-          <p className="section-copy">
-            Navigation buttons now include all important pages with a consistent visual style.
-          </p>
-
-          <div className="home-nav-sections">
+          <p className="section-label">Platform map</p>
+          <h2 className="section-title">Every major page, grouped by goal</h2>
+          <div className="map-groups-v2">
             {APP_NAV_SECTIONS.map((section) => (
-              <section key={section.title} className="panel home-nav-section">
-                <p className="home-nav-title">{section.title}</p>
-                <div className="home-nav-grid">
+              <section key={section.title} className="panel map-group-v2">
+                <p className="map-title-v2">{section.title}</p>
+                <div className="map-links-v2">
                   {section.items.map((item) => (
-                    <Link key={item.href} href={item.href} className="button button-secondary home-nav-link">
-                      <span className="home-nav-code">{item.short}</span>
-                      <span>{item.label}</span>
+                    <Link key={item.href} href={item.href} className="map-link-v2">
+                      <span>{item.short}</span>
+                      <strong>{item.label}</strong>
                     </Link>
                   ))}
                 </div>
@@ -296,17 +298,17 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="section-block story-section">
+      <section className="section-block section-muted-v2">
         <div className="container-shell">
-          <p className="section-label">Real Outcomes</p>
-          <h2 className="section-title">Success stories from recent members</h2>
+          <p className="section-label">Recent outcomes</p>
+          <h2 className="section-title">Members who moved quickly with focused navigation</h2>
 
-          <div className="story-grid">
-            {storyCards.map((item, index) => (
-              <article key={item.names} className={`panel story-card anim-rise delay-${Math.min(index + 1, 5)}`}>
-                <p className="story-names">{item.names}</p>
-                <p className="story-city">{item.city}</p>
-                <p className="story-copy">{item.copy}</p>
+          <div className="story-grid-v2">
+            {STORY_SNIPPETS.map((story) => (
+              <article key={story.names} className="panel story-card-v2 panel-hover">
+                <p className="story-name-v2">{story.names}</p>
+                <p className="story-city-v2">{story.city}</p>
+                <p className="story-copy-v2">{story.copy}</p>
               </article>
             ))}
           </div>
@@ -319,202 +321,106 @@ function LandingPage() {
 function Dashboard({ user, logout }) {
   const firstName =
     user?.profile?.firstName || user?.firstName || user?.email?.split("@")[0] || "Member";
+
   const initial = useMemo(() => firstName.charAt(0).toUpperCase(), [firstName]);
 
   return (
-    <div className="page-shell">
-      <section className="hero-backdrop" style={{ padding: "1rem 0 2.5rem" }}>
+    <div className="page-shell dashboard-v2">
+      <section className="dashboard-hero-v2">
         <div className="container-shell">
-          <header
-            className="panel"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.8rem",
-              padding: "0.74rem 0.9rem",
-              background: "rgba(12,22,44,0.44)",
-              borderColor: "rgba(255,255,255,0.22)",
-              color: "#f6fbff",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-              <div
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  display: "grid",
-                  placeItems: "center",
-                  fontWeight: 800,
-                  background: "linear-gradient(135deg, #f06b4e, #d75136)",
-                }}
-              >
-                {initial}
-              </div>
+          <div className="panel dashboard-hero-card-v2">
+            <div className="dashboard-identity-v2">
+              <span className="dashboard-avatar-v2">{initial}</span>
               <div>
-                <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.78 }}>Welcome back</p>
-                <p style={{ margin: 0, fontWeight: 700 }}>{firstName}</p>
+                <p className="dashboard-eyebrow-v2">Welcome back</p>
+                <h1 className="dashboard-title-v2">{firstName}</h1>
+                <p className="dashboard-subtitle-v2">Your workspace is refreshed with a faster route system and cleaner UI hierarchy.</p>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-              <Link href="/profile" className="button button-ghost-light">
+            <div className="dashboard-hero-actions-v2">
+              <Link href="/matches" className="button button-primary">
+                Open Matches
+              </Link>
+              <Link href="/profile" className="button button-secondary">
                 Profile
               </Link>
-              <button type="button" onClick={logout} className="button button-primary">
+              <button type="button" className="button button-secondary" onClick={logout}>
                 Logout
               </button>
             </div>
-          </header>
-        </div>
-      </section>
-
-      <main className="container-shell" style={{ marginTop: "-1.7rem", paddingBottom: "2rem" }}>
-        <section className="panel" style={{ padding: "0.9rem" }}>
-          <p className="section-label">Quick access</p>
-          <div
-            style={{
-              marginTop: "0.65rem",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              gap: "0.5rem",
-            }}
-          >
-            {dashboardShortcuts.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="button button-secondary"
-                style={{ justifyContent: "center", minHeight: 40 }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="panel" style={{ padding: "1rem" }}>
-          <p className="section-label">Dashboard overview</p>
-          <h1 className="section-title" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)", marginTop: "0.5rem" }}>
-            Your Match Activity
-          </h1>
-
-          <div
-            style={{
-              marginTop: "1rem",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "0.7rem",
-            }}
-          >
-            {dashboardStats.map((item, index) => (
-              <div
-                key={item.label}
-                className={`panel anim-rise delay-${Math.min(index + 1, 5)}`}
-                style={{ padding: "0.9rem", borderColor: `${item.tone}33` }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    color: item.tone,
-                    fontFamily: "var(--font-display)",
-                    fontSize: "2rem",
-                    lineHeight: 1,
-                  }}
-                >
-                  {item.value}
-                </p>
-                <p style={{ margin: "0.32rem 0 0", color: "var(--ink-muted)", fontSize: "0.83rem" }}>
-                  {item.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block" style={{ paddingBottom: "1.2rem" }}>
-          <p className="section-label">Quick actions</p>
-          <div
-            style={{
-              marginTop: "0.8rem",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "0.72rem",
-            }}
-          >
-            {dashboardActions.map((action, index) => (
-              <Link
-                key={action.href}
-                href={action.href}
-                className={`panel panel-hover anim-rise delay-${Math.min(index + 1, 5)}`}
-                style={{ padding: "0.95rem", textDecoration: "none" }}
-              >
-                <h3 style={{ margin: 0, fontSize: "1rem" }}>{action.title}</h3>
-                <p style={{ margin: "0.4rem 0 0", color: "var(--ink-muted)", fontSize: "0.88rem" }}>
-                  {action.desc}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block" style={{ paddingTop: "1.2rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.8rem" }}>
-            <div>
-              <p className="section-label">Today&apos;s highlights</p>
-              <h2 className="section-title" style={{ fontSize: "clamp(1.7rem,3.8vw,2.3rem)", marginTop: "0.45rem" }}>
-                Recommended Profiles
-              </h2>
-            </div>
-            <Link href="/matches" className="button button-secondary">
-              View All
-            </Link>
           </div>
 
-          <div
-            style={{
-              marginTop: "0.9rem",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "0.75rem",
-            }}
-          >
-            {recommended.map((person, index) => (
-              <article key={person.id} className={`panel panel-hover anim-rise delay-${Math.min(index + 1, 5)}`}>
-                <Image
-                  src={person.photo}
-                  alt={`${person.firstName} profile`}
-                  width={640}
-                  height={760}
-                  sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                  style={{
-                    width: "100%",
-                    height: 190,
-                    borderTopLeftRadius: "var(--radius-md)",
-                    borderTopRightRadius: "var(--radius-md)",
-                    objectFit: "cover",
-                  }}
-                />
-                <div style={{ padding: "0.8rem" }}>
-                  <h3 style={{ margin: 0, fontSize: "1rem" }}>
-                    {person.firstName}, {person.age}
-                  </h3>
-                  <p style={{ margin: "0.3rem 0 0", fontSize: "0.84rem", color: "var(--ink-muted)" }}>
-                    {person.role} | {person.city}
-                  </p>
-                  <div style={{ marginTop: "0.55rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span className="chip chip-brand">{person.score}% Match</span>
-                    <Link href={`/profile/${person.id}`} className="button button-secondary" style={{ padding: "0.42rem 0.8rem", fontSize: "0.8rem" }}>
-                      Open
-                    </Link>
-                  </div>
-                </div>
+          <div className="dashboard-stats-v2">
+            {DASHBOARD_STATS.map((item) => (
+              <article key={item.label} className="panel dashboard-stat-card-v2">
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
               </article>
             ))}
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
+
+      <section className="container-shell dashboard-body-v2">
+        <div className="dashboard-grid-v2">
+          <section className="panel dashboard-card-v2">
+            <div className="dashboard-card-head-v2">
+              <p className="section-label">Action Center</p>
+              <Link href="/notifications" className="button button-secondary">
+                Notifications
+              </Link>
+            </div>
+
+            <div className="dashboard-actions-v2">
+              {DASHBOARD_ACTIONS.map((action) => (
+                <Link key={action.href} href={action.href} className="dashboard-action-link-v2">
+                  <strong>{action.title}</strong>
+                  <p>{action.copy}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel dashboard-card-v2">
+            <div className="dashboard-card-head-v2">
+              <p className="section-label">Recommended profiles</p>
+              <Link href="/matches" className="button button-secondary">
+                View all
+              </Link>
+            </div>
+
+            <div className="profile-grid-v2">
+              {DASHBOARD_RECOMMENDED.map((person) => (
+                <article key={person.id} className="profile-card-v2">
+                  <Image
+                    src={person.photo}
+                    alt={`${person.firstName} profile`}
+                    width={640}
+                    height={760}
+                    sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                    className="profile-photo-v2"
+                  />
+                  <div className="profile-content-v2">
+                    <h3>
+                      {person.firstName}, {person.age}
+                    </h3>
+                    <p>
+                      {person.role} | {person.city}
+                    </p>
+                    <div className="profile-foot-v2">
+                      <span className="chip chip-brand">{person.score}% Match</span>
+                      <Link href={`/profile/${person.id}`} className="button button-secondary">
+                        Open
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
     </div>
   );
 }

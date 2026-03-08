@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
+import { authRules, errorIdFor, getInputA11y } from "../../../validation/rules";
 
 function OtpPageContent() {
   const [loading, setLoading] = useState(false);
@@ -36,7 +37,7 @@ function OtpPageContent() {
         await login(response.data.user, response.data.access_token, response.data.refresh_token);
 
         if (response.data.user.isNewUser) {
-          router.push("/onboarding/step-1");
+          router.push("/step-1");
         } else {
           router.push("/");
         }
@@ -55,23 +56,22 @@ function OtpPageContent() {
         <h1 className="auth-title">Enter One-Time Password</h1>
         <p className="auth-subtitle">Code sent to {phone || "your phone"}.</p>
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ marginTop: "1.2rem", display: "grid", gap: "0.8rem" }}>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate style={{ marginTop: "1.2rem", display: "grid", gap: "0.8rem" }}>
           <div>
-            <label className="form-label">6-digit OTP</label>
+            <label className="form-label" htmlFor="otp">6-digit OTP</label>
             <input
-              {...register("otp", {
-                required: "OTP is required",
-                minLength: { value: 6, message: "OTP should be 6 digits" },
-                maxLength: { value: 6, message: "OTP should be 6 digits" },
-              })}
+              {...register("otp", authRules.otp)}
+              {...getInputA11y("otp", errors)}
+              id="otp"
               type="text"
               className="form-input"
               placeholder="123456"
               inputMode="numeric"
               maxLength={6}
+              autoComplete="one-time-code"
               style={{ textAlign: "center", letterSpacing: "0.35em", fontWeight: 700 }}
             />
-            {errors.otp && <p className="form-error">{errors.otp.message}</p>}
+            {errors.otp && <p id={errorIdFor("otp")} className="form-error" role="alert">{errors.otp.message}</p>}
           </div>
 
           <button type="submit" className="button button-primary" disabled={loading} style={{ width: "100%" }}>
@@ -80,6 +80,8 @@ function OtpPageContent() {
 
           {errorMessage && (
             <div
+              role="alert"
+              aria-live="assertive"
               style={{
                 borderRadius: 12,
                 background: "#ffe8e8",

@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 const subscriptionService = require('./subscription.service');
 const privacyService = require('./privacy.service');
+const safetyService = require('./safety.service');
 
 const CALL_TOKEN_TTL_SECONDS = 15 * 60;
 
@@ -63,6 +64,10 @@ const callService = {
             }),
             findActiveMatchBetweenUsers(callerId, calleeId, payload.matchId),
         ]);
+        const communicationBlocked = await safetyService.isCommunicationBlocked(callerId, calleeId);
+        if (communicationBlocked) {
+            return { error: 'Call cannot be initiated due to safety settings', statusCode: 403 };
+        }
 
         if (!callee || !callee.isActive || callee.isBanned) {
             return { error: 'Target user is unavailable for calls', statusCode: 404 };

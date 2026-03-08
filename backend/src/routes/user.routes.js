@@ -23,6 +23,8 @@ router.post('/privacy', userController.updatePrivacySettings);
 
 // Verification
 router.post('/verification', userController.submitVerification);
+router.get('/onboarding/progress', userController.getOnboardingProgress);
+router.post('/onboarding/progress', userController.saveOnboardingProgress);
 
 module.exports = router;
 

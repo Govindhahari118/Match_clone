@@ -2,7 +2,12 @@ const paymentService = require('../services/payment.service');
 
 const getPlans = (req, res) => {
     try {
-        const plans = paymentService.getPlans();
+        res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=1800');
+        res.set('Vary', 'Accept-Encoding');
+        const plans = paymentService.getPlans({
+            region: req.query?.region,
+            country: req.query?.country,
+        });
         res.json(plans);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -12,8 +17,8 @@ const getPlans = (req, res) => {
 const createOrder = async (req, res) => {
     try {
         const userId = req.user.sub;
-        const { planId } = req.body;
-        const order = await paymentService.createOrder(userId, planId);
+        const { planId, couponCode, region, country } = req.body || {};
+        const order = await paymentService.createOrder(userId, planId, { couponCode, region, country });
         res.json(order);
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -4,7 +4,6 @@ export const APP_NAV_SECTIONS = [
     items: [
       { href: "/", label: "Home", short: "HM", blurb: "Overview and activity snapshot" },
       { href: "/matches", label: "Matches", short: "MT", blurb: "Daily compatibility recommendations" },
-      { href: "/search", label: "Search", short: "SR", blurb: "Advanced profile filters" },
       { href: "/interests", label: "Interests", short: "IN", blurb: "Sent and received interests" },
       { href: "/shortlists", label: "Shortlists", short: "SL", blurb: "Saved favorites and comparisons" },
       { href: "/who-viewed", label: "Who Viewed", short: "VW", blurb: "Recent profile visitors" },
@@ -44,11 +43,12 @@ export const APP_NAV_ITEMS = APP_NAV_SECTIONS.flatMap((section) =>
   }))
 );
 
-export const MOBILE_PRIMARY_NAV = ["/", "/matches", "/search", "/chat", "/profile"];
+export const MOBILE_PRIMARY_NAV = ["/matches", "/shortlists", "/chat", "/notifications", "/profile"];
 
 export const PUBLIC_SHORTCUTS = [
   { href: "/", label: "Home" },
-  { href: "/success-stories", label: "Stories" },
+  { href: "/matches", label: "Matches" },
+  { href: "/shortlists", label: "Shortlists" },
   { href: "/pricing", label: "Pricing" },
   { href: "/help", label: "Help" },
 ];

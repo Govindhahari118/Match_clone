@@ -3,6 +3,7 @@
 const privacyService = require('../services/privacy.service');
 
 const profileExtensionService = require('../services/profile-extension.service');
+const onboardingService = require('../services/onboarding.service');
 
 const userController = {
     async getProfile(req, res) {
@@ -13,6 +14,7 @@ const userController = {
             });
             if (!user) return res.status(404).json({ error: 'User not found' });
             const { extension } = await profileExtensionService.getUserProfileExtension(req.user.sub);
+            const progress = await onboardingService.getProgress(req.user.sub);
 
             const response = {
                 id: user.id,
@@ -25,7 +27,8 @@ const userController = {
                 partnerPreference: user.partnerPreference,
                 hasChildren: extension.hasChildren,
                 residentialStatus: extension.residentialStatus,
-                district: extension.district
+                district: extension.district,
+                onboarding: progress,
             };
 
             res.json(response);
@@ -136,12 +139,14 @@ const userController = {
             const extension = Object.keys(extensionPayload).length > 0
                 ? await profileExtensionService.saveUserProfileExtension(req.user.sub, extensionPayload)
                 : (await profileExtensionService.getUserProfileExtension(req.user.sub)).extension;
+            const completeness = await onboardingService.refreshCompleteness(req.user.sub);
 
             res.json({
                 ...updatedProfile,
                 hasChildren: extension.hasChildren,
                 residentialStatus: extension.residentialStatus,
-                district: extension.district
+                district: extension.district,
+                onboardingCompleteness: completeness,
             });
         } catch (error) {
             console.error('Update Profile Error:', error);
@@ -229,10 +234,47 @@ const userController = {
                 }
             });
 
-            res.json({ success: true, message: 'Verification submitted for review' });
+            await prisma.auditLog.create({
+                data: {
+                    userId: req.user.sub,
+                    action: 'verification_submitted',
+                    resourceType: 'verification',
+                    resourceId: req.user.sub,
+                    changes: {
+                        type: verificationType,
+                        status: 'pending',
+                        documentSubmitted: true,
+                    },
+                    ipAddress: req.ip || null,
+                    userAgent: req.get('user-agent') || null,
+                },
+            });
+            const completeness = await onboardingService.refreshCompleteness(req.user.sub);
+
+            res.json({ success: true, message: 'Verification submitted for review', onboardingCompleteness: completeness });
         } catch (error) {
             console.error('Verification Error:', error);
             res.status(500).json({ error: 'Failed to submit verification' });
+        }
+    },
+
+    async getOnboardingProgress(req, res) {
+        try {
+            const progress = await onboardingService.getProgress(req.user.sub);
+            return res.json(progress);
+        } catch (error) {
+            console.error('Get onboarding progress error:', error);
+            return res.status(500).json({ error: 'Failed to load onboarding progress' });
+        }
+    },
+
+    async saveOnboardingProgress(req, res) {
+        try {
+            const state = await onboardingService.saveResumeState(req.user.sub, req.body || {});
+            return res.json({ success: true, state });
+        } catch (error) {
+            console.error('Save onboarding progress error:', error);
+            return res.status(500).json({ error: 'Failed to save onboarding progress' });
         }
     }
 };

@@ -2,14 +2,17 @@
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
+const SUPPORTED_THEMES = ["glacier", "light", "dark", "lavender", "solar", "rose"];
+const DEFAULT_THEME = "glacier";
+
 const ThemeContext = createContext({
-  theme: "light",
+  theme: DEFAULT_THEME,
   setTheme: () => {},
   toggleTheme: () => {},
 });
 
 const themeListeners = new Set();
-let themeSnapshot = "light";
+let themeSnapshot = DEFAULT_THEME;
 let themeInitialized = false;
 
 function notifyThemeChange() {
@@ -24,12 +27,12 @@ function applyTheme(theme) {
 function readClientTheme() {
   try {
     const stored = window.localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark") return stored;
+    if (stored && SUPPORTED_THEMES.includes(stored)) return stored;
 
     const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-    return prefersDark ? "dark" : "light";
+    return prefersDark ? "dark" : DEFAULT_THEME;
   } catch {
-    return "light";
+    return DEFAULT_THEME;
   }
 }
 
@@ -53,7 +56,7 @@ function getThemeSnapshot() {
 }
 
 function getThemeServerSnapshot() {
-  return "light";
+  return DEFAULT_THEME;
 }
 
 function commitTheme(nextTheme) {
@@ -70,12 +73,14 @@ export function ThemeProvider({ children }) {
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, getThemeServerSnapshot);
 
   const setTheme = useCallback((nextTheme) => {
-    if (nextTheme !== "light" && nextTheme !== "dark") return;
+    if (!SUPPORTED_THEMES.includes(nextTheme)) return;
     commitTheme(nextTheme);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    commitTheme(theme === "dark" ? "light" : "dark");
+    const currentThemeIndex = SUPPORTED_THEMES.indexOf(theme);
+    const nextTheme = SUPPORTED_THEMES[(currentThemeIndex + 1) % SUPPORTED_THEMES.length];
+    commitTheme(nextTheme || DEFAULT_THEME);
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme, toggleTheme }), [theme, setTheme, toggleTheme]);

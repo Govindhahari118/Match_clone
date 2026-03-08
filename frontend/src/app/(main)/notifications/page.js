@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../context/AuthContext";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const MOCK_NOTIFICATIONS = [
   { id: 1, type: "match", title: "New Match", message: "You matched with Priya Sharma.", time: "2m ago", read: false },
@@ -21,6 +23,7 @@ export default function NotificationsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -31,6 +34,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setNotifications(MOCK_NOTIFICATIONS);
+      setLoadingFeed(false);
     }, 450);
     return () => clearTimeout(timer);
   }, []);
@@ -78,13 +82,19 @@ export default function NotificationsPage() {
         </div>
       </section>
 
-      {notifications.length === 0 ? (
-        <section className="panel listing-stage" style={{ textAlign: "center", padding: "2.2rem" }}>
-          <h2 style={{ marginTop: 0, marginBottom: "0.38rem" }}>No notifications yet</h2>
-          <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-            Updates will appear here as soon as you receive new activity.
-          </p>
-        </section>
+      {loadingFeed ? (
+        <PageLoadingState
+          title="Loading notifications..."
+          description="Fetching your latest match, visitor, and system updates."
+          compact
+        />
+      ) : notifications.length === 0 ? (
+        <PageEmptyState
+          title="No notifications yet"
+          description="Updates will appear here as soon as you receive new activity."
+          primaryActionLabel="View Matches"
+          primaryActionHref="/matches"
+        />
       ) : (
         <div style={{ display: "grid", gap: "0.68rem" }}>
           {notifications.map((item) => (

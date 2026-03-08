@@ -1,240 +1,257 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
-import { toast } from "react-toastify";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
+import api from "../../../services/api";
 
-const PLANS_STATIC = [
-    {
-        id: "silver",
-        name: "Silver",
-        price: 999,
-        originalPrice: 1499,
-        durationMonths: 3,
-        color: "from-gray-400 to-gray-600",
-        features: [
-            "View 50 Contact Numbers / Month",
-            "Send Unlimited Interests",
-            "Chat with Mutual Matches",
-            "Priority in Search Results",
-            "Ad-Free Experience",
-        ],
-    },
-    {
-        id: "gold",
-        name: "Gold",
-        price: 1799,
-        originalPrice: 2499,
-        durationMonths: 6,
-        popular: true,
-        color: "from-yellow-500 to-amber-600",
-        features: [
-            "View 200 Contact Numbers / Month",
-            "Send Unlimited Interests",
-            "Unlimited Chat",
-            "Top Priority in Search",
-            "WhatsApp & Video Support",
-            "Highlighted Profile Badge",
-            "AI Match Score Reports",
-        ],
-    },
-    {
-        id: "platinum",
-        name: "Platinum",
-        price: 2999,
-        originalPrice: 4499,
-        durationMonths: 12,
-        color: "from-purple-600 to-indigo-700",
-        features: [
-            "Unlimited Contact Numbers",
-            "Send Unlimited Interests",
-            "Unlimited Chat",
-            "#1 Search Ranking",
-            "Dedicated Relationship Manager",
-            "Profile Photo Verification",
-            "AI Match Score Reports",
-            "Video Calling with Matches",
-            "Profile Makeover Service",
-        ],
-    },
+const FALLBACK_PLANS = [
+  {
+    id: "SILVER_3M",
+    tier: "silver",
+    name: "Silver",
+    durationMonths: 3,
+    amount: 1499,
+    currency: "INR",
+    features: ["Unlimited interests", "Saved searches", "See who viewed your profile"],
+  },
+  {
+    id: "GOLD_3M",
+    tier: "gold",
+    name: "Gold",
+    durationMonths: 3,
+    amount: 2999,
+    currency: "INR",
+    features: ["Unlimited messages", "Voice calls", "Advanced filters"],
+  },
+  {
+    id: "PLATINUM_6M",
+    tier: "platinum",
+    name: "Platinum",
+    durationMonths: 6,
+    amount: 4999,
+    currency: "INR",
+    features: ["Priority visibility", "Voice + video calls", "Top placement in discovery"],
+  },
+  {
+    id: "TILL_MARRIAGE",
+    tier: "till_marriage",
+    name: "Till Marriage",
+    durationMonths: 24,
+    amount: 12999,
+    currency: "INR",
+    features: ["All Platinum features", "Extended support", "Long-term membership"],
+  },
 ];
 
-const COMPARISON = [
-    { feature: "Contact Numbers", silver: "50/month", gold: "200/month", platinum: "Unlimited" },
-    { feature: "Interests", silver: "Unlimited", gold: "Unlimited", platinum: "Unlimited" },
-    { feature: "Chat", silver: "Mutual only", gold: "Unlimited", platinum: "Unlimited" },
-    { feature: "Search Ranking", silver: "Priority", gold: "Top Priority", platinum: "#1 Ranked" },
-    { feature: "Video Calling", silver: "✗", gold: "✗", platinum: "✓" },
-    { feature: "Relationship Manager", silver: "✗", gold: "✗", platinum: "✓" },
-    { feature: "AI Match Reports", silver: "✗", gold: "✓", platinum: "✓" },
-    { feature: "Profile Badge", silver: "✗", gold: "✓", platinum: "✓" },
-];
+const TIER_ORDER = ["silver", "gold", "platinum", "till_marriage"];
+const TIER_GRADIENT = {
+  silver: "from-slate-500 to-slate-700",
+  gold: "from-amber-500 to-yellow-600",
+  platinum: "from-indigo-600 to-blue-700",
+  till_marriage: "from-rose-600 to-pink-700",
+};
+
+function normalizePlan(plan) {
+  return {
+    id: plan.id,
+    tier: String(plan.tier || "silver").toLowerCase(),
+    name: plan.name || plan.id,
+    durationMonths: Number(plan.durationMonths || 0),
+    amount: Number(plan.amount || plan.price || 0),
+    currency: plan.currency || "INR",
+    features: Array.isArray(plan.features) ? plan.features : [],
+  };
+}
+
+function formatAmount(amount, currency) {
+  const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  const safeCurrency = currency || "INR";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: safeCurrency,
+      maximumFractionDigits: 0,
+    }).format(safeAmount);
+  } catch {
+    return `${safeCurrency} ${safeAmount}`;
+  }
+}
 
 export default function PricingPage() {
-    const [plans, setPlans] = useState(PLANS_STATIC);
-    const [loading, setLoading] = useState(false);
-    const [showComparison, setShowComparison] = useState(false);
-    const router = useRouter();
+  const router = useRouter();
+  const [plans, setPlans] = useState(FALLBACK_PLANS);
+  const [region, setRegion] = useState("IN");
+  const [couponCode, setCouponCode] = useState("");
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [processingPlanId, setProcessingPlanId] = useState(null);
 
-    useEffect(() => {
-        const fetchFromAPI = async () => {
-            try {
-                const res = await api.get("/payment/plans");
-                if (res.data?.length) setPlans(res.data);
-            } catch { }
-        };
-        fetchFromAPI();
-    }, []);
-
-    const handlePurchase = async (plan) => {
-        try {
-            const orderRes = await api.post("/payment/create-order", { planId: plan.id });
-            const order = orderRes.data;
-            const isConfirmed = confirm(`Proceed to pay ₹${plan.price} for ${plan.name} plan (${plan.durationMonths} months)?`);
-            if (isConfirmed) {
-                const verifyRes = await api.post("/payment/verify", {
-                    paymentId: `pay_mock_${plan.id}_${order.orderId || "ord_mock"}`,
-                    orderId: order.orderId || `ord_mock`,
-                    planId: plan.id,
-                });
-                if (verifyRes.data.success) {
-                    toast.success(`🎉 Welcome to ${plan.name} Membership!`);
-                    router.push("/profile");
-                }
-            }
-        } catch {
-            // Demo mode
-            toast.success(`🎉 Welcome to ${plan.name} Membership! (Demo Mode)`);
-            router.push("/matches");
+  useEffect(() => {
+    let mounted = true;
+    const loadPlans = async () => {
+      setLoadingPlans(true);
+      try {
+        const response = await api.get("/payment/plans", { params: { region } });
+        const apiPlans = Array.isArray(response?.data) ? response.data.map(normalizePlan) : [];
+        if (mounted && apiPlans.length > 0) {
+          setPlans(apiPlans);
+        } else if (mounted) {
+          setPlans(FALLBACK_PLANS);
         }
+      } catch {
+        if (mounted) setPlans(FALLBACK_PLANS);
+      } finally {
+        if (mounted) setLoadingPlans(false);
+      }
     };
 
-    return (
-        <div className="max-w-5xl mx-auto">
-            {/* Header */}
-            <div className="text-center mb-10">
-                <div className="inline-flex items-center gap-2 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
-                    👑 Limited Time Offer — Up to 40% Off
-                </div>
-                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">
-                    Choose Your Plan
-                </h1>
-                <p className="text-gray-500 max-w-2xl mx-auto">
-                    Upgrade to unlock contact numbers, video calling, and priority matching. All plans include a 7-day money-back guarantee.
-                </p>
-            </div>
+    loadPlans();
+    return () => {
+      mounted = false;
+    };
+  }, [region]);
 
-            {/* Plans */}
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-                {plans.map((plan) => (
-                    <div
-                        key={plan.id || plan.name}
-                        className={`relative bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col ${plan.popular ? "border-yellow-400 ring-2 ring-yellow-300 scale-105" : "border-gray-200"
-                            }`}
-                    >
-                        {plan.popular && (
-                            <div className="bg-gradient-to-r from-yellow-500 to-amber-500 text-white text-xs font-bold text-center py-1.5 tracking-wider uppercase">
-                                ⭐ Most Popular
-                            </div>
-                        )}
+  const orderedPlans = useMemo(() => {
+    return [...plans]
+      .map(normalizePlan)
+      .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+  }, [plans]);
 
-                        <div className={`bg-gradient-to-br ${plan.color || "from-gray-500 to-gray-700"} p-6 text-white`}>
-                            <h2 className="text-2xl font-extrabold mb-1">{plan.name}</h2>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-4xl font-extrabold">₹{plan.price || plan.price}</span>
-                                {plan.originalPrice && <span className="text-sm line-through opacity-70">₹{plan.originalPrice}</span>}
-                            </div>
-                            <p className="text-white/80 text-sm mt-1">for {plan.durationMonths} months</p>
-                            {plan.originalPrice && (
-                                <div className="mt-2 text-xs bg-white/20 px-2 py-0.5 rounded-full inline-block font-semibold">
-                                    Save ₹{plan.originalPrice - plan.price}
-                                </div>
-                            )}
-                        </div>
+  const handlePurchase = async (plan) => {
+    setProcessingPlanId(plan.id);
+    try {
+      const orderResponse = await api.post("/payment/create-order", {
+        planId: plan.id,
+        couponCode: couponCode.trim() || undefined,
+        region,
+      });
+      const order = orderResponse?.data || {};
+      const finalAmount = Number(order.amount || plan.amount || 0);
+      const status = order.couponStatus || "none";
+      const couponText = order.coupon
+        ? `Coupon ${order.coupon} applied.`
+        : status !== "none"
+          ? `Coupon status: ${status}.`
+          : "";
+      const confirmText = [
+        `Proceed with ${plan.name} (${plan.id})?`,
+        `Amount: ${formatAmount(finalAmount, order.currency || plan.currency)}`,
+        couponText,
+      ]
+        .filter(Boolean)
+        .join("\n");
 
-                        <div className="p-6 flex-1 flex flex-col">
-                            <ul className="space-y-3 flex-1 mb-6">
-                                {(plan.features || []).map((feature, i) => (
-                                    <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
-                                        <span className="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-                                        {feature}
-                                    </li>
-                                ))}
-                            </ul>
+      const proceed = confirm(confirmText);
+      if (!proceed) return;
 
-                            <button
-                                onClick={() => handlePurchase(plan)}
-                                disabled={loading}
-                                className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${plan.popular
-                                        ? "bg-gradient-to-r from-yellow-500 to-amber-500 text-white hover:shadow-lg hover:shadow-yellow-200"
-                                        : "bg-gradient-to-r from-pink-600 to-red-600 text-white hover:shadow-lg hover:shadow-pink-200"
-                                    } disabled:opacity-50`}
-                            >
-                                Get {plan.name} Plan
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
+      const verifyResponse = await api.post("/payment/verify", {
+        paymentId: `pay_mock_${plan.id}_${Date.now()}`,
+        orderId: order.orderId,
+        planId: plan.id,
+      });
 
-            {/* Comparison Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
-                <button
-                    onClick={() => setShowComparison(!showComparison)}
-                    className="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition"
-                >
-                    <span className="font-bold text-gray-900">Compare All Plans</span>
-                    <span className="text-gray-400 text-xl">{showComparison ? "−" : "+"}</span>
-                </button>
-                {showComparison && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="px-6 py-3 text-left font-bold text-gray-600">Feature</th>
-                                    <th className="px-4 py-3 text-center font-bold text-gray-600">Silver</th>
-                                    <th className="px-4 py-3 text-center font-bold text-yellow-600">Gold ⭐</th>
-                                    <th className="px-4 py-3 text-center font-bold text-purple-600">Platinum</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {COMPARISON.map((row, i) => (
-                                    <tr key={i} className="border-t border-gray-50">
-                                        <td className="px-6 py-3 text-gray-700 font-medium">{row.feature}</td>
-                                        <td className="px-4 py-3 text-center text-gray-500">{row.silver}</td>
-                                        <td className="px-4 py-3 text-center text-yellow-700 font-semibold">{row.gold}</td>
-                                        <td className="px-4 py-3 text-center text-purple-700 font-semibold">{row.platinum}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+      if (verifyResponse?.data?.success) {
+        toast.success(`Membership activated: ${plan.name}`);
+        router.push("/matches");
+        return;
+      }
 
-            {/* Guarantees */}
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-                {[
-                    { icon: "🔒", title: "Secure Payment", desc: "Razorpay / SSL encrypted checkout" },
-                    { icon: "↩️", title: "7-Day Refund", desc: "Not satisfied? Get a full refund" },
-                    { icon: "📞", title: "24/7 Support", desc: "Dedicated team ready to help you" },
-                ].map(item => (
-                    <div key={item.title} className="bg-gray-50 rounded-xl p-4 flex items-center gap-3 border border-gray-100">
-                        <div className="text-2xl">{item.icon}</div>
-                        <div>
-                            <p className="font-bold text-gray-800 text-sm">{item.title}</p>
-                            <p className="text-xs text-gray-500">{item.desc}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
+      toast.error("Payment verification failed.");
+    } catch (error) {
+      const message = error?.response?.data?.error || "Unable to start payment.";
+      toast.error(message);
+    } finally {
+      setProcessingPlanId(null);
+    }
+  };
 
-            {/* Free plan reminder */}
-            <div className="text-center text-sm text-gray-500">
-                Want to use the free version? <Link href="/matches" className="text-pink-600 font-bold hover:underline">Continue with basic plan</Link>
-            </div>
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">Choose Your Plan</h1>
+        <p className="text-gray-500 max-w-2xl mx-auto">
+          Plans are loaded from live catalog IDs and charged with region-aware pricing.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-6 grid md:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Region</label>
+          <select
+            value={region}
+            onChange={(event) => setRegion(event.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          >
+            <option value="IN">India (INR)</option>
+            <option value="US">US (USD)</option>
+          </select>
         </div>
-    );
+        <div className="md:col-span-2">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Coupon Code</label>
+          <input
+            value={couponCode}
+            onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+            placeholder="WELCOME10 or WINBACK20"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+        {orderedPlans.map((plan) => {
+          const isPopular = plan.tier === "gold";
+          const gradient = TIER_GRADIENT[plan.tier] || "from-slate-600 to-slate-800";
+          const isLoading = loadingPlans || processingPlanId === plan.id;
+          return (
+            <article
+              key={plan.id}
+              className={`relative bg-white rounded-2xl border overflow-hidden shadow-sm ${isPopular ? "border-amber-400 ring-2 ring-amber-300" : "border-gray-200"
+                }`}
+            >
+              {isPopular && (
+                <div className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs font-bold text-center py-1.5">
+                  MOST POPULAR
+                </div>
+              )}
+
+              <div className={`bg-gradient-to-br ${gradient} p-5 text-white`}>
+                <p className="text-xs font-semibold tracking-wide opacity-90">{plan.id}</p>
+                <h2 className="text-2xl font-extrabold mt-1">{plan.name}</h2>
+                <p className="text-3xl font-extrabold mt-2">{formatAmount(plan.amount, plan.currency)}</p>
+                <p className="text-white/85 text-sm mt-1">for {plan.durationMonths} months</p>
+              </div>
+
+              <div className="p-5 flex flex-col gap-4">
+                <ul className="space-y-2 min-h-[128px]">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="text-sm text-gray-700 flex gap-2">
+                      <span className="text-green-600 font-bold">+</span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => handlePurchase(plan)}
+                  disabled={isLoading}
+                  className="w-full py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-pink-600 to-red-600 text-white disabled:opacity-60"
+                >
+                  {processingPlanId === plan.id ? "Processing..." : `Buy ${plan.name}`}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="text-center text-sm text-gray-500">
+        Prefer free browsing for now?{" "}
+        <Link href="/matches" className="text-pink-600 font-bold hover:underline">
+          Continue with basic access
+        </Link>
+      </div>
+    </div>
+  );
 }

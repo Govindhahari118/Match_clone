@@ -4,11 +4,11 @@ import PublicTopNav from "@/components/PublicTopNav";
 
 export default function AuthLayout({ children }) {
   return (
-    <div className="auth-flow-shell">
-      <div className="container-shell" style={{ paddingTop: "1rem" }}>
+    <div className="public-flow-shell">
+      <div className="container-shell public-flow-top">
         <PublicTopNav compact />
       </div>
-      <div className="auth-flow-content">{children}</div>
+      <div className="public-flow-content">{children}</div>
     </div>
   );
 }

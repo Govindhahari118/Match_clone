@@ -8,6 +8,7 @@ import Image from "next/image";
 import api from "../../../services/api";
 import { auth, googleProvider } from "../../../config/firebase";
 import { useAuth } from "../../../context/AuthContext";
+import { authRules, errorIdFor, getInputA11y } from "../../../validation/rules";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -66,19 +67,19 @@ export default function LoginPage() {
         <h1 className="auth-title">Sign In To Continue</h1>
         <p className="auth-subtitle">Access your matches, conversations, and profile insights.</p>
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ marginTop: "1.2rem", display: "grid", gap: "0.8rem" }}>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate style={{ marginTop: "1.2rem", display: "grid", gap: "0.8rem" }}>
           <div>
-            <label className="form-label">Phone Number</label>
+            <label className="form-label" htmlFor="phone">Phone Number</label>
             <input
-              {...register("phone", {
-                required: "Phone number is required",
-                minLength: { value: 10, message: "Enter a valid phone number" },
-              })}
+              {...register("phone", authRules.phone)}
+              {...getInputA11y("phone", errors)}
+              id="phone"
               type="tel"
               className="form-input"
               placeholder="+91 98765 43210"
+              autoComplete="tel"
             />
-            {errors.phone && <p className="form-error">{errors.phone.message}</p>}
+            {errors.phone && <p id={errorIdFor("phone")} className="form-error" role="alert">{errors.phone.message}</p>}
           </div>
 
           <button type="submit" className="button button-primary" disabled={loading} style={{ width: "100%" }}>
@@ -111,6 +112,8 @@ export default function LoginPage() {
 
           {errorMessage && (
             <div
+              role="alert"
+              aria-live="assertive"
               style={{
                 marginTop: "0.2rem",
                 borderRadius: 12,

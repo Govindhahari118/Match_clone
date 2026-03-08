@@ -26,7 +26,7 @@ const searchController = {
     async listSavedSearches(req, res) {
         try {
             const userId = req.user.sub;
-            const list = await searchService.listSavedSearches(userId);
+            const list = await searchService.listSavedSearches(userId, req.query || {});
             res.status(200).json(list);
         } catch (error) {
             console.error('List saved searches error:', error);
@@ -61,6 +61,42 @@ const searchController = {
         } catch (error) {
             console.error('Delete saved search error:', error);
             res.status(500).json({ error: 'Failed to delete saved search' });
+        }
+    },
+
+    async getDiscoveryRails(req, res) {
+        try {
+            const userId = req.user.sub;
+            const result = await searchService.getDiscoveryRails(userId, req.query || {});
+            res.status(200).json(result);
+        } catch (error) {
+            console.error('Get discovery rails error:', error);
+            res.status(500).json({ error: 'Failed to fetch discovery rails' });
+        }
+    },
+
+    async getSuggestions(req, res) {
+        try {
+            const userId = req.user.sub;
+            const result = await searchService.getSuggestions(userId, req.query || {});
+            res.status(200).json(result);
+        } catch (error) {
+            console.error('Get search suggestions error:', error);
+            res.status(500).json({ error: 'Failed to fetch suggestions' });
+        }
+    },
+
+    async compareProfiles(req, res) {
+        try {
+            const userId = req.user.sub;
+            const result = await searchService.compareProfiles(userId, req.query || {});
+            if (result.error) {
+                return res.status(result.statusCode || 400).json({ error: result.error });
+            }
+            return res.status(200).json(result);
+        } catch (error) {
+            console.error('Compare profiles error:', error);
+            return res.status(500).json({ error: 'Failed to compare profiles' });
         }
     },
 };

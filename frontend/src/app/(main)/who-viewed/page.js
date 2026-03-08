@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import api from "../../../services/api";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const MOCK_VIEWERS = [
   { id: "v1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, receivedAt: "5m ago" },
@@ -80,21 +82,18 @@ export default function WhoViewedPage() {
       </section>
 
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "0.9rem" }}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={`viewer-loading-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 110 }} />
-          ))}
-        </div>
+        <PageLoadingState
+          title="Loading profile viewers..."
+          description="Collecting your recent profile visitor activity."
+          compact
+        />
       ) : viewers.length === 0 ? (
-        <section className="panel listing-stage" style={{ textAlign: "center", padding: "2.2rem" }}>
-          <h2 style={{ marginTop: 0, marginBottom: "0.38rem" }}>No profile views yet</h2>
-          <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-            Complete your profile and stay active to increase discoverability.
-          </p>
-          <Link href="/profile" className="button button-primary" style={{ marginTop: "0.9rem" }}>
-            Complete Profile
-          </Link>
-        </section>
+        <PageEmptyState
+          title="No profile views yet"
+          description="Complete your profile and stay active to increase discoverability."
+          primaryActionLabel="Complete Profile"
+          primaryActionHref="/profile"
+        />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "0.9rem" }}>
           {viewers.map((viewer, index) => {
@@ -140,8 +139,8 @@ export default function WhoViewedPage() {
                     </p>
                   </div>
 
-                  <Link href={`/profile/${viewer.userId}`} className="button button-secondary" style={{ padding: "0.52rem 0.72rem" }}>
-                    View
+                  <Link href={`/profile/${viewer.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.52rem 0.72rem" }} aria-label="Open profile" title="Open profile">
+                    ↗
                   </Link>
                 </div>
               </article>

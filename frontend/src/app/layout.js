@@ -1,16 +1,17 @@
-import { Plus_Jakarta_Sans, Fraunces } from "next/font/google";
+import { Manrope, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import GuestBannerGate from "@/components/GuestBannerGate";
+import RuntimeClientBootstrap from "@/components/RuntimeClientBootstrap";
 
-const plusJakarta = Plus_Jakarta_Sans({
+const manrope = Manrope({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
 });
 
-const fraunces = Fraunces({
+const cormorantGaramond = Cormorant_Garamond({
   subsets: ["latin"],
   display: "swap",
   weight: ["500", "600", "700"],
@@ -33,15 +34,16 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#1d4ed8",
+  themeColor: "#1d8eb3",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${plusJakarta.variable} ${fraunces.variable}`}>
+      <body className={`${manrope.variable} ${cormorantGaramond.variable}`}>
         <ThemeProvider>
           <AuthProvider>
+            <RuntimeClientBootstrap />
             <GuestBannerGate />
             {children}
           </AuthProvider>
@@ -50,3 +52,4 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+

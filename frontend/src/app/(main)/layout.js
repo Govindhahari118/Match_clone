@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
@@ -12,274 +12,452 @@ import {
   isRouteActive,
 } from "@/config/navigation";
 
-const PRIMARY_NAV_ROUTES = ["/matches", "/search", "/interests", "/chat", "/shortlists", "/profile"];
+const THEME_OPTIONS = [
+  { value: "glacier", label: "Glacier" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "lavender", label: "Lavender" },
+  { value: "solar", label: "Solar" },
+  { value: "rose", label: "Rose" },
+];
+const VIEWPORT_OPTIONS = [
+  { value: "desktop", label: "Desktop" },
+  { value: "tablet", label: "Tablet" },
+  { value: "mobile", label: "Mobile" },
+];
+const VIEWPORT_STORAGE_KEY = "workspaceViewport";
+const RAIL_STORAGE_KEY = "workspaceRailOpen";
+const RAIL_PRIMARY_ROUTES = ["/", "/matches", "/interests", "/shortlists", "/chat", "/notifications", "/profile"];
+
+function UtilityIcon({ name }) {
+  if (name === "sun") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.5" />
+        <path d="M12 2.5V5.2M12 18.8v2.7M4.9 4.9 6.8 6.8M17.2 17.2l1.9 1.9M2.5 12h2.7M18.8 12h2.7M4.9 19.1l1.9-1.9M17.2 6.8l1.9-1.9" />
+      </svg>
+    );
+  }
+
+  if (name === "moon") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M20.5 14.4A8.5 8.5 0 1 1 9.6 3.5a7 7 0 0 0 10.9 10.9Z" />
+      </svg>
+    );
+  }
+
+  if (name === "bell") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6.8 9.5a5.2 5.2 0 0 1 10.4 0V13l1.6 3.1a1 1 0 0 1-.9 1.4H6.1a1 1 0 0 1-.9-1.4L6.8 13V9.5Z" />
+        <path d="M10 18.3a2.2 2.2 0 0 0 4 0" />
+      </svg>
+    );
+  }
+
+  if (name === "user") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="8" r="3.2" />
+        <path d="M5.4 19.2a6.6 6.6 0 0 1 13.2 0" />
+      </svg>
+    );
+  }
+
+  if (name === "plus") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 5.2v13.6M5.2 12h13.6" />
+      </svg>
+    );
+  }
+
+  if (name === "star") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="m12 3.8 2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3.8Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
 
 export default function MainLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, loading } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [viewportMode, setViewportMode] = useState("desktop");
+  const [railOpen, setRailOpen] = useState(true);
+  const [railPage, setRailPage] = useState(() =>
+    RAIL_PRIMARY_ROUTES.some((href) => isRouteActive(pathname, href)) ? 0 : 1
+  );
 
   const initial = useMemo(() => {
     const source = user?.profile?.firstName || user?.firstName || user?.email || "U";
     return source.charAt(0).toUpperCase();
   }, [user]);
 
+  const activeNavItem = useMemo(
+    () => APP_NAV_ITEMS.find((item) => isRouteActive(pathname, item.href)) || APP_NAV_ITEMS[0],
+    [pathname]
+  );
+  const primaryRailItems = useMemo(
+    () => APP_NAV_ITEMS.filter((item) => RAIL_PRIMARY_ROUTES.includes(item.href)),
+    []
+  );
+  const secondaryRailItems = useMemo(
+    () => APP_NAV_ITEMS.filter((item) => !RAIL_PRIMARY_ROUTES.includes(item.href)),
+    []
+  );
+
   const isActive = (href) => isRouteActive(pathname, href);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const storedViewport = window.localStorage.getItem(VIEWPORT_STORAGE_KEY);
+        if (VIEWPORT_OPTIONS.some((option) => option.value === storedViewport)) {
+          setViewportMode(storedViewport);
+        }
+      } catch {}
+
+      try {
+        setRailOpen(window.localStorage.getItem(RAIL_STORAGE_KEY) !== "0");
+      } catch {}
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const onSearchSubmit = (event) => {
     event.preventDefault();
-    if (!query.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    const normalized = query.trim();
+    if (!normalized) return;
+    router.push(`/matches?q=${encodeURIComponent(normalized)}`);
+  };
+
+  const onViewportChange = (nextMode) => {
+    if (!VIEWPORT_OPTIONS.some((option) => option.value === nextMode)) return;
+    setViewportMode(nextMode);
+    setDrawerOpen(false);
+    try {
+      window.localStorage.setItem(VIEWPORT_STORAGE_KEY, nextMode);
+    } catch {}
+  };
+
+  const toggleRail = () => {
+    setDrawerOpen(false);
+    setRailOpen((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(RAIL_STORAGE_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleMainMenuToggle = () => {
+    if (viewportMode === "desktop") {
+      toggleRail();
+      return;
+    }
+    setDrawerOpen((previous) => !previous);
+  };
+
+  const menuExpanded = viewportMode === "desktop" ? railOpen : drawerOpen;
+  const menuControlTarget = viewportMode === "desktop" ? "app-left-rail" : "app-quick-nav-sheet";
+  const menuActionLabel =
+    viewportMode === "desktop"
+      ? railOpen
+        ? "Collapse sidebar"
+        : "Expand sidebar"
+      : drawerOpen
+        ? "Close quick navigation"
+        : "Open quick navigation";
+  const visibleRailItems = railPage === 0 ? primaryRailItems : secondaryRailItems;
+  const railPageTitle = railPage === 0 ? "Primary" : "More";
+  const canGoBack = true;
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
   };
 
   return (
-    <div className="page-shell" style={{ background: "var(--bg-soft)" }}>
-      <div className="container-shell" style={{ paddingTop: "1.08rem" }}>
-        <header
-          className="panel app-topbar premium-topbar"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "0.9rem",
-            position: "sticky",
-            top: "0.85rem",
-            zIndex: 30,
-            marginBottom: "1rem",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", minWidth: 0 }}>
+    <div className={`app-shell-v2 viewport-${viewportMode} ${railOpen ? "rail-expanded" : "rail-collapsed"}`}>
+      <aside id="app-left-rail" className="panel app-rail" aria-label="Application navigation">
+        <Link href="/" className="app-brand app-brand-sidebar" aria-label="MatrimonyConnect home">
+          <span className="app-brand-mark">MC</span>
+          <span className="app-brand-copy">
+            <strong>MatrimonyConnect</strong>
+            <small>Relationship Workspace</small>
+          </span>
+        </Link>
+
+        <div className="app-rail-scroll">
+          <section className="app-rail-section">
+            <p className="app-rail-title">{railPageTitle}</p>
+            <div className="app-rail-links">
+              {visibleRailItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`app-rail-link ${isActive(item.href) ? "app-rail-link-active" : ""}`}
+                >
+                  <span className="app-rail-link-code">{item.short}</span>
+                  <span className="app-rail-link-body">
+                    <strong>{item.label}</strong>
+                    <small>{item.blurb}</small>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {secondaryRailItems.length > 0 && (
+          <div className="app-rail-pager">
             <button
               type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="menu-trigger button button-secondary"
-              style={{ padding: "0.62rem 0.86rem" }}
+              className="button button-secondary app-rail-page-btn"
+              onClick={() => setRailPage((previous) => (previous === 0 ? 1 : 0))}
+              aria-label={railPage === 0 ? "Open more pages" : "Back to primary pages"}
             >
-              Menu
+              <span className="app-rail-page-btn-arrow" aria-hidden="true">
+                {railPage === 0 ? ">" : "<"}
+              </span>
+              <span>{railPage === 0 ? "More pages" : "Back to primary"}</span>
             </button>
+          </div>
+        )}
 
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.55rem", textDecoration: "none" }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 10,
-                  background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-                  display: "grid",
-                  placeItems: "center",
-                  color: "white",
-                  fontWeight: 800,
-                  fontSize: 13,
-                }}
-              >
-                M
-              </div>
-              <strong style={{ fontSize: "0.99rem", letterSpacing: "0.005em", fontWeight: 780 }}>
-                MatrimonyConnect
-              </strong>
+        <div className="app-rail-footer">
+          {user ? (
+            <button type="button" className="button button-primary" onClick={logout}>
+              Logout
+            </button>
+          ) : (
+            <Link href="/step-1" className="button button-primary">
+              Create Account
             </Link>
+          )}
+        </div>
+      </aside>
+
+      <div className="app-workspace">
+        <header className="panel app-utility-bar">
+          <div className="app-utility-left">
+            {canGoBack && (
+              <button
+                type="button"
+                className="button button-secondary app-icon-btn app-back-btn"
+                onClick={handleBack}
+                aria-label="Go back"
+                title="Go back"
+              >
+                <span aria-hidden="true">&lt;</span>
+              </button>
+            )}
+
+            <Link href="/" className="app-brand app-brand-mobile" aria-label="MatrimonyConnect home">
+              <span className="app-brand-mark">MC</span>
+              <span className="app-brand-copy">
+                <strong>MatrimonyConnect</strong>
+                <small>{activeNavItem?.section || "Workspace"}</small>
+              </span>
+            </Link>
+
+            <div className="app-context hide-mobile-sm">
+              <p className="app-context-eyebrow">{activeNavItem?.section || "Workspace"}</p>
+              <p className="app-context-title">{activeNavItem?.label || "Overview"}</p>
+            </div>
           </div>
 
-          <form onSubmit={onSearchSubmit} className="topbar-search" style={{ flex: 1, maxWidth: 620 }}>
+          <form onSubmit={onSearchSubmit} className="app-spotlight-form" role="search" aria-label="Search profiles">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="form-input"
-              placeholder="Search by ID, name, or profile keyword"
-              aria-label="Global search"
+              placeholder="Search profile ID, name, or city"
+              aria-label="Global profile search"
             />
           </form>
 
-          <div className="topbar-actions" style={{ display: "flex", alignItems: "center", gap: "0.48rem" }}>
+          <div className="app-utility-actions">
+            <label className="app-hidden-label" htmlFor="app-theme-select-top">
+              Choose interface theme
+            </label>
+            <select
+              id="app-theme-select-top"
+              className="form-input app-compact-select app-theme-select-top"
+              value={theme}
+              onChange={(event) => setTheme(event.target.value)}
+              aria-label="Choose interface theme"
+              title="Theme"
+            >
+              {THEME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <label className="app-hidden-label" htmlFor="app-viewport-select">
+              Preview viewport
+            </label>
+            <select
+              id="app-viewport-select"
+              className="form-input app-compact-select app-viewport-select"
+              value={viewportMode}
+              onChange={(event) => onViewportChange(event.target.value)}
+              aria-label="Preview viewport"
+              title="Preview viewport"
+            >
+              {VIEWPORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
             {user && (
-              <Link className="button button-primary hide-mobile-sm" href="/pricing">
-                Upgrade
+              <Link className="button button-secondary app-icon-btn hide-mobile-xs" href="/notifications" aria-label="Notifications" title="Notifications">
+                <UtilityIcon name="bell" />
               </Link>
             )}
 
-            <Link className="button button-secondary hide-mobile-xs" href="/notifications">
-              Alerts
-            </Link>
+            {user && (
+              <Link className="button button-primary app-icon-btn hide-mobile-sm" href="/pricing" aria-label="Upgrade plan" title="Upgrade">
+                <UtilityIcon name="star" />
+              </Link>
+            )}
+
+            {loading ? (
+              <span className="button button-secondary app-icon-btn" style={{ opacity: 0.7, cursor: "default" }} aria-hidden="true">
+                <UtilityIcon name="user" />
+              </span>
+            ) : user ? (
+              <Link href="/profile" className="button button-secondary app-avatar-button" aria-label="Open profile">
+                {initial}
+              </Link>
+            ) : (
+              <Link className="button button-secondary app-icon-btn" href="/login" aria-label="Login" title="Login">
+                <UtilityIcon name="user" />
+              </Link>
+            )}
 
             <button
               type="button"
-              className="button button-secondary"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              style={{ padding: "0.62rem 0.78rem", minWidth: 64, fontWeight: 700 }}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className={`button button-secondary app-hamburger-btn ${menuExpanded ? "is-open" : ""}`}
+              onClick={handleMainMenuToggle}
+              aria-expanded={menuExpanded}
+              aria-controls={menuControlTarget}
+              title={menuActionLabel}
+              aria-label={menuActionLabel}
             >
-              {theme === "dark" ? "Dark" : "Light"}
-            </button>
-
-            {loading ? (
-              <span className="button button-secondary" style={{ opacity: 0.7, cursor: "default" }}>
-                Account
+              <span className="app-hamburger-icon" aria-hidden="true">
+                <span />
+                <span />
+                <span />
               </span>
-            ) : user ? (
-              <>
-                <Link
-                  href="/profile"
-                  className="button button-secondary"
-                  style={{ width: 38, height: 38, padding: 0, borderRadius: "50%", fontWeight: 800 }}
-                >
-                  {initial}
-                </Link>
-                <button type="button" onClick={logout} className="button button-primary">
-                  Logout
-                </button>
-              </>
-            ) : (
-              <>
-                <Link className="button button-secondary" href="/login">
-                  Login
-                </Link>
-                <Link className="button button-primary" href="/step-1">
-                  Sign Up
-                </Link>
-              </>
-            )}
+              <span>{menuActionLabel}</span>
+            </button>
           </div>
         </header>
 
-        <nav className="panel context-quick-nav premium-quick-nav quick-strip-shell" aria-label="Quick navigation">
-          <div className="quick-strip-head">
-            <p className="section-label">Quick Navigation</p>
-            <button type="button" className="button button-secondary" onClick={() => setDrawerOpen(true)}>
-              All Pages
-            </button>
-          </div>
-
-          <div className="quick-strip-row">
-            {APP_NAV_ITEMS.filter((item) => PRIMARY_NAV_ROUTES.includes(item.href)).map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`button button-secondary quick-strip-link ${
-                  isActive(item.href) ? "quick-strip-link-active" : ""
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-
-        <div className="main-shell-grid" style={{ paddingBottom: "5.2rem" }}>
-          <main className="main-content-shell" style={{ minWidth: 0 }}>
-            {children}
-          </main>
-        </div>
+        <main className="app-content-stage">{children}</main>
       </div>
 
-      <nav
-        className="mobile-bottom-nav"
-        style={{
-          position: "fixed",
-          left: "50%",
-          transform: "translateX(-50%)",
-          bottom: "0.7rem",
-          width: "min(700px, calc(100% - 1rem))",
-          zIndex: 60,
-          background: "var(--bg-elevated)",
-          backdropFilter: "blur(10px)",
-          border: "1px solid var(--line)",
-          borderRadius: 14,
-          boxShadow: "var(--shadow-md)",
-          padding: "0.38rem",
-          display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: "0.32rem",
-        }}
-      >
+      <nav className="panel mobile-dock" aria-label="Mobile navigation">
         {APP_NAV_ITEMS.filter((item) => MOBILE_PRIMARY_NAV.includes(item.href)).map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            style={{
-              borderRadius: 10,
-              textAlign: "center",
-              textDecoration: "none",
-              fontSize: "0.74rem",
-              fontWeight: 700,
-              padding: "0.5rem 0.3rem",
-              color: isActive(item.href) ? "var(--ink)" : "var(--ink-muted)",
-              background: isActive(item.href) ? "rgba(29, 78, 216, 0.13)" : "transparent",
-            }}
+            className={`mobile-dock-link ${isActive(item.href) ? "mobile-dock-link-active" : ""}`}
           >
-            {item.label}
+            <span>{item.short}</span>
+            <strong>{item.label}</strong>
           </Link>
         ))}
 
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          style={{
-            borderRadius: 10,
-            textAlign: "center",
-            fontSize: "0.74rem",
-            fontWeight: 700,
-            padding: "0.5rem 0.3rem",
-            color: drawerOpen ? "var(--ink)" : "var(--ink-muted)",
-            background: drawerOpen ? "rgba(29, 78, 216, 0.13)" : "transparent",
-            border: "none",
-            cursor: "pointer",
-          }}
+          className={`mobile-dock-link ${drawerOpen ? "mobile-dock-link-active" : ""}`}
+          aria-expanded={drawerOpen}
+          aria-controls="app-quick-nav-sheet"
         >
-          Menu
+          <span>{drawerOpen ? "CL" : "MN"}</span>
+          <strong>{drawerOpen ? "Close" : "Menu"}</strong>
         </button>
       </nav>
 
       {drawerOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 80,
-            background: "rgba(5, 12, 22, 0.48)",
-            backdropFilter: "blur(2px)",
-            display: "flex",
-          }}
-          onClick={() => setDrawerOpen(false)}
-        >
+        <div className="app-sheet-backdrop" onClick={() => setDrawerOpen(false)}>
           <aside
-            className="panel app-sidebar"
-            style={{
-              width: "min(420px, calc(100% - 2.2rem))",
-              margin: "0.8rem",
-              borderRadius: 18,
-              padding: "0.95rem",
-              overflowY: "auto",
-            }}
+            id="app-quick-nav-sheet"
+            className="panel app-sheet"
             onClick={(event) => event.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-              <strong style={{ fontSize: "1rem" }}>All Pages</strong>
+            <div className="app-sheet-head">
+              <p className="section-label">All Routes</p>
               <button type="button" className="button button-secondary" onClick={() => setDrawerOpen(false)}>
                 Close
               </button>
             </div>
 
-            <div className="drawer-menu-groups">
+            <div className="app-sheet-controls">
+              <div className="app-viewport-switcher app-viewport-switcher-sheet" role="group" aria-label="Preview viewport layout">
+                {VIEWPORT_OPTIONS.map((option) => (
+                  <button
+                    key={`sheet-${option.value}`}
+                    type="button"
+                    className={`button button-secondary app-viewport-btn ${
+                      viewportMode === option.value ? "app-viewport-btn-active" : ""
+                    }`}
+                    onClick={() => onViewportChange(option.value)}
+                    aria-pressed={viewportMode === option.value}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="app-sheet-groups">
               {APP_NAV_SECTIONS.map((section) => (
-                <section className="drawer-menu-section" key={section.title}>
-                  <p className="drawer-menu-title">{section.title}</p>
-                  <nav className="drawer-menu-grid">
+                <section key={section.title} className="app-sheet-group">
+                  <p className="app-sheet-title">{section.title}</p>
+                  <div className="app-sheet-grid">
                     {section.items.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
-                        className={`drawer-menu-link ${isActive(item.href) ? "drawer-menu-link-active" : ""}`}
+                        className={`app-sheet-link ${isActive(item.href) ? "app-sheet-link-active" : ""}`}
                         onClick={() => setDrawerOpen(false)}
                       >
-                        <span className="drawer-menu-code">{item.short}</span>
-                        <strong>{item.label}</strong>
+                        <span className="app-sheet-code">{item.short}</span>
+                        <span className="app-sheet-copy">
+                          <strong>{item.label}</strong>
+                          <small>{item.blurb}</small>
+                        </span>
                       </Link>
                     ))}
-                  </nav>
+                  </div>
                 </section>
               ))}
             </div>

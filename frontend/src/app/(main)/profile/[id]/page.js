@@ -9,6 +9,8 @@ import api from "../../../../services/api";
 import { useAuth } from "../../../../context/AuthContext";
 import LoginPromptModal from "../../../../components/LoginPromptModal";
 import ReviewsSection from "../../../../components/ReviewsSection";
+import PageEmptyState from "../../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../../components/states/PageLoadingState";
 
 const DEMO_PROFILE = {
   userId: "demo-user",
@@ -143,14 +145,22 @@ export default function UserProfilePage() {
   };
 
   if (loading) {
-    return <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>Loading profile...</div>;
+    return (
+      <PageLoadingState
+        title="Loading profile..."
+        description="Fetching profile details and compatibility context."
+      />
+    );
   }
 
   if (!profile) {
     return (
-      <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>
-        Profile unavailable.
-      </div>
+      <PageEmptyState
+        title="Profile unavailable"
+        description="This profile may be private, removed, or currently inaccessible."
+        primaryActionLabel="Back to Matches"
+        primaryActionHref="/matches"
+      />
     );
   }
 

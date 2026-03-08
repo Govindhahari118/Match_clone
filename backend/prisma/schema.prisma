@@ -59,6 +59,8 @@ model User {
   @@index([isActive])
   @@index([isBanned])
   @@index([socialId])
+  @@index([isActive, isBanned, lastLogin(sort: Desc)])
+  @@index([isActive, isBanned, createdAt(sort: Desc)])
 }
 
 model Shortlist {
@@ -122,6 +124,13 @@ model Profile {
 
   @@index([userId])
   @@index([religion, caste])
+  @@index([religion, caste, maritalStatus])
+  @@index([gender, dateOfBirth])
+  @@index([country, state, city])
+  @@index([educationLevel, profession])
+  @@index([incomeBand])
+  @@index([motherTongue])
+  @@index([heightCm])
   @@index([dateOfBirth])
   @@index([city])
   @@index([state])
@@ -199,6 +208,8 @@ model Like {
   @@unique([senderId, receiverId])
   @@index([senderId])
   @@index([receiverId])
+  @@index([senderId, createdAt(sort: Desc)])
+  @@index([receiverId, status, createdAt(sort: Desc)])
   @@index([status])
   @@index([createdAt(sort: Desc)])
 }
@@ -292,6 +303,7 @@ model SavedSearch {
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, updatedAt(sort: Desc)])
 }
 
 model Report {
@@ -327,6 +339,7 @@ model Review {
 
   @@unique([reviewerId, reviewedUserId]) // One review per pair
   @@index([reviewedUserId])
+  @@index([reviewedUserId, createdAt(sort: Desc)])
   @@index([rating])
 }
 
@@ -360,5 +373,6 @@ model AuditLog {
 
   @@index([userId])
   @@index([action])
+  @@index([action, resourceId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
 }

@@ -4,47 +4,29 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore } 
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import io from "socket.io-client";
+import api from "@/services/api";
+import {
+  clearAuthSession,
+  getAccessToken,
+  getStoredUser,
+  onAuthStorageEvent,
+  setAuthSession,
+} from "@/services/authStorage";
 
 const AuthContext = createContext();
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
-const authListeners = new Set();
-
-function notifyAuthChange() {
-  authListeners.forEach((listener) => listener());
-}
 
 function readStoredUser() {
   if (typeof window === "undefined") return null;
 
-  try {
-    const token = localStorage.getItem("accessToken");
-    const storedUser = localStorage.getItem("user");
-    if (!token || !storedUser) return null;
-    return JSON.parse(storedUser);
-  } catch {
-    return null;
-  }
+  const token = getAccessToken();
+  const user = getStoredUser();
+  if (!token || !user) return null;
+  return user;
 }
 
 function subscribeAuth(listener) {
-  authListeners.add(listener);
-
-  const onStorage = (event) => {
-    if (event.key === "user" || event.key === "accessToken" || event.key === "refreshToken") {
-      listener();
-    }
-  };
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", onStorage);
-  }
-
-  return () => {
-    authListeners.delete(listener);
-    if (typeof window !== "undefined") {
-      window.removeEventListener("storage", onStorage);
-    }
-  };
+  return onAuthStorageEvent(listener);
 }
 
 function getAuthSnapshot() {
@@ -59,6 +41,43 @@ export const AuthProvider = ({ children }) => {
   const user = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getAuthServerSnapshot);
   const loading = false;
   const [socket, setSocket] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id && !user?.sub) return undefined;
+    const userId = user.id || user.sub;
+    const guardKey = `flag_exposure_sent:${userId}`;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(guardKey)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const syncFlags = async () => {
+      try {
+        const response = await api.get("/analytics/flags");
+        const flags = Array.isArray(response?.data?.flags) ? response.data.flags : [];
+        if (cancelled || flags.length === 0) return;
+        await Promise.allSettled(
+          flags.map((flag) =>
+            api.post("/analytics/flags/exposure", {
+              flagKey: flag.key,
+              enabled: Boolean(flag.enabled),
+              experimentId: `auto-${flag.key}`,
+            })
+          )
+        );
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(guardKey, "1");
+        }
+      } catch {
+        // Silent telemetry; do not block auth flow.
+      }
+    };
+
+    syncFlags();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -85,12 +104,7 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const login = async (userDetails, accessToken, refreshToken) => {
-    localStorage.setItem("user", JSON.stringify(userDetails));
-    localStorage.setItem("accessToken", accessToken);
-    if (refreshToken) {
-      localStorage.setItem("refreshToken", refreshToken);
-    }
-    notifyAuthChange();
+    setAuthSession(userDetails, accessToken, refreshToken);
   };
 
   const logout = () => {
@@ -99,10 +113,7 @@ export const AuthProvider = ({ children }) => {
       setSocket(null);
     }
 
-    localStorage.removeItem("user");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    notifyAuthChange();
+    clearAuthSession();
     window.location.href = "/login";
   };
 

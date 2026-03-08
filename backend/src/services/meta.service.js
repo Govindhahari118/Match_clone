@@ -67,9 +67,23 @@ function withAny(options) {
     return ["Any", ...options];
 }
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const inMemoryCache = new Map();
+
+function getCachedMeta(key, factory) {
+    const now = Date.now();
+    const existing = inMemoryCache.get(key);
+    if (existing && existing.expiresAt > now) {
+        return existing.value;
+    }
+    const value = factory();
+    inMemoryCache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
+    return value;
+}
+
 const metaService = {
     getFilterMeta() {
-        return {
+        return getCachedMeta('filters', () => ({
             ...FILTER_META,
             religion: withAny(FILTER_META.religion),
             caste: withAny(FILTER_META.caste),
@@ -81,15 +95,15 @@ const metaService = {
             bodyType: withAny(FILTER_META.bodyType),
             residentialStatus: withAny(FILTER_META.residentialStatus),
             children: withAny(FILTER_META.children),
-        };
+        }));
     },
 
     getLocationMeta() {
-        return LOCATION_META;
+        return getCachedMeta('locations', () => LOCATION_META);
     },
 
     getCommunityMeta() {
-        return COMMUNITY_META;
+        return getCachedMeta('communities', () => COMMUNITY_META);
     },
 };
 

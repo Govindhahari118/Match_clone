@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const DEMO_PROFILE = {
   firstName: "Laksh",
@@ -46,14 +48,150 @@ const EDITABLE_FIELDS = [
   { key: "heightCm", label: "Height (cm)", type: "number" },
 ];
 
+function ensureStringArray(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function toDateInput(value) {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (match) return match[1];
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function calculateAge(value) {
+  const normalized = toDateInput(value);
+  if (!normalized) return null;
+
+  const [year, month, day] = normalized.split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  const now = new Date();
+  let years = now.getFullYear() - year;
+  const monthPassed = now.getMonth() + 1 > month;
+  const sameMonthAndDayPassed = now.getMonth() + 1 === month && now.getDate() >= day;
+  if (!monthPassed && !sameMonthAndDayPassed) {
+    years -= 1;
+  }
+
+  return years > 0 ? years : null;
+}
+
+function hasValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "string") return value.trim().length > 0;
+  return Boolean(value);
+}
+
+function formatDisplayValue(key, value) {
+  if (!hasValue(value)) return "-";
+
+  if (key === "dateOfBirth") {
+    const normalized = toDateInput(value);
+    if (!normalized) return "-";
+    const [year, month, day] = normalized.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  if (key === "heightCm") {
+    return `${value} cm`;
+  }
+
+  return String(value).replaceAll("_", " ");
+}
+
 function normalizeProfile(payload) {
   if (!payload) return null;
 
+  const photos = Array.isArray(payload.photos)
+    ? payload.photos
+        .filter(Boolean)
+        .map((photo) => ({
+          ...photo,
+          photoUrl: photo?.photoUrl || photo?.url || photo?.thumbnailUrl || "",
+        }))
+    : [];
+
   return {
     ...payload,
-    photos: payload.photos || [],
-    hobbies: payload.hobbies || [],
+    dateOfBirth: toDateInput(payload.dateOfBirth),
+    photos,
+    hobbies: ensureStringArray(payload.hobbies),
   };
+}
+
+function buildFormState(profile) {
+  const next = {};
+
+  EDITABLE_FIELDS.forEach((field) => {
+    if (field.key === "dateOfBirth") {
+      next[field.key] = toDateInput(profile?.[field.key]);
+      return;
+    }
+
+    next[field.key] = profile?.[field.key] ?? "";
+  });
+
+  next.bio = profile?.bio ?? "";
+  next.hobbies = ensureStringArray(profile?.hobbies);
+  return next;
+}
+
+function buildSavePayload(formData) {
+  const payload = {};
+
+  EDITABLE_FIELDS.forEach((field) => {
+    const value = formData?.[field.key];
+
+    if (field.key === "dateOfBirth") {
+      payload[field.key] = toDateInput(value) || null;
+      return;
+    }
+
+    if (field.type === "number") {
+      if (value === "" || value === null || value === undefined) {
+        payload[field.key] = null;
+        return;
+      }
+      const parsed = Number(value);
+      payload[field.key] = Number.isFinite(parsed) ? parsed : null;
+      return;
+    }
+
+    payload[field.key] = typeof value === "string" ? value.trim() : value ?? "";
+  });
+
+  payload.bio = typeof formData?.bio === "string" ? formData.bio.trim() : "";
+  payload.hobbies = ensureStringArray(formData?.hobbies);
+
+  return payload;
 }
 
 export default function ProfilePage() {
@@ -66,39 +204,51 @@ export default function ProfilePage() {
   const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadProfile = async () => {
       setLoading(true);
       setPreviewMode(false);
 
       try {
         if (!user) {
-          setProfile(DEMO_PROFILE);
-          setFormData(DEMO_PROFILE);
-          setPreviewMode(true);
+          const demo = normalizeProfile(DEMO_PROFILE);
+          if (!cancelled) {
+            setProfile(demo);
+            setFormData(buildFormState(demo));
+            setPreviewMode(true);
+          }
           return;
         }
 
         const response = await api.get("/users/profile");
-        const data = normalizeProfile(response.data) || DEMO_PROFILE;
-        setProfile(data);
-        setFormData(data);
+        const normalized = normalizeProfile(response?.data) || normalizeProfile(DEMO_PROFILE);
+        if (!cancelled) {
+          setProfile(normalized);
+          setFormData(buildFormState(normalized));
+        }
       } catch {
-        setProfile(DEMO_PROFILE);
-        setFormData(DEMO_PROFILE);
-        setPreviewMode(true);
+        const fallback = normalizeProfile(DEMO_PROFILE);
+        if (!cancelled) {
+          setProfile(fallback);
+          setFormData(buildFormState(fallback));
+          setPreviewMode(true);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  const age = useMemo(() => {
-    const dob = profile?.dateOfBirth ? new Date(profile.dateOfBirth) : null;
-    if (!dob || Number.isNaN(dob.getTime())) return null;
-    return new Date().getFullYear() - dob.getFullYear();
-  }, [profile]);
+  const age = useMemo(() => calculateAge(profile?.dateOfBirth), [profile?.dateOfBirth]);
 
   const completion = useMemo(() => {
     if (!profile) return 0;
@@ -113,14 +263,17 @@ export default function ProfilePage() {
       profile.educationLevel,
       profile.bio,
       profile.heightCm,
-      profile.photos?.length,
+      profile.photos,
     ];
 
-    const filled = checks.filter(Boolean).length;
+    const filled = checks.filter(hasValue).length;
     return Math.round((filled / checks.length) * 100);
   }, [profile]);
 
-  const primaryPhoto = profile?.photos?.find((photo) => photo.isPrimary)?.photoUrl || profile?.photos?.[0]?.photoUrl;
+  const primaryPhoto =
+    profile?.photos?.find((photo) => photo.isPrimary)?.photoUrl ||
+    profile?.photos?.[0]?.photoUrl ||
+    "";
 
   const profileSignals = useMemo(
     () => [
@@ -132,8 +285,37 @@ export default function ProfilePage() {
     [completion, age, profile]
   );
 
+  const fullName = useMemo(() => {
+    const composed = [profile?.firstName, profile?.lastName]
+      .filter((part) => typeof part === "string" && part.trim().length > 0)
+      .join(" ")
+      .trim();
+
+    return composed || "Member Profile";
+  }, [profile?.firstName, profile?.lastName]);
+
+  const profileSummary = useMemo(() => {
+    const parts = [
+      age ? `${age} yrs` : null,
+      profile?.profession || "Professional",
+      profile?.city || null,
+    ].filter(Boolean);
+
+    return parts.join(" | ");
+  }, [age, profile?.profession, profile?.city]);
+
   const onFieldChange = (key, value) => {
     setFormData((previous) => ({ ...previous, [key]: value }));
+  };
+
+  const onStartEdit = () => {
+    setFormData(buildFormState(profile));
+    setEditing(true);
+  };
+
+  const onCancelEdit = () => {
+    setFormData(buildFormState(profile));
+    setEditing(false);
   };
 
   const onSave = async () => {
@@ -143,26 +325,41 @@ export default function ProfilePage() {
     }
 
     setSaving(true);
+
     try {
-      await api.put("/users/profile", formData);
-      setProfile((previous) => ({ ...previous, ...formData }));
+      const payload = buildSavePayload(formData);
+      await api.put("/users/profile", payload);
+
+      const merged = normalizeProfile({ ...profile, ...payload });
+      setProfile(merged);
+      setFormData(buildFormState(merged));
       setEditing(false);
       toast.success("Profile updated successfully.");
     } catch {
-      setProfile((previous) => ({ ...previous, ...formData }));
-      setEditing(false);
-      toast.info("Profile updated in local preview mode.");
+      toast.error("Unable to update profile right now. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>Loading profile...</div>;
+    return (
+      <PageLoadingState
+        title="Loading profile..."
+        description="Preparing your profile dashboard and completion insights."
+      />
+    );
   }
 
   if (!profile) {
-    return <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>Unable to load profile.</div>;
+    return (
+      <PageEmptyState
+        title="Unable to load profile"
+        description="Try reloading this page or return to matches while we reconnect."
+        primaryActionLabel="Go to Matches"
+        primaryActionHref="/matches"
+      />
+    );
   }
 
   return (
@@ -206,12 +403,10 @@ export default function ProfilePage() {
 
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: "1.7rem", fontFamily: "var(--font-display)", lineHeight: 1.05 }}>
-                {profile.firstName} {profile.lastName}
+                {fullName}
               </h1>
               <p style={{ margin: "0.26rem 0 0", color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-                {age ? `${age} yrs | ` : ""}
-                {profile.profession || "Professional"}
-                {profile.city ? ` | ${profile.city}` : ""}
+                {profileSummary}
               </p>
               {previewMode && <span className="chip chip-brand" style={{ marginTop: "0.45rem" }}>Preview Mode</span>}
             </div>
@@ -219,7 +414,7 @@ export default function ProfilePage() {
             <div className="profile-action-row" style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
               {editing ? (
                 <>
-                  <button type="button" className="button button-secondary" onClick={() => setEditing(false)} disabled={saving}>
+                  <button type="button" className="button button-secondary" onClick={onCancelEdit} disabled={saving}>
                     Cancel
                   </button>
                   <button type="button" className="button button-primary" onClick={onSave} disabled={saving}>
@@ -227,7 +422,7 @@ export default function ProfilePage() {
                   </button>
                 </>
               ) : (
-                <button type="button" className="button button-primary" onClick={() => setEditing(true)}>
+                <button type="button" className="button button-primary" onClick={onStartEdit}>
                   Edit Profile
                 </button>
               )}
@@ -309,12 +504,12 @@ export default function ProfilePage() {
                   <input
                     className="form-input"
                     type={field.type}
-                    value={formData[field.key] || ""}
-                    onChange={(event) => onFieldChange(field.key, field.type === "number" ? Number(event.target.value) : event.target.value)}
+                    value={formData[field.key] ?? ""}
+                    onChange={(event) => onFieldChange(field.key, event.target.value)}
                   />
                 ) : (
                   <div className="field-tile">
-                    {String(profile[field.key] || "-").replaceAll("_", " ")}
+                    {formatDisplayValue(field.key, profile[field.key])}
                   </div>
                 )}
               </div>

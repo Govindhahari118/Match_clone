@@ -1,9 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { parsePagination } = require('../utils/pagination');
 
 exports.shortlistProfile = async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.sub || req.user.userId;
         const { shortlistedUserId } = req.body;
 
         if (!userId || !shortlistedUserId) return res.status(400).json({ error: "Missing parameters" });
@@ -33,7 +34,7 @@ exports.shortlistProfile = async (req, res) => {
 
 exports.removeShortlist = async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.sub || req.user.userId;
         const { shortlistedUserId } = req.body;
 
         await prisma.shortlist.delete({
@@ -51,9 +52,13 @@ exports.removeShortlist = async (req, res) => {
 
 exports.getShortlistedProfiles = async (req, res) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user.sub || req.user.userId;
+        const { limit, skip } = parsePagination(req.query, { defaultLimit: 20, maxLimit: 50 });
         const shortlists = await prisma.shortlist.findMany({
             where: { userId },
+            orderBy: { createdAt: 'desc' },
+            skip,
+            take: limit,
             include: {
                 shortlistedUser: {
                     select: {

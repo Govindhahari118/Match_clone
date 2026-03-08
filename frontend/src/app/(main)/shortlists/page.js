@@ -5,6 +5,8 @@ import Link from "next/link";
 import { memo, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
+import PageEmptyState from "../../../components/states/PageEmptyState";
+import PageLoadingState from "../../../components/states/PageLoadingState";
 
 const MOCK = [
   { id: "sl1", userId: "u1", firstName: "Priya", age: 26, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/women/44.jpg", isVerified: true, match: 94, shortlistedAt: "2h ago" },
@@ -57,8 +59,8 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
                 Saved {profile.shortlistedAt}
               </p>
             </div>
-            <button type="button" className="button button-secondary remove-fab" onClick={() => onRemove(profile.userId)}>
-              Remove
+            <button type="button" className="button button-secondary remove-fab icon-only-btn" onClick={() => onRemove(profile.userId)} aria-label="Remove from shortlist" title="Remove from shortlist">
+              ×
             </button>
           </div>
 
@@ -71,8 +73,8 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
             <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
               Send Interest
             </button>
-            <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.72rem 0.92rem" }}>
-              View
+            <Link href={`/profile/${profile.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.72rem 0.92rem" }} aria-label="Open profile" title="Open profile">
+              ↗
             </Link>
           </div>
         </div>
@@ -96,8 +98,8 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
         <div style={{ position: "absolute", top: 10, left: 10 }}>
           <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
         </div>
-        <button type="button" onClick={() => onRemove(profile.userId)} className="button button-secondary remove-fab" style={{ position: "absolute", top: 10, right: 10 }}>
-          Remove
+        <button type="button" onClick={() => onRemove(profile.userId)} className="button button-secondary remove-fab icon-only-btn" style={{ position: "absolute", top: 10, right: 10 }} aria-label="Remove from shortlist" title="Remove from shortlist">
+          ×
         </button>
         <div style={{ position: "absolute", left: 12, bottom: 12, color: "white", right: 12 }}>
           <h3 style={{ margin: 0, fontSize: "1.12rem", lineHeight: 1.14 }}>
@@ -119,8 +121,8 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
           <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
             Send Interest
           </button>
-          <Link href={`/profile/${profile.userId}`} className="button button-secondary" style={{ padding: "0.74rem 0.9rem" }}>
-            View
+          <Link href={`/profile/${profile.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.74rem 0.9rem" }} aria-label="Open profile" title="Open profile">
+            ↗
           </Link>
         </div>
       </div>
@@ -199,31 +201,28 @@ export default function ShortlistsPage() {
           <Link href="/matches" className="button button-primary">
             Add More
           </Link>
-          <button type="button" className={`button view-switch-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")}>
-            Grid
+          <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} aria-label="Grid view" title="Grid view">
+            ▦
           </button>
-          <button type="button" className={`button view-switch-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")}>
-            List
+          <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} aria-label="List view" title="List view">
+            ☰
           </button>
         </div>
       </section>
 
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "0.9rem" }}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={`shortlist-loading-${index}`} className="panel listing-stage skeleton-tile" style={{ height: 330 }} />
-          ))}
-        </div>
+        <PageLoadingState
+          title="Loading shortlists..."
+          description="Pulling your saved profiles and recent shortlist activity."
+          compact
+        />
       ) : list.length === 0 ? (
-        <section className="panel listing-stage" style={{ textAlign: "center", padding: "2.2rem" }}>
-          <h2 style={{ marginTop: 0, marginBottom: "0.38rem" }}>No shortlisted profiles yet</h2>
-          <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-            Browse matches and save profiles here for quick comparison.
-          </p>
-          <Link href="/matches" className="button button-primary" style={{ marginTop: "0.9rem" }}>
-            Browse Matches
-          </Link>
-        </section>
+        <PageEmptyState
+          title="No shortlisted profiles yet"
+          description="Browse matches and save profiles here for quick comparison."
+          primaryActionLabel="Browse Matches"
+          primaryActionHref="/matches"
+        />
       ) : (
         <div className="results-grid" style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
           {list.map((profile) => (

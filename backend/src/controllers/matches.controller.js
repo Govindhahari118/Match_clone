@@ -9,6 +9,8 @@ const ALLOWED_FILTER_KEYS = new Set([
     'maritalStatus',
     'city',
     'state',
+    'country',
+    'district',
     'education',
     'profession',
     'income',
@@ -17,10 +19,20 @@ const ALLOWED_FILTER_KEYS = new Set([
     'maxHeight',
     'verifiedOnly',
     'withPhotoOnly',
+    'photoVisibility',
+    'profileVisibility',
+    'verificationLevel',
     'onlineNow',
     'premiumOnly',
     'withHoroscopeOnly',
     'lastActiveDays',
+    'hasChildren',
+    'residentialStatus',
+    'diversityCap',
+    'sessionPreferredProfession',
+    'sessionPreferredCity',
+    'sessionSearchEdits',
+    'sessionProfileOpens',
     'keyword',
     'query',
     'sort',
@@ -91,6 +103,18 @@ function sanitizeFilters(raw) {
         filters.onlineNow = parsed;
     }
 
+    if (filters.premiumOnly !== undefined) {
+        const parsed = parseBoolean(filters.premiumOnly);
+        if (parsed === null) return { error: 'premiumOnly must be true or false' };
+        filters.premiumOnly = parsed;
+    }
+
+    if (filters.withHoroscopeOnly !== undefined) {
+        const parsed = parseBoolean(filters.withHoroscopeOnly);
+        if (parsed === null) return { error: 'withHoroscopeOnly must be true or false' };
+        filters.withHoroscopeOnly = parsed;
+    }
+
     if (minAge !== null) filters.minAge = minAge;
     if (maxAge !== null) filters.maxAge = maxAge;
     if (minHeight !== null) filters.minHeight = minHeight;
@@ -115,4 +139,23 @@ const getMatches = async (req, res) => {
     }
 };
 
-module.exports = { getMatches };
+const submitMatchFeedback = async (req, res) => {
+    try {
+        const userId = req.user.sub;
+        const result = await matchingService.submitFeedback(userId, req.body, {
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+        });
+
+        if (result.error) {
+            return res.status(result.statusCode || 400).json({ error: result.error });
+        }
+
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error('Submit match feedback error:', error);
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+module.exports = { getMatches, submitMatchFeedback };

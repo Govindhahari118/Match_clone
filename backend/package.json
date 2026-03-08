@@ -9,7 +9,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "seed": "node prisma/seed-pg.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No unit tests configured yet\"",
+    "test:smoke": "node scripts/smoke-test.js"
   },
   "keywords": [],
   "author": "",
@@ -27,6 +28,7 @@
     "express-rate-limit": "^8.2.1",
     "firebase": "^12.9.0",
     "firebase-admin": "^13.6.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "pg": "^8.18.0",

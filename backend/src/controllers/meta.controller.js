@@ -1,8 +1,14 @@
 const metaService = require("../services/meta.service");
 
+function applyMetaCacheHeaders(res) {
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+    res.set('Vary', 'Accept-Encoding');
+}
+
 const metaController = {
     getFilters(req, res) {
         try {
+            applyMetaCacheHeaders(res);
             res.status(200).json({
                 success: true,
                 data: metaService.getFilterMeta(),
@@ -15,6 +21,7 @@ const metaController = {
 
     getLocations(req, res) {
         try {
+            applyMetaCacheHeaders(res);
             res.status(200).json({
                 success: true,
                 data: metaService.getLocationMeta(),
@@ -27,6 +34,7 @@ const metaController = {
 
     getCommunities(req, res) {
         try {
+            applyMetaCacheHeaders(res);
             res.status(200).json({
                 success: true,
                 data: metaService.getCommunityMeta(),
