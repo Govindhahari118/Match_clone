@@ -6,6 +6,7 @@ const ALLOWED_FILTER_KEYS = new Set([
     'maxAge',
     'religion',
     'caste',
+    'subCaste',
     'maritalStatus',
     'city',
     'state',
@@ -15,8 +16,14 @@ const ALLOWED_FILTER_KEYS = new Set([
     'profession',
     'income',
     'motherTongue',
+    'diet',
+    'gothra',
+    'nakshatra',
+    'rashi',
+    'dosha',
     'minHeight',
     'maxHeight',
+    'minMatch',
     'verifiedOnly',
     'withPhotoOnly',
     'photoVisibility',
@@ -28,6 +35,7 @@ const ALLOWED_FILTER_KEYS = new Set([
     'lastActiveDays',
     'hasChildren',
     'residentialStatus',
+    'shortlistedOnly',
     'diversityCap',
     'sessionPreferredProfession',
     'sessionPreferredCity',
@@ -71,11 +79,13 @@ function sanitizeFilters(raw) {
     const maxAge = parseInteger(filters.maxAge);
     const minHeight = parseInteger(filters.minHeight);
     const maxHeight = parseInteger(filters.maxHeight);
+    const minMatch = parseInteger(filters.minMatch);
 
     if (filters.minAge !== undefined && minAge === null) return { error: 'minAge must be a valid number' };
     if (filters.maxAge !== undefined && maxAge === null) return { error: 'maxAge must be a valid number' };
     if (filters.minHeight !== undefined && minHeight === null) return { error: 'minHeight must be a valid number' };
     if (filters.maxHeight !== undefined && maxHeight === null) return { error: 'maxHeight must be a valid number' };
+    if (filters.minMatch !== undefined && minMatch === null) return { error: 'minMatch must be a valid number' };
 
     if (minAge !== null && (minAge < 18 || minAge > 80)) return { error: 'minAge must be between 18 and 80' };
     if (maxAge !== null && (maxAge < 18 || maxAge > 80)) return { error: 'maxAge must be between 18 and 80' };
@@ -84,6 +94,7 @@ function sanitizeFilters(raw) {
     if (minHeight !== null && (minHeight < 120 || minHeight > 250)) return { error: 'minHeight must be between 120 and 250 cm' };
     if (maxHeight !== null && (maxHeight < 120 || maxHeight > 250)) return { error: 'maxHeight must be between 120 and 250 cm' };
     if (minHeight !== null && maxHeight !== null && minHeight > maxHeight) return { error: 'minHeight cannot be greater than maxHeight' };
+    if (minMatch !== null && (minMatch < 0 || minMatch > 100)) return { error: 'minMatch must be between 0 and 100' };
 
     if (filters.verifiedOnly !== undefined) {
         const parsed = parseBoolean(filters.verifiedOnly);
@@ -115,10 +126,17 @@ function sanitizeFilters(raw) {
         filters.withHoroscopeOnly = parsed;
     }
 
+    if (filters.shortlistedOnly !== undefined) {
+        const parsed = parseBoolean(filters.shortlistedOnly);
+        if (parsed === null) return { error: 'shortlistedOnly must be true or false' };
+        filters.shortlistedOnly = parsed;
+    }
+
     if (minAge !== null) filters.minAge = minAge;
     if (maxAge !== null) filters.maxAge = maxAge;
     if (minHeight !== null) filters.minHeight = minHeight;
     if (maxHeight !== null) filters.maxHeight = maxHeight;
+    if (minMatch !== null) filters.minMatch = minMatch;
 
     return { filters };
 }

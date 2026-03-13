@@ -4,7 +4,7 @@ import RouteErrorState from "@/components/RouteErrorState";
 
 export default function GlobalError({ error, reset }) {
   return (
-    <div className="page-shell" style={{ padding: "1rem 0" }}>
+    <div className="page-shell page-pad">
       <div className="container-shell">
         <RouteErrorState
           title="App failed to render"

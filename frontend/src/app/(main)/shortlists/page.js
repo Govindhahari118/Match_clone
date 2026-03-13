@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import api from "../../../services/api";
 import PageEmptyState from "../../../components/states/PageEmptyState";
 import PageLoadingState from "../../../components/states/PageLoadingState";
+import PageHero from "../../../components/PageHero";
 
 const MOCK = [
   { id: "sl1", userId: "u1", firstName: "Priya", age: 26, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/women/44.jpg", isVerified: true, match: 94, shortlistedAt: "2h ago" },
@@ -23,14 +24,34 @@ function getMatchTier(matchScore) {
   return "rising";
 }
 
+function ViewIcon({ kind }) {
+  if (kind === "grid") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z" />
+      </svg>
+    );
+  }
+
+  if (kind === "list") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+
 const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove, onInterest }) {
   const matchTier = getMatchTier(Number(profile.match) || 0);
   const metaLine = [profile.profession, profile.city].filter(Boolean).join(" | ");
 
   if (viewMode === "list") {
     return (
-      <article className="panel panel-hover anim-rise listing-stage shortlist-card shortlist-list" style={{ overflow: "hidden", display: "flex" }}>
-        <div className="shortlist-media" style={{ width: 196, flexShrink: 0, position: "relative" }}>
+      <article className="panel panel-hover anim-rise listing-stage shortlist-card shortlist-card-list">
+        <div className="shortlist-media">
           <Image
             className="shortlist-photo"
             src={profile.photo}
@@ -38,43 +59,40 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
             width={620}
             height={760}
             sizes="(max-width: 760px) 100vw, 196px"
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7, 13, 30, 0.72), transparent 55%)" }} />
-          <div style={{ position: "absolute", top: 10, left: 10 }}>
-            <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
-          </div>
+          <div className="shortlist-media-overlay" />
+          <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
         </div>
 
-        <div className="shortlist-content" style={{ flex: 1, padding: "1rem", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.65rem" }}>
-            <div style={{ minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: "1.08rem", lineHeight: 1.16 }}>
+        <div className="shortlist-content">
+          <div className="shortlist-card-header">
+            <div className="shortlist-card-title">
+              <h3 className="shortlist-card-name">
                 {profile.firstName}, {profile.age}
               </h3>
-              <p className="profile-meta" style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.85rem" }}>
+              <p className="profile-meta shortlist-card-meta">
                 {metaLine}
               </p>
-              <p style={{ margin: "0.28rem 0 0", color: "var(--ink-muted)", fontSize: "0.76rem" }}>
+              <p className="shortlist-card-saved">
                 Saved {profile.shortlistedAt}
               </p>
             </div>
-            <button type="button" className="button button-secondary remove-fab icon-only-btn" onClick={() => onRemove(profile.userId)} aria-label="Remove from shortlist" title="Remove from shortlist">
-              ×
+            <button type="button" className="button button-secondary remove-fab icon-only-btn shortlist-remove" onClick={() => onRemove(profile.userId)} aria-label="Remove from shortlist" title="Remove from shortlist">
+              x
             </button>
           </div>
 
-          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.65rem" }}>
+          <div className="shortlist-card-tags">
             {profile.isVerified && <span className="chip chip-support">Verified</span>}
             {profile.profession && <span className="chip chip-brand">{profile.profession}</span>}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.55rem", marginTop: "0.9rem" }}>
+          <div className="shortlist-card-actions">
             <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
               Send Interest
             </button>
-            <Link href={`/profile/${profile.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.72rem 0.92rem" }} aria-label="Open profile" title="Open profile">
-              ↗
+            <Link href={`/profile/${profile.userId}`} className="button button-secondary" aria-label="View profile" title="View profile">
+              View Profile
             </Link>
           </div>
         </div>
@@ -83,8 +101,8 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
   }
 
   return (
-    <article className="panel panel-hover anim-rise listing-stage shortlist-card" style={{ overflow: "hidden" }}>
-      <div className="shortlist-media" style={{ position: "relative", height: 220 }}>
+    <article className="panel panel-hover anim-rise listing-stage shortlist-card">
+      <div className="shortlist-media">
         <Image
           className="shortlist-photo"
           src={profile.photo}
@@ -92,37 +110,38 @@ const ShortlistCard = memo(function ShortlistCard({ profile, viewMode, onRemove,
           width={640}
           height={920}
           sizes="(max-width: 760px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(9, 18, 36, 0.76), transparent 58%)" }} />
-        <div style={{ position: "absolute", top: 10, left: 10 }}>
-          <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
-        </div>
-        <button type="button" onClick={() => onRemove(profile.userId)} className="button button-secondary remove-fab icon-only-btn" style={{ position: "absolute", top: 10, right: 10 }} aria-label="Remove from shortlist" title="Remove from shortlist">
-          ×
+        <div className="shortlist-media-overlay" />
+        <span className={`match-badge match-badge-${matchTier}`}>{profile.match}% Match</span>
+        <button type="button" onClick={() => onRemove(profile.userId)} className="button button-secondary remove-fab icon-only-btn shortlist-remove" aria-label="Remove from shortlist" title="Remove from shortlist">
+          x
         </button>
-        <div style={{ position: "absolute", left: 12, bottom: 12, color: "white", right: 12 }}>
-          <h3 style={{ margin: 0, fontSize: "1.12rem", lineHeight: 1.14 }}>
-            {profile.firstName}, {profile.age}
-          </h3>
-          <p className="profile-meta" style={{ margin: "0.22rem 0 0", fontSize: "0.82rem", opacity: 0.92 }}>
-            {metaLine}
-          </p>
-        </div>
       </div>
 
-      <div style={{ padding: "0.95rem" }}>
-        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.72rem" }}>
-          {profile.isVerified && <span className="chip chip-support">Verified</span>}
-          <span className="chip chip-brand">Saved {profile.shortlistedAt}</span>
+      <div className="shortlist-card-body">
+        <div className="shortlist-card-heading">
+          <h3 className="shortlist-card-name">
+            {profile.firstName}, {profile.age}
+          </h3>
+          <p className="profile-meta shortlist-card-meta">
+            {metaLine}
+          </p>
+          <p className="shortlist-card-saved">
+            Saved {profile.shortlistedAt}
+          </p>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.52rem" }}>
+        <div className="shortlist-card-tags">
+          {profile.isVerified && <span className="chip chip-support">Verified</span>}
+          {profile.profession && <span className="chip chip-brand">{profile.profession}</span>}
+        </div>
+
+        <div className="shortlist-card-actions">
           <button type="button" className="button button-primary" onClick={() => onInterest(profile.userId)}>
             Send Interest
           </button>
-          <Link href={`/profile/${profile.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.74rem 0.9rem" }} aria-label="Open profile" title="Open profile">
-            ↗
+          <Link href={`/profile/${profile.userId}`} className="button button-secondary" aria-label="View profile" title="View profile">
+            View Profile
           </Link>
         </div>
       </div>
@@ -134,15 +153,24 @@ export default function ShortlistsPage() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("grid");
+  const [isPreview, setIsPreview] = useState(false);
+
+  const dataUpdatedLabel = useMemo(
+    () => new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    []
+  );
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const res = await api.get("/shortlist");
-        setList(Array.isArray(res.data) && res.data.length > 0 ? res.data : MOCK);
+        const nextList = Array.isArray(res.data) && res.data.length > 0 ? res.data : MOCK;
+        setList(nextList);
+        setIsPreview(nextList === MOCK);
       } catch {
         setList(MOCK);
+        setIsPreview(true);
       } finally {
         setLoading(false);
       }
@@ -159,6 +187,9 @@ export default function ShortlistsPage() {
   }, [list]);
 
   const handleRemove = async (userId) => {
+    if (!window.confirm("Remove this profile from your shortlist?")) {
+      return;
+    }
     setList((previous) => previous.filter((item) => item.userId !== userId));
     try {
       await api.post("/shortlist/remove", { shortlistedUserId: userId });
@@ -178,37 +209,34 @@ export default function ShortlistsPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: "0.95rem" }}>
-      <section className="listing-hero">
-        <div>
-          <p className="section-label" style={{ marginBottom: "0.22rem" }}>
-            Saved Pipeline
-          </p>
-          <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
-            Shortlists
-          </h1>
-          <p className="section-copy" style={{ marginTop: "0.38rem", fontSize: "0.92rem" }}>
-            Revisit your prioritized profiles and move quickly when the timing is right.
-          </p>
-          <div className="result-metrics">
-            <span className="metric-chip metric-chip-highlight">{shortlistStats.total} saved</span>
-            <span className="metric-chip">{shortlistStats.verified} verified</span>
-            <span className="metric-chip">{shortlistStats.highMatch} high compatibility</span>
+    <div className="stack-md">
+      <PageHero
+        eyebrow="Saved Matches"
+        title="Shortlists"
+        copy="Review your saved profiles and decide who to move into conversation."
+        className="listing-hero shortlist-hero"
+        actions={(
+          <div className="shortlist-hero-actions">
+            <Link href="/matches" className="button button-primary">
+              Add More
+            </Link>
+            <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} aria-label="Grid view" title="Grid view">
+              <ViewIcon kind="grid" />
+            </button>
+            <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} aria-label="List view" title="List view">
+              <ViewIcon kind="list" />
+            </button>
           </div>
+        )}
+      >
+        <div className="result-metrics">
+          <span className="metric-chip metric-chip-highlight">{shortlistStats.total} saved</span>
+          <span className="metric-chip">{shortlistStats.verified} verified</span>
+          <span className="metric-chip">{shortlistStats.highMatch} high compatibility</span>
+          {isPreview && <span className="metric-chip">Preview mode</span>}
         </div>
-
-        <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
-          <Link href="/matches" className="button button-primary">
-            Add More
-          </Link>
-          <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "grid" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("grid")} aria-label="Grid view" title="Grid view">
-            ▦
-          </button>
-          <button type="button" className={`button view-switch-btn icon-only-btn ${viewMode === "list" ? "button-primary" : "button-secondary"}`} onClick={() => setViewMode("list")} aria-label="List view" title="List view">
-            ☰
-          </button>
-        </div>
-      </section>
+        <p className="data-freshness">Updated {dataUpdatedLabel}</p>
+      </PageHero>
 
       {loading ? (
         <PageLoadingState
@@ -224,7 +252,7 @@ export default function ShortlistsPage() {
           primaryActionHref="/matches"
         />
       ) : (
-        <div className="results-grid" style={{ display: "grid", gridTemplateColumns: viewMode === "grid" ? "repeat(auto-fit, minmax(240px, 1fr))" : "1fr", gap: "0.9rem" }}>
+        <div className={`results-grid shortlist-results-grid ${viewMode === "grid" ? "is-grid" : "is-list"}`}>
           {list.map((profile) => (
             <ShortlistCard key={profile.id || profile.userId} profile={profile} viewMode={viewMode} onRemove={handleRemove} onInterest={handleInterest} />
           ))}
@@ -234,3 +262,6 @@ export default function ShortlistsPage() {
     </div>
   );
 }
+
+
+

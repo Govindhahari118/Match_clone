@@ -29,6 +29,18 @@ async function getMatchRecord(user1Id, user2Id) {
     });
 }
 
+async function isUserInMatch(userId, matchId) {
+    if (!userId || !matchId) return false;
+    const match = await prisma.match.findFirst({
+        where: {
+            id: matchId,
+            OR: [{ userAId: userId }, { userBId: userId }],
+        },
+        select: { id: true },
+    });
+    return Boolean(match);
+}
+
 async function enforceFirstMessageThrottle(senderId, receiverId, matchId) {
     const priorSenderMessageCount = await prisma.message.count({
         where: { matchId, senderId },
@@ -135,6 +147,7 @@ async function fetchLatestMessageStatuses(messageIds = []) {
 
 const messageService = {
     MESSAGE_STATUS_VALUES,
+    isUserInMatch,
 
     async areUsersMatched(user1Id, user2Id) {
         const match = await getMatchRecord(user1Id, user2Id);

@@ -5,15 +5,13 @@ export default function PageLoadingState({
   description = "Please wait while content is being prepared.",
   compact = false,
 }) {
-  const padding = compact ? "1rem" : "2rem";
-
   return (
-    <section className="panel listing-stage" style={{ textAlign: "center", padding }}>
-      <p className="section-label" style={{ marginBottom: "0.28rem" }}>
+    <section className={`panel listing-stage state-panel ${compact ? "state-panel-compact" : ""}`}>
+      <p className="section-label state-label">
         Loading
       </p>
-      <h2 style={{ marginTop: 0, marginBottom: "0.4rem" }}>{title}</h2>
-      <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.9rem" }}>{description}</p>
+      <h2 className="state-title">{title}</h2>
+      <p className="state-copy">{description}</p>
     </section>
   );
 }

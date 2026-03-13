@@ -72,17 +72,17 @@ npx prisma migrate deploy
 ## 3️⃣ API TESTING & DOCUMENTATION
 
 ### `matrimony-api-postman.json` (Postman Collection)
-Ready-to-import API collection with:
-- All 30+ endpoints
+Live-route Postman collection aligned to the current backend routes:
+- Core auth, profile, search, matches, interactions, chat, payments, admin
 - Pre-configured authentication
-- Request/response examples
+- Request examples
 - Environment variables
-- Tests & assertions included
+Route source of truth: `backend/src/routes/routes.registry.js`
 
 **How to use:**
 1. Open Postman
 2. File → Import → Select this JSON
-3. Set `base_url` variable to `http://localhost:5000`
+3. Set `base_url` variable to `http://localhost:4000/api`
 4. Set `access_token` after login
 5. Run any endpoint
 
@@ -125,7 +125,7 @@ Production-ready Docker configuration with:
 docker build -t matrimony-api:latest .
 
 # Run container
-docker run -p 5000:5000 \
+docker run -p 4000:4000 \
   -e DATABASE_URL=postgresql://... \
   -e REDIS_URL=redis://... \
   matrimony-api:latest
@@ -149,7 +149,7 @@ docker-compose up -d
 docker-compose logs -f api
 
 # Access:
-# - API: http://localhost:5000
+# - API: http://localhost:4000
 # - PostgreSQL: localhost:5432
 # - Redis: localhost:6379
 
@@ -254,7 +254,7 @@ npx prisma migrate dev --name init
 npm run dev
 
 # Verify setup
-curl http://localhost:5000/health
+curl http://localhost:4000/health
 ```
 
 ### .env.local (Development)

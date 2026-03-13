@@ -3,11 +3,12 @@
 import { useState } from "react";
 import api from "../../services/api";
 
-export default function PhotoUpload({ onUploadComplete }) {
+export default function PhotoUpload({ onUploadComplete, disabled = false }) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState("");
 
     const handleFileChange = async (e) => {
+        if (disabled) return;
         const file = e.target.files[0];
         if (!file) return;
 
@@ -50,11 +51,11 @@ export default function PhotoUpload({ onUploadComplete }) {
                 onChange={handleFileChange}
                 className="hidden"
                 id="photo-upload"
-                disabled={uploading}
+                disabled={uploading || disabled}
             />
             <label
                 htmlFor="photo-upload"
-                className="cursor-pointer flex flex-col items-center"
+                className={`flex flex-col items-center ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -71,7 +72,7 @@ export default function PhotoUpload({ onUploadComplete }) {
                     />
                 </svg>
                 <span className="text-gray-600 font-medium">
-                    {uploading ? "Uploading..." : "Click to Upload Photo"}
+                    {disabled ? "Login to upload a photo" : (uploading ? "Uploading..." : "Click to Upload Photo")}
                 </span>
             </label>
             {error && <p className="text-red-500 text-sm mt-2">{error}</p>}

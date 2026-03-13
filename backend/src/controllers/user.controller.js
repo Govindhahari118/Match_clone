@@ -4,6 +4,22 @@ const privacyService = require('../services/privacy.service');
 
 const profileExtensionService = require('../services/profile-extension.service');
 const onboardingService = require('../services/onboarding.service');
+const { validateProfileUpdate } = require('../validation/profile.validation');
+
+function normalizeStringArray(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => String(item || '').trim())
+            .filter(Boolean);
+    }
+    if (typeof value === 'string') {
+        return value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+    }
+    return [];
+}
 
 const userController = {
     async getProfile(req, res) {
@@ -22,12 +38,18 @@ const userController = {
                 phone: user.phone,
                 role: user.role,
                 isVerified: user.isVerified,
+                identityStatus: user.identityStatus,
                 ...(user.profile || {}),
                 photos: user.photos,
                 partnerPreference: user.partnerPreference,
                 hasChildren: extension.hasChildren,
                 residentialStatus: extension.residentialStatus,
                 district: extension.district,
+                fatherOccupation: extension.fatherOccupation,
+                motherOccupation: extension.motherOccupation,
+                siblingsCount: extension.siblingsCount,
+                familyType: extension.familyType,
+                personalityQuiz: extension.personalityQuiz,
                 onboarding: progress,
             };
 
@@ -40,6 +62,15 @@ const userController = {
 
     async updateProfile(req, res) {
         try {
+            const validation = validateProfileUpdate(req.body);
+            if (!validation.success) {
+                return res.status(400).json({
+                    error: 'Invalid profile payload',
+                    details: validation.errors,
+                });
+            }
+
+            const payload = validation.data;
             const {
                 firstName,
                 lastName,
@@ -51,12 +82,23 @@ const userController = {
                 country,
                 religion,
                 caste,
+                subCaste,
+                motherTongue,
                 maritalStatus,
                 height,
                 heightCm,
                 educationLevel,
+                educationField,
                 profession,
+                company,
                 incomeBand,
+                foodHabit,
+                drinks,
+                smokes,
+                hobbies,
+                religiousness,
+                role,
+                intent,
                 videoUrl,
                 videoThumbnail,
                 birthTime,
@@ -64,10 +106,16 @@ const userController = {
                 gothra,
                 zodiacSign,
                 nakshatra,
+                dosha,
                 hasChildren,
                 residentialStatus,
-                district
-            } = req.body;
+                district,
+                fatherOccupation,
+                motherOccupation,
+                siblingsCount,
+                familyType,
+                personalityQuiz
+            } = payload;
 
             const dob = dateOfBirth ? new Date(dateOfBirth) : undefined;
             if (dob && Number.isNaN(dob.getTime())) {
@@ -82,6 +130,8 @@ const userController = {
                 ? Number(heightCm)
                 : (Number.isFinite(Number(height)) ? Number(height) : undefined);
 
+            const normalizedHobbies = hobbies !== undefined ? normalizeStringArray(hobbies) : undefined;
+
             const profileData = {
                 firstName,
                 lastName,
@@ -93,18 +143,30 @@ const userController = {
                 country,
                 religion,
                 caste,
+                subCaste,
+                motherTongue,
                 maritalStatus,
                 heightCm: normalizedHeightCm,
                 educationLevel,
+                educationField,
                 profession,
+                company,
                 incomeBand,
+                foodHabit,
+                drinks,
+                smokes,
+                hobbies: normalizedHobbies,
+                religiousness,
+                role,
+                intent,
                 videoUrl,
                 videoThumbnail,
                 birthTime,
                 birthPlace,
                 gothra,
                 zodiacSign,
-                nakshatra
+                nakshatra,
+                dosha
             };
 
             // Prisma ignores undefined values. Keep this controller safe for partial updates.
@@ -135,6 +197,11 @@ const userController = {
             if (hasChildren !== undefined) extensionPayload.hasChildren = hasChildren;
             if (residentialStatus !== undefined) extensionPayload.residentialStatus = residentialStatus;
             if (district !== undefined) extensionPayload.district = district;
+            if (fatherOccupation !== undefined) extensionPayload.fatherOccupation = fatherOccupation;
+            if (motherOccupation !== undefined) extensionPayload.motherOccupation = motherOccupation;
+            if (siblingsCount !== undefined) extensionPayload.siblingsCount = siblingsCount;
+            if (familyType !== undefined) extensionPayload.familyType = familyType;
+            if (personalityQuiz !== undefined) extensionPayload.personalityQuiz = personalityQuiz;
 
             const extension = Object.keys(extensionPayload).length > 0
                 ? await profileExtensionService.saveUserProfileExtension(req.user.sub, extensionPayload)
@@ -146,6 +213,11 @@ const userController = {
                 hasChildren: extension.hasChildren,
                 residentialStatus: extension.residentialStatus,
                 district: extension.district,
+                fatherOccupation: extension.fatherOccupation,
+                motherOccupation: extension.motherOccupation,
+                siblingsCount: extension.siblingsCount,
+                familyType: extension.familyType,
+                personalityQuiz: extension.personalityQuiz,
                 onboardingCompleteness: completeness,
             });
         } catch (error) {

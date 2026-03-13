@@ -14,7 +14,14 @@ const DEFAULT_PROFILE_EXTENSION = {
     hasChildren: 'unknown',
     residentialStatus: 'not_specified',
     district: null,
+    fatherOccupation: null,
+    motherOccupation: null,
+    siblingsCount: null,
+    familyType: 'not_specified',
+    personalityQuiz: null,
 };
+
+const FAMILY_TYPE_VALUES = ['nuclear', 'joint', 'other', 'not_specified'];
 
 function normalize(value) {
     return String(value || '')
@@ -49,12 +56,55 @@ function normalizeDistrict(value) {
     return text ? text : null;
 }
 
+function normalizeOccupation(value) {
+    const text = String(value || '').trim();
+    return text ? text : null;
+}
+
+function normalizeSiblingsCount(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) return null;
+    if (parsed < 0) return 0;
+    if (parsed > 20) return 20;
+    return parsed;
+}
+
+function normalizeFamilyType(value) {
+    const parsed = normalize(value);
+    if (!parsed || parsed === 'any') return null;
+    if (parsed === 'joint_family') return 'joint';
+    if (parsed === 'nuclear_family') return 'nuclear';
+    return FAMILY_TYPE_VALUES.includes(parsed) ? parsed : 'other';
+}
+
+function normalizePersonalityQuiz(value) {
+    if (!value || typeof value !== 'object') return null;
+    const source = value.answers && typeof value.answers === 'object' ? value.answers : value;
+    const entries = Object.entries(source)
+        .map(([key, val]) => [String(key).trim(), String(val || '').trim()])
+        .filter(([key, val]) => key && val);
+    if (entries.length === 0) return null;
+    const limited = entries.slice(0, 10);
+    const answers = Object.fromEntries(limited);
+    return {
+        answers,
+        updatedAt: value.updatedAt || new Date().toISOString(),
+    };
+}
+
 function normalizeProfileExtension(input) {
     const merged = { ...DEFAULT_PROFILE_EXTENSION, ...(input || {}) };
+    const normalizedQuiz = normalizePersonalityQuiz(merged.personalityQuiz);
     const normalized = {
         hasChildren: normalizeHasChildren(merged.hasChildren) || DEFAULT_PROFILE_EXTENSION.hasChildren,
         residentialStatus: normalizeResidentialStatus(merged.residentialStatus) || DEFAULT_PROFILE_EXTENSION.residentialStatus,
         district: normalizeDistrict(merged.district),
+        fatherOccupation: normalizeOccupation(merged.fatherOccupation),
+        motherOccupation: normalizeOccupation(merged.motherOccupation),
+        siblingsCount: normalizeSiblingsCount(merged.siblingsCount),
+        familyType: normalizeFamilyType(merged.familyType) || DEFAULT_PROFILE_EXTENSION.familyType,
+        personalityQuiz: normalizedQuiz,
     };
     return normalized;
 }
@@ -83,9 +133,14 @@ const profileExtensionService = {
     DEFAULT_PROFILE_EXTENSION,
     HAS_CHILDREN_VALUES,
     RESIDENTIAL_STATUS_VALUES,
+    FAMILY_TYPE_VALUES,
     normalizeHasChildren,
     normalizeResidentialStatus,
     normalizeDistrict,
+    normalizeOccupation,
+    normalizeSiblingsCount,
+    normalizeFamilyType,
+    normalizePersonalityQuiz,
     normalizeProfileExtension,
 
     async getUserProfileExtension(userId) {

@@ -188,6 +188,15 @@ export default function ChatPage() {
   }, [selectedId, user, socket, myUserId]);
 
   useEffect(() => {
+    if (!socket?.connected || !selectedConversation?.matchId) return undefined;
+    const matchId = selectedConversation.matchId;
+    socket.emit("join_match", { matchId });
+    return () => {
+      socket.emit("leave_match", { matchId });
+    };
+  }, [socket, selectedConversation?.matchId]);
+
+  useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -195,7 +204,9 @@ export default function ChatPage() {
     if (!socket) return undefined;
 
     const onReceiveMessage = (message) => {
+      if (!message) return;
       const peerId = message.senderId === myUserId ? message.receiverId : message.senderId;
+      const messageTs = message.createdAt ? new Date(message.createdAt).getTime() : Date.now();
 
       setConversations((prev) =>
         prev.map((item) => {
@@ -204,14 +215,27 @@ export default function ChatPage() {
           return {
             ...item,
             lastMessage: message.content,
-            updatedAt: Date.now(),
+            updatedAt: messageTs,
             unread: peerId === selectedId ? 0 : (item.unread || 0) + 1,
           };
         })
       );
 
       if (peerId === selectedId) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => {
+          if (message.id && prev.some((item) => item.id === message.id)) {
+            return prev;
+          }
+          if (message.clientMessageId) {
+            const existingIndex = prev.findIndex((item) => item.clientMessageId === message.clientMessageId);
+            if (existingIndex !== -1) {
+              const next = [...prev];
+              next[existingIndex] = { ...next[existingIndex], ...message };
+              return next;
+            }
+          }
+          return [...prev, message];
+        });
         socket.emit("conversation_seen", { viewerId: myUserId, peerId });
       }
     };
@@ -226,6 +250,7 @@ export default function ChatPage() {
             ...item,
             id: ack.messageId || item.id,
             status: ack.status || item.status || "sent",
+            createdAt: ack.createdAt || item.createdAt,
           };
         })
       );
@@ -346,7 +371,8 @@ export default function ChatPage() {
       <header className="chat-page-head-v2">
         <div>
           <p className="section-label">Conversations</p>
-          <h1 className="chat-title-v2">Secure Messaging</h1>
+          <h1 className="chat-title-v2">Private conversations</h1>
+          <p className="chat-subtitle-v2">Chat with verified matches in a protected workspace.</p>
         </div>
         {selectedConversation && (
           <Link href={`/profile/${selectedConversation.userId}`} className="button button-secondary">
@@ -355,7 +381,7 @@ export default function ChatPage() {
         )}
       </header>
 
-      {infoMessage && <div className="chip chip-brand chat-info-v2">{infoMessage}</div>}
+      {infoMessage && <div className="status-banner chat-info-v2">{infoMessage}</div>}
 
       <div className="chat-shell-grid chat-grid-v2">
         <aside className="panel chat-sidebar-v2">

@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }) => {
     const newSocket = io(SOCKET_URL);
 
     newSocket.on("connect", () => {
-      newSocket.emit("join_room", user.id);
+      newSocket.emit("join_room", user.id || user.sub);
       setSocket(newSocket);
     });
 

@@ -127,10 +127,10 @@ export default function AdminPage() {
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <section className="panel" style={{ padding: "1rem" }}>
-        <p className="section-label" style={{ marginBottom: "0.2rem" }}>Operations</p>
-        <h1 style={{ margin: 0, fontSize: "1.65rem", fontFamily: "var(--font-display)" }}>Admin Workspace</h1>
-        <p style={{ margin: "0.45rem 0 0", color: "var(--ink-muted)", fontSize: "0.9rem" }}>
-          Moderation, risk, reliability, and support operations in one place.
+        <p className="section-label" style={{ marginBottom: "0.2rem" }}>Trust & Safety</p>
+        <h1 className="title-sm">Operations Center</h1>
+        <p className="text-sm muted" style={{ margin: "0.45rem 0 0" }}>
+          Monitor moderation queues, risk signals, and reliability metrics in one place.
         </p>
       </section>
 
@@ -151,7 +151,7 @@ export default function AdminPage() {
           </button>
         </div>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <table className="table-zebra table-header" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--line)" }}>
                 <th style={{ textAlign: "left", padding: "0.5rem" }}>Report</th>
@@ -240,7 +240,7 @@ export default function AdminPage() {
       <section className="panel" style={{ padding: "0.85rem" }}>
         <h2 style={{ margin: "0 0 0.5rem", fontSize: "1rem" }}>User Management</h2>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <table className="table-zebra table-header" style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--line)" }}>
                 <th style={{ textAlign: "left", padding: "0.5rem" }}>Name</th>

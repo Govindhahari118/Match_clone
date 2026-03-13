@@ -1,0 +1,4 @@
+Contact: mailto:security@matrimonyconnect.com
+Policy: https://matrimonyconnect.com/security
+Preferred-Languages: en
+Canonical: https://matrimonyconnect.com/.well-known/security.txt

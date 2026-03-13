@@ -45,6 +45,7 @@ export const authRules = {
 
 export const onboardingRules = {
   step1: {
+    profile_created_for: required("Profile created for"),
     first_name: withPattern(
       withMinLength(required("First name"), 2, "First name should be at least 2 characters"),
       NAME_PATTERN,

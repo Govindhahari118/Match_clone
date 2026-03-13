@@ -1,6 +1,18 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Test-DockerEngine {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker info *> $null
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $savedPreference
+    return ($exitCode -eq 0)
+}
+
 function Test-Url([string]$url) {
     try {
         $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 8
@@ -29,7 +41,11 @@ $backendProc = Process-OnPort -port 4000
 $frontendProc = Process-OnPort -port 8000
 $backendHealth = Test-Url "http://localhost:4000/health"
 $frontendHealth = Test-Url "http://localhost:8000"
-$containers = docker ps --filter "name=matrimony-postgres" --filter "name=matrimony-redis" --format "{{.Names}} | {{.Status}}"
+$dockerAvailable = Test-DockerEngine
+$containers = $null
+if ($dockerAvailable) {
+    $containers = docker ps --filter "name=matrimony-postgres" --filter "name=matrimony-redis" --format "{{.Names}} | {{.Status}}"
+}
 
 Write-Host "Frontend:"
 if ($frontendProc) {
@@ -46,7 +62,9 @@ if ($backendProc) {
 }
 
 Write-Host "Infrastructure:"
-if ($containers) {
+if (-not $dockerAvailable) {
+    Write-Host "  Docker not available; skipping container status"
+} elseif ($containers) {
     $containers | ForEach-Object { Write-Host "  $_" }
 } else {
     Write-Host "  postgres/redis containers not running"

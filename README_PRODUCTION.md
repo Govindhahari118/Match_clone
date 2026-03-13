@@ -3,7 +3,7 @@
 The app appears broken because the Database is offline and empty. Follow these steps to fix it.
 
 ## 1. Start the Database
-The app requires PostgreSQL.
+The app requires PostgreSQL. Docker is optional; production typically uses a managed Postgres instance.
 - **Option A (Docker):** Run `start_db.bat` from the desktop folder.
 - **Option B (Manual):** Ensure PostgreSQL Service is running on port 5432.
 

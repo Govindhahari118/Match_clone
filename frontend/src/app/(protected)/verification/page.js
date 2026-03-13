@@ -5,7 +5,7 @@ import IdentityVerification from "@/components/IdentityVerification";
 
 export default function VerificationPage() {
   return (
-    <div className="page-shell" style={{ padding: "1rem 0 2rem" }}>
+    <div className="page-shell page-pad-lg">
       <div className="container-shell">
         <PublicTopNav compact />
 
@@ -13,11 +13,11 @@ export default function VerificationPage() {
           <div className="verification-header">
             <div>
               <p className="section-label">Trust & Safety</p>
-              <h1 className="section-title" style={{ fontSize: "clamp(1.8rem,4vw,2.6rem)" }}>
-                Identity Verification
+              <h1 className="section-title section-title-sm">
+                Profile trust checklist
               </h1>
-              <p className="section-copy" style={{ marginTop: "0.7rem" }}>
-                Verify your identity to improve trust and unlock better visibility across the platform.
+              <p className="section-copy">
+                Complete the self-serve checklist to improve trust and visibility. No documents, no manual review.
               </p>
             </div>
           </div>
@@ -25,12 +25,12 @@ export default function VerificationPage() {
           <IdentityVerification />
 
           <div className="verification-benefits">
-            <h3>Benefits after verification</h3>
+            <h3>Benefits after completion</h3>
             <ul>
-              <li>Verified badge on profile and search listings</li>
+              <li>Profile completeness badge on listings</li>
               <li>Higher trust for incoming interests and conversations</li>
-              <li>Improved ranking in recommendations</li>
-              <li>Safer interactions for both members and families</li>
+              <li>Improved visibility based on completeness</li>
+              <li>Safer interactions with privacy-first controls</li>
             </ul>
           </div>
         </section>

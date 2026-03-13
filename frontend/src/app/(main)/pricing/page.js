@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
+import PageHero from "../../../components/PageHero";
 
 const FALLBACK_PLANS = [
   {
@@ -46,12 +47,48 @@ const FALLBACK_PLANS = [
 ];
 
 const TIER_ORDER = ["silver", "gold", "platinum", "till_marriage"];
-const TIER_GRADIENT = {
-  silver: "from-slate-500 to-slate-700",
-  gold: "from-amber-500 to-yellow-600",
-  platinum: "from-indigo-600 to-blue-700",
-  till_marriage: "from-rose-600 to-pink-700",
-};
+const ASSISTED_HIGHLIGHTS = [
+  {
+    title: "Relationship manager",
+    copy: "A dedicated expert shortlists profiles, follows up, and coordinates introductions.",
+  },
+  {
+    title: "Privacy-first outreach",
+    copy: "Control who can view and contact you while we manage the outreach on your behalf.",
+  },
+  {
+    title: "Priority visibility",
+    copy: "Boosted placement in discovery for faster responses and higher intent matches.",
+  },
+];
+
+const PLAN_COMPARISON = [
+  { label: "Contact visibility", silver: false, gold: true, platinum: true, till: true },
+  { label: "Unlimited interests", silver: true, gold: true, platinum: true, till: true },
+  { label: "Advanced filters", silver: false, gold: true, platinum: true, till: true },
+  { label: "Priority placement", silver: false, gold: false, platinum: true, till: true },
+  { label: "Relationship manager", silver: false, gold: false, platinum: true, till: true },
+  { label: "Family advisor support", silver: false, gold: false, platinum: false, till: true },
+];
+
+const PRICING_FAQS = [
+  {
+    q: "Is there a money-back guarantee?",
+    a: "Yes. All plans include a 7-day guarantee. Contact support to request a refund.",
+  },
+  {
+    q: "Can I upgrade later?",
+    a: "Yes. You can upgrade at any time without losing matches or conversations.",
+  },
+  {
+    q: "Do you offer assisted matchmaking?",
+    a: "Yes. Platinum and Till Marriage tiers include assisted matchmaking support.",
+  },
+  {
+    q: "Is browsing still free?",
+    a: "Yes. You can explore matches for free and upgrade when ready.",
+  },
+];
 
 function normalizePlan(plan) {
   return {
@@ -167,66 +204,87 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">Choose Your Plan</h1>
-        <p className="text-gray-500 max-w-2xl mx-auto">
-          Plans are loaded from live catalog IDs and charged with region-aware pricing.
-        </p>
-      </div>
+    <div className="pricing-shell pricing-shell-heirloom">
+      <PageHero
+        eyebrow="Membership"
+        title="Choose the plan that matches your pace"
+        copy="Plans are loaded from the live catalog and priced by region. Upgrade anytime without losing your progress."
+        className="pricing-hero"
+      />
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-6 grid md:grid-cols-3 gap-3">
+      <section className="status-banner">
+        Upgrade unlocks contact visibility, priority placement, and faster introductions.
+      </section>
+
+      <section className="panel pricing-callout">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Region</label>
-          <select
-            value={region}
-            onChange={(event) => setRegion(event.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="IN">India (INR)</option>
-            <option value="US">US (USD)</option>
-          </select>
+          <p className="section-label">Guarantee</p>
+          <h2 className="section-title section-title-xs">7-day money-back promise</h2>
+          <p className="section-copy">
+            Try any premium plan with full access. If you are not satisfied, request a refund within 7 days.
+          </p>
         </div>
-        <div className="md:col-span-2">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Coupon Code</label>
-          <input
-            value={couponCode}
-            onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-            placeholder="WELCOME10 or WINBACK20"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-          />
+        <div className="pricing-callout-actions">
+          <Link href="/help" className="button button-secondary">
+            Talk to support
+          </Link>
+          <Link href="/matches" className="button button-primary">
+            Browse free matches
+          </Link>
         </div>
-      </div>
+      </section>
 
-      <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+      <section className="panel pricing-control-panel">
+        <div className="form-grid-2">
+          <div>
+            <label className="form-label" htmlFor="pricing-region">Region</label>
+            <select
+              id="pricing-region"
+              value={region}
+              onChange={(event) => setRegion(event.target.value)}
+              className="form-input"
+            >
+              <option value="IN">India (INR)</option>
+              <option value="US">United States (USD)</option>
+            </select>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="pricing-coupon">Coupon Code</label>
+            <input
+              id="pricing-coupon"
+              value={couponCode}
+              onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+              placeholder="WELCOME10 or WINBACK20"
+              className="form-input"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="pricing-grid">
         {orderedPlans.map((plan) => {
           const isPopular = plan.tier === "gold";
-          const gradient = TIER_GRADIENT[plan.tier] || "from-slate-600 to-slate-800";
           const isLoading = loadingPlans || processingPlanId === plan.id;
+          const tierClass = `plan-card plan-tier-${plan.tier}`;
           return (
-            <article
-              key={plan.id}
-              className={`relative bg-white rounded-2xl border overflow-hidden shadow-sm ${isPopular ? "border-amber-400 ring-2 ring-amber-300" : "border-gray-200"
-                }`}
-            >
-              {isPopular && (
-                <div className="bg-gradient-to-r from-amber-500 to-yellow-500 text-white text-xs font-bold text-center py-1.5">
-                  MOST POPULAR
-                </div>
-              )}
-
-              <div className={`bg-gradient-to-br ${gradient} p-5 text-white`}>
-                <p className="text-xs font-semibold tracking-wide opacity-90">{plan.id}</p>
-                <h2 className="text-2xl font-extrabold mt-1">{plan.name}</h2>
-                <p className="text-3xl font-extrabold mt-2">{formatAmount(plan.amount, plan.currency)}</p>
-                <p className="text-white/85 text-sm mt-1">for {plan.durationMonths} months</p>
+            <article key={plan.id} className={tierClass}>
+              <div className="plan-card-head">
+                <p className="plan-card-id">{plan.id}</p>
+                <h2 className="plan-card-title">{plan.name}</h2>
+                <p className="plan-card-price">
+                  {formatAmount(plan.amount, plan.currency)}
+                </p>
+                <p className="plan-card-duration">
+                  {plan.durationMonths} months access
+                </p>
               </div>
 
-              <div className="p-5 flex flex-col gap-4">
-                <ul className="space-y-2 min-h-[128px]">
+              <div className="plan-card-body">
+                {isPopular && <span className="chip chip-brand plan-popular-chip">Most popular</span>}
+                <ul className="plan-feature-list">
                   {plan.features.map((feature) => (
-                    <li key={feature} className="text-sm text-gray-700 flex gap-2">
-                      <span className="text-green-600 font-bold">+</span>
+                    <li key={feature} className="plan-feature">
+                      <span>+</span>
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -236,22 +294,88 @@ export default function PricingPage() {
                   type="button"
                   onClick={() => handlePurchase(plan)}
                   disabled={isLoading}
-                  className="w-full py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-pink-600 to-red-600 text-white disabled:opacity-60"
+                  className="button button-primary cta-full"
                 >
-                  {processingPlanId === plan.id ? "Processing..." : `Buy ${plan.name}`}
+                  {processingPlanId === plan.id ? "Processing..." : `Upgrade to ${plan.name}`}
                 </button>
               </div>
             </article>
           );
         })}
-      </div>
+      </section>
 
-      <div className="text-center text-sm text-gray-500">
+      <section className="pricing-assist">
+        <div className="pricing-assist-head">
+          <div>
+            <p className="section-label">Assisted matchmaking</p>
+            <h2 className="section-title section-title-xs">When you want expert guidance</h2>
+            <p className="section-copy">
+              Premium tiers include hands-on support for shortlisting, follow-ups, and family coordination.
+            </p>
+          </div>
+          <Link href="/help" className="button button-primary">
+            Request an advisor call
+          </Link>
+        </div>
+        <div className="pricing-assist-grid">
+          {ASSISTED_HIGHLIGHTS.map((item) => (
+            <article key={item.title} className="panel pricing-assist-card">
+              <h3>{item.title}</h3>
+              <p>{item.copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="pricing-compare">
+        <p className="section-label">Plan comparison</p>
+        <h2 className="section-title section-title-xs">Compare core benefits</h2>
+        <div className="panel pricing-table-wrap">
+          <table className="pricing-table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Silver</th>
+                <th>Gold</th>
+                <th>Platinum</th>
+                <th>Till Marriage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PLAN_COMPARISON.map((row) => (
+                <tr key={row.label}>
+                  <td>{row.label}</td>
+                  <td>{row.silver ? "Yes" : "-"}</td>
+                  <td>{row.gold ? "Yes" : "-"}</td>
+                  <td>{row.platinum ? "Yes" : "-"}</td>
+                  <td>{row.till ? "Yes" : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="pricing-faq">
+        <p className="section-label">FAQ</p>
+        <h2 className="section-title section-title-xs">Questions about pricing</h2>
+        <div className="pricing-faq-grid">
+          {PRICING_FAQS.map((item) => (
+            <article key={item.q} className="panel pricing-faq-card">
+              <h3>{item.q}</h3>
+              <p>{item.a}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <p className="form-note pricing-footnote">
         Prefer free browsing for now?{" "}
-        <Link href="/matches" className="text-pink-600 font-bold hover:underline">
+        <Link href="/matches">
           Continue with basic access
         </Link>
-      </div>
+        .
+      </p>
     </div>
   );
 }

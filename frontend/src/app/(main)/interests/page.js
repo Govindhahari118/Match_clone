@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import api from "../../../services/api";
 import PageEmptyState from "../../../components/states/PageEmptyState";
 import PageLoadingState from "../../../components/states/PageLoadingState";
+import PageHero from "../../../components/PageHero";
 
 const MOCK_RECEIVED = [
   { id: "r1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, match: 92, receivedAt: "2h ago" },
@@ -49,6 +50,12 @@ export default function InterestsPage() {
   const [activeTab, setActiveTab] = useState("received");
   const [data, setData] = useState({ received: MOCK_RECEIVED, sent: MOCK_SENT, mutual: MOCK_MUTUAL });
   const [loading, setLoading] = useState(false);
+  const [isPreview, setIsPreview] = useState(true);
+
+  const dataUpdatedLabel = useMemo(
+    () => new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    []
+  );
 
   useEffect(() => {
     const fetchInterests = async () => {
@@ -57,9 +64,13 @@ export default function InterestsPage() {
         const res = await api.get(`/interactions/interests?type=${activeTab}`);
         if (Array.isArray(res.data) && res.data.length > 0) {
           setData((previous) => ({ ...previous, [activeTab]: res.data }));
+          setIsPreview(false);
+        } else {
+          setIsPreview(true);
         }
       } catch {
         // Keep fallback mock data in demo mode.
+        setIsPreview(true);
       } finally {
         setLoading(false);
       }
@@ -104,6 +115,9 @@ export default function InterestsPage() {
   };
 
   const handleDecline = async (userId) => {
+    if (!window.confirm("Decline this interest? You can still view the profile later.")) {
+      return;
+    }
     try {
       await api.post("/interactions/decline", { userId });
       toast.info("Interest declined.");
@@ -118,29 +132,24 @@ export default function InterestsPage() {
   };
 
   return (
-    <div style={{ display: "grid", gap: "0.95rem" }}>
-      <section className="listing-hero">
-        <div>
-          <p className="section-label" style={{ marginBottom: "0.22rem" }}>
-            Relationship Pipeline
-          </p>
-          <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
-            Interest Center
-          </h1>
-          <p className="section-copy" style={{ marginTop: "0.38rem", fontSize: "0.92rem" }}>
-            Track incoming interests, outgoing requests, and mutual connections in one streamlined view.
-          </p>
-
-          <div className="result-metrics">
-            <span className="metric-chip metric-chip-highlight">{headlineStats.pendingReceived} received</span>
-            <span className="metric-chip">{headlineStats.pendingSent} pending sent</span>
-            <span className="metric-chip">{headlineStats.mutual} mutual</span>
-            <span className="metric-chip">{headlineStats.total} total</span>
-          </div>
+    <div className="stack-md">
+      <PageHero
+        eyebrow="Relationship Pipeline"
+        title="Interests"
+        copy="Review incoming requests, track sent interests, and move mutual matches into chat quickly."
+        className="listing-hero interests-hero"
+      >
+        <div className="result-metrics">
+          <span className="metric-chip metric-chip-highlight">{headlineStats.pendingReceived} received</span>
+          <span className="metric-chip">{headlineStats.pendingSent} pending sent</span>
+          <span className="metric-chip">{headlineStats.mutual} mutual</span>
+          <span className="metric-chip">{headlineStats.total} total</span>
+          {isPreview && <span className="metric-chip">Preview mode</span>}
         </div>
-      </section>
+        <p className="data-freshness">Updated {dataUpdatedLabel}</p>
+      </PageHero>
 
-      <section className="panel interests-tabs-shell" style={{ padding: "0.6rem" }}>
+      <section className="panel interests-tabs-shell">
         <div className="interests-tab-row">
           {TABS.map((tab) => (
             <button
@@ -170,7 +179,7 @@ export default function InterestsPage() {
           primaryActionHref="/matches"
         />
       ) : (
-        <div style={{ display: "grid", gap: "0.72rem" }}>
+        <div className="interests-list">
           {currentList.map((item) => {
             const matchTier = getMatchTier(Number(item.match) || 0);
             const timeLabel =
@@ -181,7 +190,7 @@ export default function InterestsPage() {
                   : `Matched ${item.matchedAt}`;
 
             return (
-              <article key={item.id} className="panel listing-stage interest-card" style={{ padding: "0.8rem" }}>
+              <article key={item.id} className="panel listing-stage interest-card interest-card-body">
                 <div className="interest-main-row">
                   <div className="interest-avatar-wrap">
                     <Image
@@ -195,18 +204,18 @@ export default function InterestsPage() {
                     <span className={`match-badge match-badge-${matchTier}`}>{item.match}%</span>
                   </div>
 
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                      <h3 style={{ margin: 0, fontSize: "1rem", lineHeight: 1.15 }}>
+                  <div className="interest-info">
+                    <div className="interest-head">
+                      <h3 className="interest-name">
                         {item.firstName}, {item.age}
                       </h3>
                       {item.isVerified && <span className="chip chip-support">Verified</span>}
                     </div>
 
-                    <p className="profile-meta" style={{ margin: "0.22rem 0 0", color: "var(--ink-muted)", fontSize: "0.86rem" }}>
+                    <p className="profile-meta interest-meta">
                       {item.profession} | {item.city}
                     </p>
-                    <p style={{ margin: "0.28rem 0 0", color: "var(--ink-muted)", fontSize: "0.76rem" }}>{timeLabel}</p>
+                    <p className="interest-time">{timeLabel}</p>
 
                     {activeTab === "sent" && item.status && STATUS_META[item.status] && (
                       <span className={`status-pill ${STATUS_META[item.status].tone}`}>{STATUS_META[item.status].label}</span>
@@ -249,8 +258,8 @@ export default function InterestsPage() {
       )}
 
       {activeTab === "received" && currentList.length > 0 && (
-        <section className="panel" style={{ padding: "0.9rem", borderColor: "rgba(225, 29, 72, 0.24)", background: "linear-gradient(145deg, rgba(234, 250, 246, 0.9), rgba(248, 252, 255, 0.9))" }}>
-          <p style={{ margin: 0, color: "#0f5f58", fontSize: "0.86rem", fontWeight: 650 }}>
+        <section className="panel interest-tip">
+          <p className="interest-tip-copy">
             Tip: Accepting an interest unlocks faster conversation and helps momentum.
           </p>
         </section>

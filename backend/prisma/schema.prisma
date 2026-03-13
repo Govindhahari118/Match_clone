@@ -117,6 +117,7 @@ model Profile {
   gothra                String?
   zodiacSign            String?
   nakshatra             String?
+  dosha                 String?     // "no", "manglik", "sarpa_dosha", "dont_know"
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 

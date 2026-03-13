@@ -146,6 +146,12 @@ const onboardingService = {
 
     async saveResumeState(userId, payload = {}) {
         const normalized = normalizeResumePayload(payload);
+        const previous = await this.getResumeState(userId);
+        const previousSerialized = JSON.stringify(previous);
+        const normalizedSerialized = JSON.stringify(normalized);
+        if (previousSerialized === normalizedSerialized) {
+            return normalized;
+        }
         await prisma.auditLog.create({
             data: {
                 userId,

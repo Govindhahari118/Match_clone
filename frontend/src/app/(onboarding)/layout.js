@@ -23,11 +23,12 @@ export default function OnboardingLayout({ children }) {
             </p>
           </div>
 
-          <div className="onboarding-progress-track-v2" aria-label={`Progress ${currentStep} of ${totalSteps}`}>
-            <div
-              className="onboarding-progress-fill-v2"
-              style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-            />
+          <div
+            className="onboarding-progress-track-v2"
+            style={{ "--progress": `${(currentStep / totalSteps) * 100}%` }}
+            aria-label={`Progress ${currentStep} of ${totalSteps}`}
+          >
+            <div className="onboarding-progress-fill-v2" />
           </div>
 
           <div className="onboarding-content-v2">{children}</div>

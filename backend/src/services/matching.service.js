@@ -34,6 +34,34 @@ function normalize(value) {
         .replace(/[_\s]+/g, '_');
 }
 
+function normalizeLoose(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function normalizeDiet(value) {
+    const normalized = normalizeLoose(value);
+    if (!normalized || normalized === 'any') return null;
+    if (['veg', 'vegetarian'].includes(normalized)) return 'vegetarian';
+    if (['non_vegetarian', 'nonveg', 'non_veg', 'nonvegetarian'].includes(normalized)) return 'non_vegetarian';
+    if (['eggetarian', 'egg', 'egg_vegetarian', 'eggitarian'].includes(normalized)) return 'eggetarian';
+    if (['vegan'].includes(normalized)) return 'vegan';
+    return normalized;
+}
+
+function normalizeDosha(value) {
+    const normalized = normalizeLoose(value);
+    if (!normalized || normalized === 'any') return null;
+    if (['no', 'none', 'not_applicable'].includes(normalized)) return 'no';
+    if (['manglik', 'mangal', 'mangal_dosha', 'manglik_dosha'].includes(normalized)) return 'manglik';
+    if (['sarpa_dosha', 'sarpa', 'sarpa_dosham', 'sarpa_dosam'].includes(normalized)) return 'sarpa_dosha';
+    if (['dont_know', 'don_t_know', 'dontknow', 'unknown', 'not_sure'].includes(normalized)) return 'dont_know';
+    return normalized;
+}
+
 function expandAliasValue(value, aliasMap) {
     const normalizedInput = normalize(value);
     const matched = Object.entries(aliasMap).find(([canonical, aliases]) => {
@@ -237,22 +265,26 @@ const matchingService = {
             return cached;
         }
 
+        const includeShortlists = boolValue(filters.shortlistedOnly);
+        const viewerInclude = {
+            likesSent: { select: { receiverId: true } },
+            matches: { select: { userBId: true } },
+            matchesAsUserB: { select: { userAId: true } },
+            subscriptions: {
+                where: {
+                    status: 'active',
+                    OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+                },
+                select: { id: true },
+                take: 1,
+            },
+            ...(includeShortlists ? { shortlists: { select: { shortlistedUserId: true } } } : {}),
+        };
+
         const [viewer, viewerProfile, viewerPreference] = await Promise.all([
             prisma.user.findUnique({
                 where: { id: userId },
-                include: {
-                    likesSent: { select: { receiverId: true } },
-                    matches: { select: { userBId: true } },
-                    matchesAsUserB: { select: { userAId: true } },
-                    subscriptions: {
-                        where: {
-                            status: 'active',
-                            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-                        },
-                        select: { id: true },
-                        take: 1,
-                    },
-                },
+                include: viewerInclude,
             }),
             prisma.profile.findUnique({ where: { userId } }),
             prisma.partnerPreference.findUnique({ where: { userId } }),
@@ -276,8 +308,23 @@ const matchingService = {
             ...viewer.matchesAsUserB.map((item) => item.userAId),
         ];
 
+        const shortlistIds = includeShortlists
+            ? (viewer.shortlists || []).map((item) => item.shortlistedUserId).filter(Boolean)
+            : [];
+        const filteredShortlistIds = includeShortlists
+            ? shortlistIds.filter((id) => !excludeIds.includes(id))
+            : [];
+
+        if (includeShortlists && filteredShortlistIds.length === 0) {
+            const emptyResult = includeMeta
+                ? { items: [], page, limit, total: 0, hasNextPage: false, sort }
+                : [];
+            recommendationService.cacheRecommendations(cacheKey, emptyResult);
+            return emptyResult;
+        }
+
         const where = {
-            id: { notIn: excludeIds },
+            id: includeShortlists ? { in: filteredShortlistIds } : { notIn: excludeIds },
             isBanned: false,
             isActive: true,
             profile: {
@@ -412,6 +459,16 @@ const matchingService = {
         const requestedHasChildren = profileExtensionService.normalizeHasChildren(filters.hasChildren);
         const requestedResidentialStatus = profileExtensionService.normalizeResidentialStatus(filters.residentialStatus);
         const requestedDistrict = String(filters.district || '').trim().toLowerCase();
+        const requestedSubCaste = !isAny(filters.subCaste) ? normalizeLoose(filters.subCaste) : null;
+        const requestedGothra = !isAny(filters.gothra) ? normalizeLoose(filters.gothra) : null;
+        const requestedNakshatra = !isAny(filters.nakshatra) ? normalizeLoose(filters.nakshatra) : null;
+        const requestedRashi = !isAny(filters.rashi) ? normalizeLoose(filters.rashi) : null;
+        const requestedDosha = normalizeDosha(filters.dosha);
+        const requestedDiet = normalizeDiet(filters.diet);
+        const minMatchScore = parseInteger(filters.minMatch);
+        const normalizedMinMatch = minMatchScore !== null
+            ? Math.min(Math.max(minMatchScore, 0), 100)
+            : null;
 
         const mapped = users
             .filter((userRow) => userRow.profile)
@@ -436,6 +493,33 @@ const matchingService = {
                 if (requestedHasChildren && extension.hasChildren !== requestedHasChildren) return null;
                 if (requestedResidentialStatus && extension.residentialStatus !== requestedResidentialStatus) return null;
                 if (requestedDistrict && !String(extension.district || '').toLowerCase().includes(requestedDistrict)) return null;
+                if (requestedSubCaste) {
+                    const candidateSubCaste = normalizeLoose(profile.subCaste);
+                    if (!candidateSubCaste || candidateSubCaste !== requestedSubCaste) return null;
+                }
+                if (requestedGothra) {
+                    const candidateGothra = normalizeLoose(profile.gothra);
+                    if (!candidateGothra || candidateGothra !== requestedGothra) return null;
+                }
+                if (requestedNakshatra) {
+                    const candidateNakshatra = normalizeLoose(profile.nakshatra);
+                    if (!candidateNakshatra || candidateNakshatra !== requestedNakshatra) return null;
+                }
+                if (requestedRashi) {
+                    const candidateRashi = normalizeLoose(profile.zodiacSign);
+                    if (!candidateRashi) return null;
+                    const matchesExact = candidateRashi === requestedRashi;
+                    const matchesLoose = candidateRashi.includes(requestedRashi) || requestedRashi.includes(candidateRashi);
+                    if (!matchesExact && !matchesLoose) return null;
+                }
+                if (requestedDosha) {
+                    const candidateDosha = normalizeDosha(profile.dosha);
+                    if (!candidateDosha || candidateDosha !== requestedDosha) return null;
+                }
+                if (requestedDiet) {
+                    const candidateDiet = normalizeDiet(profile.foodHabit);
+                    if (!candidateDiet || candidateDiet !== requestedDiet) return null;
+                }
 
                 const canViewPhotos = privacyService.canViewPhotos({
                     settings: privacySettings,
@@ -457,6 +541,7 @@ const matchingService = {
                     isColdStart,
                     manualScoreDelta: manualOverrides.get(userRow.id) || 0,
                 });
+                if (normalizedMinMatch !== null && scoring.score < normalizedMinMatch) return null;
 
                 const photo = canViewPhotos
                     ? (userRow.photos[0]?.thumbnailUrl || userRow.photos[0]?.photoUrl || 'https://via.placeholder.com/150')
@@ -489,14 +574,22 @@ const matchingService = {
                     match: scoring.score,
                     religion: profile.religion,
                     caste: profile.caste,
+                    subCaste: profile.subCaste,
                     motherTongue: profile.motherTongue,
                     maritalStatus: profile.maritalStatus,
                     education: profile.educationLevel,
                     income: profile.incomeBand,
                     heightCm: profile.heightCm,
+                    height: profile.heightCm,
+                    foodHabit: profile.foodHabit,
+                    gothra: profile.gothra,
+                    nakshatra: profile.nakshatra,
+                    zodiacSign: profile.zodiacSign,
+                    dosha: profile.dosha,
                     hasChildren: extension.hasChildren,
                     residentialStatus: extension.residentialStatus,
                     lastActiveAt: privacySettings.showLastSeen ? userRow.lastLogin : null,
+                    hasHoroscope: hasHoroscopeDetails(profile),
                     reasons: mergeReasons(reasonLabels, contextualReasons),
                     explainability: {
                         schemaVersion: recommendationService.FEATURE_SCHEMA_VERSION,

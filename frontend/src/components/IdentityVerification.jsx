@@ -1,178 +1,158 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import api from '../services/api';
+import { useEffect, useMemo, useState } from "react";
+import api from "../services/api";
+
+const TRUST_CHECKS = [
+  {
+    key: "photo",
+    label: "Add a clear profile photo",
+    hint: "Profiles with a face photo feel more trustworthy.",
+  },
+  {
+    key: "bio",
+    label: "Write a meaningful bio",
+    hint: "Share values, goals, and what you are looking for.",
+  },
+  {
+    key: "basics",
+    label: "Complete basics",
+    hint: "Age, city, profession, and education help matches decide.",
+  },
+  {
+    key: "family",
+    label: "Add family details",
+    hint: "Family context improves serious intent.",
+  },
+  {
+    key: "interests",
+    label: "Add interests",
+    hint: "A few interests make conversations easier.",
+  },
+  {
+    key: "quiz",
+    label: "Finish compatibility quiz",
+    hint: "Short quiz answers improve match relevance.",
+  },
+  {
+    key: "attest",
+    label: "Self-attestation",
+    hint: "Confirm that your details are accurate.",
+  },
+];
+
+function hasValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (value === null || value === undefined) return false;
+  return Boolean(value);
+}
 
 export default function IdentityVerification() {
-    const [file, setFile] = useState(null);
-    const [status, setStatus] = useState('loading');
-    const [rejectionReason, setRejectionReason] = useState(null);
-    const [uploading, setUploading] = useState(false);
-    const [badges, setBadges] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [attested, setAttested] = useState(false);
 
-    useEffect(() => {
-        fetchStatus();
-    }, []);
+  useEffect(() => {
+    let cancelled = false;
 
-    const fetchStatus = async () => {
-        try {
-            const res = await api.get('/verification/status');
-            if (res.data.success) {
-                setStatus(res.data.status);
-                setRejectionReason(res.data.rejectionReason);
-            }
-            try {
-                const badgeRes = await api.get('/verification/badges');
-                setBadges(badgeRes?.data?.badges || null);
-            } catch {
-                setBadges(null);
-            }
-        } catch (err) {
-            console.error(err);
-            // If 404 or verify route fails, assume not started
-            setStatus('not_started');
+    const loadProfile = async () => {
+      try {
+        const response = await api.get("/users/profile");
+        if (!cancelled) {
+          setProfile(response?.data || null);
         }
+      } catch {
+        if (!cancelled) {
+          setProfile(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
-    const handleFileChange = (e) => {
-        if (e.target.files[0]) {
-            setFile(e.target.files[0]);
-        }
-    };
-
-    const handleUpload = async () => {
-        if (!file) return;
-        setUploading(true);
-        try {
-            // 1. Get Presigned URL
-            // Note: Backend endpoint /api/media/presigned-url must be active
-            const { data } = await api.post('/media/presigned-url', {
-                fileName: file.name,
-                fileType: file.type,
-                resourceType: 'identity'
-            });
-
-            const { uploadUrl, publicUrl } = data;
-
-            // 2. Upload to S3 directly
-            const uploadRes = await fetch(uploadUrl, {
-                method: 'PUT',
-                body: file,
-                headers: {
-                    'Content-Type': file.type
-                }
-            });
-
-            if (!uploadRes.ok) {
-                throw new Error('Failed to upload to S3');
-            }
-
-            // 3. Submit to Backend
-            await api.post('/verification/submit-id', { docUrl: publicUrl });
-
-            setStatus('pending');
-            setFile(null);
-            alert('Document submitted successfully! We will review it shortly.');
-        } catch (err) {
-            console.error("Verification Upload Error:", err);
-            alert('Upload failed. Please try again.');
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    if (status === 'loading') {
-        return <div className="p-4 text-center">Loading verification status...</div>;
+    if (typeof window !== "undefined") {
+      setAttested(window.localStorage.getItem("trust_attested") === "1");
     }
 
-    return (
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-                <span className="mr-2">🛡️</span> Identity Verification
-            </h2>
+    loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-            {badges && (
-                <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
-                    <div className={`p-2 rounded border ${badges.phoneVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                        Phone {badges.phoneVerified ? 'Verified' : 'Pending'}
-                    </div>
-                    <div className={`p-2 rounded border ${badges.emailVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                        Email {badges.emailVerified ? 'Verified' : 'Pending'}
-                    </div>
-                    <div className={`p-2 rounded border ${badges.idVerified ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                        ID {badges.idVerified ? 'Verified' : 'Pending'}
-                    </div>
-                    <div className={`p-2 rounded border ${badges.blueTick ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                        Blue Tick {badges.blueTick ? 'Active' : 'Locked'}
-                    </div>
-                </div>
-            )}
+  const primaryPhoto =
+    profile?.photos?.find((photo) => photo.isPrimary)?.photoUrl ||
+    profile?.photos?.[0]?.photoUrl ||
+    "";
 
-            {status === 'verified' && (
-                <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-md flex items-center">
-                    <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                    <div>
-                        <p className="font-bold">Verified</p>
-                        <p className="text-sm">Your identity has been verified. You have the &quot;Verified Badge&quot; on your profile.</p>
-                    </div>
-                </div>
-            )}
-
-            {status === 'pending' && (
-                <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 p-4 rounded-md">
-                    <p className="font-bold">Under Review</p>
-                    <p className="text-sm">We are currently reviewing your document. This usually takes 24 hours.</p>
-                </div>
-            )}
-
-            {(status === 'not_started' || status === 'rejected') && (
-                <div>
-                    {status === 'rejected' && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md mb-4">
-                            <p className="font-bold">Verification Rejected</p>
-                            <p className="text-sm">{rejectionReason || "Common reasons: Blurry image, mismatched name."}</p>
-                        </div>
-                    )}
-
-                    <p className="text-gray-600 mb-4">
-                        Upload a clear photo of your Government ID (Aadhaar, PAN, or Passport) to get verified and boost your matches by 3x.
-                    </p>
-
-                    <div className="space-y-4">
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors">
-                            <input
-                                type="file"
-                                id="id-doc"
-                                className="hidden"
-                                accept="image/*,.pdf"
-                                onChange={handleFileChange}
-                            />
-                            <label htmlFor="id-doc" className="cursor-pointer block">
-                                {file ? (
-                                    <div className="text-blue-600 font-medium">
-                                        📄 {file.name}
-                                    </div>
-                                ) : (
-                                    <div className="text-gray-500">
-                                        <span className="text-2xl block mb-2">📁</span>
-                                        <span>Click to upload secure document</span>
-                                    </div>
-                                )}
-                            </label>
-                        </div>
-
-                        {file && (
-                            <button
-                                onClick={handleUpload}
-                                disabled={uploading}
-                                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors"
-                            >
-                                {uploading ? 'Uploading Securely...' : 'Submit Verification'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
+  const checklist = useMemo(() => {
+    const quizDone = Boolean(
+      profile?.personalityQuiz?.answers && Object.keys(profile.personalityQuiz.answers).length > 0
     );
+
+    const mapping = {
+      photo: Boolean(primaryPhoto),
+      bio: hasValue(profile?.bio),
+      basics: hasValue(profile?.dateOfBirth) && hasValue(profile?.city) && hasValue(profile?.profession),
+      family:
+        hasValue(profile?.familyType) ||
+        hasValue(profile?.fatherOccupation) ||
+        hasValue(profile?.motherOccupation),
+      interests: Array.isArray(profile?.hobbies) && profile.hobbies.length >= 2,
+      quiz: quizDone,
+      attest: attested,
+    };
+
+    return TRUST_CHECKS.map((item) => ({ ...item, done: Boolean(mapping[item.key]) }));
+  }, [attested, primaryPhoto, profile]);
+
+  const completion = useMemo(() => {
+    if (checklist.length === 0) return 0;
+    const doneCount = checklist.filter((item) => item.done).length;
+    return Math.round((doneCount / checklist.length) * 100);
+  }, [checklist]);
+
+  const onAttestChange = (event) => {
+    const next = event.target.checked;
+    setAttested(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("trust_attested", next ? "1" : "0");
+    }
+  };
+
+  if (loading) {
+    return <div className="verification-loading">Loading trust checklist...</div>;
+  }
+
+  return (
+    <div className="panel verification-card">
+      <div className="verification-progress" style={{ "--progress": `${completion}%` }}>
+        <div className="verification-progress-row">
+          <span className="section-label">Checklist</span>
+          <span className="form-note">{completion}% complete</span>
+        </div>
+        <div className="verification-progress-track">
+          <div className="verification-progress-fill" />
+        </div>
+      </div>
+
+      <div className="verify-grid">
+        {checklist.map((item) => (
+          <div key={item.key} className={`verify-item ${item.done ? "is-done" : ""}`}>
+            <div>
+              <strong>{item.label}</strong>
+              <p>{item.hint}</p>
+            </div>
+            <span className="chip chip-support">{item.done ? "Done" : "Pending"}</span>
+          </div>
+        ))}
+      </div>
+
+      <label className="checkbox-row checkbox-row-spaced">
+        <input type="checkbox" checked={attested} onChange={onAttestChange} />
+        <span>I confirm the details on my profile are accurate.</span>
+      </label>
+    </div>
+  );
 }

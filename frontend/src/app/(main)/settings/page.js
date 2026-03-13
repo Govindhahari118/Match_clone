@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../services/api";
 import { settingsRules } from "../../../validation/rules";
+import PageHero from "../../../components/PageHero";
 
 const SECTIONS = [
   { key: "account", label: "Account" },
@@ -94,6 +95,12 @@ export default function SettingsPage() {
     allowMessages: true,
   });
 
+  const [privacyChecklist, setPrivacyChecklist] = useState([
+    { key: "showPhone", label: "Phone hidden by default", done: true },
+    { key: "showPhoto", label: "Photos visible to matches", done: true },
+    { key: "showProfile", label: "Profile searchable", done: true },
+  ]);
+
   const [notif, setNotif] = useState({
     emailNewMatch: true,
     emailInterest: true,
@@ -123,7 +130,22 @@ export default function SettingsPage() {
         if (!mounted) return;
 
         if (privacyResponse?.data?.settings) {
-          setPrivacy((prev) => ({ ...prev, ...privacyResponse.data.settings }));
+          const incoming = privacyResponse.data.settings;
+          setPrivacy((prev) => ({ ...prev, ...incoming }));
+          setPrivacyChecklist((prev) =>
+            prev.map((item) => {
+              if (item.key === "showPhone") {
+                return { ...item, done: !incoming.showPhone };
+              }
+              if (item.key === "showPhoto") {
+                return { ...item, done: Boolean(incoming.showPhoto) };
+              }
+              if (item.key === "showProfile") {
+                return { ...item, done: Boolean(incoming.showProfile) };
+              }
+              return item;
+            })
+          );
         }
 
         const profile = profileResponse?.data;
@@ -187,6 +209,14 @@ export default function SettingsPage() {
 
       if (section === "privacy") {
         await api.post("/users/privacy", privacy);
+        setPrivacyChecklist((prev) =>
+          prev.map((item) => {
+            if (item.key === "showPhone") return { ...item, done: !privacy.showPhone };
+            if (item.key === "showPhoto") return { ...item, done: Boolean(privacy.showPhoto) };
+            if (item.key === "showProfile") return { ...item, done: Boolean(privacy.showProfile) };
+            return item;
+          })
+        );
       }
 
       if (section === "password") {
@@ -238,11 +268,12 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-page-v2">
-      <header className="panel settings-hero-v2">
-        <p className="section-label">Control Center</p>
-        <h1 className="section-title">Settings</h1>
-        <p className="section-copy">Manage your account details, discovery preferences, privacy controls, and security.</p>
-      </header>
+      <PageHero
+        eyebrow="Account Control"
+        title="Settings"
+        copy="Tune discovery, privacy, notifications, and security in one place."
+        className="settings-hero-v2"
+      />
 
       <p aria-live="polite" className="settings-status-v2">
         {statusMessage}
@@ -418,6 +449,21 @@ export default function SettingsPage() {
 
           {section === "privacy" && (
             <div className="settings-toggle-list-v2">
+              <section className="panel settings-card">
+                <p className="section-label">Trust checklist</p>
+                <h2 className="section-title section-title-xs">Privacy health</h2>
+                <div className="settings-checklist">
+                  {privacyChecklist.map((item) => (
+                    <div key={item.key} className={`settings-check-item ${item.done ? "is-done" : ""}`}>
+                      <span>{item.label}</span>
+                      <span className="chip chip-support">{item.done ? "Good" : "Review"}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <p className="form-note">
+                Phone numbers and contact details stay hidden by default and are visible only to approved matches.
+              </p>
               {[
                 ["showPhone", "Show phone to matches"],
                 ["showPhoto", "Show photos"],

@@ -51,6 +51,15 @@ export const PUBLIC_SHORTCUTS = [
   { href: "/shortlists", label: "Shortlists" },
   { href: "/pricing", label: "Pricing" },
   { href: "/help", label: "Help" },
+  { href: "/success-stories", label: "Success Stories" },
+  { href: "/kundli", label: "Kundli" },
+  { href: "/biodata", label: "Biodata" },
+  { href: "/verification", label: "Verification" },
+  { href: "/community-guidelines", label: "Guidelines" },
+  { href: "/security", label: "Security" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: "/refunds", label: "Refunds" },
 ];
 
 export function isRouteActive(pathname, href) {

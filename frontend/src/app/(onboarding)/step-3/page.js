@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -80,15 +80,21 @@ export default function Step3() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Education & Career</h2>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
+      <div className="onboarding-step-head">
+        <p className="section-label">Step 3 - Career</p>
+        <h2 className="section-title">Education & career</h2>
+        <p className="section-copy">
+          These details help us surface profiles aligned to your goals and lifestyle.
+        </p>
+      </div>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="form-grid">
         <div>
-          <label htmlFor="education_level" className="block text-sm font-medium text-gray-700">Highest Qualification</label>
+          <label htmlFor="education_level" className="form-label">Highest Qualification</label>
           <select
             {...register("education_level", onboardingRules.step3.education_level)}
             {...getInputA11y("education_level", errors)}
             id="education_level"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="">Select Qualification</option>
             <option value="high_school">High School</option>
@@ -97,39 +103,39 @@ export default function Step3() {
             <option value="phd">PhD / Doctorate</option>
             <option value="other">Other</option>
           </select>
-          {errors.education_level && <p id={errorIdFor("education_level")} className="text-red-500 text-xs mt-1" role="alert">{errors.education_level.message}</p>}
+          {errors.education_level && <p id={errorIdFor("education_level")} className="form-error" role="alert">{errors.education_level.message}</p>}
         </div>
 
         <div>
-          <label htmlFor="education_field" className="block text-sm font-medium text-gray-700">Education Field</label>
+          <label htmlFor="education_field" className="form-label">Education Field</label>
           <input
             {...register("education_field")}
             {...getInputA11y("education_field", errors)}
             id="education_field"
             placeholder="e.g. Computer Science, Arts"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
         </div>
 
         <div>
-          <label htmlFor="profession" className="block text-sm font-medium text-gray-700">Profession</label>
+          <label htmlFor="profession" className="form-label">Profession</label>
           <input
             {...register("profession", onboardingRules.step3.profession)}
             {...getInputA11y("profession", errors)}
             id="profession"
             placeholder="e.g. Software Engineer"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
-          {errors.profession && <p id={errorIdFor("profession")} className="text-red-500 text-xs mt-1" role="alert">{errors.profession.message}</p>}
+          {errors.profession && <p id={errorIdFor("profession")} className="form-error" role="alert">{errors.profession.message}</p>}
         </div>
 
         <div>
-          <label htmlFor="income_band" className="block text-sm font-medium text-gray-700">Annual Income</label>
+          <label htmlFor="income_band" className="form-label">Annual Income</label>
           <select
             {...register("income_band", onboardingRules.step3.income_band)}
             {...getInputA11y("income_band", errors)}
             id="income_band"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="">Select Income Range</option>
             <option value="below_5L">Below 5 LPA</option>
@@ -138,28 +144,30 @@ export default function Step3() {
             <option value="25-50L">25 - 50 LPA</option>
             <option value="50L+">Above 50 LPA</option>
           </select>
-          {errors.income_band && <p id={errorIdFor("income_band")} className="text-red-500 text-xs mt-1" role="alert">{errors.income_band.message}</p>}
+          {errors.income_band && <p id={errorIdFor("income_band")} className="form-error" role="alert">{errors.income_band.message}</p>}
         </div>
 
         <div>
-          <label htmlFor="company" className="block text-sm font-medium text-gray-700">Company Name</label>
+          <label htmlFor="company" className="form-label">Company Name</label>
           <input
             {...register("company")}
             {...getInputA11y("company", errors)}
             id="company"
             placeholder="Optional"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
         </div>
 
         <button
           type="submit"
           disabled={initializing}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-60"
+          className="button button-primary cta-full"
         >
           Next: Lifestyle & Bio
         </button>
+        <p className="form-note">You can keep company optional and update later.</p>
       </form>
     </div>
   );
 }
+

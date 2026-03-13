@@ -110,17 +110,17 @@ Objective: implement complete profile discovery parity from competitor baseline.
 - [x] Age min/max
 - [x] Height min/max (cm + ft/in display)
 - [x] Marital status
-- [ ] Have children
+- [x] Have children
 - [x] Religion
 - [x] Caste/Community (multi-select + searchable)
 - [x] Mother tongue
-- [ ] Country
+- [x] Country
 - [x] State
-- [ ] District/City
+- [x] District/City
 - [x] Education (multi-select)
 - [x] Profession
 - [x] Income range
-- [ ] Residential status
+- [x] Residential status
 
 ### Profile/Visibility Filters
 - [x] With photo only

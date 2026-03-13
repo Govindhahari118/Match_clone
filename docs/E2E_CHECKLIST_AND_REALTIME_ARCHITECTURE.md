@@ -30,7 +30,7 @@ Use this as the execution checklist. Do not start feature expansion before all P
 ### A. Foundation and Environment
 
 - [ ] Standardize ports and URLs:
-- [ ] Backend HTTP + Socket on one port (recommended `5000`)
+- [ ] Backend HTTP + Socket on one port (recommended `4000`)
 - [ ] Frontend on one port (recommended `3000` or `8000`, pick one)
 - [ ] Use `.env` values (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SOCKET_URL`) instead of hardcoded URLs
 - [ ] Run Prisma generation/migrations successfully:

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../../../services/api";
 import PageEmptyState from "../../../components/states/PageEmptyState";
 import PageLoadingState from "../../../components/states/PageLoadingState";
+import PageHero from "../../../components/PageHero";
 
 const MOCK_VIEWERS = [
   { id: "v1", userId: "u1", firstName: "Arjun", age: 29, city: "Mumbai", profession: "Doctor", photo: "https://randomuser.me/api/portraits/men/11.jpg", isVerified: true, receivedAt: "5m ago" },
@@ -25,14 +26,23 @@ function getViewerTier(index) {
 export default function WhoViewedPage() {
   const [viewers, setViewers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isPreview, setIsPreview] = useState(false);
+
+  const dataUpdatedLabel = useMemo(
+    () => new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    []
+  );
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await api.get("/interactions/profile-viewers");
-        setViewers(Array.isArray(res.data) && res.data.length > 0 ? res.data : MOCK_VIEWERS);
+        const nextViewers = Array.isArray(res.data) && res.data.length > 0 ? res.data : MOCK_VIEWERS;
+        setViewers(nextViewers);
+        setIsPreview(nextViewers === MOCK_VIEWERS);
       } catch {
         setViewers(MOCK_VIEWERS);
+        setIsPreview(true);
       } finally {
         setLoading(false);
       }
@@ -49,34 +59,29 @@ export default function WhoViewedPage() {
   }, [viewers]);
 
   return (
-    <div style={{ display: "grid", gap: "0.95rem" }}>
-      <section className="listing-hero">
-        <div>
-          <p className="section-label" style={{ marginBottom: "0.22rem" }}>
-            Visibility Insights
-          </p>
-          <h1 className="section-title" style={{ margin: 0, fontSize: "clamp(1.64rem, 3vw, 2.2rem)" }}>
-            Who Viewed Your Profile
-          </h1>
-          <p className="section-copy" style={{ marginTop: "0.38rem", fontSize: "0.92rem" }}>
-            Monitor profile attention and convert high-intent visitors into conversations.
-          </p>
-          <div className="result-metrics">
-            <span className="metric-chip metric-chip-highlight">{viewerStats.total} visitors</span>
-            <span className="metric-chip">{viewerStats.recent} recent</span>
-            <span className="metric-chip">{viewerStats.verified} verified</span>
-          </div>
-        </div>
-
-        <div className="hero-actions" style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+    <div className="stack-md">
+      <PageHero
+        eyebrow="Profile Visibility"
+        title="Who Viewed Your Profile"
+        copy="Track visitor intent and convert profile views into meaningful conversations."
+        className="listing-hero viewer-hero"
+        actions={(
           <Link href="/pricing" className="button button-primary">
             Upgrade Access
           </Link>
+        )}
+      >
+        <div className="result-metrics">
+          <span className="metric-chip metric-chip-highlight">{viewerStats.total} visitors</span>
+          <span className="metric-chip">{viewerStats.recent} recent</span>
+          <span className="metric-chip">{viewerStats.verified} verified</span>
+          {isPreview && <span className="metric-chip">Preview mode</span>}
         </div>
-      </section>
+        <p className="data-freshness">Updated {dataUpdatedLabel}</p>
+      </PageHero>
 
-      <section className="panel upgrade-banner" style={{ padding: "0.9rem" }}>
-        <p style={{ margin: 0, color: "#8a5b00", fontSize: "0.85rem", fontWeight: 650 }}>
+      <section className="status-banner warning viewer-upgrade-banner">
+        <p className="viewer-upgrade-copy">
           Premium unlock: full visitor history, visitor intent scoring, and priority outreach suggestions.
         </p>
       </section>
@@ -95,16 +100,16 @@ export default function WhoViewedPage() {
           primaryActionHref="/profile"
         />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "0.9rem" }}>
+        <div className="viewer-grid">
           {viewers.map((viewer, index) => {
             const tier = getViewerTier(index);
             const gated = tier === "gated";
 
             return (
-              <article key={viewer.id || viewer.userId} className="panel listing-stage viewer-card" style={{ padding: "0.72rem", position: "relative", overflow: "hidden" }}>
+              <article key={viewer.id || viewer.userId} className="panel listing-stage viewer-card viewer-card-body">
                 {gated && (
                   <div className="gated-overlay">
-                    <Link href="/pricing" className="button button-primary" style={{ paddingInline: "0.9rem" }}>
+                    <Link href="/pricing" className="button button-primary viewer-gated-action">
                       Unlock Viewer
                     </Link>
                   </div>
@@ -123,24 +128,24 @@ export default function WhoViewedPage() {
                     <span className={`viewer-dot ${tier}`} />
                   </div>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                      <h3 style={{ margin: 0, fontSize: "0.96rem", lineHeight: 1.14 }}>
+                  <div className="viewer-info">
+                    <div className="viewer-head">
+                      <h3 className="viewer-name">
                         {viewer.firstName}, {viewer.age}
                       </h3>
                       {viewer.isVerified && <span className="chip chip-support">Verified</span>}
                     </div>
 
-                    <p className="profile-meta" style={{ margin: "0.22rem 0 0", color: "var(--ink-muted)", fontSize: "0.83rem" }}>
+                    <p className="profile-meta viewer-meta">
                       {viewer.profession} | {viewer.city}
                     </p>
-                    <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.74rem" }}>
+                    <p className="viewer-time">
                       Viewed {viewer.receivedAt}
                     </p>
                   </div>
 
-                  <Link href={`/profile/${viewer.userId}`} className="button button-secondary icon-only-btn view-fab" style={{ padding: "0.52rem 0.72rem" }} aria-label="Open profile" title="Open profile">
-                    ↗
+                  <Link href={`/profile/${viewer.userId}`} className="button button-secondary viewer-view-btn" aria-label="View profile" title="View profile">
+                    View Profile
                   </Link>
                 </div>
               </article>
@@ -152,3 +157,5 @@ export default function WhoViewedPage() {
     </div>
   );
 }
+
+

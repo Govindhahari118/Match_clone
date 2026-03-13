@@ -1,5 +1,6 @@
 param(
-    [switch]$Install
+    [switch]$Install,
+    [switch]$NoDocker
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,7 @@ $FrontendDir = Join-Path $Root "frontend"
 $RuntimeDir = Join-Path $Root "runtime"
 $LogsDir = Join-Path $RuntimeDir "logs"
 $PidsDir = Join-Path $RuntimeDir "pids"
+$UseDocker = -not $NoDocker -and -not $env:NO_DOCKER -and -not $env:SKIP_DOCKER
 
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $PidsDir | Out-Null
@@ -19,6 +21,18 @@ function Assert-LastExit([string]$errorMessage) {
     if ($LASTEXITCODE -ne 0) {
         throw $errorMessage
     }
+}
+
+function Test-DockerEngine {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker info *> $null
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $savedPreference
+    return ($exitCode -eq 0)
 }
 
 function Invoke-DockerCompose([string[]]$arguments) {
@@ -60,35 +74,43 @@ function Assert-PortFree([int]$port) {
     }
 }
 
-Write-Host "[1/6] Checking Docker engine..."
-$savedPreference = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-docker info *> $null
-$dockerExitCode = $LASTEXITCODE
-$ErrorActionPreference = $savedPreference
-if ($dockerExitCode -ne 0) {
-    throw "Docker Desktop is not running. Start Docker and retry."
+if ($UseDocker) {
+    Write-Host "[1/6] Checking Docker engine..."
+    if (-not (Test-DockerEngine)) {
+        Write-Warning "Docker Desktop is not running. Continuing without containers. Ensure Postgres is running and DATABASE_URL is set."
+        $UseDocker = $false
+    }
+} else {
+    Write-Host "[1/6] Skipping Docker checks (NoDocker)."
 }
 
-Write-Host "[2/6] Starting infrastructure containers..."
-Invoke-DockerCompose -arguments @("up", "-d", "postgres", "redis")
+if ($UseDocker) {
+    Write-Host "[2/6] Starting infrastructure containers..."
+    Invoke-DockerCompose -arguments @("up", "-d", "postgres", "redis")
+} else {
+    Write-Host "[2/6] Skipping infrastructure startup (NoDocker)."
+}
 
-Write-Host "[3/6] Waiting for postgres and redis health..."
-$deadline = (Get-Date).AddMinutes(3)
-$healthy = $false
-do {
-    $statuses = docker ps --format "{{.Names}}|{{.Status}}"
-    $postgresHealthy = $statuses -match "^matrimony-postgres\|Up .*\(healthy\)"
-    $redisHealthy = $statuses -match "^matrimony-redis\|Up .*\(healthy\)"
-    if ($postgresHealthy -and $redisHealthy) {
-        $healthy = $true
-        break
+if ($UseDocker) {
+    Write-Host "[3/6] Waiting for postgres and redis health..."
+    $deadline = (Get-Date).AddMinutes(3)
+    $healthy = $false
+    do {
+        $statuses = docker ps --format "{{.Names}}|{{.Status}}"
+        $postgresHealthy = $statuses -match "^matrimony-postgres\|Up .*\(healthy\)"
+        $redisHealthy = $statuses -match "^matrimony-redis\|Up .*\(healthy\)"
+        if ($postgresHealthy -and $redisHealthy) {
+            $healthy = $true
+            break
+        }
+        Start-Sleep -Seconds 3
+    } while ((Get-Date) -lt $deadline)
+
+    if (-not $healthy) {
+        throw "Containers did not reach healthy state within timeout."
     }
-    Start-Sleep -Seconds 3
-} while ((Get-Date) -lt $deadline)
-
-if (-not $healthy) {
-    throw "Containers did not reach healthy state within timeout."
+} else {
+    Write-Host "[3/6] Skipping infrastructure health checks (NoDocker)."
 }
 
 Write-Host "[4/6] Ensuring environment files..."

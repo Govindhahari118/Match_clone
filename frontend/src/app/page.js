@@ -7,62 +7,154 @@ import { useMemo, useState } from "react";
 import PublicTopNav from "@/components/PublicTopNav";
 import { APP_NAV_SECTIONS } from "@/config/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { STORY_SNIPPETS } from "@/components/successStoriesData";
 
 const TRUST_FEATURES = [
   {
-    title: "Identity-first profiles",
-    copy: "Verification checkpoints and moderation reduce fake accounts and low-intent messages.",
-    metric: "1.8M verified",
+    title: "Self-attested profiles",
+    copy: "Clear checklists and community guidelines keep intent high without manual ops.",
+    metric: "Self-serve trust",
   },
   {
-    title: "Compatibility graph",
-    copy: "Intent, lifestyle, and cultural preferences are weighted to surface stronger conversations.",
-    metric: "220K monthly matches",
+    title: "Rule-based matching",
+    copy: "Filters and preference-based ranking surface stronger conversations without automation.",
+    metric: "Transparent logic",
   },
   {
-    title: "Family-friendly controls",
-    copy: "Privacy, contact gating, and profile visibility can be tuned for personal or family-led journeys.",
-    metric: "4.9/5 trust score",
-  },
-];
-
-const PROCESS_STEPS = [
-  {
-    title: "Create a complete profile",
-    copy: "Add personal details, values, and partner preferences once for better long-term recommendations.",
-  },
-  {
-    title: "Prioritize quality matches",
-    copy: "Use filters and compatibility scores to focus on relevant profiles instead of scrolling endlessly.",
-  },
-  {
-    title: "Move safely to conversations",
-    copy: "Start with interests, verify intent, then continue through protected chat and family introductions.",
+    title: "Privacy-first controls",
+    copy: "Visibility, contact gating, and consent-based sharing keep members safe.",
+    metric: "Privacy by default",
   },
 ];
 
-const STORY_SNIPPETS = [
+const ASSISTED_BENEFITS = [
   {
-    names: "Aarav + Nisha",
-    city: "Bengaluru",
-    copy: "Started with values and profession filters, then families connected in under six weeks.",
+    title: "Guided shortlist flow",
+    copy: "Shortlist, compare, and revisit profiles in one place.",
   },
   {
-    names: "Rohan + Kavya",
-    city: "London",
-    copy: "Verification badges helped both sides move from chat to clarity without uncertainty.",
+    title: "Saved searches",
+    copy: "Reuse preference sets to keep discovery fast and consistent.",
   },
   {
-    names: "Dev + Meera",
-    city: "Hyderabad",
-    copy: "Shortlists and shared preferences narrowed options quickly and led to one right match.",
+    title: "Consent-first outreach",
+    copy: "Contact details stay hidden until mutual interest.",
   },
 ];
 
 const LANDING_SIGNALS = [
-  { value: "5M+", label: "Members" },
-  { value: "220K+", label: "Monthly Matches" },
-  { value: "1.8M", label: "Verified Profiles" },
+  { value: "Zero-INR", label: "New features" },
+  { value: "Zero-Infra", label: "Ops model" },
+  { value: "No-AI", label: "Matching" },
+];
+
+const LANDING_BENEFITS = [
+  "Profile completeness checklist",
+  "Privacy-first visibility controls",
+  "Rule-based matching and filters",
+];
+
+const PREMIUM_PACKAGES = [
+  {
+    title: "Starter",
+    duration: "Free",
+    copy: "Self-serve profiles, shortlists, and interest requests.",
+    highlight: "Always free",
+  },
+  {
+    title: "Plus",
+    duration: "Monthly",
+    copy: "Extra visibility windows and advanced filters.",
+    highlight: "For active search",
+  },
+  {
+    title: "Focus",
+    duration: "Quarterly",
+    copy: "Priority listing slots and unlimited shortlists.",
+    highlight: "Best for speed",
+  },
+];
+
+const APP_METRICS = [
+  { value: "Zero-ops", label: "Operating model" },
+  { value: "No-AI", label: "Matching logic" },
+  { value: "Privacy-first", label: "Default controls" },
+];
+
+const APP_HIGHLIGHTS = [
+  "Fast shortlist + interest flows",
+  "Profile completeness nudges",
+  "Family sharing and approvals",
+];
+
+const SUPPORT_CHANNELS = [
+  {
+    title: "Help center",
+    copy: "Self-serve guides, FAQs, and onboarding tips.",
+    action: { label: "Open help center", href: "/help" },
+  },
+  {
+    title: "Community guidelines",
+    copy: "Clear rules and reporting to keep intent high.",
+    action: { label: "Read guidelines", href: "/community-guidelines" },
+  },
+  {
+    title: "Feedback loop",
+    copy: "Share feedback and feature requests directly.",
+    action: { label: "Send feedback", href: "/help" },
+  },
+];
+
+const SEGMENT_GROUPS = [
+  {
+    title: "By community",
+    items: [
+      { label: "Hindu", href: "/matches?religion=Hindu" },
+      { label: "Muslim", href: "/matches?religion=Muslim" },
+      { label: "Christian", href: "/matches?religion=Christian" },
+      { label: "Sikh", href: "/matches?religion=Sikh" },
+      { label: "Jain", href: "/matches?religion=Jain" },
+    ],
+  },
+  {
+    title: "By city",
+    items: [
+      { label: "Mumbai", href: "/matches?city=Mumbai" },
+      { label: "Delhi", href: "/matches?city=Delhi" },
+      { label: "Bengaluru", href: "/matches?city=Bengaluru" },
+      { label: "Hyderabad", href: "/matches?city=Hyderabad" },
+      { label: "Chennai", href: "/matches?city=Chennai" },
+    ],
+  },
+  {
+    title: "By language",
+    items: [
+      { label: "Hindi", href: "/matches?motherTongue=Hindi" },
+      { label: "Tamil", href: "/matches?motherTongue=Tamil" },
+      { label: "Telugu", href: "/matches?motherTongue=Telugu" },
+      { label: "Marathi", href: "/matches?motherTongue=Marathi" },
+      { label: "Gujarati", href: "/matches?motherTongue=Gujarati" },
+    ],
+  },
+];
+
+const FAQ_ITEMS = [
+  {
+    question: "How is trust built without manual verification?",
+    answer: "A self-serve checklist, privacy controls, and reporting keep intent high.",
+  },
+  {
+    question: "Can families manage profiles together?",
+    answer: "Yes. Profiles can be created and managed by parents or family members.",
+  },
+  {
+    question: "What if I want privacy?",
+    answer: "Visibility, contact gating, and masked details are available in settings.",
+  },
+  {
+    question: "Do you use AI for matching?",
+    answer: "No. Matching and discovery are rule-based and transparent.",
+  },
 ];
 
 const DASHBOARD_STATS = [
@@ -73,8 +165,8 @@ const DASHBOARD_STATS = [
 ];
 
 const DASHBOARD_ACTIONS = [
-  { href: "/matches", title: "Review curated matches", copy: "Open compatibility-ranked recommendations for today." },
-  { href: "/matches?filters=1", title: "Open advanced filters", copy: "Filter by city, profession, education, and lifestyle preferences." },
+  { href: "/matches", title: "Review curated matches", copy: "Review compatibility-ranked recommendations for today." },
+  { href: "/matches?filters=1", title: "Use advanced filters", copy: "Filter by city, profession, education, and lifestyle preferences." },
   { href: "/interests", title: "Manage interests", copy: "Respond to pending requests and revisit accepted connections." },
   { href: "/chat", title: "Continue conversations", copy: "Pick up active threads and message high-intent profiles." },
   { href: "/shortlists", title: "Refine shortlist", copy: "Compare favorites and narrow your top conversation candidates." },
@@ -120,79 +212,158 @@ const DASHBOARD_RECOMMENDED = [
   },
 ];
 
+const PUBLIC_MAP_SECTIONS = APP_NAV_SECTIONS.map((section) => ({
+  ...section,
+  items: section.items.filter((item) => item.href !== "/admin"),
+})).filter((section) => section.items.length > 0);
+
+const LANDING_DRAFT_KEY = "landingDraft";
+
 function LandingPage() {
   const router = useRouter();
-  const [gender, setGender] = useState("female");
-  const [ageMin, setAgeMin] = useState(24);
-  const [ageMax, setAgeMax] = useState(31);
+  const [createdFor, setCreatedFor] = useState("self");
+  const [gender, setGender] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [phone, setPhone] = useState("");
   const [religion, setReligion] = useState("Hindu");
+  const [formError, setFormError] = useState("");
 
-  const onSearch = (event) => {
+  const onCreateProfile = (event) => {
     event.preventDefault();
-    router.push(
-      `/matches?gender=${gender}&minAge=${ageMin}&maxAge=${ageMax}&religion=${encodeURIComponent(
-        religion
-      )}`
-    );
+    const trimmedName = firstName.trim();
+    const trimmedPhone = phone.trim();
+    if (!gender) {
+      setFormError("Select a gender to continue.");
+      return;
+    }
+    if (!trimmedName) {
+      setFormError("Add your first name to continue.");
+      return;
+    }
+    setFormError("");
+    if (typeof window !== "undefined") {
+      const draftPayload = {
+        createdFor,
+        firstName: trimmedName,
+        gender,
+        religion,
+      };
+      if (trimmedPhone) draftPayload.phone = trimmedPhone;
+      window.sessionStorage.setItem(
+        LANDING_DRAFT_KEY,
+        JSON.stringify(draftPayload)
+      );
+    }
+    router.push("/step-1");
   };
 
   return (
-    <div className="page-shell landing-v2">
-      <section className="landing-hero-v2">
-        <div className="container-shell landing-shell-v2">
-          <PublicTopNav compact />
+    <div className="page-shell home-shell-heirloom">
+      <section className="home-hero-heirloom">
+        <div className="container-shell home-hero-container">
+          <PublicTopNav compact showBack={false} />
 
-          <div className="landing-grid-v2">
-            <div className="landing-copy-v2 anim-rise delay-1">
-              <p className="landing-kicker-v2">Trusted Global Matrimony Platform</p>
-              <h1 className="landing-title-v2">
-                Better Navigation.
-                <br />
-                Better Match Decisions.
+          <div className="home-hero-grid">
+            <div className="home-hero-copy anim-rise delay-1">
+              <p className="home-kicker">Trusted Global Matrimony Platform</p>
+              <h1 className="home-hero-title">
+                <span>Find the</span>
+                <span>right match</span>
+                <span>with clarity.</span>
               </h1>
-              <p className="landing-subtitle-v2">
-                Explore the full platform with a cleaner route system, stronger filters, and focused profile workflows.
-                Every page is optimized for clarity across mobile and desktop.
+              <p className="home-hero-subtitle">
+                Privacy-first profiles, rule-based matching, and family-friendly controls. Built for serious
+                matchmaking across mobile and desktop.
               </p>
 
-              <div className="landing-signals-v2">
+              <ul className="home-hero-list">
+                {LANDING_BENEFITS.map((benefit) => (
+                  <li key={benefit}>{benefit}</li>
+                ))}
+              </ul>
+
+              <div className="home-signal-row">
                 {LANDING_SIGNALS.map((item) => (
-                  <article key={item.label} className="landing-signal-v2">
+                  <article key={item.label} className="home-signal-card">
                     <strong>{item.value}</strong>
                     <span>{item.label}</span>
                   </article>
                 ))}
               </div>
 
-              <div className="landing-cta-row-v2">
+              <div className="home-cta-row">
                 <Link className="button button-primary" href="/step-1">
-                  Create Free Account
+                  Start Free
                 </Link>
                 <Link className="button button-secondary" href="/matches">
-                  Explore Matches
+                  Browse Matches
                 </Link>
               </div>
+              <p className="home-hero-note">Self-serve onboarding. Pause or switch anytime.</p>
             </div>
 
-            <aside className="panel landing-form-v2 anim-rise delay-2">
-              <p className="section-label">Quick Start</p>
-              <h2>Find profiles that fit your intent</h2>
+            <aside className="panel home-quickstart-card anim-rise delay-2">
+              <div className="home-quickstart-head">
+                <p className="section-label">Create your profile</p>
+                <h2 className="home-quickstart-title">Start with the essentials</h2>
+                <p className="home-quickstart-copy">
+                  Start with the essentials. Add contact details later and control visibility in settings.
+                </p>
+              </div>
 
-              <form onSubmit={onSearch} className="landing-form-grid-v2">
+              <form onSubmit={onCreateProfile} className="home-quickstart-form">
                 <label>
-                  <span className="form-label">Looking for</span>
+                  <span className="form-label">Profile created for</span>
+                  <select
+                    className="form-input"
+                    value={createdFor}
+                    onChange={(event) => setCreatedFor(event.target.value)}
+                  >
+                    <option value="self">Myself</option>
+                    <option value="daughter">Daughter</option>
+                    <option value="son">Son</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="friend">Friend</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span className="form-label">Gender</span>
                   <select
                     className="form-input"
                     value={gender}
                     onChange={(event) => setGender(event.target.value)}
                   >
-                    <option value="female">Woman</option>
-                    <option value="male">Man</option>
+                    <option value="">Select gender</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
                   </select>
                 </label>
 
                 <label>
-                  <span className="form-label">Religion</span>
+                  <span className="form-label">First name</span>
+                  <input
+                    className="form-input"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    placeholder="e.g. Aanya"
+                  />
+                </label>
+
+                <label>
+                  <span className="form-label">Contact number (optional)</span>
+                  <input
+                    className="form-input"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    placeholder="+91 90000 00000"
+                  />
+                </label>
+
+                <label>
+                  <span className="form-label">Religion preference</span>
                   <select
                     className="form-input"
                     value={religion}
@@ -208,49 +379,39 @@ function LandingPage() {
                   </select>
                 </label>
 
-                <div className="landing-age-row-v2">
-                  <label>
-                    <span className="form-label">Min age</span>
-                    <input
-                      className="form-input"
-                      type="number"
-                      min="18"
-                      max="70"
-                      value={ageMin}
-                      onChange={(event) => setAgeMin(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span className="form-label">Max age</span>
-                    <input
-                      className="form-input"
-                      type="number"
-                      min="18"
-                      max="70"
-                      value={ageMax}
-                      onChange={(event) => setAgeMax(event.target.value)}
-                    />
-                  </label>
-                </div>
-
-                <button type="submit" className="button button-primary landing-submit-v2">
-                  Show Matches
+                <button type="submit" className="button button-primary cta-full">
+                  Create Profile
                 </button>
               </form>
+              {formError && <p className="form-error" role="alert">{formError}</p>}
+
+              <div className="home-quickstart-foot">
+                {LANDING_BENEFITS.map((item) => (
+                  <span key={item} className="home-mini-chip">
+                    {item}
+                  </span>
+                ))}
+              </div>
+              <p className="home-quickstart-note">You can add or hide contact details anytime.</p>
             </aside>
           </div>
         </div>
       </section>
 
-      <section className="section-block">
+      <section className="home-section">
         <div className="container-shell">
-          <p className="section-label">Why this redesign helps</p>
-          <h2 className="section-title">A faster way to move from browsing to meaningful conversations</h2>
+          <div className="home-section-head">
+            <p className="section-label">Trust and transparency</p>
+            <h2 className="section-title">Safety-first signals at every step</h2>
+            <p className="section-copy">
+              Structured trust signals keep profiles authentic without manual ops or hidden scoring.
+            </p>
+          </div>
 
-          <div className="trust-grid-v2">
+          <div className="home-trust-grid">
             {TRUST_FEATURES.map((item) => (
-              <article key={item.title} className="panel trust-card-v2 panel-hover anim-rise delay-1">
-                <p className="trust-metric-v2">{item.metric}</p>
+              <article key={item.title} className="panel home-card home-trust-card">
+                <span className="home-metric-pill">{item.metric}</span>
                 <h3>{item.title}</h3>
                 <p>{item.copy}</p>
               </article>
@@ -259,34 +420,158 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="section-block section-muted-v2">
+      <section className="home-section home-section-muted">
         <div className="container-shell">
-          <p className="section-label">How it works</p>
-          <h2 className="section-title">Three phases from profile setup to final shortlist</h2>
+          <div className="home-section-head">
+            <p className="section-label">Self-serve matchmaking</p>
+            <h2 className="section-title">Clear steps without manual ops</h2>
+            <p className="section-copy">
+              Move from discovery to conversation with a crisp, guided path.
+            </p>
+          </div>
 
-          <div className="process-grid-v2">
-            {PROCESS_STEPS.map((item, index) => (
-              <article key={item.title} className="panel process-card-v2 panel-hover anim-rise delay-2">
-                <span className="process-index-v2">0{index + 1}</span>
+          <div className="home-steps-grid">
+            {ASSISTED_BENEFITS.map((item, index) => (
+              <article key={item.title} className="panel home-card home-step-card">
+                <span className="home-step-index">{String(index + 1).padStart(2, "0")}</span>
                 <h3>{item.title}</h3>
                 <p>{item.copy}</p>
+              </article>
+            ))}
+          </div>
+          <div className="home-cta-row home-cta-row-centered">
+            <Link className="button button-primary" href="/pricing">
+              Explore Plans
+            </Link>
+            <Link className="button button-secondary" href="/help">
+              See how it works
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="container-shell">
+          <div className="home-section-head">
+            <p className="section-label">Self-serve plans</p>
+            <h2 className="section-title">Choose a plan that fits your pace</h2>
+          </div>
+
+          <div className="home-plan-grid">
+            {PREMIUM_PACKAGES.map((plan, index) => (
+              <article
+                key={plan.title}
+                className={`panel home-card home-plan-card ${index === 1 ? "is-featured" : ""}`}
+              >
+                <div className="home-plan-head">
+                  <h3>{plan.title}</h3>
+                  <span className="home-plan-duration">{plan.duration}</span>
+                </div>
+                <p>{plan.copy}</p>
+                <span className="chip chip-brand">{plan.highlight}</span>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="section-block">
+      <section className="home-section home-section-muted">
         <div className="container-shell">
-          <p className="section-label">Platform map</p>
-          <h2 className="section-title">Every major page, grouped by goal</h2>
-          <div className="map-groups-v2">
-            {APP_NAV_SECTIONS.map((section) => (
-              <section key={section.title} className="panel map-group-v2">
-                <p className="map-title-v2">{section.title}</p>
-                <div className="map-links-v2">
+          <div className="home-split">
+            <div className="home-split-copy">
+              <p className="section-label">Mobile first</p>
+              <h2 className="section-title">Take Match wherever you go</h2>
+              <p className="section-copy">
+                Shortlists, interest requests, and family updates from your phone. Stay in control on every device.
+              </p>
+
+              <div className="home-signal-row home-signal-row-compact">
+                {APP_METRICS.map((metric) => (
+                  <article key={metric.label} className="home-signal-card">
+                    <strong>{metric.value}</strong>
+                    <span>{metric.label}</span>
+                  </article>
+                ))}
+              </div>
+
+              <div className="home-cta-row">
+                <Link className="button button-primary" href="/help">
+                  Get app link
+                </Link>
+                <Link className="button button-secondary" href="/help">
+                  View mobile features
+                </Link>
+              </div>
+            </div>
+
+            <aside className="panel home-card home-split-card">
+              <p className="section-label">Why members love the app</p>
+              <ul className="home-highlight-list">
+                {APP_HIGHLIGHTS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="container-shell">
+          <div className="home-section-head">
+            <p className="section-label">Support</p>
+            <h2 className="section-title">Guidance for every stage</h2>
+          </div>
+          <div className="home-support-grid">
+            {SUPPORT_CHANNELS.map((channel) => (
+              <article key={channel.title} className="panel home-card home-support-card">
+                <h3>{channel.title}</h3>
+                <p>{channel.copy}</p>
+                <Link className="button button-secondary" href={channel.action.href}>
+                  {channel.action.label}
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section home-section-muted">
+        <div className="container-shell">
+          <div className="home-section-head">
+            <p className="section-label">Browse by community</p>
+            <h2 className="section-title">Start with what matters most</h2>
+          </div>
+          <div className="home-segment-grid">
+            {SEGMENT_GROUPS.map((group) => (
+              <article key={group.title} className="panel home-card home-segment-card">
+                <h3>{group.title}</h3>
+                <div className="home-segment-chips">
+                  {group.items.map((item) => (
+                    <Link key={item.href} href={item.href} className="home-segment-chip">
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="container-shell">
+          <div className="home-section-head">
+            <p className="section-label">Platform map</p>
+            <h2 className="section-title">Every major page, grouped by goal</h2>
+          </div>
+          <div className="home-map-grid">
+            {PUBLIC_MAP_SECTIONS.map((section) => (
+              <section key={section.title} className="panel home-card home-map-group">
+                <p className="home-map-title">{section.title}</p>
+                <div className="home-map-links">
                   {section.items.map((item) => (
-                    <Link key={item.href} href={item.href} className="map-link-v2">
+                    <Link key={item.href} href={item.href} className="home-map-link">
                       <span>{item.short}</span>
                       <strong>{item.label}</strong>
                     </Link>
@@ -298,17 +583,36 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="section-block section-muted-v2">
+      <section className="home-section home-section-muted">
         <div className="container-shell">
-          <p className="section-label">Recent outcomes</p>
-          <h2 className="section-title">Members who moved quickly with focused navigation</h2>
+          <div className="home-section-head">
+            <p className="section-label">Recent outcomes</p>
+            <h2 className="section-title">Members who moved quickly with focused navigation</h2>
+          </div>
 
-          <div className="story-grid-v2">
+          <div className="home-story-grid">
             {STORY_SNIPPETS.map((story) => (
-              <article key={story.names} className="panel story-card-v2 panel-hover">
-                <p className="story-name-v2">{story.names}</p>
-                <p className="story-city-v2">{story.city}</p>
-                <p className="story-copy-v2">{story.copy}</p>
+              <article key={story.names} className="panel home-card home-story-card">
+                <p className="home-story-name">{story.names}</p>
+                <p className="home-story-city">{story.city}</p>
+                <p className="home-story-copy">{story.copy}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="container-shell">
+          <div className="home-section-head">
+            <p className="section-label">FAQ</p>
+            <h2 className="section-title">Answers to common questions</h2>
+          </div>
+          <div className="home-faq-grid">
+            {FAQ_ITEMS.map((item) => (
+              <article key={item.question} className="panel home-card home-faq-card">
+                <h3>{item.question}</h3>
+                <p>{item.answer}</p>
               </article>
             ))}
           </div>
@@ -340,7 +644,7 @@ function Dashboard({ user, logout }) {
 
             <div className="dashboard-hero-actions-v2">
               <Link href="/matches" className="button button-primary">
-                Open Matches
+                Browse Matches
               </Link>
               <Link href="/profile" className="button button-secondary">
                 Profile
@@ -411,7 +715,7 @@ function Dashboard({ user, logout }) {
                     <div className="profile-foot-v2">
                       <span className="chip chip-brand">{person.score}% Match</span>
                       <Link href={`/profile/${person.id}`} className="button button-secondary">
-                        Open
+                        View Profile
                       </Link>
                     </div>
                   </div>

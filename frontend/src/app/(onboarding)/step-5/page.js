@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -91,25 +91,30 @@ export default function Step5() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Partner Preferences</h2>
-      <p className="text-gray-600 mb-6">Tell us who you&apos;re looking for to get better matches.</p>
+      <div className="onboarding-step-head">
+        <p className="section-label">Step 5 - Preferences</p>
+        <h2 className="section-title">Partner preferences</h2>
+        <p className="section-copy">
+          Tell us who you&apos;re looking for so we can curate better matches.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="form-grid">
+        <div className="form-grid-2">
           <div>
-            <label htmlFor="min_age" className="block text-sm font-medium text-gray-700">Min Age</label>
+            <label htmlFor="min_age" className="form-label">Min Age</label>
             <input
               {...register("min_age", onboardingRules.step5.min_age)}
               {...getInputA11y("min_age", errors)}
               id="min_age"
               type="number"
               placeholder="18"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="form-input"
             />
-            {errors.min_age && <p id={errorIdFor("min_age")} className="text-red-500 text-xs mt-1" role="alert">{errors.min_age.message}</p>}
+            {errors.min_age && <p id={errorIdFor("min_age")} className="form-error" role="alert">{errors.min_age.message}</p>}
           </div>
           <div>
-            <label htmlFor="max_age" className="block text-sm font-medium text-gray-700">Max Age</label>
+            <label htmlFor="max_age" className="form-label">Max Age</label>
             <input
               {...register("max_age", {
                 ...onboardingRules.step5.max_age,
@@ -120,19 +125,19 @@ export default function Step5() {
               id="max_age"
               type="number"
               placeholder="35"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="form-input"
             />
-            {errors.max_age && <p id={errorIdFor("max_age")} className="text-red-500 text-xs mt-1" role="alert">{errors.max_age.message}</p>}
+            {errors.max_age && <p id={errorIdFor("max_age")} className="form-error" role="alert">{errors.max_age.message}</p>}
           </div>
         </div>
 
         <div>
-          <label htmlFor="marital_status" className="block text-sm font-medium text-gray-700">Marital Status Preference</label>
+          <label htmlFor="marital_status" className="form-label">Marital Status Preference</label>
           <select
             {...register("marital_status")}
             {...getInputA11y("marital_status", errors)}
             id="marital_status"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="any">Doesn&apos;t Matter</option>
             <option value="never_married">Never Married</option>
@@ -142,12 +147,12 @@ export default function Step5() {
         </div>
 
         <div>
-          <label htmlFor="religion" className="block text-sm font-medium text-gray-700">Religion Preference</label>
+          <label htmlFor="religion" className="form-label">Religion Preference</label>
           <select
             {...register("religion")}
             {...getInputA11y("religion", errors)}
             id="religion"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="Any">Open to all</option>
             <option value="Hindu">Hindu</option>
@@ -159,23 +164,23 @@ export default function Step5() {
         </div>
 
         <div>
-          <label htmlFor="preferred_locations" className="block text-sm font-medium text-gray-700">Preferred Locations</label>
+          <label htmlFor="preferred_locations" className="form-label">Preferred Locations</label>
           <input
             {...register("preferred_locations")}
             {...getInputA11y("preferred_locations", errors)}
             id="preferred_locations"
             placeholder="e.g. Mumbai, Delhi, USA (comma separated)"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
         </div>
 
         <div>
-          <label htmlFor="min_income_band" className="block text-sm font-medium text-gray-700">Min Income</label>
+          <label htmlFor="min_income_band" className="form-label">Min Income</label>
           <select
             {...register("min_income_band")}
             {...getInputA11y("min_income_band", errors)}
             id="min_income_band"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="">Doesn&apos;t Matter</option>
             <option value="5-10L">5 LPA+</option>
@@ -188,11 +193,13 @@ export default function Step5() {
         <button
           type="submit"
           disabled={initializing}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none disabled:opacity-60"
+          className="button button-primary cta-full"
         >
           Finish & See Matches
         </button>
+        <p className="form-note">You can refine preferences later from Filters.</p>
       </form>
     </div>
   );
 }
+

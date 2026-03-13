@@ -1,6 +1,7 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const crypto = require('crypto');
+const { getAuthUserId } = require('../utils/auth');
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION,
@@ -19,9 +20,14 @@ exports.getPresignedUrl = async (req, res) => {
             return res.status(400).json({ error: 'Missing fileName or fileType' });
         }
 
+        const userId = getAuthUserId(req);
+        if (!userId) {
+            return res.status(401).json({ error: 'Access denied' });
+        }
+
         // Generate unique key
         const uniqueId = crypto.randomUUID();
-        const key = `${resourceType}/${req.user.id}/${uniqueId}-${fileName}`;
+        const key = `${resourceType}/${userId}/${uniqueId}-${fileName}`;
 
         // Create S3 Command
         const command = new PutObjectCommand({

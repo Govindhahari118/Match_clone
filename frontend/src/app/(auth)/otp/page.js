@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
+import Link from "next/link";
 import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import { authRules, errorIdFor, getInputA11y } from "../../../validation/rules";
@@ -34,7 +35,9 @@ function OtpPageContent() {
       });
 
       if (response.data.success) {
-        await login(response.data.user, response.data.access_token, response.data.refresh_token);
+        const accessToken = response.data.access_token || response.data.accessToken;
+        const refreshToken = response.data.refresh_token || response.data.refreshToken;
+        await login(response.data.user, accessToken, refreshToken);
 
         if (response.data.user.isNewUser) {
           router.push("/step-1");
@@ -53,10 +56,10 @@ function OtpPageContent() {
     <div className="auth-shell">
       <div className="auth-card">
         <p className="section-label">Verification</p>
-        <h1 className="auth-title">Enter One-Time Password</h1>
-        <p className="auth-subtitle">Code sent to {phone || "your phone"}.</p>
+        <h1 className="auth-title">Enter the verification code</h1>
+        <p className="auth-subtitle">We sent a 6-digit code to {phone || "your phone"}.</p>
 
-        <form onSubmit={handleSubmit(onSubmit)} noValidate style={{ marginTop: "1.2rem", display: "grid", gap: "0.8rem" }}>
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="form-stack">
           <div>
             <label className="form-label" htmlFor="otp">6-digit OTP</label>
             <input
@@ -64,39 +67,31 @@ function OtpPageContent() {
               {...getInputA11y("otp", errors)}
               id="otp"
               type="text"
-              className="form-input"
+              className="form-input otp-input"
               placeholder="123456"
               inputMode="numeric"
               maxLength={6}
               autoComplete="one-time-code"
-              style={{ textAlign: "center", letterSpacing: "0.35em", fontWeight: 700 }}
             />
+            <p className="form-helper">Code expires in a few minutes. Request a new OTP if needed.</p>
             {errors.otp && <p id={errorIdFor("otp")} className="form-error" role="alert">{errors.otp.message}</p>}
           </div>
 
-          <button type="submit" className="button button-primary" disabled={loading} style={{ width: "100%" }}>
+          <button type="submit" className="button button-primary cta-full" disabled={loading}>
             {loading ? "Verifying..." : "Verify and Continue"}
           </button>
 
           {errorMessage && (
-            <div
-              role="alert"
-              aria-live="assertive"
-              style={{
-                borderRadius: 12,
-                background: "#ffe8e8",
-                color: "#9e2f2f",
-                border: "1px solid #ffc7c7",
-                fontSize: "0.82rem",
-                padding: "0.55rem 0.7rem",
-              }}
-            >
+            <div role="alert" aria-live="assertive" className="auth-alert">
               {errorMessage}
             </div>
           )}
 
-          <p style={{ margin: "0.3rem 0 0", fontSize: "0.78rem", color: "var(--ink-muted)" }}>
+          <p className="form-note">
             Demo OTP for local testing is usually <strong>123456</strong>.
+          </p>
+          <p className="form-note">
+            Entered the wrong number? <Link href="/login" className="link-accent">Go back</Link>.
           </p>
         </form>
       </div>

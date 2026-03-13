@@ -131,6 +131,7 @@ export default function UserProfilePage() {
 
   const reportProfile = async () => {
     if (!guardUserAction()) return;
+    if (!window.confirm("Report this profile for inappropriate content?")) return;
 
     try {
       await api.post("/interactions/report", {
@@ -165,13 +166,13 @@ export default function UserProfilePage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: "0.9rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.55rem" }}>
+    <div className="profile-detail-shell">
+      <div className="profile-detail-actions">
         <button type="button" className="button button-secondary" onClick={() => router.back()}>
           Back
         </button>
-        <div style={{ display: "flex", gap: "0.42rem", flexWrap: "wrap" }}>
-          <button type="button" className="button button-secondary" onClick={toggleShortlist}>
+        <div className="profile-detail-action-group">
+          <button type="button" className="button button-secondary" onClick={toggleShortlist} aria-pressed={shortlisted}>
             {shortlisted ? "Saved" : "Save Profile"}
           </button>
           <button type="button" className="button button-primary" onClick={sendInterest} disabled={sendingInterest}>
@@ -180,26 +181,12 @@ export default function UserProfilePage() {
         </div>
       </div>
 
-      <section className="panel" style={{ overflow: "hidden" }}>
-        <div style={{ height: 190, background: "linear-gradient(140deg, #17213b 0%, #1f3f63 45%, #0d8ea0 100%)", position: "relative" }}>
-          <div
-            style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 80% 20%, rgba(240,107,78,0.4), transparent 45%)" }}
-          />
-        </div>
+      <section className="panel profile-hero profile-hero-detail">
+        <div className="profile-hero-banner profile-hero-banner-lg" />
 
-        <div style={{ padding: "0.95rem", marginTop: -54 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "88px minmax(0,1fr)", gap: "0.75rem", alignItems: "end" }}>
-            <div
-              style={{
-                width: 88,
-                height: 88,
-                borderRadius: "50%",
-                border: "4px solid #fff",
-                overflow: "hidden",
-                background: "#f2efe9",
-                boxShadow: "var(--shadow-md)",
-              }}
-            >
+        <div className="profile-hero-body">
+          <div className="profile-hero-head profile-hero-head-simple">
+            <div className="profile-avatar profile-avatar-lg">
               {primaryPhoto ? (
                 <Image
                   src={primaryPhoto}
@@ -207,46 +194,44 @@ export default function UserProfilePage() {
                   width={240}
                   height={240}
                   sizes="88px"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  className="profile-avatar-img"
                 />
               ) : (
-                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontWeight: 800 }}>
+                <div className="profile-avatar-letter">
                   {(profile.firstName || "U").charAt(0)}
                 </div>
               )}
             </div>
 
-            <div>
-              <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "1.72rem" }}>
+            <div className="profile-hero-meta">
+              <h1 className="profile-hero-name">
                 {profile.firstName} {profile.lastName}
               </h1>
-              <p style={{ margin: "0.24rem 0 0", color: "var(--ink-muted)", fontSize: "0.9rem" }}>
+              <p className="profile-hero-summary">
                 {age ? `${age} yrs | ` : ""}
                 {profile.profession || "Professional"}
                 {profile.city ? ` | ${profile.city}` : ""}
               </p>
-              <div style={{ marginTop: "0.38rem", display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              <div className="profile-hero-chips">
                 {profile.user?.isVerified && <span className="chip chip-support">Verified Profile</span>}
-                {profile.compatibilityScore && <span className="chip chip-brand">Compatibility {profile.compatibilityScore}/36</span>}
+                {profile.compatibilityScore && (
+                  <span className="chip chip-brand">Compatibility {profile.compatibilityScore}/36</span>
+                )}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.08fr 0.92fr", gap: "0.9rem" }} className="profile-view-grid">
-        <section className="panel" style={{ padding: "0.95rem" }}>
-          <p className="section-label" style={{ marginBottom: "0.3rem" }}>
-            About
-          </p>
-          <h2 style={{ margin: "0 0 0.7rem", fontFamily: "var(--font-display)", fontSize: "1.45rem" }}>Introduction</h2>
-          <p style={{ margin: 0, color: "var(--ink)", lineHeight: 1.68 }}>{profile.bio || "No bio added yet."}</p>
+      <div className="profile-view-grid">
+        <section className="panel profile-block">
+          <p className="section-label">About</p>
+          <h2 className="profile-section-title">Introduction</h2>
+          <p className="profile-bio-text">{profile.bio || "No bio added yet."}</p>
 
-          <div style={{ marginTop: "0.9rem" }}>
-            <p className="section-label" style={{ marginBottom: "0.35rem" }}>
-              Interests
-            </p>
-            <div style={{ display: "flex", gap: "0.42rem", flexWrap: "wrap" }}>
+          <div className="stack-sm profile-section-stack">
+            <p className="section-label">Interests</p>
+            <div className="profile-interests">
               {(profile.hobbies || []).length > 0 ? (
                 profile.hobbies.map((item) => (
                   <span key={item} className="chip chip-support">
@@ -254,23 +239,21 @@ export default function UserProfilePage() {
                   </span>
                 ))
               ) : (
-                <span style={{ color: "var(--ink-muted)", fontSize: "0.85rem" }}>No interests listed.</span>
+                <span className="profile-interests-empty">No interests listed.</span>
               )}
             </div>
           </div>
 
-          <div style={{ marginTop: "1rem" }}>
+          <div className="profile-actions-row">
             <button type="button" className="button button-secondary" onClick={reportProfile}>
               Report Profile
             </button>
           </div>
         </section>
 
-        <section className="panel" style={{ padding: "0.95rem", display: "grid", gap: "0.55rem" }}>
-          <p className="section-label" style={{ marginBottom: "0.3rem" }}>
-            Details
-          </p>
-          <h2 style={{ margin: "0 0 0.5rem", fontFamily: "var(--font-display)", fontSize: "1.45rem" }}>Profile Snapshot</h2>
+        <section className="panel profile-block profile-detail-panel">
+          <p className="section-label">Details</p>
+          <h2 className="profile-section-title">Profile Snapshot</h2>
 
           {[
             ["Religion", profile.religion],
@@ -282,15 +265,18 @@ export default function UserProfilePage() {
             ["Company", profile.company],
             ["Income", profile.incomeBand],
             ["Height", profile.heightCm ? `${profile.heightCm} cm` : null],
+            ["District", profile.district],
+            ["Residential status", profile.residentialStatus?.replaceAll("_", " ")],
+            ["Children", profile.hasChildren?.replaceAll("_", " ")],
             ["Location", [profile.city, profile.state, profile.country].filter(Boolean).join(", ")],
           ].map(([label, value]) => (
-            <div key={label} className="panel" style={{ padding: "0.52rem 0.62rem", borderRadius: 10 }}>
-              <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</p>
-              <p style={{ margin: "0.2rem 0 0", fontSize: "0.87rem", fontWeight: 700 }}>{value || "-"}</p>
+            <div key={label} className="profile-detail-tile">
+              <p className="profile-detail-label">{label}</p>
+              <p className="profile-detail-value">{value || "-"}</p>
             </div>
           ))}
 
-          <div style={{ marginTop: "0.2rem", display: "flex", gap: "0.42rem", flexWrap: "wrap" }}>
+          <div className="profile-actions-row">
             <Link href="/chat" className="button button-primary">
               Open Chat
             </Link>
@@ -301,9 +287,20 @@ export default function UserProfilePage() {
         </section>
       </div>
 
-      <section className="panel" style={{ padding: "0.95rem" }}>
+      <section className="panel profile-block">
         <ReviewsSection userId={profileId} userName={profile.firstName} />
       </section>
+
+      <div className="profile-sticky-cta" role="region" aria-label="Profile actions">
+        <div className="profile-sticky-actions">
+          <button type="button" className="button button-secondary" onClick={toggleShortlist} aria-pressed={shortlisted}>
+            {shortlisted ? "Saved" : "Save"}
+          </button>
+          <button type="button" className="button button-primary" onClick={sendInterest} disabled={sendingInterest}>
+            {sendingInterest ? "Sending..." : "Send Interest"}
+          </button>
+        </div>
+      </div>
 
       <LoginPromptModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 

@@ -1,6 +1,7 @@
 const interactionService = require('../services/interaction.service');
 const safetyService = require('../services/safety.service');
 const { parsePagination } = require('../utils/pagination');
+const { buildUserRoom, buildMatchRoom } = require('../realtime/socket.rooms');
 
 const likeUser = async (req, res) => {
     try {
@@ -9,10 +10,12 @@ const likeUser = async (req, res) => {
         const result = await interactionService.likeUser(senderId, receiverId);
         const io = req.app.get('io');
         if (result.isMatch && result.matchId) {
-            io.to(senderId).emit('new_match', { matchId: result.matchId, userId: receiverId });
-            io.to(receiverId).emit('new_match', { matchId: result.matchId, userId: senderId });
+            io.to(buildUserRoom(senderId)).emit('new_match', { matchId: result.matchId, userId: receiverId });
+            io.to(buildUserRoom(receiverId)).emit('new_match', { matchId: result.matchId, userId: senderId });
+            io.in(buildUserRoom(senderId)).socketsJoin(buildMatchRoom(result.matchId));
+            io.in(buildUserRoom(receiverId)).socketsJoin(buildMatchRoom(result.matchId));
         } else if (result.status === 'liked') {
-            io.to(receiverId).emit('new_like', { userId: senderId });
+            io.to(buildUserRoom(receiverId)).emit('new_like', { userId: senderId });
         }
         res.status(200).json(result);
     } catch (error) {

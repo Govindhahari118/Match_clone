@@ -1,5 +1,6 @@
 param(
-    [switch]$KeepInfra
+    [switch]$KeepInfra,
+    [switch]$NoDocker
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +8,19 @@ Set-StrictMode -Version Latest
 
 $Root = Split-Path -Parent $PSScriptRoot
 $PidsDir = Join-Path $Root "runtime\pids"
+$UseDocker = -not $NoDocker -and -not $env:NO_DOCKER -and -not $env:SKIP_DOCKER
+
+function Test-DockerEngine {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    $savedPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    docker info *> $null
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $savedPreference
+    return ($exitCode -eq 0)
+}
 
 function Invoke-DockerCompose([string[]]$arguments) {
     $savedPreference = $ErrorActionPreference
@@ -72,7 +86,11 @@ if (Test-Path $PidsDir) {
 
 if (-not $KeepInfra) {
     Write-Host "[2/2] Stopping postgres and redis containers..."
-    Invoke-DockerCompose -arguments @("stop", "postgres", "redis")
+    if ($UseDocker -and (Test-DockerEngine)) {
+        Invoke-DockerCompose -arguments @("stop", "postgres", "redis")
+    } else {
+        Write-Host "Docker not available; skipping infra stop."
+    }
 } else {
     Write-Host "[2/2] Keeping infrastructure running as requested."
 }

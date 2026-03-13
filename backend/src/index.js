@@ -7,27 +7,9 @@ const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config({ quiet: true });
 
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const postRoutes = require('./routes/post.routes');
-const metaRoutes = require('./routes/meta.routes');
-const searchRoutes = require('./routes/search.routes');
-const subscriptionRoutes = require('./routes/subscription.routes');
-const callRoutes = require('./routes/call.routes');
-const profileRoutes = require('./routes/profile.routes');
-const photoRoutes = require('./routes/photo.routes');
-const matchesRoutes = require('./routes/matches.routes');
-const interactionRoutes = require('./routes/interaction.routes');
-const chatRoutes = require('./routes/chat.routes');
-const paymentRoutes = require('./routes/payment.routes');
-const adminRoutes = require('./routes/admin.routes');
-const mediaRoutes = require('./routes/media.routes');
-const shortlistRoutes = require('./routes/shortlist.routes');
-const reviewRoutes = require('./routes/review.routes');
-const verificationRoutes = require('./routes/verification.routes');
-const analyticsRoutes = require('./routes/analytics.routes');
-const messageService = require('./services/message.service');
+const { buildRouteRegistry } = require('./routes/routes.registry');
 const { requestContextMiddleware, requestLoggingMiddleware } = require('./middleware/request-context.middleware');
+const { initRealtime, setupRedisAdapter } = require('./realtime/socket.server');
 
 const app = express();
 const server = http.createServer(app);
@@ -66,7 +48,10 @@ const io = new Server(server, {
     credentials: true,
   },
 });
-const connectedUsers = new Map();
+setupRedisAdapter(io).catch((error) => {
+  console.error('Redis adapter setup failed:', error);
+});
+initRealtime(io);
 
 app.set('io', io);
 app.disable('x-powered-by');
@@ -122,129 +107,19 @@ const callLimiter = rateLimit({
   message: { error: 'Call setup rate limit exceeded' },
 });
 
-app.use('/api/auth', authRoutes);
-app.use('/api/meta', metaRoutes);
-app.use('/api/search', searchLimiter, searchRoutes);
-app.use('/api/subscription', subscriptionRoutes);
-app.use('/api/call', callLimiter, callRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/profiles', profileLimiter, profileRoutes);
-app.use('/api/photos', photoRoutes);
-app.use('/api/matches', matchesRoutes);
-app.use('/api/interactions', interactionRoutes);
-app.use('/api/chat', chatLimiter, chatRoutes);
-app.use('/api/payment', paymentRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/posts', postRoutes);
-app.use('/api/media', mediaRoutes);
-app.use('/api/shortlist', shortlistRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/verification', verificationRoutes);
-app.use('/api/analytics', analyticsRoutes);
+const routeRegistry = buildRouteRegistry({
+  searchLimiter,
+  profileLimiter,
+  chatLimiter,
+  callLimiter,
+});
 
-io.on('connection', (socket) => {
-  console.log('User connected', socket.id);
-
-  socket.on('join_room', (userId) => {
-    if (!userId) {
-      return;
-    }
-
-    const normalizedUserId = String(userId);
-    socket.data.userId = normalizedUserId;
-    socket.join(normalizedUserId);
-    const activeSockets = connectedUsers.get(normalizedUserId) || new Set();
-    activeSockets.add(socket.id);
-    connectedUsers.set(normalizedUserId, activeSockets);
-    io.to(normalizedUserId).emit('presence_update', { userId: normalizedUserId, isOnline: true });
-    console.log(`User ${socket.id} joined room ${normalizedUserId}`);
-  });
-
-  socket.on('send_message', async (data = {}) => {
-    const { senderId, receiverId, content, clientMessageId } = data;
-    if (!senderId || !receiverId || !content) {
-      return;
-    }
-
-    try {
-      const saved = await messageService.saveMessage(senderId, receiverId, content, { clientMessageId });
-      const payload = {
-        ...saved,
-        senderId,
-        receiverId,
-      };
-
-      io.to(String(receiverId)).emit('receive_message', payload);
-      io.to(String(senderId)).emit('message_ack', {
-        clientMessageId: clientMessageId || null,
-        messageId: saved.id,
-        status: saved.status || 'sent',
-      });
-
-      const receiverSockets = connectedUsers.get(String(receiverId));
-      if (receiverSockets && receiverSockets.size > 0) {
-        await messageService.updateMessageStatus(receiverId, saved.id, 'delivered', {
-          source: 'socket_realtime_delivery',
-        });
-        io.to(String(senderId)).emit('message_status', {
-          messageId: saved.id,
-          status: 'delivered',
-          receiverId,
-        });
-      }
-    } catch (error) {
-      console.error('Error saving message', error);
-      io.to(String(senderId)).emit('message_ack', {
-        clientMessageId: clientMessageId || null,
-        status: 'failed',
-        error: error.message,
-      });
-    }
-  });
-
-  socket.on('typing', (data = {}) => {
-    const { senderId, receiverId, isTyping = true } = data;
-    if (!senderId || !receiverId) return;
-    io.to(String(receiverId)).emit('typing', {
-      senderId,
-      receiverId,
-      isTyping: Boolean(isTyping),
-      ts: new Date().toISOString(),
-    });
-  });
-
-  socket.on('conversation_seen', async (data = {}) => {
-    const { viewerId, peerId } = data;
-    if (!viewerId || !peerId) return;
-    try {
-      const seenUpdate = await messageService.markConversationSeen(String(viewerId), String(peerId));
-      if (seenUpdate.updated > 0) {
-        io.to(String(peerId)).emit('conversation_seen', {
-          viewerId: String(viewerId),
-          updated: seenUpdate.updated,
-        });
-      }
-    } catch (error) {
-      console.error('conversation_seen handler error', error);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    const userId = socket.data.userId;
-    if (userId) {
-      const activeSockets = connectedUsers.get(userId);
-      if (activeSockets) {
-        activeSockets.delete(socket.id);
-        if (activeSockets.size === 0) {
-          connectedUsers.delete(userId);
-          io.emit('presence_update', { userId, isOnline: false });
-        } else {
-          connectedUsers.set(userId, activeSockets);
-        }
-      }
-    }
-    console.log('User disconnected', socket.id);
-  });
+routeRegistry.forEach(({ base, router, middleware = [] }) => {
+  if (Array.isArray(middleware) && middleware.length > 0) {
+    app.use(base, ...middleware, router);
+  } else {
+    app.use(base, router);
+  }
 });
 
 app.get('/health', async (_req, res) => {

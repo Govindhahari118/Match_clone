@@ -1,11 +1,16 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { parsePagination } = require("../utils/pagination");
+const { getAuthUserId } = require("../utils/auth");
 
 const createReview = async (req, res) => {
     try {
         const { reviewedUserId, rating, comment } = req.body;
-        const reviewerId = req.user.sub || req.user.id; // From auth middleware
+        const reviewerId = getAuthUserId(req);
+
+        if (!reviewerId) {
+            return res.status(401).json({ error: "Access denied" });
+        }
 
         if (reviewerId === reviewedUserId) {
             return res.status(400).json({ error: "Cannot review yourself" });
@@ -91,7 +96,11 @@ const getReviews = async (req, res) => {
 const deleteReview = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.sub || req.user.id;
+        const userId = getAuthUserId(req);
+
+        if (!userId) {
+            return res.status(401).json({ error: "Access denied" });
+        }
 
         const review = await prisma.review.findUnique({ where: { id } });
         if (!review) return res.status(404).json({ error: "Review not found" });

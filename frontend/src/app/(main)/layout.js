@@ -351,7 +351,7 @@ export default function MainLayout({ children }) {
                 <UtilityIcon name="user" />
               </span>
             ) : user ? (
-              <Link href="/profile" className="button button-secondary app-avatar-button" aria-label="Open profile">
+              <Link href="/profile" className="button button-secondary app-avatar-button" aria-label="View profile">
                 {initial}
               </Link>
             ) : (

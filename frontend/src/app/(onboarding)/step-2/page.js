@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -21,8 +21,11 @@ export default function Step2() {
       country: "India",
       state: "",
       city: "",
+      district: "",
       religion: "",
       caste: "",
+      sub_caste: "",
+      gothra: "",
       mother_tongue: "",
     },
   });
@@ -41,8 +44,11 @@ export default function Step2() {
         country: stepDraft.country ?? profile.country ?? "India",
         state: stepDraft.state ?? profile.state ?? "",
         city: stepDraft.city ?? profile.city ?? "",
+        district: stepDraft.district ?? profile.district ?? "",
         religion: stepDraft.religion ?? profile.religion ?? "",
         caste: stepDraft.caste ?? profile.caste ?? "",
+        sub_caste: stepDraft.sub_caste ?? profile.subCaste ?? "",
+        gothra: stepDraft.gothra ?? profile.gothra ?? "",
         mother_tongue: stepDraft.mother_tongue ?? profile.motherTongue ?? "",
       });
 
@@ -61,8 +67,11 @@ export default function Step2() {
         country: data.country,
         state: data.state,
         city: data.city,
+        district: data.district,
         religion: data.religion,
         caste: data.caste,
+        subCaste: data.sub_caste,
+        gothra: data.gothra,
         motherTongue: data.mother_tongue,
       });
 
@@ -83,50 +92,68 @@ export default function Step2() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Location & Community</h2>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="onboarding-step-head">
+        <p className="section-label">Step 2 - Location</p>
+        <h2 className="section-title">Location & community</h2>
+        <p className="section-copy">
+          Tell us where you live and how you identify so matches feel more relevant.
+        </p>
+      </div>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="form-grid">
+        <div className="form-grid-2">
           <div>
-            <label htmlFor="country" className="block text-sm font-medium text-gray-700">Country</label>
+            <label htmlFor="country" className="form-label">Country</label>
             <input
               {...register("country", onboardingRules.step2.country)}
               {...getInputA11y("country", errors)}
               id="country"
               defaultValue="India"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="form-input"
             />
-            {errors.country && <p id={errorIdFor("country")} className="text-red-500 text-xs mt-1" role="alert">{errors.country.message}</p>}
+            {errors.country && <p id={errorIdFor("country")} className="form-error" role="alert">{errors.country.message}</p>}
           </div>
           <div>
-            <label htmlFor="state" className="block text-sm font-medium text-gray-700">State</label>
+            <label htmlFor="state" className="form-label">State</label>
             <input
               {...register("state", onboardingRules.step2.state)}
               {...getInputA11y("state", errors)}
               id="state"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="form-input"
             />
-            {errors.state && <p id={errorIdFor("state")} className="text-red-500 text-xs mt-1" role="alert">{errors.state.message}</p>}
+            {errors.state && <p id={errorIdFor("state")} className="form-error" role="alert">{errors.state.message}</p>}
+          </div>
+        </div>
+
+        <div className="form-grid-2">
+          <div>
+            <label htmlFor="city" className="form-label">City</label>
+            <input
+              {...register("city", onboardingRules.step2.city)}
+              {...getInputA11y("city", errors)}
+              id="city"
+              className="form-input"
+            />
+            {errors.city && <p id={errorIdFor("city")} className="form-error" role="alert">{errors.city.message}</p>}
+          </div>
+          <div>
+            <label htmlFor="district" className="form-label">District</label>
+            <input
+              {...register("district")}
+              {...getInputA11y("district", errors)}
+              id="district"
+              placeholder="Optional"
+              className="form-input"
+            />
           </div>
         </div>
 
         <div>
-          <label htmlFor="city" className="block text-sm font-medium text-gray-700">City</label>
-          <input
-            {...register("city", onboardingRules.step2.city)}
-            {...getInputA11y("city", errors)}
-            id="city"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-          {errors.city && <p id={errorIdFor("city")} className="text-red-500 text-xs mt-1" role="alert">{errors.city.message}</p>}
-        </div>
-
-        <div>
-          <label htmlFor="religion" className="block text-sm font-medium text-gray-700">Religion</label>
+          <label htmlFor="religion" className="form-label">Religion</label>
           <select
             {...register("religion", onboardingRules.step2.religion)}
             {...getInputA11y("religion", errors)}
             id="religion"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           >
             <option value="">Select Religion</option>
             <option value="Hindu">Hindu</option>
@@ -137,40 +164,64 @@ export default function Step2() {
             <option value="Buddhist">Buddhist</option>
             <option value="Other">Other</option>
           </select>
-          {errors.religion && <p id={errorIdFor("religion")} className="text-red-500 text-xs mt-1" role="alert">{errors.religion.message}</p>}
+          {errors.religion && <p id={errorIdFor("religion")} className="form-error" role="alert">{errors.religion.message}</p>}
         </div>
 
         <div>
-          <label htmlFor="caste" className="block text-sm font-medium text-gray-700">Caste</label>
+          <label htmlFor="caste" className="form-label">Caste</label>
           <input
             {...register("caste")}
             {...getInputA11y("caste", errors)}
             id="caste"
             placeholder="Optional"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
         </div>
 
         <div>
-          <label htmlFor="mother_tongue" className="block text-sm font-medium text-gray-700">Mother Tongue</label>
+          <label htmlFor="sub_caste" className="form-label">Sub Caste</label>
+          <input
+            {...register("sub_caste")}
+            {...getInputA11y("sub_caste", errors)}
+            id="sub_caste"
+            placeholder="Optional"
+            className="form-input"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="gothra" className="form-label">Gothra</label>
+          <input
+            {...register("gothra")}
+            {...getInputA11y("gothra", errors)}
+            id="gothra"
+            placeholder="Optional"
+            className="form-input"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="mother_tongue" className="form-label">Mother Tongue</label>
           <input
             {...register("mother_tongue", onboardingRules.step2.mother_tongue)}
             {...getInputA11y("mother_tongue", errors)}
             id="mother_tongue"
             placeholder="e.g. Hindi, English, Tamil"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className="form-input"
           />
-          {errors.mother_tongue && <p id={errorIdFor("mother_tongue")} className="text-red-500 text-xs mt-1" role="alert">{errors.mother_tongue.message}</p>}
+          {errors.mother_tongue && <p id={errorIdFor("mother_tongue")} className="form-error" role="alert">{errors.mother_tongue.message}</p>}
         </div>
 
         <button
           type="submit"
           disabled={initializing}
-          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-60"
+          className="button button-primary cta-full"
         >
           Next: Education & Career
         </button>
+        <p className="form-note">Your community details are only shared with compatible matches.</p>
       </form>
     </div>
   );
 }
+

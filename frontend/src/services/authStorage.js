@@ -1,4 +1,9 @@
 const AUTH_CHANGE_EVENT = "auth:changed";
+const USER_KEY = "user";
+const ACCESS_TOKEN_KEY = "accessToken";
+const REFRESH_TOKEN_KEY = "refreshToken";
+const LEGACY_ACCESS_TOKEN_KEY = "access_token";
+const LEGACY_REFRESH_TOKEN_KEY = "refresh_token";
 
 function emitAuthChange() {
   if (typeof window !== "undefined") {
@@ -8,14 +13,24 @@ function emitAuthChange() {
 
 export function getAccessToken() {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("accessToken") || localStorage.getItem("access_token");
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (token) return token;
+
+  const legacyToken = localStorage.getItem(LEGACY_ACCESS_TOKEN_KEY);
+  if (legacyToken) {
+    localStorage.setItem(ACCESS_TOKEN_KEY, legacyToken);
+    localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+    return legacyToken;
+  }
+
+  return null;
 }
 
 export function getStoredUser() {
   if (typeof window === "undefined") return null;
 
   try {
-    const rawUser = localStorage.getItem("user");
+    const rawUser = localStorage.getItem(USER_KEY);
     return rawUser ? JSON.parse(rawUser) : null;
   } catch {
     return null;
@@ -25,13 +40,16 @@ export function getStoredUser() {
 export function setAuthSession(userDetails, accessToken, refreshToken) {
   if (typeof window === "undefined") return;
 
-  localStorage.setItem("user", JSON.stringify(userDetails));
-  localStorage.setItem("accessToken", accessToken);
-  localStorage.setItem("access_token", accessToken);
+  localStorage.setItem(USER_KEY, JSON.stringify(userDetails));
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
 
   if (refreshToken) {
-    localStorage.setItem("refreshToken", refreshToken);
-    localStorage.setItem("refresh_token", refreshToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
+  } else {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
   }
 
   emitAuthChange();
@@ -40,11 +58,11 @@ export function setAuthSession(userDetails, accessToken, refreshToken) {
 export function clearAuthSession() {
   if (typeof window === "undefined") return;
 
-  localStorage.removeItem("user");
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refreshToken");
-  localStorage.removeItem("refresh_token");
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
 
   emitAuthChange();
 }
@@ -56,11 +74,11 @@ export function onAuthStorageEvent(listener) {
 
   const onStorage = (event) => {
     if (
-      event.key === "user" ||
-      event.key === "accessToken" ||
-      event.key === "access_token" ||
-      event.key === "refreshToken" ||
-      event.key === "refresh_token"
+      event.key === USER_KEY ||
+      event.key === ACCESS_TOKEN_KEY ||
+      event.key === LEGACY_ACCESS_TOKEN_KEY ||
+      event.key === REFRESH_TOKEN_KEY ||
+      event.key === LEGACY_REFRESH_TOKEN_KEY
     ) {
       listener();
     }
