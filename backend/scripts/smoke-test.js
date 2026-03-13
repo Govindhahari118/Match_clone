@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-const DEFAULT_BASE_URL = "http://localhost:4000";
+const DEFAULT_BASE_URL = "http://localhost:5000";
 const DEFAULT_OTP = "123456";
 
 function stripTrailingSlash(value) {

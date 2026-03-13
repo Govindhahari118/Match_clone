@@ -26,6 +26,21 @@ export function getAccessToken() {
   return null;
 }
 
+export function getRefreshToken() {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (token) return token;
+
+  const legacyToken = localStorage.getItem(LEGACY_REFRESH_TOKEN_KEY);
+  if (legacyToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, legacyToken);
+    localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
+    return legacyToken;
+  }
+
+  return null;
+}
+
 export function getStoredUser() {
   if (typeof window === "undefined") return null;
 

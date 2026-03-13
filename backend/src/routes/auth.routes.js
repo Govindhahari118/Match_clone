@@ -15,9 +15,9 @@ router.post('/signup', authController.signup);
 router.post('/login-firebase', authController.loginFirebase);
 
 // Token Refresh
-// router.post('/refresh', authController.refreshToken); 
+router.post('/refresh', authController.refreshToken);
 
 // Logout
-// router.post('/logout', authController.logout);
+router.post('/logout', authController.logout);
 
 module.exports = router;

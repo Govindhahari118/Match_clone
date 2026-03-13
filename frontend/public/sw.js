@@ -45,7 +45,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   const isSameOrigin = url.origin === self.location.origin;
-  const isApiRequest = url.pathname.startsWith("/api/") || url.origin.includes("localhost:4000");
+  const isApiRequest = url.pathname.startsWith("/api/") || url.origin.includes("localhost:5000");
 
   if (isApiRequest) {
     event.respondWith(

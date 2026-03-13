@@ -98,4 +98,32 @@ const signup = async (req, res) => {
     res.status(501).json({ error: 'Use request-otp for signup' });
 };
 
-module.exports = { requestOtp, verifyOtp, login: loginEmail, signup, loginFirebase }; 
+const refreshToken = async (req, res) => {
+    try {
+        const tokenFromBody = req.body?.refresh_token || req.body?.refreshToken;
+        const tokenFromHeader = req.header('x-refresh-token');
+        const token = tokenFromBody || tokenFromHeader;
+
+        const result = await authService.refreshAccessToken(token);
+        return res.status(200).json({
+            success: true,
+            user: result.user,
+            access_token: result.accessToken,
+            refresh_token: result.refreshToken,
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            expires_in: 3600,
+        });
+    } catch (error) {
+        if (error.message === 'Refresh token is required' || error.message === 'Invalid refresh token') {
+            return res.status(401).json({ error: error.message });
+        }
+        return res.status(500).json({ error: 'Failed to refresh token' });
+    }
+};
+
+const logout = async (_req, res) => {
+    return res.status(200).json({ success: true, message: 'Signed out' });
+};
+
+module.exports = { requestOtp, verifyOtp, login: loginEmail, signup, loginFirebase, refreshToken, logout };

@@ -14,7 +14,7 @@ import {
 } from "@/services/authStorage";
 
 const AuthContext = createContext();
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000";
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000";
 
 function readStoredUser() {
   if (typeof window === "undefined") return null;
@@ -112,6 +112,10 @@ export const AuthProvider = ({ children }) => {
       socket.disconnect();
       setSocket(null);
     }
+
+    void api.post("/auth/logout").catch(() => {
+      // Stateless logout endpoint; ignore network failures.
+    });
 
     clearAuthSession();
     window.location.href = "/login";
