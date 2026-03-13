@@ -37,3 +37,14 @@ This file summarizes the current `docs/` contents and the historical files that 
 
 No docs files are currently missing from the latest branch state compared to `HEAD~1`.
 The list above can be used as the authoritative retrieval set for current documentation artifacts.
+
+## Format gap vs requested analysis mode
+
+- Requested deep parsing target (`.txt` and `.docx`) is currently not present under `docs/`.
+- Available source formats are markdown (`.md`) and one Postman collection (`.json`).
+- Sequential per-file deep analysis has been started with:
+  - `docs/analysis/01-matrimony-app-prd-analysis.md`
+
+- Sequential analysis progress:
+  - `docs/analysis/01-matrimony-app-prd-analysis.md`
+  - `docs/analysis/02-matrimony-app-complete-documentation-analysis.md`

@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth.middleware');
 const searchController = require('../controllers/search.controller');
+const { requirePremiumSearchFilters } = require('../middleware/entitlement.middleware');
 
 router.use(authMiddleware);
 
-router.get('/', searchController.executeSearch);
-router.get('/execute', searchController.executeSearch);
+router.get('/', requirePremiumSearchFilters, searchController.executeSearch);
+router.get('/execute', requirePremiumSearchFilters, searchController.executeSearch);
 router.get('/rails', searchController.getDiscoveryRails);
 router.get('/suggestions', searchController.getSuggestions);
 router.get('/compare', searchController.compareProfiles);

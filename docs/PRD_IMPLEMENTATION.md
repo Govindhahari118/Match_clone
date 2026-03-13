@@ -70,7 +70,7 @@ This tracker maps the `Matrimony_App_PRD.docx` requirements to the current web a
 
 ### 4.11 Subscription Tiers
 - Pricing page with tiers: Implemented (pricing UI + comparisons).
-- Feature gating: Partial (no enforced gates in UI).
+- Feature gating: API enforcement improved (premium search filters + who-viewed now entitlement-gated); UI gating remains partial.
 
 ## 3. UI/UX Design (Section 5)
 - Warm, trust-first palette: Implemented (brand tokens updated).
@@ -92,5 +92,6 @@ Metrics captured in analytics stubs; full instrumentation deferred.
 ---
 
 ## Next Implementation Targets
-1. Enforce feature gating for premium plans (UI + API).
+1. Complete UI-level paywall and feature-lock states for all premium paths.
 2. Notification pipeline (email + web push) once infra allowed.
+3. Add automated entitlement test suite (search/profile-viewers/calls).

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const interactionController = require('../controllers/interaction.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const { requireEntitlement } = require('../middleware/entitlement.middleware');
 
 router.use(authMiddleware);
 
@@ -18,7 +19,9 @@ router.get('/safety-status', interactionController.getSafetyStatus);
 
 // ── Profile Views ─────────────────────────────────────────
 // ── Profile Views ─────────────────────────────────────────
-router.get('/profile-viewers', interactionController.getProfileViewers);
+router.get('/profile-viewers', requireEntitlement('canViewWhoViewed', {
+    message: 'Viewing profile visitors requires a premium subscription.'
+}), interactionController.getProfileViewers);
 
 // ── Features ─────────────────────────────────────────
 router.get('/horoscope/:targetUserId', interactionController.getHoroscopeMatch);
