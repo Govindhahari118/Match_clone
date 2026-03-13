@@ -2,6 +2,7 @@ const prisma = require('../config/prisma'); // Import singleton
 const { generateTokens } = require('../utils/jwt');
 const { hashPassword, comparePassword } = require('../utils/password');
 const admin = require('../config/firebase');
+const jwt = require('jsonwebtoken');
 
 const authService = {
     // Request OTP for phone (signup/login)
@@ -9,8 +10,10 @@ const authService = {
         // Check if user exists or create placeholder
         let user = await prisma.user.findUnique({ where: { phone } });
 
-        // For MVP/Dev, we use a fixed OTP '123456' or generate random
-        const otp = '123456';
+        // Keep fixed OTP only in development to avoid insecure non-dev defaults.
+        const otp = process.env.NODE_ENV === 'development'
+            ? '123456'
+            : String(Math.floor(100000 + Math.random() * 900000));
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
         if (!user) {
@@ -192,6 +195,35 @@ const authService = {
             console.error("Firebase Login Error:", error);
             throw new Error('Invalid Firebase Token');
         }
+    },
+
+    async refreshAccessToken(refreshToken) {
+        if (!refreshToken) {
+            throw new Error('Refresh token is required');
+        }
+
+        let decoded;
+        try {
+            decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        } catch (_error) {
+            throw new Error('Invalid refresh token');
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+        if (!user || !user.isActive) {
+            throw new Error('User not found');
+        }
+
+        const tokens = generateTokens(user.id, user.role);
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+            },
+            ...tokens,
+        };
     }
 };
 

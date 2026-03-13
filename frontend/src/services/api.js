@@ -1,8 +1,8 @@
 import axios from "axios";
-import { clearAuthSession, getAccessToken } from "./authStorage";
+import { clearAuthSession, getAccessToken, getRefreshToken, setAuthSession, getStoredUser } from "./authStorage";
 import { enqueueOfflineRequest } from "./offlineQueue";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 const RESPONSE_CACHE_PREFIX = "match_api_cache_v1:";
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -79,6 +79,35 @@ api.interceptors.response.use(
     const method = String(config.method || "get").toLowerCase();
 
     if (error.response && error.response.status === 401) {
+      const isRefreshCall = String(config.url || "").includes("/auth/refresh");
+      const alreadyRetried = Boolean(config.__retriedWithRefresh);
+
+      if (!isRefreshCall && !alreadyRetried) {
+        const refreshToken = getRefreshToken();
+        const user = getStoredUser();
+        if (refreshToken && user) {
+          try {
+            const refreshResponse = await api.post("/auth/refresh", { refresh_token: refreshToken });
+            const newAccessToken = refreshResponse?.data?.access_token || refreshResponse?.data?.accessToken;
+            const newRefreshToken = refreshResponse?.data?.refresh_token || refreshResponse?.data?.refreshToken;
+            if (newAccessToken) {
+              setAuthSession(user, newAccessToken, newRefreshToken || refreshToken);
+              const retryConfig = {
+                ...config,
+                __retriedWithRefresh: true,
+                headers: {
+                  ...(config.headers || {}),
+                  Authorization: `Bearer ${newAccessToken}`,
+                },
+              };
+              return api.request(retryConfig);
+            }
+          } catch (_refreshError) {
+            // fall through to session clear
+          }
+        }
+      }
+
       clearAuthSession();
       return Promise.reject(error);
     }

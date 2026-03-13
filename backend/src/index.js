@@ -15,7 +15,7 @@ const app = express();
 const server = http.createServer(app);
 const prisma = new PrismaClient();
 
-const PORT = Number(process.env.PORT || 4000);
+const PORT = Number(process.env.PORT || 5000);
 const BODY_LIMIT = process.env.BODY_LIMIT || '1mb';
 const ORIGIN_FALLBACK = process.env.FRONTEND_URL || 'http://localhost:8000';
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || ORIGIN_FALLBACK)
@@ -134,10 +134,13 @@ app.get('/health', async (_req, res) => {
     });
   } catch (error) {
     console.error('Health check failed', error);
-    res.status(500).json({
-      status: 'error',
+    res.status(200).json({
+      status: 'degraded',
       db: 'disconnected',
       error: error.message,
+      socket: 'active',
+      uptimeSeconds: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
     });
   }
 });
