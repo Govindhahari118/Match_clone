@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "description": "Workspace utilities for running Matrimony App locally",
   "scripts": {
-    "dev:up": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-up.ps1",
-    "dev:up:nodocker": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-up.ps1 -NoDocker",
+    "dev:up": "node ./scripts/dev-up.js",
+    "dev:up:nodocker": "node ./scripts/dev-up.js --no-docker",
     "dev:down": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-down.ps1",
     "dev:down:nodocker": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-down.ps1 -NoDocker",
     "dev:status": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-status.ps1",

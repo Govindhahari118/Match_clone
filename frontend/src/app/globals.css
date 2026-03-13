@@ -44,6 +44,10 @@
 
   --measure: 70ch;
 
+  --font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Georgia", "Times New Roman", serif;
+
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

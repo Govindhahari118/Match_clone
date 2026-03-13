@@ -1,4 +1,3 @@
-import { Fraunces, Sora } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -6,19 +5,6 @@ import GuestBannerGate from "@/components/GuestBannerGate";
 import RuntimeClientBootstrap from "@/components/RuntimeClientBootstrap";
 import SiteFooter from "@/components/SiteFooter";
 
-const sora = Sora({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-sans",
-  weight: ["400", "500", "600", "700"],
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
-});
 
 export const metadata = {
   title: "MatrimonyConnect - Trusted Global Matrimony Platform",
@@ -42,7 +28,7 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${sora.variable} ${fraunces.variable}`}>
+      <body>
         <ThemeProvider>
           <AuthProvider>
             <RuntimeClientBootstrap />

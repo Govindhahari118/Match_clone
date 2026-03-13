@@ -16,6 +16,9 @@ A privacy-first, self-serve matrimony platform engineered for zero-INR feature d
 npm run dev:up
 ```
 
+- On Windows: uses PowerShell bootstrap.
+- On Linux/macOS: launches frontend dev server at `http://localhost:8000`.
+
 Without Docker:
 
 ```bash
@@ -268,6 +271,9 @@ With Docker:
 ```bash
 npm run dev:up
 ```
+
+- On Windows: uses PowerShell bootstrap.
+- On Linux/macOS: launches frontend dev server at `http://localhost:8000`.
 
 Without Docker:
 
