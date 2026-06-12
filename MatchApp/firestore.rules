@@ -1,0 +1,227 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────
+    // Anyone signed in can read profiles (for discovery).
+    // Only the profile owner can write their own profile.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // ── Interests (likes) ─────────────────────────────────────────────────
+    // Document ID: {fromUid}_{toUid}
+    // Only the sender can create/delete their own interest.
+    // Anyone signed in can read (to check mutual matches).
+    match /interests/{interestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.fromUid == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.fromUid == request.auth.uid;
+      allow update: if false; // Interests are immutable
+    }
+
+    // ── Matches ───────────────────────────────────────────────────────────
+    // Only participants can read their matches.
+    // Created by the system (client that detects mutual like).
+    match /matches/{matchId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.users;
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.users;
+      allow delete: if isSignedIn()
+        && request.auth.uid in resource.data.users;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.users;
+    }
+
+    // ── Shortlists ────────────────────────────────────────────────────────
+    // Only the owner can read/write their shortlists.
+    match /shortlists/{ownerUid}/saved/{targetUid} {
+      allow read, write: if isOwner(ownerUid);
+    }
+    match /shortlists/{ownerUid} {
+      allow read: if isOwner(ownerUid);
+    }
+
+    // ── Blocks ────────────────────────────────────────────────────────────
+    // Only the blocker can read/write their block list.
+    match /blocks/{blockerUid}/blocked/{blockedUid} {
+      allow read, write: if isOwner(blockerUid);
+    }
+    match /blocks/{blockerUid} {
+      allow read: if isOwner(blockerUid);
+    }
+
+    // ── Chats ─────────────────────────────────────────────────────────────
+    // Only participants of a thread can read/write messages.
+    match /chats/{threadId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.participants;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants;
+        allow create: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants
+          && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants;
+      }
+    }
+
+    // ── Events ────────────────────────────────────────────────────────────
+    // Anyone signed in can read events. Only admins should create (enforce via Cloud Functions).
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only via Cloud Functions
+    }
+
+    // ── Event Registrations ───────────────────────────────────────────────
+    // Users can read/create their own registrations.
+    match /eventRegistrations/{regId} {
+      allow read: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Counselling Bookings ──────────────────────────────────────────────
+    match /counsellingBookings/{bookingId} {
+      allow read: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Referrals ─────────────────────────────────────────────────────────
+    match /referrals/{refId} {
+      allow read: if isSignedIn()
+        && resource.data.referrerUid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.referrerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── RM Requests (Assisted Matchmaking) ────────────────────────────────
+    match /rmRequests/{reqId} {
+      allow read: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Background Checks ─────────────────────────────────────────────────
+    match /backgroundChecks/{checkId} {
+      allow read: if isSignedIn()
+        && resource.data.requestedBy == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.requestedBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Call Requests (Secure Call / Virtual Meet) ─────────────────────────
+    match /callRequests/{callId} {
+      allow read: if isSignedIn()
+        && (resource.data.fromUid == request.auth.uid
+            || resource.data.toUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.fromUid == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.toUid == request.auth.uid; // Only recipient can accept/decline
+      allow delete: if false;
+    }
+
+    // ── Profile Analytics ─────────────────────────────────────────────────
+    match /profileAnalytics/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /weekly/{weekId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ── Communities ───────────────────────────────────────────────────────
+    match /communities/{communityId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Admin-only
+
+      match /members/{memberId} {
+        allow read: if isSignedIn();
+        allow create: if isOwner(memberId);
+        allow delete: if isOwner(memberId);
+      }
+    }
+
+    // ── Verifications (Sprint 10) ─────────────────────────────────────────
+    // Users submit verification documents; only they and Cloud Functions can access.
+    match /verifications/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if false; // Only Cloud Functions (admin SDK) can approve/reject
+      allow delete: if false;
+    }
+
+    // ── Verification Requests (Sprint B — real pipeline) ──────────────────
+    match /verificationRequests/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid)
+        && request.resource.data.status == "pending"; // Users can only submit, not approve
+      allow delete: if false;
+    }
+
+    // ── Notifications (Sprint 10) ─────────────────────────────────────────
+    // Users can read and mark their own notifications as read.
+    match /notifications/{notifId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow create: if false; // Only Cloud Functions create notifications
+      allow delete: if false;
+    }
+
+    // ── Notification Preferences (Sprint 10) ──────────────────────────────
+    match /notificationPrefs/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ── Sessions (Sprint 10) ──────────────────────────────────────────────
+    // Server-side session tracking. Users can read own sessions, only system writes.
+    match /sessions/{uid}/devices/{deviceId} {
+      allow read: if isOwner(uid);
+      allow write: if false; // Only Cloud Functions manage sessions
+    }
+    match /sessions/{uid} {
+      allow read: if isOwner(uid);
+    }
+
+    // ── OTP Log (Sprint 10) ───────────────────────────────────────────────
+    // System-only for brute-force protection. No client access.
+    match /otpLog/{hash} {
+      allow read, write: if false; // Cloud Functions only
+    }
+  }
+}

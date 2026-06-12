@@ -1,0 +1,314 @@
+package com.match.app.ui.interests
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.match.app.data.local.dao.UserDao
+import com.match.app.data.repo.SocialRepository
+import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.Gender
+import com.match.app.domain.model.LookingFor
+import com.match.app.domain.model.UserProfile
+import com.match.app.ui.i18n.t
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+enum class InterestTab { RECEIVED, SENT, MUTUAL }
+
+data class InterestUi(
+    val tab: InterestTab = InterestTab.RECEIVED,
+    val received: List<UserProfile> = emptyList(),
+    val sent: List<UserProfile> = emptyList(),
+    val mutual: List<UserProfile> = emptyList()
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@HiltViewModel
+class InterestsViewModel @Inject constructor(
+    private val session: SessionStore,
+    private val social: SocialRepository,
+    private val userDao: UserDao
+) : ViewModel() {
+    private val _tab = MutableStateFlow(InterestTab.RECEIVED)
+    val tab: StateFlow<InterestTab> = _tab
+
+    val received: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
+        .flatMapLatest { me ->
+            social.observeReceivedInterests(me).map { ids ->
+                ids.mapNotNull { userDao.findById(it)?.toProfile() }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val sent: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
+        .flatMapLatest { me ->
+            social.observeSentInterests(me).map { ids ->
+                ids.mapNotNull { userDao.findById(it)?.toProfile() }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val mutual: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
+        .flatMapLatest { me ->
+            social.observeMutual(me).map { likes ->
+                likes.mapNotNull { userDao.findById(it.toUserId)?.toProfile() }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun setTab(t: InterestTab) { _tab.value = t }
+
+    fun accept(targetId: Long) = viewModelScope.launch {
+        val me = session.userId.first() ?: return@launch
+        social.like(me, targetId)
+    }
+
+    fun decline(targetId: Long) = viewModelScope.launch {
+        val me = session.userId.first() ?: return@launch
+        social.unlike(me, targetId)
+    }
+
+    private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
+        id = id, email = email, displayName = displayName, age = age,
+        gender = runCatching { Gender.valueOf(gender) }.getOrDefault(Gender.OTHER),
+        lookingFor = runCatching { LookingFor.valueOf(lookingFor) }.getOrDefault(LookingFor.ANY),
+        city = city, bio = bio, rasi = rasi, nakshatra = nakshatra,
+        hasQuestionnaire = false, primaryPhotoPath = null,
+        religion = religion, caste = caste, motherTongue = motherTongue,
+        education = education, profession = profession,
+        maritalStatus = maritalStatus, heightCm = heightCm,
+        isVerified = isVerified, isPremium = isPremium, state = state
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InterestsScreen(
+    onOpenProfile: (Long) -> Unit = {},
+    onOpenChat: (Long) -> Unit = {},
+    vm: InterestsViewModel = hiltViewModel()
+) {
+    val tab by vm.tab.collectAsState()
+    val received by vm.received.collectAsState()
+    val sent by vm.sent.collectAsState()
+    val mutual by vm.mutual.collectAsState()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(t("interests", "Interests")) },
+                actions = {
+                    if (received.isNotEmpty()) {
+                        BadgedBox(
+                            badge = { Badge(containerColor = MaterialTheme.colorScheme.error) { Text("${received.size}") } },
+                            modifier = Modifier.padding(end = 16.dp)
+                        ) {
+                            Icon(Icons.Filled.MoveToInbox, contentDescription = "Pending interests")
+                        }
+                    }
+                }
+            )
+        }
+    ) { pad ->
+        Column(Modifier.padding(pad).fillMaxSize().testTag("interests_screen")) {
+            // Stats strip
+            Surface(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    Modifier.padding(16.dp, 12.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InterestStatItem("${received.size}", t("received", "Received"), MaterialTheme.colorScheme.error)
+                    InterestStatItem("${mutual.size}", t("mutual", "Mutual"), MaterialTheme.colorScheme.primary)
+                    InterestStatItem("${sent.size}", t("sent", "Sent"), MaterialTheme.colorScheme.tertiary)
+                }
+            }
+            // Tab row
+            TabRow(selectedTabIndex = tab.ordinal) {
+                InterestTab.entries.forEach { t ->
+                    Tab(
+                        selected = tab == t,
+                        onClick = { vm.setTab(t) },
+                        text = {
+                            val count = when (t) {
+                                InterestTab.RECEIVED -> received.size
+                                InterestTab.SENT     -> sent.size
+                                InterestTab.MUTUAL   -> mutual.size
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(t.name.lowercase().replaceFirstChar { it.uppercase() })
+                                if (count > 0) {
+                                    Badge { Text("$count") }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+            val list = when (tab) {
+                InterestTab.RECEIVED -> received
+                InterestTab.SENT     -> sent
+                InterestTab.MUTUAL   -> mutual
+            }
+            if (list.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val (icon, msg) = when (tab) {
+                            InterestTab.RECEIVED -> Icons.Filled.MoveToInbox to t("no_interests_received", "No interests received yet")
+                            InterestTab.SENT     -> Icons.AutoMirrored.Filled.Send to t("no_interests_sent", "You haven't sent any interests yet")
+                            InterestTab.MUTUAL   -> Icons.Filled.Favorite to t("no_mutual_interests", "No mutual interests yet")
+                        }
+                        Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        Text(msg, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            when (tab) {
+                                InterestTab.RECEIVED -> t("interests_received_hint", "When someone likes you, they'll appear here")
+                                InterestTab.SENT     -> t("interests_sent_hint", "Like someone from Matches to send an interest")
+                                InterestTab.MUTUAL   -> t("interests_mutual_hint", "Mutual interests appear when you both like each other")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize().testTag("interests_list_${tab.name.lowercase()}")
+                ) {
+                    items(list, key = { it.id }) { p ->
+                        InterestCard(
+                            profile = p,
+                            tab = tab,
+                            onOpen = { onOpenProfile(p.id) },
+                            onChat = { onOpenChat(p.id) },
+                            onAccept = { vm.accept(p.id) },
+                            onDecline = { vm.decline(p.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InterestStatItem(value: String, label: String, color: androidx.compose.ui.graphics.Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun InterestCard(
+    profile: UserProfile,
+    tab: InterestTab,
+    onOpen: () -> Unit,
+    onChat: () -> Unit,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    ElevatedCard(
+        onClick = onOpen,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().testTag("interest_card_${profile.id}")
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val gradColors = remember(profile.id) {
+                    val palette = listOf(
+                        listOf(Color(0xFFE91E63), Color(0xFFFF5722)),
+                        listOf(Color(0xFF9C27B0), Color(0xFF3F51B5)),
+                        listOf(Color(0xFF009688), Color(0xFF4CAF50)),
+                        listOf(Color(0xFF1976D2), Color(0xFF00BCD4)),
+                        listOf(Color(0xFF795548), Color(0xFF607D8B)),
+                    )
+                    palette[(profile.id % palette.size).toInt()]
+                }
+                Box(
+                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
+                        .background(Brush.linearGradient(gradColors)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(profile.displayName.first().uppercase(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("${profile.displayName}, ${profile.age}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        if (profile.isVerified) {
+                            Icon(Icons.Filled.Verified, null, Modifier.size(14.dp), tint = Color(0xFF1976D2))
+                        }
+                        if (profile.isPremium) {
+                            Icon(Icons.Filled.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFB300))
+                        }
+                    }
+                    Text("${profile.city} • ${profile.profession}", style = MaterialTheme.typography.bodySmall)
+                    Text("${profile.religion} • ${profile.motherTongue}", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (tab == InterestTab.RECEIVED) {
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onDecline,
+                        modifier = Modifier.weight(1f).testTag("interest_decline_${profile.id}"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Filled.Close, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(t("decline", "Decline"))
+                    }
+                    Button(
+                        onClick = onAccept,
+                        modifier = Modifier.weight(1f).testTag("interest_accept_${profile.id}")
+                    ) {
+                        Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(t("accept", "Accept"))
+                    }
+                }
+            } else if (tab == InterestTab.MUTUAL) {
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = onChat,
+                    modifier = Modifier.fillMaxWidth().testTag("interest_chat_${profile.id}")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Chat, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(t("start_chatting", "Start chatting"))
+                }
+            }
+        }
+    }
+}

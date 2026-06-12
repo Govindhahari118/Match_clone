@@ -1,0 +1,52 @@
+{
+  "nakshatras": [
+    {"index": 0, "name": "Ashwini", "telugu": "అశ్విని", "rasi": "Aries", "gana": "Deva", "yoni": "Horse"},
+    {"index": 1, "name": "Bharani", "telugu": "భరణి", "rasi": "Aries", "gana": "Manushya", "yoni": "Elephant"},
+    {"index": 2, "name": "Krittika", "telugu": "కృత్తిక", "rasi": "Aries/Taurus", "gana": "Rakshasa", "yoni": "Goat"},
+    {"index": 3, "name": "Rohini", "telugu": "రోహిణి", "rasi": "Taurus", "gana": "Manushya", "yoni": "Serpent"},
+    {"index": 4, "name": "Mrigashira", "telugu": "మృగశిర", "rasi": "Taurus/Gemini", "gana": "Deva", "yoni": "Serpent"},
+    {"index": 5, "name": "Ardra", "telugu": "ఆర్ద్ర", "rasi": "Gemini", "gana": "Manushya", "yoni": "Dog"},
+    {"index": 6, "name": "Punarvasu", "telugu": "పునర్వసు", "rasi": "Gemini/Cancer", "gana": "Deva", "yoni": "Cat"},
+    {"index": 7, "name": "Pushya", "telugu": "పుష్యమి", "rasi": "Cancer", "gana": "Deva", "yoni": "Goat"},
+    {"index": 8, "name": "Ashlesha", "telugu": "ఆశ్లేష", "rasi": "Cancer", "gana": "Rakshasa", "yoni": "Cat"},
+    {"index": 9, "name": "Magha", "telugu": "మఘ", "rasi": "Leo", "gana": "Rakshasa", "yoni": "Rat"},
+    {"index": 10, "name": "Purva Phalguni", "telugu": "పూర్వ ఫల్గుణి", "rasi": "Leo", "gana": "Manushya", "yoni": "Rat"},
+    {"index": 11, "name": "Uttara Phalguni", "telugu": "ఉత్తర ఫల్గుణి", "rasi": "Leo/Virgo", "gana": "Manushya", "yoni": "Cow"},
+    {"index": 12, "name": "Hasta", "telugu": "హస్త", "rasi": "Virgo", "gana": "Deva", "yoni": "Buffalo"},
+    {"index": 13, "name": "Chitra", "telugu": "చిత్ర", "rasi": "Virgo/Libra", "gana": "Rakshasa", "yoni": "Tiger"},
+    {"index": 14, "name": "Swati", "telugu": "స్వాతి", "rasi": "Libra", "gana": "Deva", "yoni": "Buffalo"},
+    {"index": 15, "name": "Vishakha", "telugu": "విశాఖ", "rasi": "Libra/Scorpio", "gana": "Rakshasa", "yoni": "Tiger"},
+    {"index": 16, "name": "Anuradha", "telugu": "అనూరాధ", "rasi": "Scorpio", "gana": "Deva", "yoni": "Deer"},
+    {"index": 17, "name": "Jyeshtha", "telugu": "జ్యేష్ఠ", "rasi": "Scorpio", "gana": "Rakshasa", "yoni": "Deer"},
+    {"index": 18, "name": "Mula", "telugu": "మూల", "rasi": "Sagittarius", "gana": "Rakshasa", "yoni": "Dog"},
+    {"index": 19, "name": "Purva Ashadha", "telugu": "పూర్వాషాఢ", "rasi": "Sagittarius", "gana": "Manushya", "yoni": "Monkey"},
+    {"index": 20, "name": "Uttara Ashadha", "telugu": "ఉత్తరాషాఢ", "rasi": "Sagittarius/Capricorn", "gana": "Manushya", "yoni": "Mongoose"},
+    {"index": 21, "name": "Shravana", "telugu": "శ్రవణం", "rasi": "Capricorn", "gana": "Deva", "yoni": "Monkey"},
+    {"index": 22, "name": "Dhanishta", "telugu": "ధనిష్ఠ", "rasi": "Capricorn/Aquarius", "gana": "Rakshasa", "yoni": "Lion"},
+    {"index": 23, "name": "Shatabhisha", "telugu": "శతభిషం", "rasi": "Aquarius", "gana": "Rakshasa", "yoni": "Horse"},
+    {"index": 24, "name": "Purva Bhadrapada", "telugu": "పూర్వ భాద్రపద", "rasi": "Aquarius/Pisces", "gana": "Manushya", "yoni": "Lion"},
+    {"index": 25, "name": "Uttara Bhadrapada", "telugu": "ఉత్తర భాద్రపద", "rasi": "Pisces", "gana": "Manushya", "yoni": "Cow"},
+    {"index": 26, "name": "Revati", "telugu": "రేవతి", "rasi": "Pisces", "gana": "Deva", "yoni": "Elephant"}
+  ],
+  "rashis": [
+    {"index": 0, "name": "Aries", "telugu": "మేషం", "lord": "Mars"},
+    {"index": 1, "name": "Taurus", "telugu": "వృషభం", "lord": "Venus"},
+    {"index": 2, "name": "Gemini", "telugu": "మిథునం", "lord": "Mercury"},
+    {"index": 3, "name": "Cancer", "telugu": "కర్కాటకం", "lord": "Moon"},
+    {"index": 4, "name": "Leo", "telugu": "సింహం", "lord": "Sun"},
+    {"index": 5, "name": "Virgo", "telugu": "కన్య", "lord": "Mercury"},
+    {"index": 6, "name": "Libra", "telugu": "తుల", "lord": "Venus"},
+    {"index": 7, "name": "Scorpio", "telugu": "వృశ్చికం", "lord": "Mars"},
+    {"index": 8, "name": "Sagittarius", "telugu": "ధనుస్సు", "lord": "Jupiter"},
+    {"index": 9, "name": "Capricorn", "telugu": "మకరం", "lord": "Saturn"},
+    {"index": 10, "name": "Aquarius", "telugu": "కుంభం", "lord": "Saturn"},
+    {"index": 11, "name": "Pisces", "telugu": "మీనం", "lord": "Jupiter"}
+  ],
+  "gothras": [
+    "Kasyapa", "Bharadwaja", "Vasishta", "Vishwamitra", "Atri",
+    "Gautama", "Jamadagni", "Angirasa", "Agastya", "Pulastya",
+    "Parasara", "Harita", "Kanva", "Katyayana", "Mandavya",
+    "Vatsa", "Shandilya", "Kaundinya", "Mudgala", "Nidruva",
+    "Dhananjaya", "Surya", "Somavanshi"
+  ]
+}

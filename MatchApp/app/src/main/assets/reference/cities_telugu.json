@@ -1,0 +1,30 @@
+{
+  "cities": {
+    "telangana": [
+      "Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam",
+      "Mahbubnagar", "Nalgonda", "Adilabad", "Suryapet", "Siddipet",
+      "Mancherial", "Kamareddy", "Jagtial", "Medak", "Sangareddy"
+    ],
+    "andhra_pradesh": [
+      "Vijayawada", "Visakhapatnam", "Guntur", "Nellore", "Kurnool",
+      "Tirupati", "Rajahmundry", "Kakinada", "Eluru", "Ongole",
+      "Anantapur", "Kadapa", "Machilipatnam", "Srikakulam", "Bhimavaram",
+      "Tenali", "Proddatur", "Hindupur", "Chirala", "Narasaraopet"
+    ],
+    "nri_hubs": [
+      {"city": "New Jersey", "country": "USA", "telugu_population": "large"},
+      {"city": "Dallas", "country": "USA", "telugu_population": "large"},
+      {"city": "Bay Area", "country": "USA", "telugu_population": "large"},
+      {"city": "Chicago", "country": "USA", "telugu_population": "medium"},
+      {"city": "Seattle", "country": "USA", "telugu_population": "medium"},
+      {"city": "Dubai", "country": "UAE", "telugu_population": "large"},
+      {"city": "Abu Dhabi", "country": "UAE", "telugu_population": "medium"},
+      {"city": "Sydney", "country": "Australia", "telugu_population": "medium"},
+      {"city": "Melbourne", "country": "Australia", "telugu_population": "medium"},
+      {"city": "London", "country": "UK", "telugu_population": "medium"},
+      {"city": "Singapore", "country": "Singapore", "telugu_population": "medium"},
+      {"city": "Toronto", "country": "Canada", "telugu_population": "medium"},
+      {"city": "Kuala Lumpur", "country": "Malaysia", "telugu_population": "small"}
+    ]
+  }
+}

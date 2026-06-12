@@ -1,0 +1,27 @@
+{
+  "castes": [
+    {"id": "brahmin", "name": "Brahmin", "telugu": "బ్రాహ్మణ", "subCastes": ["Niyogi", "Vaidiki", "Smartha", "Sri Vaishnava", "Madhva", "Deshastha", "Velanadu", "Mulukanadu"]},
+    {"id": "reddy", "name": "Reddy", "telugu": "రెడ్డి", "subCastes": ["Kapu Reddy", "Panta Reddy", "Motati Reddy", "Pakanati Reddy", "Desuru Reddy", "Gudati Reddy"]},
+    {"id": "kamma", "name": "Kamma", "telugu": "కమ్మ", "subCastes": ["Pedda Kamma", "Chinna Kamma", "Illuvella Kamma", "Yerra Kamma", "Golla Kamma"]},
+    {"id": "kapu", "name": "Kapu", "telugu": "కాపు", "subCastes": ["Telaga", "Turpu Kapu", "Ontari", "Balija Kapu", "Munnuru Kapu"]},
+    {"id": "velama", "name": "Velama", "telugu": "వెలమ", "subCastes": ["Padmanayaka Velama", "Rachakonda Velama", "Devarakonda Velama"]},
+    {"id": "naidu", "name": "Naidu", "telugu": "నాయుడు", "subCastes": ["Balija Naidu", "Kamma Naidu", "Kapu Naidu", "Gavara Naidu", "Settibalija Naidu"]},
+    {"id": "yadav", "name": "Yadav (Golla)", "telugu": "యాదవ (గొల్ల)", "subCastes": ["Kuruma", "Erukala Golla", "Ediga"]},
+    {"id": "vysya", "name": "Vysya (Arya Vaishya)", "telugu": "వైశ్య (ఆర్య వైశ్య)", "subCastes": ["Komati", "Trivarnika Vysya", "Gupta"]},
+    {"id": "mudaliar", "name": "Mudaliar", "telugu": "ముదలియార్", "subCastes": ["Agamudayar", "Saiva Mudaliar"]},
+    {"id": "raju", "name": "Raju (Kshatriya)", "telugu": "రాజు (క్షత్రియ)", "subCastes": ["Suryavanshi", "Chandravanshi", "Pusapati", "Vatsavai"]},
+    {"id": "mala", "name": "Mala", "telugu": "మాల", "subCastes": ["Mala", "Mala Dasari", "Mala Jangam"]},
+    {"id": "madiga", "name": "Madiga", "telugu": "మాదిగ", "subCastes": ["Madiga", "Madiga Dakkali", "Madiga Mashteen"]},
+    {"id": "padmashali", "name": "Padmashali", "telugu": "పద్మశాలి", "subCastes": ["Padmashali", "Sali", "Senapathi"]},
+    {"id": "goud", "name": "Goud", "telugu": "గౌడ్", "subCastes": ["Ediga", "Goud Setty", "Idiga"]},
+    {"id": "kummari", "name": "Kummari (Kamsali)", "telugu": "కుమ్మరి (కంసాలి)", "subCastes": ["Kamsali", "Ausula", "Kanchari", "Vadrangi", "Silpi"]},
+    {"id": "mudiraj", "name": "Mudiraj", "telugu": "ముదిరాజ్", "subCastes": ["Mudiraj", "Mutrasi", "Tenugu Mudiraj"]},
+    {"id": "munnuru_kapu", "name": "Munnuru Kapu", "telugu": "మున్నూరు కాపు", "subCastes": ["Munnuru Kapu"]},
+    {"id": "kuruma", "name": "Kuruma (Kuruba)", "telugu": "కురుమ (కురుబ)", "subCastes": ["Kuruma", "Kuruma Golla"]},
+    {"id": "lambadi", "name": "Lambadi (Banjara)", "telugu": "లంబాడి (బంజారా)", "subCastes": ["Lambadi", "Banjara", "Sugali"]},
+    {"id": "chakali", "name": "Chakali (Rajaka)", "telugu": "చాకలి (రజక)", "subCastes": ["Chakali", "Rajaka"]},
+    {"id": "mangali", "name": "Mangali (Nayee Brahmin)", "telugu": "మంగలి (నాయీ బ్రాహ్మణ)", "subCastes": ["Mangali"]},
+    {"id": "christian", "name": "Christian", "telugu": "క్రిస్టియన్", "subCastes": ["RC (Roman Catholic)", "CSI", "Pentecostal", "Baptist", "Methodist"]},
+    {"id": "muslim", "name": "Muslim", "telugu": "ముస్లిం", "subCastes": ["Sunni", "Shia", "Bohra", "Pathan", "Syed", "Sheikh"]}
+  ]
+}

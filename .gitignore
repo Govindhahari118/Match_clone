@@ -1,0 +1,33 @@
+# Temporary analysis clone
+Match_clone_analysis/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Node
+node_modules/
+
+# Android build artifacts
+**/build/
+**/app/build/
+*.apk
+*.aab
+
+# Compiled Firebase Functions
+MatchApp/functions/lib/
+
+# Gradle
+.gradle/
+local.properties
+*.keystore
+*.jks
+keystore.properties
+
+# Logs
+MatchApp/logs/
