@@ -1,7 +1,6 @@
 package com.match.app.ui.pricing
 
 import android.app.Activity
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,6 +25,7 @@ import com.match.app.BuildConfig
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.subscription.SubscriptionPlans
 import com.match.app.ui.i18n.t
 import com.razorpay.Checkout
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,146 +34,34 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import javax.inject.Inject
 
-// ── Plan model ──────────────────────────────────────────────────────────────
 private data class Plan(
+    val id: String,
     val name: String,
     val tagline: String,
     val price: String,
-    val originalPrice: String?,
     val period: String,
-    val duration: String,
     val contacts: String,
-    val badge: String?,
-    val badgeColor: Color,
     val features: List<String>,
-    val lockedFeatures: List<String>,
     val cta: String,
     val highlighted: Boolean,
     val icon: ImageVector,
-    val amountPaise: Int = 0
+    val amountPaise: Int
 )
 
 private val PLANS = listOf(
-    Plan(
-        name = "Free",
-        tagline = "Start your journey",
-        price = "₹0",
-        originalPrice = null,
-        period = "ALWAYS FREE",
-        duration = "Unlimited",
-        contacts = "5 per day",
-        badge = null,
-        badgeColor = Color.Transparent,
-        features = listOf(
-            "Create & complete profile",
-            "Browse daily matches",
-            "Send up to 5 interests/day",
-            "Shortlist profiles",
-            "Receive interests",
-            "Basic questionnaire matching"
-        ),
-        lockedFeatures = listOf(
-            "View contact details",
-            "Unlimited messaging",
-            "Kundli compatibility report"
-        ),
-        cta = "Get started free",
-        highlighted = false,
-        icon = Icons.Filled.Person,
-        amountPaise = 0
-    ),
-    Plan(
-        name = "Silver",
-        tagline = "Serious matchmaking",
-        price = "₹2,999",
-        originalPrice = "₹4,999",
-        period = "3 MONTHS",
-        duration = "3 months",
-        contacts = "75 contacts",
-        badge = null,
-        badgeColor = Color.Transparent,
-        features = listOf(
-            "Everything in Free",
-            "View 75 contact details",
-            "Priority profile listing",
-            "Advanced search filters",
-            "Unlimited messaging",
-            "See who viewed you",
-            "Hide profile from non-members",
-            "Kundli compatibility report"
-        ),
-        lockedFeatures = listOf(
-            "Profile spotlight",
-            "Dedicated relationship manager"
-        ),
-        cta = "Upgrade to Silver",
-        highlighted = false,
-        icon = Icons.Filled.WorkspacePremium,
-        amountPaise = 299900
-    ),
-    Plan(
-        name = "Gold",
-        tagline = "Most chosen plan",
-        price = "₹4,999",
-        originalPrice = "₹8,999",
-        period = "6 MONTHS",
-        duration = "6 months",
-        contacts = "150 contacts",
-        badge = "Most Popular",
-        badgeColor = Color(0xFFE91E63),
-        features = listOf(
-            "Everything in Silver",
-            "View 150 contact details",
-            "Profile spotlight (2× visibility)",
-            "Bold listing in search",
-            "Family profile sharing",
-            "Dedicated customer support",
-            "Export biodata as PDF",
-            "SMS match alerts",
-            "Premium trust badge"
-        ),
-        lockedFeatures = listOf(
-            "Dedicated relationship manager"
-        ),
-        cta = "Upgrade to Gold",
-        highlighted = true,
-        icon = Icons.Filled.Star,
-        amountPaise = 499900
-    ),
-    Plan(
-        name = "Platinum",
-        tagline = "Best value · Till you marry",
-        price = "₹7,499",
-        originalPrice = "₹14,999",
-        period = "12 MONTHS",
-        duration = "12 months",
-        contacts = "300 contacts",
-        badge = "Best Value",
-        badgeColor = Color(0xFF7B1FA2),
-        features = listOf(
-            "Everything in Gold",
-            "View 300 contact details",
-            "Top placement in all searches",
-            "Profile highlighted to premium members",
-            "3× spotlight rotation",
-            "Astrology deep-dive report",
-            "1 virtual family meet session",
-            "Dedicated relationship manager (3 months)"
-        ),
-        lockedFeatures = emptyList(),
-        cta = "Go Platinum",
-        highlighted = false,
-        icon = Icons.Filled.Diamond,
-        amountPaise = 749900
-    )
+    Plan("FREE", "Free", "Start your journey", "₹0", "ALWAYS FREE", "No contact reveal", listOf(
+        "Create & complete profile", "Browse daily matches", "Send up to 5 interests/day", "Shortlist profiles", "Receive interests"
+    ), "Get started free", false, Icons.Filled.Person, 0),
+    Plan("SILVER_3M", "Silver", "Serious matchmaking", "₹2,999", "3 MONTHS", "75 contacts", listOf(
+        "Everything in Free", "View 75 contact details", "Advanced search filters", "Unlimited messaging", "See who viewed you", "Kundli compatibility report"
+    ), "Upgrade to Silver", false, Icons.Filled.WorkspacePremium, SubscriptionPlans.Plan.SILVER_3M.amountPaise),
+    Plan("GOLD_6M", "Gold", "Most chosen plan", "₹4,999", "6 MONTHS", "150 contacts", listOf(
+        "Everything in Silver", "View 150 contact details", "Profile boost", "Family profile sharing", "Priority support", "Export biodata as PDF"
+    ), "Upgrade to Gold", true, Icons.Filled.Star, SubscriptionPlans.Plan.GOLD_6M.amountPaise),
+    Plan("PLATINUM_12M", "Platinum", "Maximum access", "₹7,499", "12 MONTHS", "300 contacts", listOf(
+        "Everything in Gold", "View 300 contact details", "Priority placement", "Astrology deep-dive", "Relationship manager eligibility"
+    ), "Go Platinum", false, Icons.Filled.Diamond, SubscriptionPlans.Plan.PLATINUM_12M.amountPaise)
 )
-
-private fun planTypeKey(plan: Plan): String = when (plan.name) {
-    "Silver"   -> "silver_3m"
-    "Gold"     -> "gold_6m"
-    "Platinum" -> "platinum_12m"
-    else       -> "free"
-}
 
 @HiltViewModel
 class PricingViewModel @Inject constructor(
@@ -192,11 +79,9 @@ class PricingViewModel @Inject constructor(
     private val _loading = MutableStateFlow(false)
     val loading = _loading.asStateFlow()
 
-    suspend fun createOrder(amount: Int, plan: String): String? {
+    suspend fun createOrder(planId: String): Result<SubscriptionRepository.CheckoutOrder> {
         _loading.value = true
-        val res = subscriptionRepo.createRazorpayOrder(amount, plan)
-        _loading.value = false
-        return res.getOrNull()
+        return try { subscriptionRepo.createRazorpayOrder(planId) } finally { _loading.value = false }
     }
 }
 
@@ -210,97 +95,82 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
     val loading by vm.loading.collectAsState()
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { Checkout.preload(activity) }
+    LaunchedEffect(Unit) { if (activity != null) Checkout.preload(activity) }
 
     fun launchPayment(plan: Plan) {
         if (plan.amountPaise == 0 || activity == null) return
         scope.launch {
-            val orderId = vm.createOrder(plan.amountPaise, planTypeKey(plan))
-            if (orderId == null) {
-                snackbarHostState.showSnackbar("Failed to initialize payment. Please try again.")
+            val order = vm.createOrder(plan.id).getOrElse {
+                snackbarHostState.showSnackbar("Unable to initialize payment. Please try again.")
                 return@launch
             }
-            vm.subscriptionRepo.pendingPlanType = planTypeKey(plan)
-            vm.subscriptionRepo.pendingAmountPaise = plan.amountPaise
+            // The server is authoritative, but never charge an amount different from what the
+            // current UI disclosed. A mismatch means the app catalogue needs refreshing.
+            if (order.planId != plan.id || order.amount != plan.amountPaise || order.currency != "INR") {
+                snackbarHostState.showSnackbar("Membership pricing changed. Please update the app before paying.")
+                return@launch
+            }
             try {
-                val checkout = Checkout()
-                checkout.setKeyID(BuildConfig.RAZORPAY_KEY_ID)
-                val options = JSONObject().apply {
+                Checkout().apply { setKeyID(BuildConfig.RAZORPAY_KEY_ID) }.open(activity, JSONObject().apply {
                     put("name", "MatrimonyConnect")
                     put("description", "${plan.name} Membership")
-                    put("order_id", orderId)
-                    put("amount", plan.amountPaise)
-                    put("currency", "INR")
+                    put("order_id", order.id)
+                    put("amount", order.amount)
+                    put("currency", order.currency)
                     put("prefill", JSONObject().apply {
                         put("contact", prefill.phone)
                         put("email", prefill.email)
                     })
                     put("theme", JSONObject().apply { put("color", "#E91E63") })
-                }
-                checkout.open(activity, options)
-            } catch (_: Exception) {}
+                })
+            } catch (_: Exception) {
+                snackbarHostState.showSnackbar("Unable to open secure checkout. Please try again.")
+            }
         }
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(t("membership_plans", "Membership Plans")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-                }
-            )
-        },
+        topBar = { TopAppBar(
+            title = { Text(t("membership_plans", "Membership Plans")) },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } }
+        ) },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text(t("choose_right_plan", "Choose the right plan"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(20.dp))
-                
                 PLANS.forEach { plan ->
-                    PlanCard(plan, onCta = { if (plan.amountPaise == 0) launchPayment(plan) else pendingPlan = plan })
+                    ElevatedCard(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(20.dp)) {
+                            Text(plan.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(plan.tagline, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(12.dp))
+                            Text(plan.price, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(plan.period, style = MaterialTheme.typography.labelMedium)
+                            Text(plan.contacts, style = MaterialTheme.typography.bodySmall)
+                            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                            plan.features.forEach { f -> Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = Color(0xFF2E7D32)); Spacer(Modifier.width(8.dp)); Text(f, style = MaterialTheme.typography.bodySmall)
+                            } }
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = { if (plan.amountPaise > 0) pendingPlan = plan }, enabled = plan.amountPaise > 0, modifier = Modifier.fillMaxWidth()) { Text(plan.cta) }
+                        }
+                    }
                     Spacer(Modifier.height(16.dp))
                 }
             }
-
-            if (loading) {
-                Surface(color = Color.Black.copy(alpha = 0.3f), modifier = Modifier.fillMaxSize()) {
-                    Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                }
+            if (loading) Surface(color = Color.Black.copy(alpha = 0.3f), modifier = Modifier.fillMaxSize()) {
+                Box(contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
     }
 
-    pendingPlan?.let { plan ->
-        AlertDialog(
-            onDismissRequest = { pendingPlan = null },
-            title = { Text("Confirm Upgrade") },
-            text = { Text("Upgrade to ${plan.name} for ${plan.price}?") },
-            confirmButton = { Button(onClick = { launchPayment(plan); pendingPlan = null }) { Text("Proceed") } },
-            dismissButton = { TextButton(onClick = { pendingPlan = null }) { Text("Cancel") } }
-        )
-    }
-}
-
-@Composable
-private fun PlanCard(plan: Plan, onCta: () -> Unit) {
-    ElevatedCard(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp)) {
-            Text(plan.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(plan.tagline, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Text(plan.price, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-            plan.features.forEach { f ->
-                Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = Color(0xFF2E7D32))
-                    Spacer(Modifier.width(8.dp))
-                    Text(f, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onCta, modifier = Modifier.fillMaxWidth()) { Text(plan.cta) }
-        }
-    }
+    pendingPlan?.let { plan -> AlertDialog(
+        onDismissRequest = { pendingPlan = null },
+        title = { Text("Confirm Upgrade") },
+        text = { Text("Upgrade to ${plan.name} for ${plan.price}?") },
+        confirmButton = { Button(onClick = { pendingPlan = null; launchPayment(plan) }) { Text("Proceed") } },
+        dismissButton = { TextButton(onClick = { pendingPlan = null }) { Text("Cancel") } }
+    ) }
 }

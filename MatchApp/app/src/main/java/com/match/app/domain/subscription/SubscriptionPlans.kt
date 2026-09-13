@@ -1,22 +1,15 @@
 package com.match.app.domain.subscription
 
-/**
- * Subscription plan definitions and feature gating.
- *
- * Plans:
- *  - FREE: Basic browsing, 5 interests/day, no contact reveal
- *  - STANDARD (₹399/month): 15 interests/day, see who viewed, basic filters
- *  - PREMIUM (₹799/month): Unlimited interests, contact reveal, Kundali match, boost
- *  - PLATINUM (₹1499/month): All Premium + RM assistance, priority support, video calls
- */
+/** Canonical membership catalogue shared conceptually with the server payment catalogue. */
 object SubscriptionPlans {
 
     enum class Plan(
         val id: String,
         val displayName: String,
-        val priceMonthly: Int,   // INR
-        val priceAnnual: Int,    // INR (20% off)
+        val durationMonths: Int,
+        val amountPaise: Int,
         val interestsPerDay: Int,
+        val contactLimit: Int,
         val canSeeWhoViewed: Boolean,
         val canRevealContact: Boolean,
         val canUseKundali: Boolean,
@@ -28,85 +21,20 @@ object SubscriptionPlans {
         val readReceipts: Boolean,
         val stealthBrowse: Boolean,
     ) {
-        FREE(
-            id = "FREE",
-            displayName = "Free",
-            priceMonthly = 0,
-            priceAnnual = 0,
-            interestsPerDay = 5,
-            canSeeWhoViewed = false,
-            canRevealContact = false,
-            canUseKundali = false,
-            canBoost = false,
-            canVideoCall = false,
-            hasRMAssistance = false,
-            prioritySupport = false,
-            advancedFilters = false,
-            readReceipts = false,
-            stealthBrowse = false
-        ),
-        STANDARD(
-            id = "STANDARD",
-            displayName = "Standard",
-            priceMonthly = 399,
-            priceAnnual = 3830, // 399*12 * 0.8
-            interestsPerDay = 15,
-            canSeeWhoViewed = true,
-            canRevealContact = false,
-            canUseKundali = false,
-            canBoost = false,
-            canVideoCall = false,
-            hasRMAssistance = false,
-            prioritySupport = false,
-            advancedFilters = true,
-            readReceipts = true,
-            stealthBrowse = false
-        ),
-        PREMIUM(
-            id = "PREMIUM",
-            displayName = "Premium",
-            priceMonthly = 799,
-            priceAnnual = 7670, // 799*12 * 0.8
-            interestsPerDay = Int.MAX_VALUE,
-            canSeeWhoViewed = true,
-            canRevealContact = true,
-            canUseKundali = true,
-            canBoost = true,
-            canVideoCall = false,
-            hasRMAssistance = false,
-            prioritySupport = false,
-            advancedFilters = true,
-            readReceipts = true,
-            stealthBrowse = true
-        ),
-        PLATINUM(
-            id = "PLATINUM",
-            displayName = "Platinum",
-            priceMonthly = 1499,
-            priceAnnual = 14390, // 1499*12 * 0.8
-            interestsPerDay = Int.MAX_VALUE,
-            canSeeWhoViewed = true,
-            canRevealContact = true,
-            canUseKundali = true,
-            canBoost = true,
-            canVideoCall = true,
-            hasRMAssistance = true,
-            prioritySupport = true,
-            advancedFilters = true,
-            readReceipts = true,
-            stealthBrowse = true
-        );
+        FREE("FREE", "Free", 0, 0, 5, 0, false, false, false, false, false, false, false, false, false, false),
+        SILVER_3M("SILVER_3M", "Silver", 3, 299900, Int.MAX_VALUE, 75, true, true, true, false, false, false, false, true, true, false),
+        GOLD_6M("GOLD_6M", "Gold", 6, 499900, Int.MAX_VALUE, 150, true, true, true, true, false, false, true, true, true, true),
+        PLATINUM_12M("PLATINUM_12M", "Platinum", 12, 749900, Int.MAX_VALUE, 300, true, true, true, true, true, true, true, true, true, true);
 
         companion object {
             fun fromId(id: String): Plan = entries.find { it.id == id } ?: FREE
         }
     }
 
-    /** Check if a feature is available for a given plan. */
     fun canAccess(userPlan: String, feature: Feature): Boolean {
         val plan = Plan.fromId(userPlan)
         return when (feature) {
-            Feature.SEND_INTEREST -> true // All plans, but rate-limited
+            Feature.SEND_INTEREST -> true
             Feature.SEE_WHO_VIEWED -> plan.canSeeWhoViewed
             Feature.REVEAL_CONTACT -> plan.canRevealContact
             Feature.KUNDALI_MATCH -> plan.canUseKundali
@@ -120,22 +48,12 @@ object SubscriptionPlans {
         }
     }
 
-    /** Get daily interest limit for a plan. */
-    fun dailyInterestLimit(userPlan: String): Int {
-        return Plan.fromId(userPlan).interestsPerDay
-    }
+    fun dailyInterestLimit(userPlan: String): Int = Plan.fromId(userPlan).interestsPerDay
+    fun contactRevealLimit(userPlan: String): Int = Plan.fromId(userPlan).contactLimit
 
     enum class Feature {
-        SEND_INTEREST,
-        SEE_WHO_VIEWED,
-        REVEAL_CONTACT,
-        KUNDALI_MATCH,
-        PROFILE_BOOST,
-        VIDEO_CALL,
-        RM_ASSISTANCE,
-        PRIORITY_SUPPORT,
-        ADVANCED_FILTERS,
-        READ_RECEIPTS,
+        SEND_INTEREST, SEE_WHO_VIEWED, REVEAL_CONTACT, KUNDALI_MATCH, PROFILE_BOOST,
+        VIDEO_CALL, RM_ASSISTANCE, PRIORITY_SUPPORT, ADVANCED_FILTERS, READ_RECEIPTS,
         STEALTH_BROWSE
     }
 }
