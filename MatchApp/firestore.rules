@@ -11,45 +11,77 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function safeUserCreate() {
+      return (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false)
+        && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false)
+        && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '')
+        && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0)
+        && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE')
+        && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0)
+        && !('premiumPlan' in request.resource.data)
+        && !('premiumUntil' in request.resource.data)
+        && !('paymentId' in request.resource.data);
+    }
+
+    function userServerFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'isPremium',
+        'isVerified',
+        'matrimonyId',
+        'verificationLevel',
+        'subscriptionPlan',
+        'subscriptionExpiry',
+        'premiumPlan',
+        'premiumUntil',
+        'paymentId'
+      ]);
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────
-    // Anyone signed in can read profiles (for discovery).
-    // Only the profile owner can write their own profile.
+    // Signed-in users may discover profiles. Owners may edit normal profile fields,
+    // but billing/verification/system identity fields are server-owned.
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
+      allow create: if isOwner(userId) && safeUserCreate();
+      allow update: if isOwner(userId) && userServerFieldsUnchanged();
       allow delete: if isOwner(userId);
     }
 
     // ── Interests (likes) ─────────────────────────────────────────────────
-    // Document ID: {fromUid}_{toUid}
-    // Only the sender can create/delete their own interest.
-    // Anyone signed in can read (to check mutual matches).
+    // Document ID: {fromUid}_{toUid}. Only participants can read an interest.
     match /interests/{interestId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn()
+        && (resource.data.fromUid == request.auth.uid
+            || resource.data.toUid == request.auth.uid);
       allow create: if isSignedIn()
-        && request.resource.data.fromUid == request.auth.uid;
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid
+        && interestId == request.auth.uid + '_' + request.resource.data.toUid;
       allow delete: if isSignedIn()
         && resource.data.fromUid == request.auth.uid;
-      allow update: if false; // Interests are immutable
+      allow update: if false;
     }
 
     // ── Matches ───────────────────────────────────────────────────────────
-    // Only participants can read their matches.
-    // Created by the system (client that detects mutual like).
+    // A client may materialize a match only when BOTH directed interests already exist.
+    // This preserves the current client flow while preventing fabricated matches.
     match /matches/{matchId} {
       allow read: if isSignedIn()
         && request.auth.uid in resource.data.users;
       allow create: if isSignedIn()
-        && request.auth.uid in request.resource.data.users;
+        && request.resource.data.users is list
+        && request.resource.data.users.size() == 2
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.users[0] != request.resource.data.users[1]
+        && exists(/databases/$(database)/documents/interests/$(request.resource.data.users[0] + '_' + request.resource.data.users[1]))
+        && exists(/databases/$(database)/documents/interests/$(request.resource.data.users[1] + '_' + request.resource.data.users[0]));
       allow delete: if isSignedIn()
         && request.auth.uid in resource.data.users;
-      allow update: if isSignedIn()
-        && request.auth.uid in resource.data.users;
+      allow update: if false;
     }
 
     // ── Shortlists ────────────────────────────────────────────────────────
-    // Only the owner can read/write their shortlists.
     match /shortlists/{ownerUid}/saved/{targetUid} {
       allow read, write: if isOwner(ownerUid);
     }
@@ -58,7 +90,6 @@ service cloud.firestore {
     }
 
     // ── Blocks ────────────────────────────────────────────────────────────
-    // Only the blocker can read/write their block list.
     match /blocks/{blockerUid}/blocked/{blockedUid} {
       allow read, write: if isOwner(blockerUid);
     }
@@ -67,35 +98,47 @@ service cloud.firestore {
     }
 
     // ── Chats ─────────────────────────────────────────────────────────────
-    // Only participants of a thread can read/write messages.
+    // Authorization uses Firebase Auth UIDs. Numeric IDs are app-domain metadata only.
     match /chats/{threadId} {
       allow read: if isSignedIn()
-        && request.auth.uid in resource.data.participants;
+        && request.auth.uid in resource.data.participantUids;
       allow create: if isSignedIn()
-        && request.auth.uid in request.resource.data.participants;
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() == 2
+        && request.auth.uid in request.resource.data.participantUids
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2;
       allow update: if isSignedIn()
-        && request.auth.uid in resource.data.participants;
+        && request.auth.uid in resource.data.participantUids
+        && request.resource.data.participantUids == resource.data.participantUids
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastSentAt']);
+      allow delete: if false;
 
       match /messages/{messageId} {
         allow read: if isSignedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants;
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
         allow create: if isSignedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants
-          && request.resource.data.senderUid == request.auth.uid;
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids
+          && request.resource.data.fromFirebaseUid == request.auth.uid
+          && request.resource.data.toFirebaseUid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids
+          && request.resource.data.toFirebaseUid != request.auth.uid
+          && request.resource.data.isRead == false;
         allow update: if isSignedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participants;
+          && resource.data.toFirebaseUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])
+          && request.resource.data.isRead == true;
+        allow delete: if false;
       }
     }
 
     // ── Events ────────────────────────────────────────────────────────────
-    // Anyone signed in can read events. Only admins should create (enforce via Cloud Functions).
     match /events/{eventId} {
       allow read: if isSignedIn();
-      allow write: if false; // Admin-only via Cloud Functions
+      allow write: if false;
     }
 
     // ── Event Registrations ───────────────────────────────────────────────
-    // Users can read/create their own registrations.
     match /eventRegistrations/{regId} {
       allow read: if isSignedIn()
         && resource.data.uid == request.auth.uid;
@@ -148,7 +191,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.fromUid == request.auth.uid;
       allow update: if isSignedIn()
-        && resource.data.toUid == request.auth.uid; // Only recipient can accept/decline
+        && resource.data.toUid == request.auth.uid;
       allow delete: if false;
     }
 
@@ -164,7 +207,7 @@ service cloud.firestore {
     // ── Communities ───────────────────────────────────────────────────────
     match /communities/{communityId} {
       allow read: if isSignedIn();
-      allow write: if false; // Admin-only
+      allow write: if false;
 
       match /members/{memberId} {
         allow read: if isSignedIn();
@@ -173,55 +216,51 @@ service cloud.firestore {
       }
     }
 
-    // ── Verifications (Sprint 10) ─────────────────────────────────────────
-    // Users submit verification documents; only they and Cloud Functions can access.
+    // ── Verifications ─────────────────────────────────────────────────────
     match /verifications/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      allow update: if false; // Only Cloud Functions (admin SDK) can approve/reject
+      allow update: if false;
       allow delete: if false;
     }
 
-    // ── Verification Requests (Sprint B — real pipeline) ──────────────────
+    // ── Verification Requests ─────────────────────────────────────────────
     match /verificationRequests/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
       allow update: if isOwner(uid)
-        && request.resource.data.status == "pending"; // Users can only submit, not approve
+        && request.resource.data.status == 'pending';
       allow delete: if false;
     }
 
-    // ── Notifications (Sprint 10) ─────────────────────────────────────────
-    // Users can read and mark their own notifications as read.
+    // ── Notifications ─────────────────────────────────────────────────────
     match /notifications/{notifId} {
       allow read: if isSignedIn()
         && resource.data.userId == request.auth.uid;
       allow update: if isSignedIn()
         && resource.data.userId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
-      allow create: if false; // Only Cloud Functions create notifications
+      allow create: if false;
       allow delete: if false;
     }
 
-    // ── Notification Preferences (Sprint 10) ──────────────────────────────
+    // ── Notification Preferences ──────────────────────────────────────────
     match /notificationPrefs/{uid} {
       allow read, write: if isOwner(uid);
     }
 
-    // ── Sessions (Sprint 10) ──────────────────────────────────────────────
-    // Server-side session tracking. Users can read own sessions, only system writes.
+    // ── Sessions ──────────────────────────────────────────────────────────
     match /sessions/{uid}/devices/{deviceId} {
       allow read: if isOwner(uid);
-      allow write: if false; // Only Cloud Functions manage sessions
+      allow write: if false;
     }
     match /sessions/{uid} {
       allow read: if isOwner(uid);
     }
 
-    // ── OTP Log (Sprint 10) ───────────────────────────────────────────────
-    // System-only for brute-force protection. No client access.
+    // ── OTP Log ───────────────────────────────────────────────────────────
     match /otpLog/{hash} {
-      allow read, write: if false; // Cloud Functions only
+      allow read, write: if false;
     }
   }
 }
