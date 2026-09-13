@@ -43,16 +43,20 @@ export const onMatchCreated = functions.firestore
     const name2 = doc2.data()?.displayName || "Someone";
 
     const sends: Promise<string>[] = [];
-    if (token1) sends.push(messaging.send({
-      token: token1,
-      data: { type: "mutual_match", title: "It's a Match! 🎉", body: `You and ${name2} have liked each other. Say hello!`, user_id: uid2 },
-      android: { priority: "high", notification: { channelId: "match_matches" } },
-    }));
-    if (token2) sends.push(messaging.send({
-      token: token2,
-      data: { type: "mutual_match", title: "It's a Match! 🎉", body: `You and ${name1} have liked each other. Say hello!`, user_id: uid1 },
-      android: { priority: "high", notification: { channelId: "match_matches" } },
-    }));
+    if (token1) {
+      sends.push(messaging.send({
+        token: token1,
+        data: { type: "mutual_match", title: "It's a Match! 🎉", body: `You and ${name2} have liked each other. Say hello!`, user_id: uid2 },
+        android: { priority: "high", notification: { channelId: "match_matches" } },
+      }));
+    }
+    if (token2) {
+      sends.push(messaging.send({
+        token: token2,
+        data: { type: "mutual_match", title: "It's a Match! 🎉", body: `You and ${name1} have liked each other. Say hello!`, user_id: uid1 },
+        android: { priority: "high", notification: { channelId: "match_matches" } },
+      }));
+    }
     await Promise.allSettled(sends);
   });
 
