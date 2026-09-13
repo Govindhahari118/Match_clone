@@ -117,14 +117,18 @@ const DELETE_BATCH_SIZE = 300;
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<number> {
   let deleted = 0;
-  while (true) {
+  let hasMore = true;
+  while (hasMore) {
     const snap = await query.limit(DELETE_BATCH_SIZE).get();
-    if (snap.empty) break;
+    if (snap.empty) {
+      hasMore = false;
+      continue;
+    }
     const batch = db.batch();
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
     deleted += snap.size;
-    if (snap.size < DELETE_BATCH_SIZE) break;
+    hasMore = snap.size === DELETE_BATCH_SIZE;
   }
   return deleted;
 }
@@ -158,7 +162,6 @@ export const deleteUserAccount = functions
     }, { merge: true });
 
     try {
-      // Top-level query-owned data. Re-running any of these after a partial failure is safe.
       await deleteQuery(db.collection("interests").where("fromUid", "==", uid));
       await deleteQuery(db.collection("interests").where("toUid", "==", uid));
       await deleteQuery(db.collection("matches").where("users", "array-contains", uid));
@@ -174,30 +177,23 @@ export const deleteUserAccount = functions
       await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
       await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
 
-      // Remove owned and inbound shortlist/block references.
       await deleteCollection(`shortlists/${uid}/saved`);
       await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
       await deleteCollection(`blocks/${uid}/blocked`);
       await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
-
-      // Subcollections that cannot be removed by deleting only their parent document.
       await deleteCollection(`subscriptions/${uid}/usage`);
       await deleteCollection(`profileAnalytics/${uid}/weekly`);
       await deleteCollection(`sessions/${uid}/devices`);
 
-      // Chat contents are user-linked personal data. Delete each affected thread and its messages.
       const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
       for (const thread of chats.docs) await deleteChatThread(thread);
 
-      // Storage prefixes keyed by canonical Firebase UID.
       const bucket = admin.storage().bucket();
       const prefixes = ["photos", "videos", "voicebios", "verifications"];
       for (const prefix of prefixes) {
         await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
       }
 
-      // Parent/singleton documents. Financial payment records are intentionally retained
-      // for accounting/audit obligations and must be covered by the published retention policy.
       const singletonRefs = [
         db.collection("users").doc(uid),
         db.collection("userPrivate").doc(uid),
