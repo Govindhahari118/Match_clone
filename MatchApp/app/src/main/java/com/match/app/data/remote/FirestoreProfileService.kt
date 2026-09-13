@@ -1,7 +1,8 @@
 package com.match.app.data.remote
 
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
@@ -15,31 +16,51 @@ import javax.inject.Singleton
 /**
  * Syncs user profiles between local Room DB and Firestore.
  *
- * Firestore collection: `users/{firebaseUid}`
- * This is the source of truth for profile data in production.
- * Room serves as an offline cache.
+ * Public/discoverable fields live in `users/{firebaseUid}`. Sensitive account/contact
+ * fields live in `userPrivate/{firebaseUid}` and are readable only by the owner or
+ * trusted server code. Firebase Auth UID is the only remote security identity; Room IDs
+ * are local cache identifiers only.
  */
 @Singleton
 class FirestoreProfileService @Inject constructor(
     private val userDao: UserDao
 ) {
     private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     private val usersCol = db.collection("users")
+    private val privateCol = db.collection("userPrivate")
 
-    // ── Write profile to Firestore ────────────────────────────────────────
-
-    /** Push the full profile to Firestore. Call on signup and every profile edit. */
-    suspend fun pushProfile(entity: UserEntity) {
-        if (entity.firebaseUid.isBlank()) return
-        val data = entityToMap(entity)
-        usersCol.document(entity.firebaseUid).set(data, SetOptions.merge()).await()
+    companion object {
+        private val SERVER_OWNED_FIELDS = setOf(
+            "isPremium", "isVerified", "matrimonyId", "verificationLevel",
+            "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
+            "paymentId", "contactsRevealedThisMonth", "contactsResetAt"
+        )
+        private val PRIVATE_FIELDS = setOf(
+            "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
+            "manglik", "birthTime", "birthPlace", "incomeBand", "lastActiveAt"
+        )
     }
 
-    /**
-     * Discrete age bucket used by [discoverProfilesIndexed] for index-friendly
-     * equality queries instead of expensive Firestore range scans.
-     * Mirrors the SQL backfill in [com.match.app.data.local.Migrations.MIGRATION_14_15].
-     */
+    /** Push the profile while keeping contact/private data out of discoverable documents. */
+    suspend fun pushProfile(entity: UserEntity) {
+        if (entity.firebaseUid.isBlank()) return
+        val uid = entity.firebaseUid
+        val publicData = entityToPublicMap(entity).toMutableMap().apply {
+            // Clean legacy deployments where these fields may have lived in the public doc.
+            put("email", FieldValue.delete())
+            put("phoneNumber", FieldValue.delete())
+            put("fcmToken", FieldValue.delete())
+            put("dateOfBirth", FieldValue.delete())
+        }
+        val privateData = entityToPrivateMap(entity)
+
+        val batch = db.batch()
+        batch.set(usersCol.document(uid), publicData, SetOptions.merge())
+        batch.set(privateCol.document(uid), privateData, SetOptions.merge())
+        batch.commit().await()
+    }
+
     fun ageBucketFor(age: Int): String = when {
         age < 18 -> "<18"
         age >= 63 -> "63+"
@@ -49,7 +70,6 @@ class FirestoreProfileService @Inject constructor(
         }
     }
 
-    /** All age buckets that overlap [ageMin]..[ageMax]. Caller passes to whereIn. */
     fun ageBucketsFor(ageMin: Int, ageMax: Int): List<String> {
         val lo = maxOf(ageMin, 18)
         val hi = minOf(ageMax, 70)
@@ -63,37 +83,44 @@ class FirestoreProfileService @Inject constructor(
         return buckets.toList()
     }
 
-    /** Update specific fields in Firestore (partial update). */
+    /**
+     * Update profile fields without ever permitting the Android client to mutate
+     * billing/verification authority. Sensitive owner fields are routed to userPrivate.
+     */
     suspend fun updateFields(firebaseUid: String, fields: Map<String, Any?>) {
-        if (firebaseUid.isBlank()) return
-        usersCol.document(firebaseUid).update(fields).await()
+        if (firebaseUid.isBlank() || fields.isEmpty()) return
+        require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's profile" }
+        require(fields.keys.none { it in SERVER_OWNED_FIELDS }) { "Server-owned field update rejected" }
+
+        val privateUpdates = fields.filterKeys { it in PRIVATE_FIELDS }
+        val publicUpdates = fields.filterKeys { it !in PRIVATE_FIELDS }
+        val batch = db.batch()
+        if (publicUpdates.isNotEmpty()) batch.set(usersCol.document(firebaseUid), publicUpdates, SetOptions.merge())
+        if (privateUpdates.isNotEmpty()) batch.set(privateCol.document(firebaseUid), privateUpdates, SetOptions.merge())
+        batch.commit().await()
     }
 
-    // ── Read profile from Firestore ───────────────────────────────────────
-
-    /** Fetch a single profile by Firebase UID. Returns null if not found. */
+    /** Fetch one profile. Private data is merged only when the signed-in owner is reading it. */
     suspend fun fetchProfile(firebaseUid: String): UserEntity? {
         val doc = usersCol.document(firebaseUid).get().await()
         if (!doc.exists()) return null
-        return mapToEntity(firebaseUid, doc.data ?: return null)
+        var data: Map<String, Any?> = doc.data ?: return null
+        if (auth.currentUser?.uid == firebaseUid) {
+            val privateDoc = privateCol.document(firebaseUid).get().await()
+            if (privateDoc.exists()) data = data + (privateDoc.data ?: emptyMap())
+        }
+        return mapToEntity(firebaseUid, data)
     }
 
-    /** Fetch a batch of profiles by Firebase UIDs. */
     suspend fun fetchProfiles(uids: List<String>): List<UserEntity> {
         if (uids.isEmpty()) return emptyList()
-        // Firestore `in` query supports max 30 items per batch
         return uids.chunked(30).flatMap { chunk ->
             usersCol.whereIn("firebaseUid", chunk).get().await().documents.mapNotNull { doc ->
-                val uid = doc.id
-                mapToEntity(uid, doc.data ?: return@mapNotNull null)
+                mapToEntity(doc.id, doc.data ?: return@mapNotNull null)
             }
         }
     }
 
-    /**
-     * Discover profiles from Firestore with basic filters.
-     * Returns raw maps — caller converts to UserEntity/UserProfile.
-     */
     suspend fun discoverProfiles(
         excludeUid: String,
         gender: String? = null,
@@ -104,18 +131,13 @@ class FirestoreProfileService @Inject constructor(
         limit: Int = 40
     ): List<UserEntity> {
         var query = usersCol.limit(limit.toLong())
-
-        // Firestore can only do inequality on ONE field, so we filter age
-        // and do remaining filters client-side
         query = query.whereGreaterThanOrEqualTo("age", ageMin)
-                     .whereLessThanOrEqualTo("age", ageMax)
+            .whereLessThanOrEqualTo("age", ageMax)
 
         val snap = query.get().await()
         return snap.documents.mapNotNull { doc ->
             if (doc.id == excludeUid) return@mapNotNull null
-            val data = doc.data ?: return@mapNotNull null
-            val entity = mapToEntity(doc.id, data)
-            // Client-side filters
+            val entity = mapToEntity(doc.id, doc.data ?: return@mapNotNull null)
             if (gender != null && !entity.gender.equals(gender, ignoreCase = true)) return@mapNotNull null
             if (!religion.isNullOrBlank() && !entity.religion.equals(religion, ignoreCase = true)) return@mapNotNull null
             if (!city.isNullOrBlank() && !entity.city.equals(city, ignoreCase = true)) return@mapNotNull null
@@ -123,7 +145,6 @@ class FirestoreProfileService @Inject constructor(
         }
     }
 
-    /** Observe a profile in real-time. */
     fun observeProfile(firebaseUid: String): Flow<UserEntity?> = callbackFlow {
         val reg = usersCol.document(firebaseUid).addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
@@ -133,16 +154,6 @@ class FirestoreProfileService @Inject constructor(
         awaitClose { reg.remove() }
     }
 
-    /**
-     * Sprint 9 Discovery 2.0: index-friendly profile discovery.
-     * Uses equality on `ageBucket` (whereIn) plus `gender` so the query rides on the
-     * composite index `(gender, ageBucket, lastActiveAt desc)`. Active profiles bubble
-     * to the top — dormant profiles never compete for the feed head.
-     *
-     * `religion` and `city` are still applied client-side because adding them to the
-     * index multiplies index storage cost; for v1 the bucket+gender narrowing is
-     * sufficient (~10x read reduction vs. range query).
-     */
     suspend fun discoverProfilesIndexed(
         excludeUid: String,
         gender: String,
@@ -154,7 +165,6 @@ class FirestoreProfileService @Inject constructor(
     ): List<UserEntity> {
         val buckets = ageBucketsFor(ageMin, ageMax)
         if (buckets.isEmpty()) return emptyList()
-        // Firestore whereIn supports up to 30 values — we have at most ~10 buckets
         val query = usersCol
             .whereEqualTo("gender", gender)
             .whereIn("ageBucket", buckets)
@@ -163,52 +173,66 @@ class FirestoreProfileService @Inject constructor(
         val snap = query.get().await()
         return snap.documents.mapNotNull { doc ->
             if (doc.id == excludeUid) return@mapNotNull null
-            val data = doc.data ?: return@mapNotNull null
-            val entity = mapToEntity(doc.id, data)
+            val entity = mapToEntity(doc.id, doc.data ?: return@mapNotNull null)
             if (!religion.isNullOrBlank() && !entity.religion.equals(religion, ignoreCase = true)) return@mapNotNull null
             if (!city.isNullOrBlank() && !entity.city.equals(city, ignoreCase = true)) return@mapNotNull null
             entity
         }
     }
 
-    /** Save FCM token to Firestore for push notifications. */
     suspend fun saveFcmToken(firebaseUid: String, token: String) {
-        if (firebaseUid.isBlank()) return
-        usersCol.document(firebaseUid).update("fcmToken", token).await()
+        if (firebaseUid.isBlank() || token.isBlank()) return
+        require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's token" }
+        privateCol.document(firebaseUid).set(
+            mapOf("fcmToken" to token, "updatedAt" to System.currentTimeMillis()),
+            SetOptions.merge()
+        ).await()
     }
 
-    /** Delete profile from Firestore (account deletion). */
     suspend fun deleteProfile(firebaseUid: String) {
         if (firebaseUid.isBlank()) return
-        usersCol.document(firebaseUid).delete().await()
+        require(auth.currentUser?.uid == firebaseUid) { "Cannot delete another user's profile" }
+        val batch = db.batch()
+        batch.delete(usersCol.document(firebaseUid))
+        batch.delete(privateCol.document(firebaseUid))
+        batch.commit().await()
     }
 
-    // ── Mapping helpers ───────────────────────────────────────────────────
-
-    private fun entityToMap(e: UserEntity): Map<String, Any?> = mapOf(
-        "firebaseUid" to e.firebaseUid,
+    private fun entityToPrivateMap(e: UserEntity): Map<String, Any?> = mapOf(
         "email" to e.email,
+        "phoneNumber" to e.phoneNumber,
+        "dateOfBirth" to e.dateOfBirth,
+        "rasi" to e.rasi,
+        "nakshatra" to e.nakshatra,
+        "manglik" to e.manglik,
+        "birthTime" to e.birthTime,
+        "birthPlace" to e.birthPlace,
+        "incomeBand" to e.incomeBand,
+        "lastActiveAt" to e.lastActiveAt,
+        "updatedAt" to System.currentTimeMillis()
+    )
+
+    private fun entityToPublicMap(e: UserEntity): Map<String, Any?> = mapOf(
+        "firebaseUid" to e.firebaseUid,
         "displayName" to e.displayName,
         "age" to e.age,
         "gender" to e.gender,
         "lookingFor" to e.lookingFor,
         "city" to e.city,
         "bio" to e.bio,
-        "rasi" to e.rasi,
-        "nakshatra" to e.nakshatra,
+        "rasi" to if (e.showHoroscope) e.rasi else "",
+        "nakshatra" to if (e.showHoroscope) e.nakshatra else "",
         "religion" to e.religion,
         "motherTongue" to e.motherTongue,
         "education" to e.education,
         "profession" to e.profession,
         "maritalStatus" to e.maritalStatus,
         "heightCm" to e.heightCm,
-        "isVerified" to e.isVerified,
-        "isPremium" to e.isPremium,
         "caste" to e.caste,
         "state" to e.state,
         "subCaste" to e.subCaste,
         "gothra" to e.gothra,
-        "incomeBand" to e.incomeBand,
+        "incomeBand" to if (e.incomeDisclosure.equals("hidden", true)) "" else e.incomeBand,
         "diet" to e.diet,
         "familyType" to e.familyType,
         "fatherOccupation" to e.fatherOccupation,
@@ -227,20 +251,17 @@ class FirestoreProfileService @Inject constructor(
         "visaStatus" to e.visaStatus,
         "willingToRelocate" to e.willingToRelocate,
         "createdAt" to e.createdAt,
-        "lastActiveAt" to e.lastActiveAt,
+        "lastActiveAt" to if (e.showLastActive) e.lastActiveAt else 0L,
         "isIncognito" to e.isIncognito,
-        "phoneNumber" to e.phoneNumber,
         "ageBucket" to (e.ageBucket.ifBlank { ageBucketFor(e.age) }),
         "familyValues" to e.familyValues,
         "aboutFamily" to e.aboutFamily,
-        "manglik" to e.manglik,
-        // Sprint 10: New fields
-        "dateOfBirth" to e.dateOfBirth,
+        "manglik" to if (e.showHoroscope) e.manglik else "",
         "weight" to e.weight,
         "complexion" to e.complexion,
         "physicalStatus" to e.physicalStatus,
-        "birthTime" to e.birthTime,
-        "birthPlace" to e.birthPlace,
+        "birthTime" to if (e.showHoroscope) e.birthTime else "",
+        "birthPlace" to if (e.showHoroscope) e.birthPlace else "",
         "familyStatus" to e.familyStatus,
         "educationField" to e.educationField,
         "institution" to e.institution,
@@ -251,17 +272,13 @@ class FirestoreProfileService @Inject constructor(
         "citizenship" to e.citizenship,
         "isNRI" to e.isNRI,
         "fitnessActivities" to e.fitnessActivities,
-        "matrimonyId" to e.matrimonyId,
         "photoUrl" to e.photoUrl,
         "voiceBioUrl" to e.voiceBioUrl,
         "profileCompleteness" to e.profileCompleteness,
-        "verificationLevel" to e.verificationLevel,
         "stealthMode" to e.stealthMode,
         "showLastActive" to e.showLastActive,
         "showHoroscope" to e.showHoroscope,
         "incomeDisclosure" to e.incomeDisclosure,
-        "subscriptionPlan" to e.subscriptionPlan,
-        "subscriptionExpiry" to e.subscriptionExpiry,
         "matchScore" to e.matchScore,
         "updatedAt" to System.currentTimeMillis()
     )
@@ -269,7 +286,7 @@ class FirestoreProfileService @Inject constructor(
     private fun mapToEntity(uid: String, data: Map<String, Any?>): UserEntity = UserEntity(
         firebaseUid = uid,
         email = data["email"] as? String ?: "",
-        passwordHash = "", // Never stored in Firestore
+        passwordHash = "",
         displayName = data["displayName"] as? String ?: "",
         age = (data["age"] as? Number)?.toInt() ?: 25,
         gender = data["gender"] as? String ?: "MALE",
@@ -316,7 +333,6 @@ class FirestoreProfileService @Inject constructor(
         familyValues = data["familyValues"] as? String ?: "",
         aboutFamily = data["aboutFamily"] as? String ?: "",
         manglik = data["manglik"] as? String ?: "",
-        // Sprint 10: New fields
         dateOfBirth = data["dateOfBirth"] as? String ?: "",
         weight = (data["weight"] as? Number)?.toFloat() ?: 0f,
         complexion = data["complexion"] as? String ?: "",

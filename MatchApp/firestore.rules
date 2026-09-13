@@ -2,17 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helper functions ──────────────────────────────────────────────────
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+    function hasNoPrivateProfileFields() {
+      return !('email' in request.resource.data)
+        && !('phoneNumber' in request.resource.data)
+        && !('fcmToken' in request.resource.data)
+        && !('dateOfBirth' in request.resource.data);
     }
 
     function safeUserCreate() {
-      return (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false)
+      return hasNoPrivateProfileFields()
+        && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false)
         && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false)
         && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '')
         && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0)
@@ -25,50 +27,43 @@ service cloud.firestore {
 
     function userServerFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'isPremium',
-        'isVerified',
-        'matrimonyId',
-        'verificationLevel',
-        'subscriptionPlan',
-        'subscriptionExpiry',
-        'premiumPlan',
-        'premiumUntil',
-        'paymentId'
+        'isPremium', 'isVerified', 'matrimonyId', 'verificationLevel',
+        'subscriptionPlan', 'subscriptionExpiry', 'premiumPlan', 'premiumUntil',
+        'paymentId', 'contactsRevealedThisMonth', 'contactsResetAt'
       ]);
     }
 
-    // ── Users ─────────────────────────────────────────────────────────────
-    // Signed-in users may discover profiles. Owners may edit normal profile fields,
-    // but billing/verification/system identity fields are server-owned.
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isOwner(userId) && safeUserCreate();
-      allow update: if isOwner(userId) && userServerFieldsUnchanged();
+      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged();
       allow delete: if isOwner(userId);
     }
 
-    // ── Interests (likes) ─────────────────────────────────────────────────
-    // Document ID: {fromUid}_{toUid}. Only participants can read an interest.
+    // Contact/account secrets are never discoverable through profile reads.
+    match /userPrivate/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'email', 'phoneNumber', 'fcmToken', 'dateOfBirth', 'rasi', 'nakshatra',
+          'manglik', 'birthTime', 'birthPlace', 'incomeBand', 'lastActiveAt', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId);
+    }
+
     match /interests/{interestId} {
-      allow read: if isSignedIn()
-        && (resource.data.fromUid == request.auth.uid
-            || resource.data.toUid == request.auth.uid);
+      allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
       allow create: if isSignedIn()
         && request.resource.data.fromUid == request.auth.uid
         && request.resource.data.toUid is string
         && request.resource.data.toUid != request.auth.uid
         && interestId == request.auth.uid + '_' + request.resource.data.toUid;
-      allow delete: if isSignedIn()
-        && resource.data.fromUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.fromUid == request.auth.uid;
       allow update: if false;
     }
 
-    // ── Matches ───────────────────────────────────────────────────────────
-    // A client may materialize a match only when BOTH directed interests already exist.
-    // This preserves the current client flow while preventing fabricated matches.
     match /matches/{matchId} {
-      allow read: if isSignedIn()
-        && request.auth.uid in resource.data.users;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.users;
       allow create: if isSignedIn()
         && request.resource.data.users is list
         && request.resource.data.users.size() == 2
@@ -76,32 +71,17 @@ service cloud.firestore {
         && request.resource.data.users[0] != request.resource.data.users[1]
         && exists(/databases/$(database)/documents/interests/$(request.resource.data.users[0] + '_' + request.resource.data.users[1]))
         && exists(/databases/$(database)/documents/interests/$(request.resource.data.users[1] + '_' + request.resource.data.users[0]));
-      allow delete: if isSignedIn()
-        && request.auth.uid in resource.data.users;
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.users;
       allow update: if false;
     }
 
-    // ── Shortlists ────────────────────────────────────────────────────────
-    match /shortlists/{ownerUid}/saved/{targetUid} {
-      allow read, write: if isOwner(ownerUid);
-    }
-    match /shortlists/{ownerUid} {
-      allow read: if isOwner(ownerUid);
-    }
+    match /shortlists/{ownerUid}/saved/{targetUid} { allow read, write: if isOwner(ownerUid); }
+    match /shortlists/{ownerUid} { allow read: if isOwner(ownerUid); }
+    match /blocks/{blockerUid}/blocked/{blockedUid} { allow read, write: if isOwner(blockerUid); }
+    match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); }
 
-    // ── Blocks ────────────────────────────────────────────────────────────
-    match /blocks/{blockerUid}/blocked/{blockedUid} {
-      allow read, write: if isOwner(blockerUid);
-    }
-    match /blocks/{blockerUid} {
-      allow read: if isOwner(blockerUid);
-    }
-
-    // ── Chats ─────────────────────────────────────────────────────────────
-    // Authorization uses Firebase Auth UIDs. Numeric IDs are app-domain metadata only.
     match /chats/{threadId} {
-      allow read: if isSignedIn()
-        && request.auth.uid in resource.data.participantUids;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantUids;
       allow create: if isSignedIn()
         && request.resource.data.participantUids is list
         && request.resource.data.participantUids.size() == 2
@@ -116,8 +96,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        allow read: if isSignedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
         allow create: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids
           && request.resource.data.fromFirebaseUid == request.auth.uid
@@ -132,135 +111,107 @@ service cloud.firestore {
       }
     }
 
-    // ── Events ────────────────────────────────────────────────────────────
-    match /events/{eventId} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
-
-    // ── Event Registrations ───────────────────────────────────────────────
+    match /events/{eventId} { allow read: if isSignedIn(); allow write: if false; }
     match /eventRegistrations/{regId} {
-      allow read: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
-
-    // ── Counselling Bookings ──────────────────────────────────────────────
     match /counsellingBookings/{bookingId} {
-      allow read: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
-
-    // ── Referrals ─────────────────────────────────────────────────────────
     match /referrals/{refId} {
-      allow read: if isSignedIn()
-        && resource.data.referrerUid == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.referrerUid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.referrerUid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.referrerUid == request.auth.uid;
       allow update, delete: if false;
     }
-
-    // ── RM Requests (Assisted Matchmaking) ────────────────────────────────
     match /rmRequests/{reqId} {
-      allow read: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
-
-    // ── Background Checks ─────────────────────────────────────────────────
     match /backgroundChecks/{checkId} {
-      allow read: if isSignedIn()
-        && resource.data.requestedBy == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.requestedBy == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.requestedBy == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.requestedBy == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // ── Call Requests (Secure Call / Virtual Meet) ─────────────────────────
     match /callRequests/{callId} {
-      allow read: if isSignedIn()
-        && (resource.data.fromUid == request.auth.uid
-            || resource.data.toUid == request.auth.uid);
+      allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
       allow create: if isSignedIn()
-        && request.resource.data.fromUid == request.auth.uid;
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid
+        && request.resource.data.status == 'requested';
       allow update: if isSignedIn()
-        && resource.data.toUid == request.auth.uid;
+        && resource.data.toUid == request.auth.uid
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['accepted', 'declined'];
       allow delete: if false;
     }
 
-    // ── Profile Analytics ─────────────────────────────────────────────────
+    // Analytics are server-owned; users may read only their own aggregate.
     match /profileAnalytics/{uid} {
-      allow read, write: if isOwner(uid);
-
-      match /weekly/{weekId} {
-        allow read, write: if isOwner(uid);
-      }
+      allow read: if isOwner(uid);
+      allow write: if false;
+      match /weekly/{weekId} { allow read: if isOwner(uid); allow write: if false; }
     }
 
-    // ── Communities ───────────────────────────────────────────────────────
     match /communities/{communityId} {
       allow read: if isSignedIn();
       allow write: if false;
-
       match /members/{memberId} {
         allow read: if isSignedIn();
-        allow create: if isOwner(memberId);
-        allow delete: if isOwner(memberId);
+        allow create, delete: if isOwner(memberId);
       }
     }
 
-    // ── Verifications ─────────────────────────────────────────────────────
     match /verifications/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      allow update: if false;
-      allow delete: if false;
+      allow update, delete: if false;
     }
-
-    // ── Verification Requests ─────────────────────────────────────────────
     match /verificationRequests/{uid} {
       allow read: if isOwner(uid);
-      allow create: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.status == 'pending';
       allow update: if isOwner(uid)
-        && request.resource.data.status == 'pending';
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'docType', 'documentPath', 'selfiePath', 'employmentPath', 'submittedAt'
+        ]);
       allow delete: if false;
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────
     match /notifications/{notifId} {
-      allow read: if isSignedIn()
-        && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow update: if isSignedIn()
         && resource.data.userId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
-      allow create: if false;
-      allow delete: if false;
+      allow create, delete: if false;
+    }
+    match /notificationPrefs/{uid} { allow read, write: if isOwner(uid); }
+
+    // Profile-view events are immutable and self-attributed; server triggers aggregate them.
+    match /profileViews/{viewId} {
+      allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.viewerUid == request.auth.uid
+        && request.resource.data.viewedUid is string
+        && request.resource.data.viewedUid != request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // ── Notification Preferences ──────────────────────────────────────────
-    match /notificationPrefs/{uid} {
-      allow read, write: if isOwner(uid);
-    }
+    match /sessions/{uid}/devices/{deviceId} { allow read: if isOwner(uid); allow write: if false; }
+    match /sessions/{uid} { allow read: if isOwner(uid); }
+    match /otpLog/{hash} { allow read, write: if false; }
 
-    // ── Sessions ──────────────────────────────────────────────────────────
-    match /sessions/{uid}/devices/{deviceId} {
-      allow read: if isOwner(uid);
-      allow write: if false;
-    }
-    match /sessions/{uid} {
-      allow read: if isOwner(uid);
-    }
-
-    // ── OTP Log ───────────────────────────────────────────────────────────
-    match /otpLog/{hash} {
-      allow read, write: if false;
-    }
+    // Payment state and entitlements are server authority only.
+    match /paymentOrders/{orderId} { allow read, write: if false; }
+    match /payments/{paymentId} { allow read, write: if false; }
   }
 }
