@@ -1,60 +1,31 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Photos: only the owner can upload/delete; anyone signed in can read
-    match /photos/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 2 * 1024 * 1024  // Max 2MB
-                   && request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    function signedIn() { return request.auth != null; }
+    match /photos/{uid}/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
-
-    // Videos: only the owner can upload/delete; anyone signed in can read
-    match /videos/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 50 * 1024 * 1024  // Max 50MB
-                   && request.resource.contentType.matches('video/.*');
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    match /videos/{uid}/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
-
-    // Voice bios: only the owner can upload/delete; anyone signed in can read
-    match /voicebios/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
-                   && request.resource.contentType.matches('audio/.*');
-      allow delete: if request.auth != null && request.auth.uid == userId;
+    match /voicebios/{uid}/{allPaths=**} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
-
-    // Verification documents: owner can upload; only Cloud Functions can read
-    match /verifications/{userId}/{allPaths=**} {
-      allow read: if false; // Only Cloud Functions (admin SDK) can read
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
-                   && (request.resource.contentType.matches('image/.*')
-                       || request.resource.contentType.matches('application/pdf'));
+    match /verifications/{uid}/{allPaths=**} {
+      allow read: if false;
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/pdf'));
       allow delete: if false;
     }
-
-    // Voice bios: only the owner can upload/delete; anyone signed in can read
-    match /voicebios/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
-                   && request.resource.contentType.matches('audio/.*');
-      allow delete: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Verification documents: owner can upload; only Cloud Functions can read
-    match /verifications/{userId}/{allPaths=**} {
-      allow read: if false; // Only Cloud Functions (admin SDK) can read
-      allow write: if request.auth != null && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024  // Max 5MB
-                   && (request.resource.contentType.matches('image/.*')
-                       || request.resource.contentType.matches('application/pdf'));
-      allow delete: if false;
+    match /chat-media/{threadId}/{fileName} {
+      allow read: if signedIn() && (request.auth.uid == resource.metadata.senderUid || request.auth.uid == resource.metadata.recipientUid);
+      allow create, update: if signedIn() && request.auth.uid == request.resource.metadata.senderUid && request.resource.metadata.recipientUid is string && request.resource.metadata.recipientUid != request.auth.uid && request.resource.metadata.threadId == threadId && request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('audio/.*'));
+      allow delete: if signedIn() && request.auth.uid == resource.metadata.senderUid;
     }
   }
 }

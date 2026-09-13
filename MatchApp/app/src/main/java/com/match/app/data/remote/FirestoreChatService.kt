@@ -7,149 +7,111 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Firebase Firestore-backed real-time chat service.
- * Messages are stored under: chats/{threadId}/messages/{messageId}
- * threadId is deterministic: "uid_smaller-uid_larger"
- *
- * Firestore authorization is based on Firebase Auth UIDs (`participantUids`),
- * while the numeric user IDs are retained for the app's existing local/domain model.
- */
+/** Firestore real-time chat keyed exclusively by canonical Firebase Auth UIDs. */
 @Singleton
 class FirestoreChatService @Inject constructor() {
-
     private val db = FirebaseFirestore.getInstance()
 
     companion object {
-        fun threadId(uid1: Long, uid2: Long): String {
-            val a = minOf(uid1, uid2)
-            val b = maxOf(uid1, uid2)
-            return "${a}_${b}"
+        /** Collision-resistant deterministic thread id that does not depend on local Room ids. */
+        fun threadId(uid1: String, uid2: String): String {
+            require(uid1.isNotBlank() && uid2.isNotBlank() && uid1 != uid2)
+            val canonical = listOf(uid1, uid2).sorted().joinToString("\n")
+            return MessageDigest.getInstance("SHA-256")
+                .digest(canonical.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
         }
     }
 
-    /** Observe real-time messages for a thread. Returns a cold Flow. */
-    fun observeThread(me: Long, peer: Long): Flow<List<FirestoreMessage>> = callbackFlow {
-        val tid = threadId(me, peer)
-        val reg = db.collection("chats")
-            .document(tid)
-            .collection("messages")
+    fun observeThread(myUid: String, peerUid: String): Flow<List<FirestoreMessage>> = callbackFlow {
+        val tid = threadId(myUid, peerUid)
+        val reg = db.collection("chats").document(tid).collection("messages")
             .orderBy("sentAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    close(err)
-                    return@addSnapshotListener
-                }
-                val msgs = snap?.documents?.mapNotNull { doc ->
-                    runCatching {
-                        FirestoreMessage(
-                            id = doc.id,
-                            fromUserId = doc.getLong("fromUserId") ?: 0L,
-                            toUserId = doc.getLong("toUserId") ?: 0L,
-                            body = doc.getString("body") ?: "",
-                            voiceUri = doc.getString("voiceUri"),
-                            imageUri = doc.getString("imageUri"),
-                            sentAt = doc.getLong("sentAt") ?: 0L,
-                            isRead = doc.getBoolean("isRead") ?: false
-                        )
-                    }.getOrNull()
+                if (err != null) { close(err); return@addSnapshotListener }
+                val messages = snap?.documents?.mapNotNull { doc ->
+                    val fromUid = doc.getString("fromFirebaseUid") ?: return@mapNotNull null
+                    val toUid = doc.getString("toFirebaseUid") ?: return@mapNotNull null
+                    FirestoreMessage(
+                        id = doc.id,
+                        fromFirebaseUid = fromUid,
+                        toFirebaseUid = toUid,
+                        body = doc.getString("body") ?: "",
+                        voiceUri = doc.getString("voiceUri"),
+                        imageUri = doc.getString("imageUri"),
+                        voiceDurationMs = doc.getLong("voiceDurationMs"),
+                        sentAt = doc.getLong("sentAt") ?: 0L,
+                        isRead = doc.getBoolean("isRead") ?: false
+                    )
                 } ?: emptyList()
-                trySend(msgs)
+                trySend(messages)
             }
         awaitClose { reg.remove() }
     }
 
-    /**
-     * Send a message to Firestore.
-     *
-     * The parent thread is created/updated before the message so Firestore rules can
-     * authorize the message against `participantUids`, including for the first message
-     * in a brand-new conversation.
-     */
     suspend fun sendMessage(
-        me: Long,
-        peer: Long,
+        clientMessageId: String,
         body: String,
+        myFirebaseUid: String,
+        peerFirebaseUid: String,
         voiceUri: String? = null,
         imageUri: String? = null,
-        myFirebaseUid: String = "",
-        peerFirebaseUid: String = ""
+        voiceDurationMs: Long? = null
     ) {
-        require(me > 0L && peer > 0L && me != peer) { "Invalid chat participants" }
-        require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank()) {
-            "Firebase UIDs are required for secure chat authorization"
-        }
+        require(clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}"))) { "Invalid message id" }
+        require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank() && myFirebaseUid != peerFirebaseUid)
+        require(body.length <= 3000) { "Message too long" }
 
-        val tid = threadId(me, peer)
+        val tid = threadId(myFirebaseUid, peerFirebaseUid)
         val now = System.currentTimeMillis()
         val threadRef = db.collection("chats").document(tid)
+        val participantUids = listOf(myFirebaseUid, peerFirebaseUid).sorted()
+        val preview = when {
+            imageUri != null -> "📷 Image"
+            voiceUri != null -> "🎤 Voice message"
+            else -> body.take(120)
+        }
 
-        // Canonicalize both ID lists using the same numeric ordering that defines threadId.
-        // This keeps participant arrays stable regardless of which participant sends next,
-        // which is required by Firestore rules that prohibit membership mutation.
-        val participantPairs = listOf(
-            me to myFirebaseUid,
-            peer to peerFirebaseUid
-        ).sortedBy { it.first }
-        val participantIds = participantPairs.map { it.first }
-        val participantUids = participantPairs.map { it.second }
-
-        // Establish the authorization boundary first. Existing participant arrays are
-        // protected by Firestore rules and therefore cannot be changed by a client.
         threadRef.set(
-            mapOf(
-                "lastMessage" to body,
-                "lastSentAt" to now,
-                "participants" to participantIds,
-                "participantUids" to participantUids
-            ),
+            mapOf("participantUids" to participantUids, "lastMessage" to preview, "lastSentAt" to now),
             SetOptions.merge()
         ).await()
 
-        val data = hashMapOf(
-            "fromUserId" to me,
-            "toUserId" to peer,
+        val data = mutableMapOf<String, Any>(
             "body" to body,
-            "voiceUri" to voiceUri,
-            "imageUri" to imageUri,
             "sentAt" to now,
             "isRead" to false,
             "fromFirebaseUid" to myFirebaseUid,
             "toFirebaseUid" to peerFirebaseUid
         )
-        threadRef.collection("messages").add(data).await()
+        if (!voiceUri.isNullOrBlank()) data["voiceUri"] = voiceUri
+        if (!imageUri.isNullOrBlank()) data["imageUri"] = imageUri
+        if (voiceDurationMs != null && voiceDurationMs > 0) data["voiceDurationMs"] = voiceDurationMs
+        threadRef.collection("messages").document(clientMessageId).set(data).await()
     }
 
-    /** Mark all messages in a thread addressed to this local user as read. */
-    suspend fun markRead(me: Long, peer: Long) {
-        val tid = threadId(me, peer)
-        val unread = db.collection("chats")
-            .document(tid)
-            .collection("messages")
-            .whereEqualTo("toUserId", me)
+    suspend fun markRead(myUid: String, peerUid: String) {
+        val tid = threadId(myUid, peerUid)
+        val unread = db.collection("chats").document(tid).collection("messages")
+            .whereEqualTo("toFirebaseUid", myUid)
             .whereEqualTo("isRead", false)
-            .get()
-            .await()
+            .get().await()
+        if (unread.isEmpty) return
         val batch = db.batch()
-        unread.documents.forEach { doc ->
-            batch.update(doc.reference, "isRead", true)
-        }
-        if (unread.documents.isNotEmpty()) batch.commit().await()
+        unread.documents.forEach { batch.update(it.reference, "isRead", true) }
+        batch.commit().await()
     }
 
-    /** Observe unread message count for a user (across all threads). */
-    fun observeUnreadCount(userId: Long): Flow<Int> = callbackFlow {
+    fun observeUnreadCount(firebaseUid: String): Flow<Int> = callbackFlow {
         val reg = db.collectionGroup("messages")
-            .whereEqualTo("toUserId", userId)
+            .whereEqualTo("toFirebaseUid", firebaseUid)
             .whereEqualTo("isRead", false)
             .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    close(err)
-                    return@addSnapshotListener
-                }
+                if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.size() ?: 0)
             }
         awaitClose { reg.remove() }
@@ -158,11 +120,12 @@ class FirestoreChatService @Inject constructor() {
 
 data class FirestoreMessage(
     val id: String = "",
-    val fromUserId: Long = 0L,
-    val toUserId: Long = 0L,
+    val fromFirebaseUid: String = "",
+    val toFirebaseUid: String = "",
     val body: String = "",
     val voiceUri: String? = null,
     val imageUri: String? = null,
+    val voiceDurationMs: Long? = null,
     val sentAt: Long = 0L,
     val isRead: Boolean = false
 )

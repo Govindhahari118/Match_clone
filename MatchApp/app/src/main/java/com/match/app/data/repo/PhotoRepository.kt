@@ -1,17 +1,16 @@
 package com.match.app.data.repo
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import com.match.app.data.local.dao.PhotoDao
+import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PhotoEntity
 import com.match.app.data.remote.FirebaseStorageService
+import com.match.app.data.remote.FirestoreProfileService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,91 +19,49 @@ import javax.inject.Singleton
 class PhotoRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: PhotoDao,
-    private val storageService: FirebaseStorageService
+    private val userDao: UserDao,
+    private val storageService: FirebaseStorageService,
+    private val profileService: FirestoreProfileService
 ) {
-    companion object {
-        private const val MAX_BYTES = 500 * 1024L   // 500 KB target
-        private const val MAX_DIM   = 1024           // max dimension in px
-    }
-
     fun observe(userId: Long): Flow<List<PhotoEntity>> = dao.observeForUser(userId)
+    suspend fun primaryPath(userId: Long): String? = withContext(Dispatchers.IO) { dao.primaryFor(userId)?.path }
 
-    suspend fun primaryPath(userId: Long): String? =
-        withContext(Dispatchers.IO) { dao.primaryFor(userId)?.path }
-
-    /**
-     * Import a photo: compress to ≤500 KB locally, attempt Firebase Storage upload,
-     * persist the remote URL (or local path as fallback) in Room.
-     */
     suspend fun import(userId: Long, src: Uri): Result<PhotoEntity> = withContext(Dispatchers.IO) {
         runCatching {
-            // 1. Compress locally first
-            val dir  = File(context.filesDir, "photos/$userId").apply { mkdirs() }
-            val file = File(dir, "p_${System.currentTimeMillis()}.jpg")
-            val compressedBytes = compressToTarget(src)
-            file.writeBytes(compressedBytes)
-
-            // 2. Attempt Firebase Storage upload (best-effort)
-            val remoteUrl = storageService.uploadPhoto(userId, src).getOrNull()
-
+            val user = userDao.findById(userId) ?: error("User not found")
+            val firebaseUid = user.firebaseUid.takeIf { it.isNotBlank() } ?: error("Profile is not linked to Firebase")
+            val remoteUrl = storageService.uploadPhoto(firebaseUid, src).getOrThrow()
             val makePrimary = dao.primaryFor(userId) == null
-            val id = dao.insert(
-                PhotoEntity(
-                    userId    = userId,
-                    path      = remoteUrl ?: file.absolutePath,
-                    isPrimary = makePrimary
-                )
-            )
-            dao.byId(id) ?: PhotoEntity(
-                id = id, userId = userId,
-                path = remoteUrl ?: file.absolutePath,
-                isPrimary = makePrimary
-            )
+            val id = dao.insert(PhotoEntity(userId = userId, path = remoteUrl, isPrimary = makePrimary))
+            val saved = dao.byId(id) ?: PhotoEntity(id = id, userId = userId, path = remoteUrl, isPrimary = makePrimary)
+            if (makePrimary) profileService.updateFields(firebaseUid, mapOf("photoUrl" to remoteUrl))
+            saved
         }
     }
 
-    suspend fun setPrimary(userId: Long, photoId: Long) =
-        withContext(Dispatchers.IO) { dao.setPrimary(userId, photoId) }
+    suspend fun setPrimary(userId: Long, photoId: Long) = withContext(Dispatchers.IO) {
+        val user = userDao.findById(userId) ?: return@withContext
+        val photo = dao.byId(photoId) ?: return@withContext
+        dao.setPrimary(userId, photoId)
+        if (user.firebaseUid.isNotBlank()) profileService.updateFields(user.firebaseUid, mapOf("photoUrl" to photo.path))
+    }
 
-    suspend fun setPrivacy(photoId: Long, privacy: String) =
-        withContext(Dispatchers.IO) { dao.setPrivacy(photoId, privacy) }
+    suspend fun setPrivacy(photoId: Long, privacy: String) = withContext(Dispatchers.IO) {
+        require(privacy in setOf("PUBLIC", "ACCEPTED_ONLY", "HIDDEN"))
+        dao.setPrivacy(photoId, privacy)
+    }
 
     suspend fun delete(photo: PhotoEntity) = withContext(Dispatchers.IO) {
+        if (photo.path.startsWith("https://") || photo.path.startsWith("gs://") || photo.path.startsWith("photos/")) {
+            storageService.deletePhoto(photo.path).getOrThrow()
+        } else File(photo.path).delete()
         dao.delete(photo.id)
-        // Delete from Firebase Storage if it's a remote URL
-        if (photo.path.startsWith("https://")) {
-            storageService.deletePhoto(photo.path)
-        } else {
-            runCatching { File(photo.path).delete() }
+        if (photo.isPrimary) {
+            val user = userDao.findById(photo.userId)
+            val next = dao.primaryFor(photo.userId)
+            if (user != null && user.firebaseUid.isNotBlank()) {
+                profileService.updateFields(user.firebaseUid, mapOf("photoUrl" to (next?.path ?: "")))
+            }
         }
     }
-
-    // ── Compression helper ────────────────────────────────────────────────────
-
-    private fun compressToTarget(uri: Uri): ByteArray {
-        val bmp = context.contentResolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input)
-        } ?: throw IllegalArgumentException("Cannot decode bitmap from URI: $uri")
-
-        // Scale down if too large
-        val scaled = if (bmp.width > MAX_DIM || bmp.height > MAX_DIM) {
-            val ratio = MAX_DIM.toFloat() / maxOf(bmp.width, bmp.height)
-            val w = (bmp.width * ratio).toInt()
-            val h = (bmp.height * ratio).toInt()
-            Bitmap.createScaledBitmap(bmp, w, h, true).also { if (it !== bmp) bmp.recycle() }
-        } else bmp
-
-        var quality = 90
-        var bytes: ByteArray
-        do {
-            val out = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
-            bytes = out.toByteArray()
-            quality -= 10
-        } while (bytes.size > MAX_BYTES && quality > 10)
-
-        scaled.recycle()
-        return bytes
-    }
 }
-

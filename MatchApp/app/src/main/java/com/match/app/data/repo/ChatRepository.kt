@@ -1,192 +1,129 @@
 package com.match.app.data.repo
 
+import android.content.Context
+import android.net.Uri
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.local.dao.PendingMessageDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.MessageEntity
 import com.match.app.data.local.entity.PendingMessageEntity
+import com.match.app.data.remote.FirebaseStorageService
 import com.match.app.data.remote.FirestoreChatService
 import com.match.app.security.ChatCrypto
+import com.match.app.worker.MessageRetryWorker
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ChatRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val dao: MessageDao,
     private val pendingDao: PendingMessageDao,
     private val userDao: UserDao,
-    private val firestoreChat: FirestoreChatService
+    private val firestoreChat: FirestoreChatService,
+    private val storage: FirebaseStorageService
 ) {
+    companion object { private const val MAX_PLAINTEXT_LENGTH = 3000; const val FREE_MSG_LIMIT = 5 }
 
-    companion object {
-        /** Max plaintext chars allowed before encryption (encrypted output fits in Room TEXT). */
-        private const val MAX_PLAINTEXT_LENGTH = 3000
-        /**
-         * Free users can send this many messages to a new match before being prompted to upgrade.
-         * Premium users have no limit.
-         */
-        const val FREE_MSG_LIMIT = 5
+    fun thread(me: Long, peer: Long): Flow<List<MessageEntity>> = dao.observeThread(me, peer).map { list ->
+        list.map { msg -> ChatCrypto.decrypt(msg.body)?.let { msg.copy(body = it) } ?: msg }
     }
-
-    /** Messages are decrypted transparently before being emitted to the UI. */
-    fun thread(me: Long, peer: Long): Flow<List<MessageEntity>> = dao.observeThread(me, peer)
-        .map { list ->
-            list.map { msg ->
-                val decrypted = ChatCrypto.decrypt(msg.body)
-                when {
-                    decrypted != null -> msg.copy(body = decrypted)
-                    msg.body.length > 24 && msg.body.all { it.isLetterOrDigit() || it in "+/=" } ->
-                        msg.copy(body = "⚠ Unable to decrypt message")
-                    else -> msg
-                }
-            }
-        }
-
     fun unread(me: Long): Flow<Int> = dao.observeUnread(me)
 
     suspend fun isFreeLimitReached(me: Long, peer: Long): Boolean = withContext(Dispatchers.IO) {
         val user = userDao.findById(me) ?: return@withContext false
-        if (user.isPremium) return@withContext false
-        val sentCount = dao.countSentMessages(me, peer)
-        sentCount >= FREE_MSG_LIMIT
+        if (user.isPremium && user.subscriptionExpiry > System.currentTimeMillis()) return@withContext false
+        dao.countSentMessages(me, peer) >= FREE_MSG_LIMIT
     }
 
     suspend fun send(me: Long, peer: Long, body: String, replyToId: Long? = null) = withContext(Dispatchers.IO) {
         val trimmed = body.trim()
-        if (trimmed.isEmpty()) return@withContext
-        if (trimmed.length > MAX_PLAINTEXT_LENGTH) return@withContext
-
-        val user = userDao.findById(me)
-        if (user != null && !user.isPremium) {
-            val sentCount = dao.countSentMessages(me, peer)
-            if (sentCount >= FREE_MSG_LIMIT) return@withContext
-        }
-
+        if (trimmed.isEmpty() || trimmed.length > MAX_PLAINTEXT_LENGTH || isFreeLimitReached(me, peer)) return@withContext
+        val clientId = UUID.randomUUID().toString().replace("-", "_")
         val encrypted = ChatCrypto.encrypt(trimmed) ?: trimmed
-        dao.insert(
-            MessageEntity(
-                fromUserId = me,
-                toUserId = peer,
-                body = encrypted,
-                replyToId = replyToId
-            )
-        )
-
-        val myUid = user?.firebaseUid.orEmpty()
-        val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
-        if (myUid.isBlank() || peerUid.isBlank()) {
-            pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = trimmed))
-            return@withContext
-        }
-
-        try {
-            firestoreChat.sendMessage(
-                me,
-                peer,
-                encrypted,
-                myFirebaseUid = myUid,
-                peerFirebaseUid = peerUid
-            )
-        } catch (_: Exception) {
-            pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = trimmed))
-        }
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, status = "sending"))
+        sendOrQueue(me, peer, localId, clientId, "TEXT", trimmed, "", 0)
     }
 
-    suspend fun sendVoice(me: Long, peer: Long, voiceUri: String, durationMs: Long) =
-        withContext(Dispatchers.IO) {
-            val entity = MessageEntity(
-                fromUserId = me,
-                toUserId = peer,
-                body = "🎤 Voice message",
-                voiceUri = voiceUri,
-                voiceDurationMs = durationMs
-            )
-            dao.insert(entity)
+    suspend fun sendVoice(me: Long, peer: Long, voiceUri: String, durationMs: Long) = withContext(Dispatchers.IO) {
+        val clientId = UUID.randomUUID().toString().replace("-", "_")
+        val persisted = persistOutboxMedia(voiceUri, clientId, "m4a")
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "🎤 Voice message", voiceUri = persisted, voiceDurationMs = durationMs, status = "sending"))
+        sendOrQueue(me, peer, localId, clientId, "VOICE", "🎤 Voice message", persisted, durationMs)
+    }
 
-            val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
-            val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
-            if (myUid.isBlank() || peerUid.isBlank()) return@withContext
+    suspend fun sendImage(me: Long, peer: Long, imageUri: String) = withContext(Dispatchers.IO) {
+        val clientId = UUID.randomUUID().toString().replace("-", "_")
+        val persisted = persistOutboxMedia(imageUri, clientId, "jpg")
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "📷 Image", imageUri = persisted, status = "sending"))
+        sendOrQueue(me, peer, localId, clientId, "IMAGE", "📷 Image", persisted, 0)
+    }
 
-            try {
-                firestoreChat.sendMessage(
-                    me,
-                    peer,
-                    entity.body,
-                    voiceUri = voiceUri,
-                    myFirebaseUid = myUid,
-                    peerFirebaseUid = peerUid
-                )
-            } catch (_: Exception) {
-                // Keep the local copy and fail gracefully. Media upload/retry is handled
-                // separately from plain-text pending messages because local URIs are not
-                // safe to replay as cross-device URLs.
+    private suspend fun sendOrQueue(me: Long, peer: Long, localId: Long, clientId: String, type: String, body: String, mediaUri: String, durationMs: Long) {
+        val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
+        val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
+        if (myUid.isBlank() || peerUid.isBlank()) { queue(me, peer, localId, clientId, type, body, mediaUri, durationMs); return }
+        try {
+            val tid = FirestoreChatService.threadId(myUid, peerUid)
+            var voicePath: String? = null
+            var imagePath: String? = null
+            when (type) {
+                "IMAGE" -> imagePath = storage.uploadChatImage(tid, myUid, peerUid, clientId, mediaUri).getOrThrow()
+                "VOICE" -> voicePath = storage.uploadChatVoice(tid, myUid, peerUid, clientId, mediaUri).getOrThrow()
             }
+            firestoreChat.sendMessage(clientId, body, myUid, peerUid, voicePath, imagePath, durationMs.takeIf { it > 0 })
+            dao.updateStatus(localId, "sent")
+        } catch (_: Exception) { queue(me, peer, localId, clientId, type, body, mediaUri, durationMs) }
+    }
+
+    private suspend fun queue(me: Long, peer: Long, localId: Long, clientId: String, type: String, body: String, mediaUri: String, durationMs: Long) {
+        dao.updateStatus(localId, "failed")
+        pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = body, localMessageId = localId, clientMessageId = clientId, type = type, mediaUri = mediaUri, durationMs = durationMs))
+        MessageRetryWorker.enqueue(context)
+    }
+
+    private fun persistOutboxMedia(source: String, clientId: String, ext: String): String {
+        val dir = File(context.filesDir, "chat_outbox").apply { mkdirs() }
+        val target = File(dir, "$clientId.$ext")
+        val parsed = Uri.parse(source)
+        if (parsed.scheme.isNullOrBlank()) {
+            val src = File(source); require(src.exists() && src.length() > 0) { "Media file unavailable" }; src.copyTo(target, overwrite = true)
+        } else {
+            context.contentResolver.openInputStream(parsed)?.use { input -> target.outputStream().use { output -> input.copyTo(output) } } ?: error("Media unavailable")
         }
-
-    suspend fun sendImage(me: Long, peer: Long, imageUri: String) =
-        withContext(Dispatchers.IO) {
-            val entity = MessageEntity(
-                fromUserId = me,
-                toUserId = peer,
-                body = "📷 Image",
-                imageUri = imageUri
-            )
-            dao.insert(entity)
-
-            val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
-            val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
-            if (myUid.isBlank() || peerUid.isBlank()) return@withContext
-
-            try {
-                firestoreChat.sendMessage(
-                    me,
-                    peer,
-                    entity.body,
-                    imageUri = imageUri,
-                    myFirebaseUid = myUid,
-                    peerFirebaseUid = peerUid
-                )
-            } catch (_: Exception) {
-                // Local message remains available without crashing the UI coroutine.
-            }
-        }
+        require(target.length() > 0) { "Empty media" }
+        return target.absolutePath
+    }
 
     suspend fun markRead(me: Long, peer: Long) = withContext(Dispatchers.IO) {
         dao.markRead(me, peer)
-        try {
-            firestoreChat.markRead(me, peer)
-        } catch (_: Exception) {
-            // Local read state is still valid while offline; remote state can catch up later.
-        }
+        val myUid = userDao.findById(me)?.firebaseUid.orEmpty(); val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
+        if (myUid.isNotBlank() && peerUid.isNotBlank()) runCatching { firestoreChat.markRead(myUid, peerUid) }
     }
 
     suspend fun startFirestoreSync(me: Long, peer: Long) = withContext(Dispatchers.IO) {
+        val myUid = userDao.findById(me)?.firebaseUid.orEmpty(); val peerUid = userDao.findById(peer)?.firebaseUid.orEmpty()
+        if (myUid.isBlank() || peerUid.isBlank()) return@withContext
         try {
-            firestoreChat.observeThread(me, peer).collect { firestoreMsgs ->
-                for (fm in firestoreMsgs) {
-                    if (fm.fromUserId == peer && fm.toUserId == me) {
-                        val alreadyExists = dao.countBySentAt(fm.fromUserId, fm.toUserId, fm.sentAt) > 0
-                        if (!alreadyExists) {
-                            dao.insert(
-                                MessageEntity(
-                                    fromUserId = fm.fromUserId,
-                                    toUserId = fm.toUserId,
-                                    body = fm.body,
-                                    voiceUri = fm.voiceUri,
-                                    imageUri = fm.imageUri,
-                                    sentAt = fm.sentAt
-                                )
-                            )
-                        }
-                    }
+            firestoreChat.observeThread(myUid, peerUid).collect { remoteMessages ->
+                remoteMessages.forEach { remote ->
+                    if (remote.fromFirebaseUid != peerUid || remote.toFirebaseUid != myUid) return@forEach
+                    if (dao.countBySentAt(peer, me, remote.sentAt) > 0) return@forEach
+                    val voiceLocal = remote.voiceUri?.let { storage.downloadChatMedia(it).getOrNull() }
+                    val imageLocal = remote.imageUri?.let { storage.downloadChatMedia(it).getOrNull() }
+                    if (remote.voiceUri != null && voiceLocal == null) return@forEach
+                    if (remote.imageUri != null && imageLocal == null) return@forEach
+                    val localBody = if (remote.voiceUri == null && remote.imageUri == null) ChatCrypto.encrypt(remote.body) ?: remote.body else remote.body
+                    dao.insert(MessageEntity(fromUserId = peer, toUserId = me, body = localBody, voiceUri = voiceLocal, imageUri = imageLocal, voiceDurationMs = remote.voiceDurationMs, sentAt = remote.sentAt, readAt = if (remote.isRead) System.currentTimeMillis() else null, status = if (remote.isRead) "read" else "delivered"))
                 }
             }
-        } catch (_: Exception) {
-            // Offline or listener error — Room cache remains valid.
-        }
+        } catch (_: Exception) { }
     }
 }

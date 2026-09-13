@@ -5,18 +5,16 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.security.MessageDigest
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Firebase Storage service for uploading profile photos.
- * Photos are stored at: photos/{userId}/{timestamp}.jpg
- * Max size: 500KB (JPEG, quality reduced in loop to meet target).
- */
 @Singleton
 class FirebaseStorageService @Inject constructor(
     @ApplicationContext private val context: Context
@@ -24,59 +22,124 @@ class FirebaseStorageService @Inject constructor(
     private val storage = FirebaseStorage.getInstance()
 
     companion object {
-        private const val MAX_BYTES = 500 * 1024L  // 500 KB
-        private const val MAX_DIMENSION = 1024       // px
+        private const val MAX_PHOTO_BYTES = 500 * 1024L
+        private const val MAX_DIMENSION = 1024
+        private const val MAX_CHAT_IMAGE_BYTES = 8 * 1024 * 1024L
+        private const val MAX_CHAT_VOICE_BYTES = 12 * 1024 * 1024L
     }
 
-    /**
-     * Compress a photo from [uri] to ≤500KB JPEG and upload to Firebase Storage.
-     * Returns the download URL on success.
-     */
-    suspend fun uploadPhoto(userId: Long, uri: Uri): Result<String> = runCatching {
+    suspend fun uploadPhoto(firebaseUid: String, uri: Uri): Result<String> = runCatching {
+        require(firebaseUid.isNotBlank())
         val bytes = compressToTarget(uri)
-        val ref = storage.reference.child("photos/$userId/${System.currentTimeMillis()}.jpg")
-        ref.putBytes(bytes).await()
+        val ref = storage.reference.child("photos/$firebaseUid/${UUID.randomUUID()}.jpg")
+        val metadata = StorageMetadata.Builder()
+            .setContentType("image/jpeg")
+            .setCustomMetadata("ownerUid", firebaseUid)
+            .build()
+        ref.putBytes(bytes, metadata).await()
         ref.downloadUrl.await().toString()
     }
 
-    /**
-     * Delete a photo by its Firebase Storage URL.
-     */
-    suspend fun deletePhoto(url: String): Result<Unit> = runCatching {
-        storage.getReferenceFromUrl(url).delete().await()
+    suspend fun deletePhoto(urlOrPath: String): Result<Unit> = runCatching {
+        referenceFor(urlOrPath).delete().await()
     }
 
-    /**
-     * Compress bitmap from URI to ≤MAX_BYTES JPEG.
-     * Downscales first if dimensions > MAX_DIMENSION, then reduces quality.
-     */
-    private fun compressToTarget(uri: Uri): ByteArray {
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = false }
-        val bmp = context.contentResolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, opts)
-        } ?: throw IllegalArgumentException("Cannot decode bitmap from URI: $uri")
+    suspend fun uploadChatImage(
+        threadId: String,
+        senderUid: String,
+        recipientUid: String,
+        clientMessageId: String,
+        source: String
+    ): Result<String> = uploadChatMedia(
+        threadId, senderUid, recipientUid, clientMessageId, source,
+        kind = "image", maxBytes = MAX_CHAT_IMAGE_BYTES, fallbackContentType = "image/jpeg"
+    )
 
-        // Scale down if too large
+    suspend fun uploadChatVoice(
+        threadId: String,
+        senderUid: String,
+        recipientUid: String,
+        clientMessageId: String,
+        source: String
+    ): Result<String> = uploadChatMedia(
+        threadId, senderUid, recipientUid, clientMessageId, source,
+        kind = "voice", maxBytes = MAX_CHAT_VOICE_BYTES, fallbackContentType = "audio/mp4"
+    )
+
+    suspend fun downloadChatMedia(storagePath: String): Result<String> = runCatching {
+        require(storagePath.startsWith("chat-media/")) { "Unexpected media path" }
+        val ext = storagePath.substringAfterLast('.', "bin").take(8)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(storagePath.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val dir = File(context.filesDir, "chat_media").apply { mkdirs() }
+        val file = File(dir, "$digest.$ext")
+        if (!file.exists() || file.length() == 0L) storage.reference.child(storagePath).getFile(file).await()
+        file.absolutePath
+    }
+
+    private suspend fun uploadChatMedia(
+        threadId: String,
+        senderUid: String,
+        recipientUid: String,
+        clientMessageId: String,
+        source: String,
+        kind: String,
+        maxBytes: Long,
+        fallbackContentType: String
+    ): Result<String> = runCatching {
+        require(threadId.matches(Regex("[a-f0-9]{64}")))
+        require(senderUid.isNotBlank() && recipientUid.isNotBlank() && senderUid != recipientUid)
+        require(clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}")))
+        val uri = sourceUri(source)
+        val localFile = source.takeIf { !it.contains("://") }?.let(::File)
+        if (localFile != null && localFile.exists()) require(localFile.length() in 1..maxBytes) { "Media too large" }
+        val resolverType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+        val contentType = resolverType?.takeIf {
+            (kind == "image" && it.startsWith("image/")) || (kind == "voice" && it.startsWith("audio/"))
+        } ?: fallbackContentType
+        val ext = if (kind == "image") "jpg" else "m4a"
+        val path = "chat-media/$threadId/$clientMessageId.$ext"
+        val ref = storage.reference.child(path)
+        val metadata = StorageMetadata.Builder()
+            .setContentType(contentType)
+            .setCustomMetadata("senderUid", senderUid)
+            .setCustomMetadata("recipientUid", recipientUid)
+            .setCustomMetadata("threadId", threadId)
+            .setCustomMetadata("kind", kind)
+            .build()
+        ref.putFile(uri, metadata).await()
+        path
+    }
+
+    private fun referenceFor(urlOrPath: String) = if (urlOrPath.startsWith("https://") || urlOrPath.startsWith("gs://")) {
+        storage.getReferenceFromUrl(urlOrPath)
+    } else storage.reference.child(urlOrPath.trimStart('/'))
+
+    private fun sourceUri(value: String): Uri {
+        val parsed = Uri.parse(value)
+        return if (parsed.scheme.isNullOrBlank()) Uri.fromFile(File(value)) else parsed
+    }
+
+    private fun compressToTarget(uri: Uri): ByteArray {
+        val bmp = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            ?: throw IllegalArgumentException("Cannot decode image")
         val scaled = if (bmp.width > MAX_DIMENSION || bmp.height > MAX_DIMENSION) {
             val ratio = MAX_DIMENSION.toFloat() / maxOf(bmp.width, bmp.height)
-            val w = (bmp.width * ratio).toInt()
-            val h = (bmp.height * ratio).toInt()
-            Bitmap.createScaledBitmap(bmp, w, h, true).also {
-                if (it !== bmp) bmp.recycle()
-            }
+            Bitmap.createScaledBitmap(bmp, (bmp.width * ratio).toInt(), (bmp.height * ratio).toInt(), true)
+                .also { if (it !== bmp) bmp.recycle() }
         } else bmp
-
-        // Reduce quality loop to hit ≤500KB
         var quality = 90
         var bytes: ByteArray
         do {
-            val out = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
-            bytes = out.toByteArray()
+            bytes = ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                out.toByteArray()
+            }
             quality -= 10
-        } while (bytes.size > MAX_BYTES && quality > 10)
-
+        } while (bytes.size > MAX_PHOTO_BYTES && quality > 10)
         scaled.recycle()
+        require(bytes.size <= MAX_PHOTO_BYTES) { "Image could not be compressed to safe upload size" }
         return bytes
     }
 }
