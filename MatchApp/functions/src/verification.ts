@@ -2,51 +2,98 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { db, messaging } from "./shared";
 
+function requireAdmin(context: functions.https.CallableContext): string {
+  const uid = context.auth?.uid;
+  if (!uid) {
+    throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  }
+  if (context.auth?.token.admin !== true) {
+    throw new functions.https.HttpsError("permission-denied", "Admin access required");
+  }
+  return uid;
+}
+
 // ── Verification Request Submitted → Admin notification ────────────────────
 export const onVerificationSubmitted = functions.firestore
   .document("verificationRequests/{uid}")
   .onCreate(async (snap, context) => {
     const uid = context.params.uid;
     const data = snap.data();
-    functions.logger.info(`Verification request from ${uid}: ${data.docType}`);
+    // Do not log uploaded document contents or other identity data.
+    functions.logger.info("Verification request submitted", {
+      uid,
+      docType: typeof data.docType === "string" ? data.docType : "unknown",
+    });
   });
 
 // ── Approve/Reject Verification (Admin callable) ───────────────────────────
 export const approveVerification = functions.https.onCall(
   async (data, context) => {
-    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+    const reviewerUid = requireAdmin(context);
 
-    const { targetUid, approved, rejectionReason, newLevel } = data;
-    if (!targetUid) throw new functions.https.HttpsError("invalid-argument", "targetUid required");
+    const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+    const approved = data?.approved === true;
+    const rejectionReason = typeof data?.rejectionReason === "string"
+      ? data.rejectionReason.trim().slice(0, 500)
+      : "";
+    const newLevel = Number(data?.newLevel);
 
-    await db.collection("verificationRequests").doc(targetUid).update({
+    if (!targetUid) {
+      throw new functions.https.HttpsError("invalid-argument", "targetUid required");
+    }
+    if (approved && (!Number.isInteger(newLevel) || newLevel < 1 || newLevel > 5)) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "newLevel must be an integer from 1 to 5 for approvals"
+      );
+    }
+
+    const requestRef = db.collection("verificationRequests").doc(targetUid);
+    const requestSnap = await requestRef.get();
+    if (!requestSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Verification request not found");
+    }
+
+    const batch = db.batch();
+    batch.update(requestRef, {
       status: approved ? "verified" : "rejected",
-      rejectionReason: rejectionReason || "",
+      rejectionReason: approved ? "" : (rejectionReason || "Please re-submit"),
       reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-      reviewedBy: context.auth.uid,
+      reviewedBy: reviewerUid,
     });
 
-    if (approved && newLevel) {
-      await db.collection("users").doc(targetUid).update({
+    if (approved) {
+      batch.update(db.collection("users").doc(targetUid), {
         verificationLevel: newLevel,
         isVerified: newLevel >= 2,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
+
+    await batch.commit();
 
     const userDoc = await db.collection("users").doc(targetUid).get();
     const fcmToken = userDoc.data()?.fcmToken as string | undefined;
     if (fcmToken) {
-      await messaging.send({
-        token: fcmToken,
-        data: {
-          type: "verification_update",
-          title: approved ? "Verification Approved ✅" : "Verification Update",
-          body: approved
-            ? "Your profile is now verified! You'll get a trust badge."
-            : `Verification needs attention: ${rejectionReason || "Please re-submit"}`,
-        },
-        android: { priority: "high", notification: { channelId: "match_system" } },
-      });
+      try {
+        await messaging.send({
+          token: fcmToken,
+          data: {
+            type: "verification_update",
+            title: approved ? "Verification Approved ✅" : "Verification Update",
+            body: approved
+              ? "Your profile is now verified! You'll get a trust badge."
+              : `Verification needs attention: ${rejectionReason || "Please re-submit"}`,
+          },
+          android: { priority: "high", notification: { channelId: "match_system" } },
+        });
+      } catch (err) {
+        // Verification is the source-of-truth operation. Push delivery is best-effort.
+        functions.logger.warn("Verification notification delivery failed", {
+          targetUid,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     return { success: true };
