@@ -87,14 +87,24 @@ class FirestoreChatService @Inject constructor() {
         val now = System.currentTimeMillis()
         val threadRef = db.collection("chats").document(tid)
 
-        // Establish the authorization boundary first. Existing participantUids are
+        // Canonicalize both ID lists using the same numeric ordering that defines threadId.
+        // This keeps participant arrays stable regardless of which participant sends next,
+        // which is required by Firestore rules that prohibit membership mutation.
+        val participantPairs = listOf(
+            me to myFirebaseUid,
+            peer to peerFirebaseUid
+        ).sortedBy { it.first }
+        val participantIds = participantPairs.map { it.first }
+        val participantUids = participantPairs.map { it.second }
+
+        // Establish the authorization boundary first. Existing participant arrays are
         // protected by Firestore rules and therefore cannot be changed by a client.
         threadRef.set(
             mapOf(
                 "lastMessage" to body,
                 "lastSentAt" to now,
-                "participants" to listOf(me, peer),
-                "participantUids" to listOf(myFirebaseUid, peerFirebaseUid).distinct()
+                "participants" to participantIds,
+                "participantUids" to participantUids
             ),
             SetOptions.merge()
         ).await()
