@@ -118,9 +118,6 @@ async function activateCapturedPayment(
   const planId = pending.planId as string;
   const plan = PLANS[planId];
   if (!plan) throw new functions.https.HttpsError("failed-precondition", "Unknown order plan");
-  if ((pending.expiresAt?.toMillis?.() || 0) < Date.now()) {
-    throw new functions.https.HttpsError("deadline-exceeded", "Payment order has expired");
-  }
 
   const [payment, order] = await Promise.all([
     razorpayRequest<RazorpayPayment>("GET", `/v1/payments/${encodeURIComponent(paymentId)}`),
@@ -147,9 +144,7 @@ async function activateCapturedPayment(
   const userRef = db.collection("users").doc(uid);
   return db.runTransaction(async (tx) => {
     const [existingPayment, userSnap, freshOrder] = await Promise.all([
-      tx.get(paymentRef),
-      tx.get(userRef),
-      tx.get(orderRef),
+      tx.get(paymentRef), tx.get(userRef), tx.get(orderRef),
     ]);
 
     if (existingPayment.exists) {
@@ -166,30 +161,17 @@ async function activateCapturedPayment(
 
     const user = userSnap.data() || {};
     const existingExpiry = user.premiumUntil instanceof admin.firestore.Timestamp
-      ? user.premiumUntil.toMillis()
-      : Number(user.subscriptionExpiry || 0);
+      ? user.premiumUntil.toMillis() : Number(user.subscriptionExpiry || 0);
     const base = Math.max(Date.now(), Number.isFinite(existingExpiry) ? existingExpiry : 0);
     const premiumUntilMillis = base + plan.durationDays * 24 * 60 * 60 * 1000;
     const premiumUntil = admin.firestore.Timestamp.fromMillis(premiumUntilMillis);
     const now = admin.firestore.FieldValue.serverTimestamp();
 
     tx.set(paymentRef, {
-      uid,
-      orderId,
-      paymentId,
-      planId,
-      amount: plan.amount,
-      currency: plan.currency,
-      status: "ACTIVATED",
-      source,
-      verifiedAt: now,
-      premiumUntilMillis,
+      uid, orderId, paymentId, planId, amount: plan.amount, currency: plan.currency,
+      status: "ACTIVATED", source, verifiedAt: now, premiumUntilMillis,
     });
-    tx.update(orderRef, {
-      status: "ACTIVATED",
-      paymentId,
-      activatedAt: now,
-    });
+    tx.update(orderRef, { status: "ACTIVATED", paymentId, activatedAt: now });
     tx.update(userRef, {
       isPremium: true,
       premiumPlan: planId,
@@ -223,7 +205,9 @@ export const createRazorpayOrder = functions.https.onCall(async (data, context) 
       notes: { uid, planId },
     });
   } catch (err) {
-    functions.logger.error("Razorpay order creation failed", { uid, planId, error: err instanceof Error ? err.message : String(err) });
+    functions.logger.error("Razorpay order creation failed", {
+      uid, planId, error: err instanceof Error ? err.message : String(err),
+    });
     throw new functions.https.HttpsError("unavailable", "Unable to initialize payment");
   }
 
@@ -241,7 +225,6 @@ export const createRazorpayOrder = functions.https.onCall(async (data, context) 
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
   });
-
   return { id: order.id, planId, amount: plan.amount, currency: plan.currency };
 });
 
@@ -269,6 +252,72 @@ export const verifyRazorpayPayment = functions.https.onCall(async (data, context
 
   const premiumUntil = await activateCapturedPayment(uid, orderId, paymentId, "checkout");
   return { success: true, premiumUntil };
+});
+
+/**
+ * Return a matched member's private phone only after server-side entitlement checks.
+ * Quotas count unique profiles per current paid entitlement; reopening an already-revealed
+ * contact does not consume another slot.
+ */
+export const consumeContactReveal = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+  if (!targetUid || targetUid === uid || targetUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const privateRef = db.collection("userPrivate").doc(targetUid);
+  const matchId = [uid, targetUid].sort().join("_");
+  const matchRef = db.collection("matches").doc(matchId);
+  const usageRef = db.collection("subscriptions").doc(uid).collection("usage").doc("current");
+
+  return db.runTransaction(async (tx) => {
+    const [userSnap, targetPrivateSnap, matchSnap, usageSnap] = await Promise.all([
+      tx.get(userRef), tx.get(privateRef), tx.get(matchRef), tx.get(usageRef),
+    ]);
+    if (!userSnap.exists) throw new functions.https.HttpsError("not-found", "User profile not found");
+    if (!matchSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+
+    const user = userSnap.data() || {};
+    const planId = String(user.subscriptionPlan || user.premiumPlan || "FREE");
+    const plan = PLANS[planId];
+    const expiry = user.premiumUntil instanceof admin.firestore.Timestamp
+      ? user.premiumUntil.toMillis() : Number(user.subscriptionExpiry || 0);
+    if (!plan || user.isPremium !== true || expiry <= Date.now() || plan.contactLimit <= 0) {
+      throw new functions.https.HttpsError("permission-denied", "Active paid membership required");
+    }
+
+    const phoneNumber = String(targetPrivateSnap.data()?.phoneNumber || "").trim();
+    if (!phoneNumber) throw new functions.https.HttpsError("failed-precondition", "This member has not shared a phone number");
+
+    const paymentId = String(user.paymentId || "");
+    if (!paymentId) throw new functions.https.HttpsError("failed-precondition", "Membership entitlement is incomplete");
+    const usage = usageSnap.data() || {};
+    const sameEntitlement = usage.paymentId === paymentId;
+    const existingTargets = sameEntitlement && Array.isArray(usage.revealedTargets)
+      ? (usage.revealedTargets as unknown[]).filter((v): v is string => typeof v === "string")
+      : [];
+
+    if (existingTargets.includes(targetUid)) {
+      return { phoneNumber, contactsUsed: existingTargets.length, contactsLimit: plan.contactLimit };
+    }
+    if (existingTargets.length >= plan.contactLimit) {
+      throw new functions.https.HttpsError("resource-exhausted", "Contact reveal limit reached for this membership");
+    }
+
+    const nextTargets = [...existingTargets, targetUid];
+    tx.set(usageRef, {
+      paymentId,
+      planId,
+      revealedTargets: nextTargets,
+      contactsUsed: nextTargets.length,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    return { phoneNumber, contactsUsed: nextTargets.length, contactsLimit: plan.contactLimit };
+  });
 });
 
 async function revokeRefundedPayment(paymentId: string): Promise<void> {
@@ -336,7 +385,9 @@ export const razorpayWebhook = functions.https.onRequest(async (req, res) => {
     }
     res.status(200).send("ok");
   } catch (err) {
-    functions.logger.error("Razorpay webhook processing failed", { event, eventId, error: err instanceof Error ? err.message : String(err) });
+    functions.logger.error("Razorpay webhook processing failed", {
+      event, eventId, error: err instanceof Error ? err.message : String(err),
+    });
     res.status(500).send("retry");
   }
 });
