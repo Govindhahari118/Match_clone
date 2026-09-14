@@ -20,11 +20,37 @@ class SubscriptionRepository @Inject constructor(
     private val session: SessionStore
 ) {
     data class CheckoutOrder(val id: String, val planId: String, val amount: Int, val currency: String)
+    data class PlayEntitlement(val planId: String, val premiumUntil: Long, val consumptionPending: Boolean)
+    data class RevealedContact(val phoneNumber: String, val contactsUsed: Int, val contactsLimit: Int)
 
     private val db = FirebaseFirestore.getInstance()
     private val functions = FirebaseFunctions.getInstance()
 
-    /** Server owns amount, currency and duration. Android sends only the selected plan id. */
+    /**
+     * Play-distributed Android builds use this path. The backend validates the opaque token with
+     * the Google Play Developer API and owns the product-to-plan mapping, duration and entitlement.
+     */
+    suspend fun verifyGooglePlayPurchase(productId: String, purchaseToken: String): Result<PlayEntitlement> = runCatching {
+        require(productId.isNotBlank() && purchaseToken.isNotBlank())
+        val result = functions.getHttpsCallable("verifyGooglePlayPurchase")
+            .call(mapOf("productId" to productId, "purchaseToken" to purchaseToken)).await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid Play verification response")
+        val success = data["success"] as? Boolean ?: false
+        if (!success) error("Play purchase was not activated")
+        val entitlement = PlayEntitlement(
+            planId = data["planId"] as? String ?: error("Missing plan id"),
+            premiumUntil = (data["premiumUntil"] as? Number)?.toLong() ?: error("Missing entitlement expiry"),
+            consumptionPending = data["consumptionPending"] as? Boolean ?: false
+        )
+        syncPremiumStatusFromServer()
+        entitlement
+    }
+
+    /**
+     * Retained for a future direct-distribution or explicitly eligible alternative-billing build.
+     * The Play Store production UI does not call this path.
+     */
     suspend fun createRazorpayOrder(planId: String): Result<CheckoutOrder> = runCatching {
         val result = functions.getHttpsCallable("createRazorpayOrder")
             .call(mapOf("planId" to planId)).await()
@@ -114,6 +140,4 @@ class SubscriptionRepository @Inject constructor(
             contactsLimit = (data["contactsLimit"] as? Number)?.toInt() ?: 0
         )
     }
-
-    data class RevealedContact(val phoneNumber: String, val contactsUsed: Int, val contactsLimit: Int)
 }
