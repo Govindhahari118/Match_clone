@@ -4,12 +4,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Push notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Voice messages in chat -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Read external storage for attaching media (Android < 13) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- Nearby matches: foreground-only location. Background location is intentionally not requested. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
         android:name=".AppEntry"
@@ -35,23 +36,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep links — scheme: matrimonyconnect://  -->
-            <!-- match/123 → profile detail for user 123   -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="matrimonyconnect" android:host="match" />
             </intent-filter>
-            <!-- chat/123 → open chat with user 123 -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="matrimonyconnect" android:host="chat" />
             </intent-filter>
-            <!-- notifications → open notifications screen -->
-            <intent-filter android:autoVerify="true">
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -59,7 +56,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Firebase Cloud Messaging service -->
         <service
             android:name=".service.MatchFcmService"
             android:exported="false">
@@ -68,7 +64,6 @@
             </intent-filter>
         </service>
 
-        <!-- FileProvider for sharing PDF biodata and cached files -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -79,7 +74,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Disable default WorkManager init (using Hilt-injected factory) -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -91,7 +85,6 @@
                 tools:node="remove" />
         </provider>
 
-        <!-- Default FCM notification channel metadata -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="match_default_channel" />
