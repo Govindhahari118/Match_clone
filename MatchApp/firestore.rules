@@ -69,7 +69,7 @@ service cloud.firestore {
     match /verificationRequests/{uid} { allow read: if isOwner(uid); allow create: if isOwner(uid) && request.resource.data.status == 'pending'; allow update: if isOwner(uid) && resource.data.status == 'pending' && request.resource.data.status == 'pending' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['docType','documentPath','selfiePath','employmentPath','submittedAt']); allow delete: if false; }
     match /notifications/{notifId} { allow read: if isSignedIn() && resource.data.userId == request.auth.uid; allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']); allow create, delete: if false; }
     match /notificationPrefs/{uid} { allow read, write: if isOwner(uid); }
-    match /profileViews/{viewId} { allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid); allow create: if isSignedIn() && request.resource.data.viewerUid == request.auth.uid && request.resource.data.viewedUid is string && request.resource.data.viewedUid != request.auth.uid && !blockedEitherWay(request.auth.uid, request.resource.data.viewedUid); allow update, delete: if false; }
+    match /profileViews/{viewId} { allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid); allow create, update, delete: if false; }
     match /sessions/{uid}/devices/{deviceId} { allow read: if isOwner(uid); allow write: if false; }
     match /sessions/{uid} { allow read: if isOwner(uid); }
     match /otpLog/{hash} { allow read, write: if false; }
