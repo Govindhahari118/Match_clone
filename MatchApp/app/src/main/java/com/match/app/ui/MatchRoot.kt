@@ -26,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.match.app.data.session.SessionStore
 import com.match.app.core.network.ConnectivityObserver
+import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -56,14 +57,17 @@ class RootViewModel @Inject constructor(
     val userId    = session.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val onboarded = session.onboarded.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val darkMode  = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val palette   = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "ROSE")
+    val palette   = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
+    val religionExperience = session.religionExperience.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        ReligionExperiencePreference()
+    )
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline   = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    /** Record a heartbeat for session expiry tracking. */
     fun touchActivity() = viewModelScope.launch { session.touchActivity() }
 
-    /** Check and auto-logout if 30+ days idle. */
     fun checkSessionExpiry() = viewModelScope.launch {
         if (session.isSessionExpired()) session.clear()
     }
@@ -74,17 +78,24 @@ class RootViewModel @Inject constructor(
 fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val darkMode by vm.darkMode.collectAsState()
     val paletteKey by vm.palette.collectAsState()
+    val religionExperience by vm.religionExperience.collectAsState()
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
 
-    // Session expiry check + activity heartbeat
     LaunchedEffect(Unit) {
         vm.checkSessionExpiry()
         vm.touchActivity()
     }
-    // RTL for Arabic and Urdu
+
+    val selectedReligion = religionExperience.selected.singleOrNull()
+    val effectivePalette = if (religionExperience.religionThemeEnabled && selectedReligion != null) {
+        AppPalette.forReligion(selectedReligion)
+    } else {
+        AppPalette.fromKey(paletteKey)
+    }
+
     val layoutDir = if (uiLanguage in setOf("ar", "ur")) LayoutDirection.Rtl else LayoutDirection.Ltr
-    MatchTheme(darkMode = darkMode, palette = AppPalette.fromKey(paletteKey)) {
+    MatchTheme(darkMode = darkMode, palette = effectivePalette) {
         CompositionLocalProvider(
             LocalI18n provides catalog,
             androidx.compose.ui.platform.LocalLayoutDirection provides layoutDir
@@ -96,7 +107,6 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                 val loggedIn = userId != null
 
                 Column(Modifier.fillMaxSize()) {
-                    // Offline banner
                     AnimatedVisibility(
                         visible = !isOnline,
                         enter = slideInVertically() + fadeIn(),
@@ -127,7 +137,7 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
 
                     Box(Modifier.weight(1f)) {
                         when {
-                            !onboarded -> OnboardingScreen(onDone = {})   // VM sets onboarded=true
+                            !onboarded -> OnboardingScreen(onDone = {})
                             !loggedIn  -> AuthNav()
                             else       -> MainShell()
                         }
