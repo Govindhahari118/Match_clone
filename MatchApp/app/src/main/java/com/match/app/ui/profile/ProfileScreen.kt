@@ -100,8 +100,8 @@ class ProfileViewModel @Inject constructor(
         val uid = session.userId.first() ?: return@launch
         photoRepo.import(uid, uri)
     }
+
     fun setPrimary(photo: PhotoEntity) = viewModelScope.launch { photoRepo.setPrimary(photo.userId, photo.id) }
-    fun setPrivacy(photo: PhotoEntity, privacy: String) = viewModelScope.launch { photoRepo.setPrivacy(photo.id, privacy) }
     fun delete(photo: PhotoEntity) = viewModelScope.launch { photoRepo.delete(photo) }
     fun signOut() = viewModelScope.launch { auth.signOut() }
 }
@@ -330,29 +330,27 @@ private fun PhotosSection(photos: List<PhotoEntity>, picker: () -> Unit, vm: Pro
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth().heightIn(max = 330.dp).testTag("photos_grid")
-            ) { items(photos, key = { it.id }) { photo -> PhotoCell(photo, vm::setPrimary, vm::delete, vm::setPrivacy) } }
+            ) { items(photos, key = { it.id }) { photo -> PhotoCell(photo, vm::setPrimary, vm::delete) } }
         }
+        Text(
+            "Profile photos are visible to signed-in members. Delete any photo you do not want shown on your profile.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
 @Composable
-private fun PhotoCell(photo: PhotoEntity, onPrimary: (PhotoEntity) -> Unit, onDelete: (PhotoEntity) -> Unit, onSetPrivacy: (PhotoEntity, String) -> Unit) {
-    var showPrivacyMenu by remember { mutableStateOf(false) }
+private fun PhotoCell(photo: PhotoEntity, onPrimary: (PhotoEntity) -> Unit, onDelete: (PhotoEntity) -> Unit) {
+    val imageModel: Any = if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) photo.path else File(photo.path)
     Box(Modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)).testTag("photo_${photo.id}")) {
-        AsyncImage(model = File(photo.path), contentDescription = "Profile photo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        AsyncImage(model = imageModel, contentDescription = "Profile photo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         FilledIconButton(onClick = { onPrimary(photo) }, modifier = Modifier.align(Alignment.TopStart).padding(4.dp).size(28.dp)) {
             Icon(if (photo.isPrimary) Icons.Filled.Star else Icons.Filled.StarBorder, "Set primary", Modifier.size(14.dp))
         }
-        Row(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-            FilledIconButton(onClick = { showPrivacyMenu = true }, modifier = Modifier.size(28.dp)) {
-                Icon(when (photo.privacy) { "HIDDEN" -> Icons.Filled.VisibilityOff; "ACCEPTED_ONLY" -> Icons.Filled.People; else -> Icons.Filled.Public }, "Photo privacy", Modifier.size(14.dp))
-            }
-            DropdownMenu(expanded = showPrivacyMenu, onDismissRequest = { showPrivacyMenu = false }) {
-                DropdownMenuItem(text = { Text("Public") }, leadingIcon = { Icon(Icons.Filled.Public, null) }, onClick = { onSetPrivacy(photo, "PUBLIC"); showPrivacyMenu = false })
-                DropdownMenuItem(text = { Text("Accepted only") }, leadingIcon = { Icon(Icons.Filled.People, null) }, onClick = { onSetPrivacy(photo, "ACCEPTED_ONLY"); showPrivacyMenu = false })
-                DropdownMenuItem(text = { Text("Hidden") }, leadingIcon = { Icon(Icons.Filled.VisibilityOff, null) }, onClick = { onSetPrivacy(photo, "HIDDEN"); showPrivacyMenu = false })
-            }
-            FilledIconButton(onClick = { onDelete(photo) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Filled.Delete, "Delete photo", Modifier.size(14.dp)) }
+        FilledIconButton(onClick = { onDelete(photo) }, modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp)) {
+            Icon(Icons.Filled.Delete, "Delete photo", Modifier.size(14.dp))
         }
     }
 }
