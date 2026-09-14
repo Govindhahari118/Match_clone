@@ -2,75 +2,61 @@ package com.match.app.data.remote
 
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
+import com.google.firebase.functions.FirebaseFunctions
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.domain.model.MatchFilter
 import kotlinx.coroutines.tasks.await
 
-/** Cursor-paged production discovery source. Firestore does coarse filtering;
- * the remaining user-controlled filters are applied deterministically per page. */
+/**
+ * Cursor-paged production discovery source backed by a trusted callable.
+ *
+ * Per-document block and stealth visibility cannot safely be implemented by querying the
+ * Firestore `users` collection directly because security rules are not query filters. The
+ * backend derives viewer identity from Firebase Auth, excludes either-direction blocks and
+ * stealth profiles, and returns only public profile fields. Remaining search filters are
+ * presentation filters applied to that already-authorized result set.
+ */
 class FirestorePagingSource(
     private val myUid: String,
     private val myGender: String,
     private val myLookingFor: String,
-    private val filter: MatchFilter,
-    private val blockedUids: Set<String>,
-    private val likedUids: Set<String>
-) : PagingSource<DocumentSnapshot, UserEntity>() {
+    private val filter: MatchFilter
+) : PagingSource<String, UserEntity>() {
 
-    private val usersCol = FirebaseFirestore.getInstance().collection("users")
+    private val functions = FirebaseFunctions.getInstance()
 
     companion object {
         const val PAGE_SIZE = 20
         private const val DAY_MS = 24L * 60L * 60L * 1000L
-
-        private fun ageBucketFor(age: Int): String = when {
-            age < 18 -> "<18"
-            age >= 63 -> "63+"
-            else -> {
-                val lo = 18 + ((age - 18) / 5) * 5
-                "$lo-${lo + 4}"
-            }
-        }
-
-        private fun ageBucketsFor(ageMin: Int, ageMax: Int): List<String> {
-            val lo = maxOf(ageMin, 18)
-            val hi = minOf(ageMax, 70)
-            if (hi < lo) return emptyList()
-            return buildSet {
-                for (age in lo..hi) add(ageBucketFor(age))
-            }.toList()
-        }
     }
 
-    override fun getRefreshKey(state: PagingState<DocumentSnapshot, UserEntity>): DocumentSnapshot? = null
+    override fun getRefreshKey(state: PagingState<String, UserEntity>): String? = null
 
-    override suspend fun load(params: LoadParams<DocumentSnapshot>): LoadResult<DocumentSnapshot, UserEntity> = try {
-        val buckets = ageBucketsFor(filter.ageMin, filter.ageMax)
-        var query: Query = if (buckets.isNotEmpty() && myLookingFor != "ANY") {
-            usersCol
-                .whereEqualTo("gender", myLookingFor)
-                .whereIn("ageBucket", buckets.take(30))
-                .orderBy("lastActiveAt", Query.Direction.DESCENDING)
-                .limit((PAGE_SIZE * 3).toLong())
-        } else {
-            usersCol.orderBy("lastActiveAt", Query.Direction.DESCENDING).limit((PAGE_SIZE * 3).toLong())
-        }
+    override suspend fun load(params: LoadParams<String>): LoadResult<String, UserEntity> = try {
+        val payload = mutableMapOf<String, Any>(
+            "ageMin" to filter.ageMin,
+            "ageMax" to filter.ageMax
+        )
+        params.key?.takeIf { it.isNotBlank() }?.let { payload["cursor"] = it }
 
-        params.key?.let { query = query.startAfter(it) }
-        val snapshot = query.get().await()
-        val documents = snapshot.documents
+        val response = functions.getHttpsCallable("discoverProfiles")
+            .call(payload)
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val data = response.data as? Map<String, Any?>
+            ?: return LoadResult.Error(IllegalStateException("Invalid discovery response"))
+        @Suppress("UNCHECKED_CAST")
+        val rawProfiles = data["profiles"] as? List<Map<String, Any?>> ?: emptyList()
+        val nextCursor = data["nextCursor"] as? String
         val now = System.currentTimeMillis()
 
-        val profiles = documents.mapNotNull { doc ->
-            if (doc.id == myUid || doc.id in blockedUids) return@mapNotNull null
-            val entity = mapToEntity(doc.id, doc.data ?: return@mapNotNull null)
+        val profiles = rawProfiles.mapNotNull { raw ->
+            val uid = raw["firebaseUid"] as? String ?: return@mapNotNull null
+            if (uid.isBlank() || uid == myUid) return@mapNotNull null
+            val entity = mapToEntity(uid, raw)
 
-            // Stealth mode represents an intentionally hidden profile. Incognito
-            // browsing only hides view footprints and must not remove the member.
-            if (entity.stealthMode) return@mapNotNull null
+            // Defence in depth: the callable already enforces mutual gender preference, block state,
+            // stealth visibility and age bounds. Re-check non-security search filters locally.
             if (!matchesGenderPreference(entity)) return@mapNotNull null
             if (entity.age !in filter.ageMin..filter.ageMax) return@mapNotNull null
             if (!matchesText(filter.city, entity.city)) return@mapNotNull null
@@ -104,10 +90,13 @@ class FirestorePagingSource(
             if (!matchesText(filter.manglik, entity.manglik)) return@mapNotNull null
             if (filter.hobbies.isNotBlank() && !entity.hobbies.contains(filter.hobbies, true)) return@mapNotNull null
             if (filter.keyword.isNotBlank()) {
-                val k = filter.keyword
-                if (!entity.displayName.contains(k, true) && !entity.bio.contains(k, true) && !entity.profession.contains(k, true)) return@mapNotNull null
+                val keyword = filter.keyword
+                if (!entity.displayName.contains(keyword, true) &&
+                    !entity.bio.contains(keyword, true) &&
+                    !entity.profession.contains(keyword, true)) return@mapNotNull null
             }
-            if (filter.hasChildren.isNotBlank() && !filter.hasChildren.equals("Any", true) && (filter.hasChildren.equals("Yes", true) != entity.hasChildren)) return@mapNotNull null
+            if (filter.hasChildren.isNotBlank() && !filter.hasChildren.equals("Any", true) &&
+                (filter.hasChildren.equals("Yes", true) != entity.hasChildren)) return@mapNotNull null
             if (filter.hasChildrenFilter.isNotBlank() && !filter.hasChildrenFilter.equals("Don't mind", true)) {
                 val wanted = when {
                     filter.hasChildrenFilter.startsWith("No", true) -> false
@@ -116,7 +105,8 @@ class FirestorePagingSource(
                 }
                 if (entity.hasChildren != wanted) return@mapNotNull null
             }
-            if (filter.nriOnly && !entity.isNRI && (entity.countryOfResidence.isBlank() || entity.countryOfResidence.equals("India", true))) return@mapNotNull null
+            if (filter.nriOnly && !entity.isNRI &&
+                (entity.countryOfResidence.isBlank() || entity.countryOfResidence.equals("India", true))) return@mapNotNull null
             when (filter.nriStatus.lowercase()) {
                 "only" -> if (!entity.isNRI) return@mapNotNull null
                 "exclude" -> if (entity.isNRI) return@mapNotNull null
@@ -129,15 +119,19 @@ class FirestorePagingSource(
                 "no" -> if (entity.rasi.isNotBlank() || entity.nakshatra.isNotBlank()) return@mapNotNull null
             }
             entity
-        }.take(PAGE_SIZE)
+        }
 
-        val lastDoc = documents.lastOrNull()
-        LoadResult.Page(data = profiles, prevKey = null, nextKey = if (documents.isEmpty()) null else lastDoc)
+        LoadResult.Page(
+            data = profiles,
+            prevKey = null,
+            nextKey = nextCursor?.takeIf { it.isNotBlank() && it != params.key }
+        )
     } catch (e: Exception) {
         LoadResult.Error(e)
     }
 
-    private fun matchesText(expected: String, actual: String): Boolean = expected.isBlank() || actual.equals(expected, true)
+    private fun matchesText(expected: String, actual: String): Boolean =
+        expected.isBlank() || actual.equals(expected, true)
 
     private fun matchesGenderPreference(candidate: UserEntity): Boolean {
         val iAccept = myLookingFor == "ANY" || myLookingFor == candidate.gender
@@ -147,7 +141,7 @@ class FirestorePagingSource(
 
     private fun mapToEntity(uid: String, data: Map<String, Any?>): UserEntity = UserEntity(
         firebaseUid = uid,
-        email = "", // private contact data never comes from the public profile document
+        email = "",
         passwordHash = "",
         displayName = data["displayName"] as? String ?: "",
         age = (data["age"] as? Number)?.toInt() ?: 25,
@@ -179,8 +173,16 @@ class FirestorePagingSource(
         smoking = data["smoking"] as? String ?: "",
         drinking = data["drinking"] as? String ?: "",
         personalityType = data["personalityType"] as? String ?: "",
-        hobbies = when (val raw = data["hobbies"]) { is List<*> -> raw.filterIsInstance<String>().joinToString(","); is String -> raw; else -> "" },
-        spokenLanguages = when (val raw = data["spokenLanguages"]) { is List<*> -> raw.filterIsInstance<String>().joinToString(","); is String -> raw; else -> "" },
+        hobbies = when (val raw = data["hobbies"]) {
+            is List<*> -> raw.filterIsInstance<String>().joinToString(",")
+            is String -> raw
+            else -> ""
+        },
+        spokenLanguages = when (val raw = data["spokenLanguages"]) {
+            is List<*> -> raw.filterIsInstance<String>().joinToString(",")
+            is String -> raw
+            else -> ""
+        },
         videoUrl = data["videoUrl"] as? String ?: "",
         residentialStatus = data["residentialStatus"] as? String ?: "",
         hasChildren = data["hasChildren"] as? Boolean ?: false,
@@ -197,7 +199,7 @@ class FirestorePagingSource(
         familyValues = data["familyValues"] as? String ?: "",
         aboutFamily = data["aboutFamily"] as? String ?: "",
         manglik = data["manglik"] as? String ?: "",
-        dateOfBirth = "", // kept private; exact DOB is not exposed in discovery
+        dateOfBirth = "",
         weight = (data["weight"] as? Number)?.toFloat() ?: 0f,
         complexion = data["complexion"] as? String ?: "",
         physicalStatus = data["physicalStatus"] as? String ?: "",
