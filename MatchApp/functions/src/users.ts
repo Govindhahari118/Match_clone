@@ -185,13 +185,21 @@ export const deleteUserAccount = functions
       await deleteCollection(`profileAnalytics/${uid}/weekly`);
       await deleteCollection(`sessions/${uid}/devices`);
 
+      // Capture thread ids before deleting Firestore so the corresponding Storage media can
+      // be erased as part of the same restartable account-erasure operation.
       const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
+      const chatThreadIds = chats.docs.map((thread) => thread.id);
       for (const thread of chats.docs) await deleteChatThread(thread);
 
       const bucket = admin.storage().bucket();
       const prefixes = ["photos", "videos", "voicebios", "verifications"];
       for (const prefix of prefixes) {
         await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
+      }
+      // A deleted conversation must not leave image/voice objects for either participant.
+      // Deleting the entire thread prefix mirrors the Firestore conversation deletion above.
+      for (const threadId of chatThreadIds) {
+        await bucket.deleteFiles({ prefix: `chat-media/${threadId}/` });
       }
 
       const singletonRefs = [
