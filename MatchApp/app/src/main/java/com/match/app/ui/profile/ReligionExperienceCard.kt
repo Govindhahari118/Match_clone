@@ -47,7 +47,7 @@ class ReligionExperienceViewModel @Inject constructor(
     fun setLocked(locked: Boolean, profileReligion: String) = viewModelScope.launch {
         if (locked) {
             val category = ReligionCategory.fromReligion(profileReligion)
-            session.setReligionExperience(current = preference.value.copy(selected = setOf(category), locked = true))
+            session.setReligionExperience(preference.value.copy(selected = setOf(category), locked = true))
         } else {
             session.setReligionLocked(false)
         }
