@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -112,6 +113,7 @@ private val religionStyles = listOf(
  * selected categories equally. Alternate communities remain reachable without
  * forcing them into the primary experience.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReligionHomeHero(
     profileReligion: String,
