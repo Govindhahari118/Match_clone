@@ -57,10 +57,7 @@ class HomeViewModel @Inject constructor(
 
     private var lastMutualCount = 0
 
-    /**
-     * Network social state is authoritative. Room remains the local presentation cache, but a
-     * fresh second device must immediately see incoming interests and mutual matches.
-     */
+    /** Network state is authoritative; Room is only the presentation/offline cache. */
     val ui: StateFlow<HomeActivityUi> = combine(session.userId, session.firebaseUid) { localId, firebaseUid ->
         localId to firebaseUid
     }.flatMapLatest { (me, firebaseUid) ->
@@ -70,10 +67,10 @@ class HomeViewModel @Inject constructor(
             combine(
                 notifRepo.observeUnreadCount(me),
                 social.observeReceivedInterestsRemote(firebaseUid),
-                shortlistRepo.observeCount(me),
+                shortlistRepo.observeSavedIdsRemote(firebaseUid),
                 social.observeMutualIdsRemote(firebaseUid),
                 session.hasQuestionnaire
-            ) { notif, incomingIds, saved, mutualIds, quizDone ->
+            ) { notif, incomingIds, savedIds, mutualIds, quizDone ->
                 val profile = auth.currentProfile(me)
                 val mutualCount = mutualIds.size
                 val newMutualName = if (mutualCount > lastMutualCount && lastMutualCount > 0) "Someone" else null
@@ -83,7 +80,7 @@ class HomeViewModel @Inject constructor(
                     mode = MatchMode.ADVANCED,
                     unreadNotif = notif,
                     pendingInterests = incomingIds.size,
-                    shortlistCount = saved,
+                    shortlistCount = savedIds.size,
                     mutualCount = mutualCount,
                     hasQuestionnaire = quizDone,
                     newMutualName = newMutualName
@@ -140,7 +137,7 @@ fun HomeScreen(
     onGoAdvHoroscope:      () -> Unit = {},
     onGoDailyRewards:      () -> Unit = {},
     onGoNearby:            () -> Unit = {},
-    onGoNRIMatch:           () -> Unit = {},
+    onGoNRIMatch:          () -> Unit = {},
     onGoSafetyCenter:       () -> Unit = {},
     onGoTimeline:           () -> Unit = {},
     onGoReferral:           () -> Unit = {},
@@ -205,10 +202,7 @@ fun HomeScreen(
 
 @Composable
 private fun ActivityStat(icon: ImageVector, label: String, value: String, tint: Color, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
         Icon(icon, null, Modifier.size(22.dp), tint = tint)
         Spacer(Modifier.height(4.dp))
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = tint)
