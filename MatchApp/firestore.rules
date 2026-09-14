@@ -16,7 +16,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || !blockedEitherWay(request.auth.uid, userId));
+      allow read: if isSignedIn() && (isOwner(userId) || (resource.data.stealthMode != true && !blockedEitherWay(request.auth.uid, userId)));
       allow create: if isOwner(userId) && safeUserCreate();
       allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged();
       allow delete: if isOwner(userId);
