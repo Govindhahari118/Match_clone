@@ -54,24 +54,25 @@ class InterestsViewModel @Inject constructor(
     private val _tab = MutableStateFlow(InterestTab.RECEIVED)
     val tab: StateFlow<InterestTab> = _tab
 
-    val received: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
-        .flatMapLatest { me ->
-            social.observeReceivedInterests(me).map { ids ->
+    /** Firestore is authoritative so the inbox remains correct on a fresh/second device. */
+    val received: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            social.observeReceivedInterestsRemote(uid).map { ids ->
                 ids.mapNotNull { userDao.findById(it)?.toProfile() }
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val sent: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
-        .flatMapLatest { me ->
-            social.observeSentInterests(me).map { ids ->
+    val sent: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            social.observeSentInterestsRemote(uid).map { ids ->
                 ids.mapNotNull { userDao.findById(it)?.toProfile() }
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val mutual: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
-        .flatMapLatest { me ->
-            social.observeMutual(me).map { likes ->
-                likes.mapNotNull { userDao.findById(it.toUserId)?.toProfile() }
+    val mutual: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            social.observeMutualIdsRemote(uid).map { ids ->
+                ids.mapNotNull { userDao.findById(it)?.toProfile() }
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -79,24 +80,37 @@ class InterestsViewModel @Inject constructor(
 
     fun accept(targetId: Long) = viewModelScope.launch {
         val me = session.userId.first() ?: return@launch
-        social.like(me, targetId)
-    }
-
-    fun decline(targetId: Long) = viewModelScope.launch {
-        val me = session.userId.first() ?: return@launch
-        social.unlike(me, targetId)
+        runCatching { social.like(me, targetId) }
     }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
-        id = id, email = email, displayName = displayName, age = age,
+        id = id,
+        firebaseUid = firebaseUid,
+        email = email,
+        displayName = displayName,
+        age = age,
         gender = runCatching { Gender.valueOf(gender) }.getOrDefault(Gender.OTHER),
         lookingFor = runCatching { LookingFor.valueOf(lookingFor) }.getOrDefault(LookingFor.ANY),
-        city = city, bio = bio, rasi = rasi, nakshatra = nakshatra,
-        hasQuestionnaire = false, primaryPhotoPath = null,
-        religion = religion, caste = caste, motherTongue = motherTongue,
-        education = education, profession = profession,
-        maritalStatus = maritalStatus, heightCm = heightCm,
-        isVerified = isVerified, isPremium = isPremium, state = state
+        city = city,
+        bio = bio,
+        rasi = rasi,
+        nakshatra = nakshatra,
+        hasQuestionnaire = false,
+        primaryPhotoPath = photoUrl.ifBlank { null },
+        religion = religion,
+        caste = caste,
+        motherTongue = motherTongue,
+        education = education,
+        profession = profession,
+        maritalStatus = maritalStatus,
+        heightCm = heightCm,
+        isVerified = isVerified,
+        isPremium = isPremium,
+        state = state,
+        photoUrl = photoUrl,
+        verificationLevel = verificationLevel,
+        subscriptionPlan = subscriptionPlan,
+        subscriptionExpiry = subscriptionExpiry
     )
 }
 
@@ -130,11 +144,10 @@ fun InterestsScreen(
         }
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().testTag("interests_screen")) {
-            // Stats strip
             Surface(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
                     Modifier.padding(16.dp, 12.dp).fillMaxWidth(),
@@ -145,23 +158,20 @@ fun InterestsScreen(
                     InterestStatItem("${sent.size}", t("sent", "Sent"), MaterialTheme.colorScheme.tertiary)
                 }
             }
-            // Tab row
             TabRow(selectedTabIndex = tab.ordinal) {
-                InterestTab.entries.forEach { t ->
+                InterestTab.entries.forEach { interestTab ->
                     Tab(
-                        selected = tab == t,
-                        onClick = { vm.setTab(t) },
+                        selected = tab == interestTab,
+                        onClick = { vm.setTab(interestTab) },
                         text = {
-                            val count = when (t) {
+                            val count = when (interestTab) {
                                 InterestTab.RECEIVED -> received.size
-                                InterestTab.SENT     -> sent.size
-                                InterestTab.MUTUAL   -> mutual.size
+                                InterestTab.SENT -> sent.size
+                                InterestTab.MUTUAL -> mutual.size
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(t.name.lowercase().replaceFirstChar { it.uppercase() })
-                                if (count > 0) {
-                                    Badge { Text("$count") }
-                                }
+                                Text(interestTab.name.lowercase().replaceFirstChar { it.uppercase() })
+                                if (count > 0) Badge { Text("$count") }
                             }
                         }
                     )
@@ -169,24 +179,24 @@ fun InterestsScreen(
             }
             val list = when (tab) {
                 InterestTab.RECEIVED -> received
-                InterestTab.SENT     -> sent
-                InterestTab.MUTUAL   -> mutual
+                InterestTab.SENT -> sent
+                InterestTab.MUTUAL -> mutual
             }
             if (list.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         val (icon, msg) = when (tab) {
                             InterestTab.RECEIVED -> Icons.Filled.MoveToInbox to t("no_interests_received", "No interests received yet")
-                            InterestTab.SENT     -> Icons.AutoMirrored.Filled.Send to t("no_interests_sent", "You haven't sent any interests yet")
-                            InterestTab.MUTUAL   -> Icons.Filled.Favorite to t("no_mutual_interests", "No mutual interests yet")
+                            InterestTab.SENT -> Icons.AutoMirrored.Filled.Send to t("no_interests_sent", "You haven't sent any interests yet")
+                            InterestTab.MUTUAL -> Icons.Filled.Favorite to t("no_mutual_interests", "No mutual interests yet")
                         }
                         Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
                         Text(msg, style = MaterialTheme.typography.titleMedium)
                         Text(
                             when (tab) {
                                 InterestTab.RECEIVED -> t("interests_received_hint", "When someone likes you, they'll appear here")
-                                InterestTab.SENT     -> t("interests_sent_hint", "Like someone from Matches to send an interest")
-                                InterestTab.MUTUAL   -> t("interests_mutual_hint", "Mutual interests appear when you both like each other")
+                                InterestTab.SENT -> t("interests_sent_hint", "Like someone from Matches to send an interest")
+                                InterestTab.MUTUAL -> t("interests_mutual_hint", "Mutual interests appear when you both like each other")
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -199,14 +209,13 @@ fun InterestsScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize().testTag("interests_list_${tab.name.lowercase()}")
                 ) {
-                    items(list, key = { it.id }) { p ->
+                    items(list, key = { it.firebaseUid.ifBlank { it.id.toString() } }) { p ->
                         InterestCard(
                             profile = p,
                             tab = tab,
                             onOpen = { onOpenProfile(p.id) },
                             onChat = { onOpenChat(p.id) },
-                            onAccept = { vm.accept(p.id) },
-                            onDecline = { vm.decline(p.id) }
+                            onAccept = { vm.accept(p.id) }
                         )
                     }
                 }
@@ -216,7 +225,7 @@ fun InterestsScreen(
 }
 
 @Composable
-private fun InterestStatItem(value: String, label: String, color: androidx.compose.ui.graphics.Color) {
+private fun InterestStatItem(value: String, label: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -229,8 +238,7 @@ private fun InterestCard(
     tab: InterestTab,
     onOpen: () -> Unit,
     onChat: () -> Unit,
-    onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onAccept: () -> Unit
 ) {
     ElevatedCard(
         onClick = onOpen,
@@ -250,54 +258,43 @@ private fun InterestCard(
                     palette[(profile.id % palette.size).toInt()]
                 }
                 Box(
-                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp))
-                        .background(Brush.linearGradient(gradColors)),
+                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(gradColors)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(profile.displayName.first().uppercase(),
+                    Text(
+                        profile.displayName.firstOrNull()?.uppercase() ?: "?",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White)
+                        color = Color.White
+                    )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${profile.displayName}, ${profile.age}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold)
-                        if (profile.isVerified) {
-                            Icon(Icons.Filled.Verified, null, Modifier.size(14.dp), tint = Color(0xFF1976D2))
-                        }
-                        if (profile.isPremium) {
-                            Icon(Icons.Filled.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFB300))
-                        }
+                        Text("${profile.displayName}, ${profile.age}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        if (profile.isVerified) Icon(Icons.Filled.Verified, null, Modifier.size(14.dp), tint = Color(0xFF1976D2))
+                        if (profile.isPremium) Icon(Icons.Filled.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFB300))
                     }
                     Text("${profile.city} • ${profile.profession}", style = MaterialTheme.typography.bodySmall)
-                    Text("${profile.religion} • ${profile.motherTongue}", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${profile.religion} • ${profile.motherTongue}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             if (tab == InterestTab.RECEIVED) {
                 Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onDecline,
-                        modifier = Modifier.weight(1f).testTag("interest_decline_${profile.id}"),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Filled.Close, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(t("decline", "Decline"))
-                    }
-                    Button(
-                        onClick = onAccept,
-                        modifier = Modifier.weight(1f).testTag("interest_accept_${profile.id}")
-                    ) {
-                        Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(t("accept", "Accept"))
-                    }
+                Button(
+                    onClick = onAccept,
+                    modifier = Modifier.fillMaxWidth().testTag("interest_accept_${profile.id}")
+                ) {
+                    Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(t("accept", "Accept"))
                 }
+                Text(
+                    "Open the profile to block or report an unwanted request.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             } else if (tab == InterestTab.MUTUAL) {
                 Spacer(Modifier.height(10.dp))
                 Button(
