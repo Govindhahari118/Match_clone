@@ -16,13 +16,6 @@ val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
 
-val localPropsFile = rootProject.file("local.properties")
-val localProps = Properties().apply {
-    if (localPropsFile.exists()) localPropsFile.inputStream().use { load(it) }
-}
-val razorpayKeyDebug: String = localProps.getProperty("razorpay.key.debug", "rzp_test_PLACEHOLDER")
-val razorpayKeyRelease: String = localProps.getProperty("razorpay.key.release", "rzp_live_PLACEHOLDER")
-
 android {
     namespace = "com.match.app"
     compileSdk = 36
@@ -53,7 +46,6 @@ android {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
-            buildConfigField("String", "RAZORPAY_KEY_ID", "\"$razorpayKeyDebug\"")
         }
         release {
             isMinifyEnabled = true
@@ -65,7 +57,6 @@ android {
             if (keystorePropsFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            buildConfigField("String", "RAZORPAY_KEY_ID", "\"$razorpayKeyRelease\"")
         }
     }
 
@@ -144,11 +135,10 @@ dependencies {
 
     implementation(libs.play.review.ktx)
     implementation(libs.play.app.update.ktx)
-    implementation(libs.razorpay.checkout)
+    implementation(libs.play.billing.ktx)
 
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
-    ksp(libs.hilt.compiler)
 
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
