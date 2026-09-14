@@ -54,7 +54,6 @@ class WhoViewedViewModel @Inject constructor(
     private val _likedIds = MutableStateFlow<Set<Long>>(emptySet())
     val likedIds: StateFlow<Set<Long>> = _likedIds.asStateFlow()
 
-    /** Whether the user's plan allows "Who Viewed Me" access. */
     val hasAccess: StateFlow<Boolean> = session.subscriptionPlan
         .map { featureAccess.checkSync(it, com.match.app.domain.subscription.SubscriptionPlans.Feature.SEE_WHO_VIEWED).granted }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -92,13 +91,12 @@ fun WhoViewedScreen(
     val hasAccess by vm.hasAccess.collectAsState()
     var showPaywall by remember { mutableStateOf(false) }
 
-    // Show paywall if no access
     LaunchedEffect(hasAccess) { if (!hasAccess) showPaywall = true }
 
     if (showPaywall && !hasAccess) {
         com.match.app.ui.common.PaywallSheet(
             feature = com.match.app.domain.subscription.SubscriptionPlans.Feature.SEE_WHO_VIEWED,
-            minimumPlan = com.match.app.domain.subscription.SubscriptionPlans.Plan.STANDARD,
+            minimumPlan = com.match.app.domain.subscription.SubscriptionPlans.Plan.SILVER_3M,
             onUpgrade = onUpgrade,
             onDismiss = { showPaywall = false }
         )
@@ -128,7 +126,6 @@ fun WhoViewedScreen(
         )
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().testTag("who_viewed_screen")) {
-            // Stats strip
             if (viewers.isNotEmpty()) {
                 Surface(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -148,12 +145,10 @@ fun WhoViewedScreen(
             if (viewers.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.RemoveRedEye, null, Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        Icon(Icons.Filled.RemoveRedEye, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
                         Spacer(Modifier.height(12.dp))
                         Text(t("no_profile_views", "No profile views yet"), style = MaterialTheme.typography.titleMedium)
-                        Text(t("who_viewed_hint", "When someone views your profile it will appear here"),
-                            style = MaterialTheme.typography.bodySmall)
+                        Text(t("who_viewed_hint", "When someone views your profile it will appear here"), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             } else {
@@ -163,7 +158,7 @@ fun WhoViewedScreen(
                             Column(Modifier.padding(14.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(52.dp)) {
-                                        Box(contentAlignment = Alignment.Center) { Text(p.displayName.first().uppercase(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }
+                                        Box(contentAlignment = Alignment.Center) { Text(p.displayName.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }
                                     }
                                     Spacer(Modifier.width(12.dp))
                                     Column(Modifier.weight(1f)) {
@@ -177,24 +172,15 @@ fun WhoViewedScreen(
                                 }
                                 Spacer(Modifier.height(10.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = { onOpenProfile(p.id) },
-                                        modifier = Modifier.weight(1f).testTag("whoviewed_view_${p.id}")
-                                    ) {
-                                        Icon(Icons.Filled.RemoveRedEye, null, Modifier.size(16.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(t("view", "View"))
+                                    OutlinedButton(onClick = { onOpenProfile(p.id) }, modifier = Modifier.weight(1f).testTag("whoviewed_view_${p.id}")) {
+                                        Icon(Icons.Filled.RemoveRedEye, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(t("view", "View"))
                                     }
                                     Button(
                                         onClick = { vm.sendInterest(p.id) },
                                         modifier = Modifier.weight(1f).testTag("whoviewed_interest_${p.id}"),
-                                        colors = if (p.id in likedIds)
-                                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                                        else ButtonDefaults.buttonColors()
+                                        colors = if (p.id in likedIds) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary) else ButtonDefaults.buttonColors()
                                     ) {
-                                        Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(if (p.id in likedIds) t("interest_sent", "Sent!") else t("send_interest", "Interest"))
+                                        Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(if (p.id in likedIds) t("interest_sent", "Sent!") else t("send_interest", "Interest"))
                                     }
                                 }
                             }
