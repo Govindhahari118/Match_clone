@@ -129,6 +129,7 @@ dependencies {
     debugImplementation(libs.firebase.appcheck.debug)
 
     implementation(libs.google.play.services.auth)
+    implementation(libs.google.play.services.location)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.google.identity.googleid)
