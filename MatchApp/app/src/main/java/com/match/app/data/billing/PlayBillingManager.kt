@@ -61,7 +61,7 @@ class PlayBillingManager @Inject constructor(
     private data class Purchasable(
         val offer: Offer,
         val productDetails: ProductDetails,
-        val offerToken: String
+        val offerToken: String?
     )
 
     companion object {
@@ -163,7 +163,7 @@ class PlayBillingManager @Inject constructor(
             val next = linkedMapOf<String, Purchasable>()
             detailsResult.productDetailsList.forEach { details ->
                 val planId = PRODUCT_TO_PLAN[details.productId] ?: return@forEach
-                val offerDetails = details.oneTimePurchaseOfferDetailsList.firstOrNull() ?: return@forEach
+                val offerDetails = details.oneTimePurchaseOfferDetailsList?.firstOrNull() ?: return@forEach
                 val offer = Offer(
                     planId = planId,
                     productId = details.productId,
@@ -189,10 +189,10 @@ class PlayBillingManager @Inject constructor(
         val selected = purchasables[planId]
             ?: return errorResult(BillingClient.BillingResponseCode.ITEM_UNAVAILABLE, "Membership is not available from Google Play")
 
-        val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+        val productParamsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(selected.productDetails)
-            .setOfferToken(selected.offerToken)
-            .build()
+        selected.offerToken?.takeIf { it.isNotBlank() }?.let(productParamsBuilder::setOfferToken)
+        val productParams = productParamsBuilder.build()
         val params = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(listOf(productParams))
             .setObfuscatedAccountId(accountHash(uid))
