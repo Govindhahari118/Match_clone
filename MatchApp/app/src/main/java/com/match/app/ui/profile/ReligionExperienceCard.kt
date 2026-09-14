@@ -53,8 +53,18 @@ class ReligionExperienceViewModel @Inject constructor(
         }
     }
 
-    fun setThemeEnabled(enabled: Boolean) = viewModelScope.launch {
-        session.setReligionThemeEnabled(enabled)
+    fun setThemeEnabled(enabled: Boolean, profileReligion: String) = viewModelScope.launch {
+        val current = preference.value
+        if (enabled && current.selected.isEmpty()) {
+            session.setReligionExperience(
+                current.copy(
+                    selected = setOf(ReligionCategory.fromReligion(profileReligion)),
+                    religionThemeEnabled = true
+                )
+            )
+        } else {
+            session.setReligionThemeEnabled(enabled)
+        }
     }
 }
 
@@ -143,7 +153,7 @@ fun ReligionExperienceCard(
                 }
                 Switch(
                     checked = preference.religionThemeEnabled,
-                    onCheckedChange = vm::setThemeEnabled,
+                    onCheckedChange = { vm.setThemeEnabled(it, profileReligion) },
                     enabled = effective.size == 1
                 )
             }
