@@ -42,7 +42,6 @@ data class HomeActivityUi(
     val shortlistCount: Int = 0,
     val mutualCount: Int = 0,
     val hasQuestionnaire: Boolean = false,
-    /** Name of the newest mutual match to show the celebration dialog */
     val newMutualName: String? = null
 )
 
@@ -58,42 +57,45 @@ class HomeViewModel @Inject constructor(
 
     private var lastMutualCount = 0
 
-    val ui: StateFlow<HomeActivityUi> = session.userId.filterNotNull()
-        .flatMapLatest { me ->
+    /**
+     * Network social state is authoritative. Room remains the local presentation cache, but a
+     * fresh second device must immediately see incoming interests and mutual matches.
+     */
+    val ui: StateFlow<HomeActivityUi> = combine(session.userId, session.firebaseUid) { localId, firebaseUid ->
+        localId to firebaseUid
+    }.flatMapLatest { (me, firebaseUid) ->
+        if (me == null || firebaseUid.isNullOrBlank()) {
+            flowOf(HomeActivityUi())
+        } else {
             combine(
                 notifRepo.observeUnreadCount(me),
-                social.observeIncoming(me),
+                social.observeReceivedInterestsRemote(firebaseUid),
                 shortlistRepo.observeCount(me),
-                social.observeMutual(me),
+                social.observeMutualIdsRemote(firebaseUid),
                 session.hasQuestionnaire
-            ) { notif: Int, incoming: Int, saved: Int, mutuals: List<Any>, quizDone: Boolean ->
+            ) { notif, incomingIds, saved, mutualIds, quizDone ->
                 val profile = auth.currentProfile(me)
-                val mutualCount = mutuals.size
-                // Detect a new mutual match since last emission
-                val newMutualName: String? = if (mutualCount > lastMutualCount && lastMutualCount > 0) {
-                    "Someone" 
-                } else null
+                val mutualCount = mutualIds.size
+                val newMutualName = if (mutualCount > lastMutualCount && lastMutualCount > 0) "Someone" else null
                 lastMutualCount = mutualCount
                 HomeActivityUi(
-                    profile          = profile,
-                    mode             = MatchMode.ADVANCED,
-                    unreadNotif      = notif,
-                    pendingInterests = incoming,
-                    shortlistCount   = saved,
-                    mutualCount      = mutualCount,
+                    profile = profile,
+                    mode = MatchMode.ADVANCED,
+                    unreadNotif = notif,
+                    pendingInterests = incomingIds.size,
+                    shortlistCount = saved,
+                    mutualCount = mutualCount,
                     hasQuestionnaire = quizDone,
-                    newMutualName    = newMutualName
+                    newMutualName = newMutualName
                 )
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeActivityUi())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeActivityUi())
 
     val mode: StateFlow<MatchMode> = session.mode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MatchMode.ADVANCED)
 
     fun setMode(m: MatchMode) = viewModelScope.launch { session.setMode(m) }
-    fun dismissMutualCelebration() {
-        // No-op — the dialog auto-dismisses; could update a flag in session if needed
-    }
+    fun dismissMutualCelebration() = Unit
 }
 
 @Composable
@@ -138,14 +140,14 @@ fun HomeScreen(
     onGoAdvHoroscope:      () -> Unit = {},
     onGoDailyRewards:      () -> Unit = {},
     onGoNearby:            () -> Unit = {},
-    onGoNRIMatch:          () -> Unit = {},
-    onGoSafetyCenter:      () -> Unit = {},
-    onGoTimeline:          () -> Unit = {},
-    onGoReferral:          () -> Unit = {},
-    onGoMuhurat:           () -> Unit = {},
-    onGoDeepCompat:        () -> Unit = {},
-    onGoWizard:            () -> Unit = {},
-    onOpenProfile:         (Long) -> Unit = {},
+    onGoNRIMatch:           () -> Unit = {},
+    onGoSafetyCenter:       () -> Unit = {},
+    onGoTimeline:           () -> Unit = {},
+    onGoReferral:           () -> Unit = {},
+    onGoMuhurat:            () -> Unit = {},
+    onGoDeepCompat:         () -> Unit = {},
+    onGoWizard:             () -> Unit = {},
+    onOpenProfile:          (Long) -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
     HomeLauncherScreen(
