@@ -1,10 +1,8 @@
-﻿package com.match.app.ui.language
+package com.match.app.ui.language
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -26,57 +24,32 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// ── Data ──────────────────────────────────────────────────────────────────
-private data class LangEntry(val code: String, val label: String, val native: String, val dir: String = "ltr")
-private data class LangGroup(val tier: String, val id: String, val entries: List<LangEntry>)
+private data class LangEntry(val code: String, val label: String, val native: String)
 
-private val LANG_GROUPS = listOf(
-    LangGroup("Global", "tier1", listOf(
-        LangEntry("en", "English",    "English"),
-        LangEntry("es", "Spanish",    "Español"),
-        LangEntry("hi", "Hindi",      "हिन्दी"),
-        LangEntry("pt", "Portuguese", "Português"),
-        LangEntry("ru", "Russian",    "Pусский"),
-        LangEntry("ar", "Arabic",     "العربية", "rtl"),
-    )),
-    LangGroup("European & Asian", "tier2", listOf(
-        LangEntry("de", "German",   "Deutsch"),
-        LangEntry("fr", "French",   "Français"),
-        LangEntry("it", "Italian",  "Italiano"),
-        LangEntry("ja", "Japanese", "日本語"),
-        LangEntry("ko", "Korean",   "한국어"),
-        LangEntry("zh", "Chinese",  "简体中文"),
-    )),
-    LangGroup("Regional & Emerging", "tier3", listOf(
-        LangEntry("id", "Indonesian", "Bahasa Indonesia"),
-        LangEntry("tr", "Turkish",    "Türkçe"),
-        LangEntry("sw", "Swahili",    "Kiswahili"),
-        LangEntry("vi", "Vietnamese", "Tiếng Việt"),
-        LangEntry("th", "Thai",       "ไทย"),
-        LangEntry("ur", "Urdu",       "اردو", "rtl"),
-    )),
-    LangGroup("Indian Languages", "indian", listOf(
-        LangEntry("te", "Telugu",    "తెలుగు"),
-        LangEntry("ta", "Tamil",     "தமிழ்"),
-        LangEntry("kn", "Kannada",   "ಕನ್ನಡ"),
-        LangEntry("mr", "Marathi",   "मराठी"),
-        LangEntry("bn", "Bengali",   "বাংলা"),
-        LangEntry("gu", "Gujarati",  "ગુજરાતી"),
-        LangEntry("ml", "Malayalam", "മലയാളം"),
-        LangEntry("pa", "Punjabi",   "ਪੰਜਾਬੀ"),
-    )),
+/**
+ * Only language packs that have real, independently translated production assets are exposed.
+ * Placeholder/duplicated packs remain hidden until translation QA is complete.
+ */
+private val SUPPORTED_LANGUAGES = listOf(
+    LangEntry("en", "English", "English"),
+    LangEntry("te", "Telugu", "తెలుగు"),
+    LangEntry("hi", "Hindi", "हिन्दी"),
+    LangEntry("ta", "Tamil", "தமிழ்"),
+    LangEntry("kn", "Kannada", "ಕನ್ನಡ"),
+    LangEntry("mr", "Marathi", "मराठी")
 )
 
-// ── ViewModel ─────────────────────────────────────────────────────────────
 @HiltViewModel
 class LanguageSelectionViewModel @Inject constructor(
     private val session: SessionStore
 ) : ViewModel() {
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
-    fun setLanguage(code: String) = viewModelScope.launch { session.setUiLanguage(code) }
+
+    fun setLanguage(code: String) = viewModelScope.launch {
+        if (SUPPORTED_LANGUAGES.any { it.code == code }) session.setUiLanguage(code)
+    }
 }
 
-// ── Screen ─────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LanguageSelectionScreen(
@@ -84,48 +57,50 @@ fun LanguageSelectionScreen(
     vm: LanguageSelectionViewModel = hiltViewModel()
 ) {
     val current by vm.uiLanguage.collectAsState()
-    val title = t("app_language", "App Language")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title) },
+                title = { Text(t("app_language", "App Language")) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("lang_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
-    ) { pad ->
+    ) { padding ->
         LazyColumn(
-            Modifier
-                .padding(pad)
-                .fillMaxSize()
-                .testTag("lang_select_screen"),
+            modifier = Modifier.padding(padding).fillMaxSize().testTag("lang_select_screen"),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
-            LANG_GROUPS.forEach { group ->
-                item(key = group.id) {
-                    Text(
-                        group.tier,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
-                    )
-                }
-                items(group.entries, key = { it.code }) { lang ->
-                    LangRow(
-                        lang = lang,
-                        selected = lang.code == current,
-                        onClick = {
-                            vm.setLanguage(lang.code)
-                            onBack()
-                        }
-                    )
-                }
-                item(key = "${group.id}_divider") { HorizontalDivider(Modifier.padding(horizontal = 20.dp)) }
+            item {
+                Text(
+                    "Available languages",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                )
+            }
+            items(SUPPORTED_LANGUAGES, key = { it.code }) { lang ->
+                LangRow(
+                    lang = lang,
+                    selected = lang.code == current,
+                    onClick = {
+                        vm.setLanguage(lang.code)
+                        onBack()
+                    }
+                )
+            }
+            item {
+                HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                Text(
+                    "More languages will appear only after translation and layout QA is complete.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                )
             }
         }
     }
@@ -135,37 +110,20 @@ fun LanguageSelectionScreen(
 private fun LangRow(lang: LangEntry, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("lang_row_${lang.code}"),
-        color = if (selected)
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        else
-            MaterialTheme.colorScheme.surface
+        modifier = Modifier.fillMaxWidth().testTag("lang_row_${lang.code}"),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else MaterialTheme.colorScheme.surface
     ) {
         Row(
             Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    lang.native,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    lang.label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(lang.native, style = MaterialTheme.typography.bodyLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                Text(lang.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (selected) {
-                Icon(
-                    Icons.Filled.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
     }
