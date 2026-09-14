@@ -68,6 +68,21 @@ test('private account data is owner-only', async () => {
   await assertFails(getDoc(doc(bobDb, 'userPrivate/alice')));
 });
 
+test('exact nearby coordinates are server-only', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'userLocations/alice'), {
+      latitude: 17.4, longitude: 78.4, geohash: 'te', updatedAtMillis: Date.now(),
+    });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(aliceDb, 'userLocations/alice')));
+  await assertFails(getDoc(doc(bobDb, 'userLocations/alice')));
+  await assertFails(setDoc(doc(aliceDb, 'userLocations/alice'), {
+    latitude: 17.4, longitude: 78.4, geohash: 'te', updatedAtMillis: Date.now(),
+  }));
+});
+
 test('clients cannot grant themselves premium or verification', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await assertFails(updateDoc(doc(db, 'users/alice'), { isPremium: true }));
