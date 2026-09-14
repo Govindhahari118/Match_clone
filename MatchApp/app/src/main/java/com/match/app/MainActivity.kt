@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,21 +18,19 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.match.app.core.config.RemoteConfigManager
 import com.match.app.core.update.InAppUpdateManager
-import com.match.app.data.repo.SubscriptionRepository
+import com.match.app.data.billing.PlayBillingManager
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.MatchRoot
-import com.razorpay.PaymentData
-import com.razorpay.PaymentResultWithDataListener
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
+class MainActivity : FragmentActivity() {
 
     @Inject lateinit var session: SessionStore
-    @Inject lateinit var subscriptionRepo: SubscriptionRepository
+    @Inject lateinit var playBilling: PlayBillingManager
     @Inject lateinit var inAppUpdateManager: InAppUpdateManager
     @Inject lateinit var remoteConfig: RemoteConfigManager
 
@@ -66,6 +63,10 @@ class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
         if (isPermissionPromptInFlight || isBiometricPromptShowing) return
         lifecycleScope.launch { session.touchActivity() }
         lifecycleScope.launch { if (session.biometricLock.first()) showBiometricPrompt() }
+        // Keep one process-wide BillingClient connected while the app is foregrounded. This also
+        // recovers PURCHASED items when checkout completed while the process was killed or when a
+        // pending payment completed outside the app. Entitlements are still server-verified.
+        playBilling.connect()
         inAppUpdateManager.checkForUpdate(activity = this, forceUpdateVersionCode = remoteConfig.forceUpdateVersionCode)
     }
 
@@ -126,40 +127,5 @@ class MainActivity : FragmentActivity(), PaymentResultWithDataListener {
             isPermissionPromptInFlight = true
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-    }
-
-    override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
-        val orderId = paymentData?.orderId.orEmpty()
-        val paymentId = razorpayPaymentId.orEmpty()
-        val signature = paymentData?.signature.orEmpty()
-        if (orderId.isBlank() || paymentId.isBlank() || signature.isBlank()) {
-            Toast.makeText(this, "Payment response incomplete. Do not pay again; contact support.", Toast.LENGTH_LONG).show()
-            return
-        }
-        Toast.makeText(this, "Payment received. Verifying securely…", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch {
-            subscriptionRepo.verifyAndActivatePremium(orderId, paymentId, signature)
-                .onSuccess { Toast.makeText(this@MainActivity, "Membership activated.", Toast.LENGTH_LONG).show() }
-                .onFailure {
-                    // Never grant local premium on verification failure. A captured payment can
-                    // still be recovered by the signed Razorpay webhook on the server.
-                    subscriptionRepo.checkPremiumStatus()
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Payment verification is pending. Do not pay again; membership will update after server confirmation.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-        }
-    }
-
-    override fun onPaymentError(errorCode: Int, errorDescription: String?, paymentData: PaymentData?) {
-        val msg = when (errorCode) {
-            0 -> "Network error. Please try again."
-            1 -> "Payment cancelled."
-            2 -> "Invalid payment options."
-            else -> "Payment failed. Please try again."
-        }
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 }
