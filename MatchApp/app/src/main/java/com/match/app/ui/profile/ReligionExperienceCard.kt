@@ -1,26 +1,12 @@
 package com.match.app.ui.profile
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,9 +47,7 @@ class ReligionExperienceViewModel @Inject constructor(
     fun setLocked(locked: Boolean, profileReligion: String) = viewModelScope.launch {
         if (locked) {
             val category = ReligionCategory.fromReligion(profileReligion)
-            session.setReligionExperience(
-                preference.value.copy(selected = setOf(category), locked = true)
-            )
+            session.setReligionExperience(current = preference.value.copy(selected = setOf(category), locked = true))
         } else {
             session.setReligionLocked(false)
         }
@@ -75,79 +59,84 @@ class ReligionExperienceViewModel @Inject constructor(
 }
 
 /**
- * Profile-level control for the discovery lens. It deliberately separates a
- * member's declared religion from what they want to browse. Locking is an
- * explicit user action and can always be reversed.
+ * Profile-level religion controls. Declared religion is a profile field; discovery
+ * lenses are separate preferences. Locking is explicit and reversible. Religion-
+ * inspired styling is opt-in and the neutral matrimony theme remains the default.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReligionExperienceCard(
     profileReligion: String,
+    onReligionChange: (ReligionCategory) -> Unit = {},
     vm: ReligionExperienceViewModel = hiltViewModel()
 ) {
     val preference by vm.preference.collectAsState()
     val effective = preference.effective(profileReligion)
+    val declared = ReligionCategory.fromReligion(profileReligion)
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Religion & discovery", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "Your profile religion is $profileReligion. Choose which communities you want to discover.",
+                        "Choose your declared religion, then decide whether discovery should stay locked to it.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(
-                    if (preference.locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Icon(if (preference.locked) Icons.Filled.Lock else Icons.Filled.LockOpen, null, tint = MaterialTheme.colorScheme.primary)
             }
 
-            Spacer(Modifier.height(12.dp))
+            Text("My religion", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ReligionCategory.entries.forEach { category ->
-                    AssistChip(
-                        enabled = !preference.locked,
-                        onClick = { vm.toggleLens(category, profileReligion) },
-                        label = {
-                            Text(if (category in effective) "✓ ${category.label}" else category.label)
-                        }
+                    FilterChip(
+                        selected = declared == category,
+                        onClick = { if (declared != category) onReligionChange(category) },
+                        label = { Text(category.label) }
                     )
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            HorizontalDivider()
+            Text("Discovery communities", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReligionCategory.entries.forEach { category ->
+                    FilterChip(
+                        selected = category in effective,
+                        enabled = !preference.locked,
+                        onClick = { vm.toggleLens(category, profileReligion) },
+                        label = { Text(category.label) }
+                    )
+                }
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Lock to my religion", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "When on, Home and Discover default to ${ReligionCategory.fromReligion(profileReligion).label} only.",
+                        "When enabled, Home and Discover default to ${declared.label} only.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(
-                    checked = preference.locked,
-                    onCheckedChange = { vm.setLocked(it, profileReligion) }
-                )
+                Switch(checked = preference.locked, onCheckedChange = { vm.setLocked(it, profileReligion) })
             }
 
-            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Religion-inspired theme", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Optional. The normal matrimony theme stays the default.",
+                        "Optional visual styling for the active religion. The standard matrimony theme is the default.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
