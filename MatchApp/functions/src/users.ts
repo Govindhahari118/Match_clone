@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { createHash } from "crypto";
 import { db, generateMatrimonyId, getFcmToken, messaging, requireAppCheck } from "./shared";
 
 export const onUserCreate = functions.firestore
@@ -241,6 +242,51 @@ export const deleteUserAccount = functions
       throw new functions.https.HttpsError("internal", "Account deletion could not be completed. Please retry.");
     }
   });
+
+/**
+ * Records at most one profile view per viewer/target/UTC day.
+ * The client never supplies viewer identity or the document id, so views cannot be forged
+ * to inflate analytics or generate notification spam.
+ */
+export const recordProfileView = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const viewerUid = context.auth?.uid;
+  if (!viewerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const viewedUid = typeof data?.viewedUid === "string" ? data.viewedUid.trim() : "";
+  if (!viewedUid || viewedUid === viewerUid) {
+    throw new functions.https.HttpsError("invalid-argument", "A valid target profile is required");
+  }
+
+  const [target, viewerBlocked, targetBlocked] = await Promise.all([
+    db.collection("users").doc(viewedUid).get(),
+    db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
+    db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
+  ]);
+  if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+  if (viewerBlocked.exists || targetBlocked.exists) {
+    throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+  const viewId = createHash("sha256")
+    .update(`${viewerUid}|${viewedUid}|${day}`)
+    .digest("hex");
+  const viewRef = db.collection("profileViews").doc(viewId);
+
+  const recorded = await db.runTransaction(async (tx) => {
+    const existing = await tx.get(viewRef);
+    if (existing.exists) return false;
+    tx.set(viewRef, {
+      viewerUid,
+      viewedUid,
+      viewedAt: Date.now(),
+    });
+    return true;
+  });
+
+  return { recorded };
+});
 
 export const onProfileViewed = functions.firestore
   .document("profileViews/{viewId}")
