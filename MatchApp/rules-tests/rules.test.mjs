@@ -6,7 +6,6 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
-  collection,
   deleteDoc,
   doc,
   getDoc,
@@ -111,6 +110,28 @@ test('users cannot write payment authority documents', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await assertFails(setDoc(doc(db, 'paymentOrders/order_fake'), { uid: 'alice', status: 'paid' }));
   await assertFails(setDoc(doc(db, 'payments/pay_fake'), { uid: 'alice', amount: 1 }));
+});
+
+test('clients cannot forge profile views', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(db, 'profileViews/fake'), {
+    viewerUid: 'alice', viewedUid: 'bob', viewedAt: Date.now(),
+  }));
+});
+
+test('profile view records are visible only to viewer and viewed user', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'profileViews/server_written'), {
+      viewerUid: 'alice', viewedUid: 'bob', viewedAt: Date.now(),
+    });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const malloryDb = env.authenticatedContext('mallory').firestore();
+  await assertSucceeds(getDoc(doc(aliceDb, 'profileViews/server_written')));
+  await assertSucceeds(getDoc(doc(bobDb, 'profileViews/server_written')));
+  await assertFails(getDoc(doc(malloryDb, 'profileViews/server_written')));
 });
 
 test('profile photo upload is owner-only', async () => {
