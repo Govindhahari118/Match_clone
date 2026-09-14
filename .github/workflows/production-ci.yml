@@ -22,12 +22,12 @@ jobs:
       run:
         working-directory: MatchApp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - uses: android-actions/setup-android@v3
       - name: Install Android 36 SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
@@ -48,7 +48,7 @@ jobs:
       run:
         working-directory: MatchApp/functions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -57,3 +57,24 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  firebase-rules:
+    name: Firestore and Storage security rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: MatchApp/rules-tests
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned test dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run Firebase emulator security tests
+        run: npm test
