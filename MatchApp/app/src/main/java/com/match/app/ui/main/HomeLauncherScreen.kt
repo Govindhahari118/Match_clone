@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrivacyTip
@@ -36,6 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,11 +49,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.ReligionCategory
+import com.match.app.ui.nearby.NearbyMatchesScreen
 
 /**
- * Production home intentionally exposes a small set of real user journeys.
- * Experimental/secondary routes remain reachable from their dedicated areas,
- * but are not presented as first-class promises until their audit is green.
+ * Production home intentionally exposes only audited journeys. Nearby is hosted here until the
+ * root navigation graph is migrated to typed navigation; its profile opens still use the root
+ * profile callback, so there is no duplicate navigation identity.
  */
 @Composable
 fun HomeLauncherScreen(
@@ -81,7 +86,7 @@ fun HomeLauncherScreen(
     onGoBoost:              () -> Unit = {},
     onGoVideoProfile:       () -> Unit = {},
     onGoRecentlyJoined:     () -> Unit = {},
-    onGoTestimonials:      () -> Unit = {},
+    onGoTestimonials:       () -> Unit = {},
     onGoSwipeDiscover:      () -> Unit = {},
     onGoCommunityBrowse:    () -> Unit = {},
     onGoLiveEvents:         () -> Unit = {},
@@ -104,6 +109,15 @@ fun HomeLauncherScreen(
     onOpenProfile:          (Long) -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
+    var showNearby by remember { mutableStateOf(false) }
+    if (showNearby) {
+        NearbyMatchesScreen(
+            onBack = { showNearby = false },
+            onOpenProfile = onOpenProfile
+        )
+        return
+    }
+
     val ui by vm.ui.collectAsState()
     val p = ui.profile
 
@@ -192,16 +206,17 @@ fun HomeLauncherScreen(
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EssentialButton(Icons.Filled.Search, "Discover", Modifier.weight(1f), onGoMatches)
+                EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f)) { showNearby = true }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EssentialButton(Icons.Filled.Chat, "Messages", Modifier.weight(1f), onGoMessages)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EssentialButton(Icons.Filled.Person, "Profile", Modifier.weight(1f), onGoProfile)
-                EssentialButton(Icons.Filled.Verified, "Verification", Modifier.weight(1f), onGoVerification)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EssentialButton(Icons.Filled.Verified, "Verification", Modifier.weight(1f), onGoVerification)
                 EssentialButton(Icons.Filled.PrivacyTip, "Privacy", Modifier.weight(1f), onGoPrivacyDash)
-                EssentialButton(Icons.Filled.WorkspacePremium, "Membership", Modifier.weight(1f), onGoPricing)
             }
+            EssentialButton(Icons.Filled.WorkspacePremium, "Membership", Modifier.fillMaxWidth(), onGoPricing)
         }
 
         Spacer(Modifier.height(18.dp))
