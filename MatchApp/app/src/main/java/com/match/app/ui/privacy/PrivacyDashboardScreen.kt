@@ -71,7 +71,7 @@ class PrivacyViewModel @Inject constructor(
     fun dismissError() { _error.value = null }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Composable
 fun PrivacyDashboardScreen(
     onBack: () -> Unit = {},
@@ -180,10 +180,10 @@ fun PrivacyDashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
-                        Text("Photo privacy", fontWeight = FontWeight.SemiBold)
+                        Text("Profile photos", fontWeight = FontWeight.SemiBold)
                     }
                     Text(
-                        "Each profile photo has its own Public, Accepted only, or Hidden setting. Manage those controls from your Profile photo grid.",
+                        "Uploaded profile photos are visible to signed-in members who can access your profile. Delete a photo from your Profile if you no longer want it shown.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
