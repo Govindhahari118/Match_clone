@@ -3,6 +3,7 @@ package com.match.app.data.repo
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import androidx.paging.PagingSource
 import androidx.paging.map
 import com.google.firebase.auth.FirebaseAuth
 import com.match.app.core.matching.Astrology
@@ -43,8 +44,8 @@ class MatchingRepository @Inject constructor(
         val me = uid.let { userDao.findByFirebaseUid(it) }
         val myGender = me?.gender ?: "MALE"
         val myLookingFor = me?.lookingFor ?: "FEMALE"
-        val blockedUids = blockService.getBlockedUids(uid)
-        val likedUids = interestService.getSentInterestUids(uid)
+        val blockedUids = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
+        val likedUids = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
 
         return Pager(
             config = PagingConfig(pageSize = FirestorePagingSource.PAGE_SIZE, enablePlaceholders = false),
@@ -58,7 +59,9 @@ class MatchingRepository @Inject constructor(
                     likedUids = likedUids
                 )
             }
-        ).flow.map { data -> data.map { it.toProfile() } }
+        ).flow.map { data ->
+            data.map { remote -> cacheRemoteCandidate(remote).toProfile() }
+        }
     }
 
     suspend fun myCity(userId: Long): String = userDao.findById(userId)?.city ?: ""
@@ -68,102 +71,175 @@ class MatchingRepository @Inject constructor(
         seekerId: Long,
         mode: MatchMode,
         filter: MatchFilter = MatchFilter()
-    ): List<MatchResult> = withContext(Dispatchers.Default) {
-        val seekerEntity = userDao.findById(seekerId) ?: return@withContext emptyList()
-        val blockedIds = social.blockedIds(seekerId).toSet()
-        val qMap = qDao.all().associateBy { it.userId }
-        val seekerProfile = seekerEntity.toProfile(qMap)
-        val now = System.currentTimeMillis()
+    ): List<MatchResult> {
+        val seekerEntity = userDao.findById(seekerId) ?: return emptyList()
 
-        userDao.allExcluding(seekerId)
-            .asSequence()
-            .filter { it.id !in blockedIds }
-            .filter { genderFilter(seekerEntity, it) }
-            .filter { filter.city.isBlank() || it.city.equals(filter.city, true) }
-            .filter { filter.state.isBlank() || it.state.equals(filter.state, true) }
-            .filter { filter.caste.isBlank() || it.caste.equals(filter.caste, true) }
-            .filter { filter.subCaste.isBlank() || it.subCaste.equals(filter.subCaste, true) }
-            .filter { it.age in filter.ageMin..filter.ageMax }
-            .filter { filter.religion.isBlank() || it.religion.equals(filter.religion, true) }
-            .filter { filter.motherTongue.isBlank() || it.motherTongue.equals(filter.motherTongue, true) }
-            .filter { filter.maritalStatus.isBlank() || it.maritalStatus.equals(filter.maritalStatus, true) }
-            .filter { !filter.verifiedOnly || it.isVerified }
-            .filter { filter.verifiedLevel <= 0 || it.verificationLevel >= filter.verifiedLevel }
-            .filter { !filter.premiumOnly || it.isPremium }
-            .filter { !filter.withPhotoOnly || it.photoUrl.isNotBlank() }
-            .filter { filter.diet.isBlank() || it.diet.equals(filter.diet, true) }
-            .filter { filter.educationLevel.isBlank() || it.education.equals(filter.educationLevel, true) }
-            .filter { filter.educationField.isBlank() || it.educationField.equals(filter.educationField, true) }
-            .filter { filter.occupationCategory.isBlank() || it.occupationCategory.equals(filter.occupationCategory, true) }
-            .filter { filter.employerType.isBlank() || it.employerType.equals(filter.employerType, true) }
-            .filter { filter.residentialStatus.isBlank() || it.residentialStatus.equals(filter.residentialStatus, true) }
-            .filter { filter.gothra.isBlank() || it.gothra.equals(filter.gothra, true) }
-            .filter { filter.smoking.isBlank() || it.smoking.equals(filter.smoking, true) }
-            .filter { filter.drinking.isBlank() || it.drinking.equals(filter.drinking, true) }
-            .filter { filter.familyType.isBlank() || it.familyType.equals(filter.familyType, true) }
-            .filter { filter.familyStatus.isBlank() || it.familyStatus.equals(filter.familyStatus, true) }
-            .filter { filter.physicalStatus.isBlank() || it.physicalStatus.equals(filter.physicalStatus, true) }
-            .filter { filter.citizenship.isBlank() || it.citizenship.equals(filter.citizenship, true) }
-            .filter { filter.nakshatra.isBlank() || it.nakshatra.equals(filter.nakshatra, true) }
-            .filter { filter.rasi.isBlank() || it.rasi.equals(filter.rasi, true) }
-            .filter { filter.manglik.isBlank() || it.manglik.equals(filter.manglik, true) }
-            .filter { filter.hobbies.isBlank() || it.hobbies.contains(filter.hobbies, true) }
-            .filter { filter.keyword.isBlank() || it.displayName.contains(filter.keyword, true) || it.bio.contains(filter.keyword, true) || it.profession.contains(filter.keyword, true) }
-            .filter { filter.hasChildren.isBlank() || filter.hasChildren.equals("Any", true) || (filter.hasChildren.equals("Yes", true) == it.hasChildren) }
-            .filter {
-                filter.hasChildrenFilter.isBlank() || filter.hasChildrenFilter.equals("Don't mind", true) ||
-                    when {
-                        filter.hasChildrenFilter.startsWith("No", true) -> !it.hasChildren
-                        filter.hasChildrenFilter.startsWith("Yes", true) -> it.hasChildren
+        // Production discovery is Firebase-backed. Hydrate authorized public profiles into Room
+        // first so the existing local numeric navigation IDs remain stable while Firebase UID stays
+        // the canonical network identity for interests, blocks, chat and profile reads.
+        syncRemoteCandidates(seekerEntity, filter)
+
+        return withContext(Dispatchers.Default) {
+            val blockedIds = social.blockedIds(seekerId).toSet()
+            val qMap = qDao.all().associateBy { it.userId }
+            val seekerProfile = seekerEntity.toProfile(qMap)
+            val now = System.currentTimeMillis()
+
+            userDao.allExcluding(seekerId)
+                .asSequence()
+                .filter { !it.isSeed }
+                .filter { it.firebaseUid.isNotBlank() }
+                .filter { it.id !in blockedIds }
+                .filter { !it.stealthMode }
+                .filter { genderFilter(seekerEntity, it) }
+                .filter { filter.city.isBlank() || it.city.equals(filter.city, true) }
+                .filter { filter.state.isBlank() || it.state.equals(filter.state, true) }
+                .filter { filter.caste.isBlank() || it.caste.equals(filter.caste, true) }
+                .filter { filter.subCaste.isBlank() || it.subCaste.equals(filter.subCaste, true) }
+                .filter { it.age in filter.ageMin..filter.ageMax }
+                .filter { filter.religion.isBlank() || it.religion.equals(filter.religion, true) }
+                .filter { filter.motherTongue.isBlank() || it.motherTongue.equals(filter.motherTongue, true) }
+                .filter { filter.maritalStatus.isBlank() || it.maritalStatus.equals(filter.maritalStatus, true) }
+                .filter { !filter.verifiedOnly || it.isVerified }
+                .filter { filter.verifiedLevel <= 0 || it.verificationLevel >= filter.verifiedLevel }
+                .filter { !filter.premiumOnly || it.isPremium }
+                .filter { !filter.withPhotoOnly || it.photoUrl.isNotBlank() }
+                .filter { filter.diet.isBlank() || it.diet.equals(filter.diet, true) }
+                .filter { filter.educationLevel.isBlank() || it.education.equals(filter.educationLevel, true) }
+                .filter { filter.educationField.isBlank() || it.educationField.equals(filter.educationField, true) }
+                .filter { filter.occupationCategory.isBlank() || it.occupationCategory.equals(filter.occupationCategory, true) }
+                .filter { filter.employerType.isBlank() || it.employerType.equals(filter.employerType, true) }
+                .filter { filter.residentialStatus.isBlank() || it.residentialStatus.equals(filter.residentialStatus, true) }
+                .filter { filter.gothra.isBlank() || it.gothra.equals(filter.gothra, true) }
+                .filter { filter.smoking.isBlank() || it.smoking.equals(filter.smoking, true) }
+                .filter { filter.drinking.isBlank() || it.drinking.equals(filter.drinking, true) }
+                .filter { filter.familyType.isBlank() || it.familyType.equals(filter.familyType, true) }
+                .filter { filter.familyStatus.isBlank() || it.familyStatus.equals(filter.familyStatus, true) }
+                .filter { filter.physicalStatus.isBlank() || it.physicalStatus.equals(filter.physicalStatus, true) }
+                .filter { filter.citizenship.isBlank() || it.citizenship.equals(filter.citizenship, true) }
+                .filter { filter.nakshatra.isBlank() || it.nakshatra.equals(filter.nakshatra, true) }
+                .filter { filter.rasi.isBlank() || it.rasi.equals(filter.rasi, true) }
+                .filter { filter.manglik.isBlank() || it.manglik.equals(filter.manglik, true) }
+                .filter { filter.hobbies.isBlank() || it.hobbies.contains(filter.hobbies, true) }
+                .filter { filter.keyword.isBlank() || it.displayName.contains(filter.keyword, true) || it.bio.contains(filter.keyword, true) || it.profession.contains(filter.keyword, true) }
+                .filter { filter.hasChildren.isBlank() || filter.hasChildren.equals("Any", true) || (filter.hasChildren.equals("Yes", true) == it.hasChildren) }
+                .filter {
+                    filter.hasChildrenFilter.isBlank() || filter.hasChildrenFilter.equals("Don't mind", true) ||
+                        when {
+                            filter.hasChildrenFilter.startsWith("No", true) -> !it.hasChildren
+                            filter.hasChildrenFilter.startsWith("Yes", true) -> it.hasChildren
+                            else -> true
+                        }
+                }
+                .filter { filter.nativeState.isBlank() || it.nativeState.equals(filter.nativeState, true) }
+                .filter { filter.countryOfResidence.isBlank() || it.countryOfResidence.equals(filter.countryOfResidence, true) }
+                .filter { !filter.nriOnly || it.isNRI || (it.countryOfResidence.isNotBlank() && !it.countryOfResidence.equals("India", true)) }
+                .filter {
+                    when (filter.nriStatus.lowercase()) {
+                        "only" -> it.isNRI
+                        "exclude" -> !it.isNRI
                         else -> true
                     }
-            }
-            .filter { filter.nativeState.isBlank() || it.nativeState.equals(filter.nativeState, true) }
-            .filter { filter.countryOfResidence.isBlank() || it.countryOfResidence.equals(filter.countryOfResidence, true) }
-            .filter { !filter.nriOnly || it.isNRI || (it.countryOfResidence.isNotBlank() && !it.countryOfResidence.equals("India", true)) }
-            .filter {
-                when (filter.nriStatus.lowercase()) {
-                    "only" -> it.isNRI
-                    "exclude" -> !it.isNRI
-                    else -> true
                 }
-            }
-            .filter { !filter.willingToRelocate || it.willingToRelocate }
-            .filter { filter.incomeMin.isBlank() || it.incomeBand.contains(filter.incomeMin, true) }
-            .filter { filter.recentlyJoinedDays <= 0 || (now - it.createdAt) <= filter.recentlyJoinedDays * DAY_MS }
-            .filter { filter.lastActiveWithinDays <= 0 || (now - it.lastActiveAt) <= filter.lastActiveWithinDays * DAY_MS }
-            .filter {
-                when (filter.hasHoroscope.lowercase()) {
-                    "yes" -> it.rasi.isNotBlank() && it.nakshatra.isNotBlank()
-                    "no" -> it.rasi.isBlank() && it.nakshatra.isBlank()
-                    else -> true
+                .filter { !filter.willingToRelocate || it.willingToRelocate }
+                .filter { filter.incomeMin.isBlank() || it.incomeBand.contains(filter.incomeMin, true) }
+                .filter { filter.recentlyJoinedDays <= 0 || (now - it.createdAt) <= filter.recentlyJoinedDays * DAY_MS }
+                .filter { filter.lastActiveWithinDays <= 0 || (now - it.lastActiveAt) <= filter.lastActiveWithinDays * DAY_MS }
+                .filter {
+                    when (filter.hasHoroscope.lowercase()) {
+                        "yes" -> it.rasi.isNotBlank() && it.nakshatra.isNotBlank()
+                        "no" -> it.rasi.isBlank() && it.nakshatra.isBlank()
+                        else -> true
+                    }
                 }
-            }
-            .map { candidate ->
-                val candidateProfile = candidate.toProfile(qMap)
-                val qScore = if (seekerProfile.selfVector != null && seekerProfile.partnerVector != null) {
-                    qMap[candidate.id]?.let { q ->
-                        Vectors.questionnaireScore(
-                            seekerProfile.selfVector,
-                            seekerProfile.partnerVector,
-                            Vec.decode(q.selfVector),
-                            Vec.decode(q.partnerVector)
-                        )
-                    } ?: 0f
-                } else 0f
-                val astro = Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
-                MatchResult(
-                    user = candidateProfile,
-                    questionnaireScore = qScore,
-                    astrologyScore = astro,
-                    combinedScore = MatchScorer.calculate(seekerProfile, candidateProfile).toFloat() / 100f,
-                    mode = mode
+                .map { candidate ->
+                    val candidateProfile = candidate.toProfile(qMap)
+                    val qScore = if (seekerProfile.selfVector != null && seekerProfile.partnerVector != null) {
+                        qMap[candidate.id]?.let { q ->
+                            Vectors.questionnaireScore(
+                                seekerProfile.selfVector,
+                                seekerProfile.partnerVector,
+                                Vec.decode(q.selfVector),
+                                Vec.decode(q.partnerVector)
+                            )
+                        } ?: 0f
+                    } else 0f
+                    val astro = Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
+                    MatchResult(
+                        user = candidateProfile,
+                        questionnaireScore = qScore,
+                        astrologyScore = astro,
+                        combinedScore = MatchScorer.calculate(seekerProfile, candidateProfile).toFloat() / 100f,
+                        mode = mode
+                    )
+                }
+                .filter { filter.minScore <= 0f || it.combinedScore >= filter.minScore }
+                .sortedByDescending { it.combinedScore }
+                .take(200)
+                .toList()
+        }
+    }
+
+    private suspend fun syncRemoteCandidates(seeker: UserEntity, filter: MatchFilter) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() } ?: return
+        val blocked = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
+        val liked = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
+        var cursor: String? = null
+
+        repeat(MAX_DISCOVERY_PAGES_PER_REFRESH) {
+            val source = FirestorePagingSource(
+                myUid = uid,
+                myGender = seeker.gender,
+                myLookingFor = seeker.lookingFor,
+                filter = filter,
+                blockedUids = blocked,
+                likedUids = liked
+            )
+            val result = source.load(
+                PagingSource.LoadParams.Refresh(
+                    key = cursor,
+                    loadSize = FirestorePagingSource.PAGE_SIZE,
+                    placeholdersEnabled = false
                 )
+            )
+            when (result) {
+                is PagingSource.LoadResult.Page -> {
+                    result.data.forEach { cacheRemoteCandidate(it) }
+                    cursor = result.nextKey
+                    if (cursor == null) return
+                }
+                is PagingSource.LoadResult.Error -> return
+                is PagingSource.LoadResult.Invalid -> return
             }
-            .filter { filter.minScore <= 0f || it.combinedScore >= filter.minScore }
-            .sortedByDescending { it.combinedScore }
-            .take(200)
-            .toList()
+        }
+    }
+
+    private suspend fun cacheRemoteCandidate(remote: UserEntity): UserEntity {
+        val firebaseUid = remote.firebaseUid
+        if (firebaseUid.isBlank()) return remote
+
+        val existing = userDao.findByFirebaseUid(firebaseUid)
+        if (existing != null) {
+            val merged = remote.copy(
+                id = existing.id,
+                email = existing.email,
+                passwordHash = existing.passwordHash,
+                isSeed = false
+            )
+            userDao.update(merged)
+            return merged
+        }
+
+        // Room requires a unique non-null email, but discovery intentionally never receives private
+        // contact data. This sentinel is internal cache metadata only and is replaced with the real
+        // authenticated email if that Firebase account later signs in on this device.
+        val cached = remote.copy(
+            email = "${firebaseUid}@cache.invalid",
+            passwordHash = "",
+            isSeed = false
+        )
+        val id = userDao.insert(cached)
+        return cached.copy(id = id)
     }
 
     private fun safeGender(raw: String): Gender = runCatching { Gender.valueOf(raw) }.getOrDefault(Gender.OTHER)
@@ -190,7 +266,7 @@ class MatchingRepository @Inject constructor(
     private fun UserEntity.toProfile(qMap: Map<Long, QuestionnaireEntity> = emptyMap()) = UserProfile(
         id = id,
         firebaseUid = firebaseUid,
-        email = email,
+        email = if (email.endsWith("@cache.invalid")) "" else email,
         displayName = displayName,
         age = age,
         gender = safeGender(gender),
@@ -234,16 +310,16 @@ class MatchingRepository @Inject constructor(
         willingToRelocate = willingToRelocate,
         createdAt = createdAt,
         lastActiveAt = lastActiveAt,
-        phoneNumber = phoneNumber,
+        phoneNumber = "",
         isIncognito = isIncognito,
         familyValues = familyValues,
         aboutFamily = aboutFamily,
         manglik = manglik,
-        dateOfBirth = dateOfBirth,
+        dateOfBirth = "",
         weight = weight,
         complexion = complexion,
         physicalStatus = physicalStatus,
-        birthTime = birthTime,
+        birthTime = "",
         birthPlace = birthPlace,
         familyStatus = familyStatus,
         educationField = educationField,
@@ -273,5 +349,6 @@ class MatchingRepository @Inject constructor(
 
     private companion object {
         const val DAY_MS = 24L * 60L * 60L * 1000L
+        const val MAX_DISCOVERY_PAGES_PER_REFRESH = 5
     }
 }
