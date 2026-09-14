@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.MatchMode
+import com.match.app.domain.model.ReligionCategory
+import com.match.app.domain.model.ReligionExperiencePreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -27,6 +29,7 @@ class SessionStore(private val context: Context) {
     private val KEY_CITY      = stringPreferencesKey("filter_city")
     private val KEY_STATE     = stringPreferencesKey("filter_state")
     private val KEY_CASTE     = stringPreferencesKey("filter_caste")
+    private val KEY_SUB_CASTE = stringPreferencesKey("filter_sub_caste")
     private val KEY_MIN_SCORE = floatPreferencesKey("filter_min_score")
     private val KEY_RELIGION  = stringPreferencesKey("filter_religion")
     private val KEY_TONGUE    = stringPreferencesKey("filter_tongue")
@@ -49,6 +52,27 @@ class SessionStore(private val context: Context) {
     private val KEY_NRI_ONLY   = booleanPreferencesKey("filter_nri_only")
     private val KEY_RELOCATE   = booleanPreferencesKey("filter_relocate")
     private val KEY_RECENT_DAYS = intPreferencesKey("filter_recent_days")
+    private val KEY_SMOKING = stringPreferencesKey("filter_smoking")
+    private val KEY_DRINKING = stringPreferencesKey("filter_drinking")
+    private val KEY_FAMILY_TYPE = stringPreferencesKey("filter_family_type")
+    private val KEY_FAMILY_STATUS = stringPreferencesKey("filter_family_status")
+    private val KEY_PHYSICAL_STATUS = stringPreferencesKey("filter_physical_status")
+    private val KEY_CHILDREN_FILTER = stringPreferencesKey("filter_children_extended")
+    private val KEY_CITIZENSHIP = stringPreferencesKey("filter_citizenship")
+    private val KEY_NRI_STATUS = stringPreferencesKey("filter_nri_status")
+    private val KEY_EDUCATION_FIELD = stringPreferencesKey("filter_education_field")
+    private val KEY_OCCUPATION_CATEGORY = stringPreferencesKey("filter_occupation_category")
+    private val KEY_EMPLOYER_TYPE = stringPreferencesKey("filter_employer_type")
+    private val KEY_NAKSHATRA = stringPreferencesKey("filter_nakshatra")
+    private val KEY_RASI = stringPreferencesKey("filter_rasi")
+    private val KEY_MANGLIK = stringPreferencesKey("filter_manglik")
+    private val KEY_HOBBIES = stringPreferencesKey("filter_hobbies")
+    private val KEY_PHOTO_ONLY = booleanPreferencesKey("filter_photo_only")
+    private val KEY_VERIFIED_LEVEL = intPreferencesKey("filter_verified_level")
+    private val KEY_PREMIUM_ONLY = booleanPreferencesKey("filter_premium_only")
+    private val KEY_LAST_ACTIVE_DAYS = intPreferencesKey("filter_last_active_days")
+    private val KEY_MIN_PORUTHAM = intPreferencesKey("filter_min_porutham")
+    private val KEY_HAS_HOROSCOPE = stringPreferencesKey("filter_has_horoscope")
     private val KEY_UI_LANG    = stringPreferencesKey("ui_language")
     private val KEY_COMMUNITY_SETUP_DONE = booleanPreferencesKey("community_setup_done")
     private val KEY_LAST_ACTIVE = longPreferencesKey("last_active_at")
@@ -56,6 +80,12 @@ class SessionStore(private val context: Context) {
     private val KEY_SUB_PLAN   = stringPreferencesKey("subscription_plan")
     private val KEY_DPDP_CONSENT = booleanPreferencesKey("dpdp_consent_given")
     private val KEY_DPDP_CONSENT_AT = longPreferencesKey("dpdp_consent_at")
+
+    // Private discovery experience. These values never redefine the member's
+    // declared religion; they only control discovery defaults and optional UI.
+    private val KEY_RELIGION_LENSES = stringPreferencesKey("religion_lenses")
+    private val KEY_RELIGION_LOCKED = booleanPreferencesKey("religion_lens_locked")
+    private val KEY_RELIGION_THEME = booleanPreferencesKey("religion_theme_enabled")
 
     companion object {
         /** Auto-logout after 30 days of inactivity. */
@@ -75,6 +105,7 @@ class SessionStore(private val context: Context) {
             city         = it[KEY_CITY]      ?: "",
             state        = it[KEY_STATE]     ?: "",
             caste        = it[KEY_CASTE]     ?: "",
+            subCaste     = it[KEY_SUB_CASTE] ?: "",
             minScore     = it[KEY_MIN_SCORE] ?: 0f,
             religion     = it[KEY_RELIGION]  ?: "",
             motherTongue = it[KEY_TONGUE]    ?: "",
@@ -92,11 +123,44 @@ class SessionStore(private val context: Context) {
             countryOfResidence = it[KEY_COUNTRY] ?: "",
             nriOnly      = it[KEY_NRI_ONLY]  ?: false,
             willingToRelocate = it[KEY_RELOCATE] ?: false,
-            recentlyJoinedDays = it[KEY_RECENT_DAYS] ?: 0
+            recentlyJoinedDays = it[KEY_RECENT_DAYS] ?: 0,
+            smoking = it[KEY_SMOKING] ?: "",
+            drinking = it[KEY_DRINKING] ?: "",
+            familyType = it[KEY_FAMILY_TYPE] ?: "",
+            familyStatus = it[KEY_FAMILY_STATUS] ?: "",
+            physicalStatus = it[KEY_PHYSICAL_STATUS] ?: "",
+            hasChildrenFilter = it[KEY_CHILDREN_FILTER] ?: "",
+            citizenship = it[KEY_CITIZENSHIP] ?: "",
+            nriStatus = it[KEY_NRI_STATUS] ?: "",
+            educationField = it[KEY_EDUCATION_FIELD] ?: "",
+            occupationCategory = it[KEY_OCCUPATION_CATEGORY] ?: "",
+            employerType = it[KEY_EMPLOYER_TYPE] ?: "",
+            nakshatra = it[KEY_NAKSHATRA] ?: "",
+            rasi = it[KEY_RASI] ?: "",
+            manglik = it[KEY_MANGLIK] ?: "",
+            hobbies = it[KEY_HOBBIES] ?: "",
+            withPhotoOnly = it[KEY_PHOTO_ONLY] ?: true,
+            verifiedLevel = it[KEY_VERIFIED_LEVEL] ?: 0,
+            premiumOnly = it[KEY_PREMIUM_ONLY] ?: false,
+            lastActiveWithinDays = it[KEY_LAST_ACTIVE_DAYS] ?: 0,
+            minPoruthamScore = it[KEY_MIN_PORUTHAM] ?: 0,
+            hasHoroscope = it[KEY_HAS_HOROSCOPE] ?: ""
         )
     }
     val darkMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK] ?: false }
     val paletteKey: Flow<String> = context.dataStore.data.map { it[KEY_PALETTE] ?: "VIVAH" }
+    val religionExperience: Flow<ReligionExperiencePreference> = context.dataStore.data.map { prefs ->
+        val selected = prefs[KEY_RELIGION_LENSES]
+            .orEmpty()
+            .split(',')
+            .mapNotNull { ReligionCategory.fromStorageKey(it.trim()) }
+            .toSet()
+        ReligionExperiencePreference(
+            selected = selected,
+            locked = prefs[KEY_RELIGION_LOCKED] ?: false,
+            religionThemeEnabled = prefs[KEY_RELIGION_THEME] ?: false
+        )
+    }
     val apiBaseUrl: Flow<String> = context.dataStore.data.map {
         it[KEY_API_BASE] ?: ""   // No REST server; Firebase IS the backend. Only set in debug.
     }
@@ -104,7 +168,6 @@ class SessionStore(private val context: Context) {
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
     val uiLanguage: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_UI_LANG] ?: run {
-            // Auto-detect system language on first run; fall back to English if unsupported
             val supported = setOf(
                 "en","hi","te","ta","kn","mr","bn","gu","ml","pa","ur",
                 "es","pt","ru","ar","de","fr","it","ja","ko","zh",
@@ -119,43 +182,75 @@ class SessionStore(private val context: Context) {
     val incognitoMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_INCOGNITO] ?: false }
     val dpdpConsentGiven: Flow<Boolean> = context.dataStore.data.map { it[KEY_DPDP_CONSENT] ?: false }
 
-    suspend fun setUser(id: Long)   = context.dataStore.edit { it[KEY_USER_ID] = id }
+    suspend fun setUser(id: Long) = context.dataStore.edit { it[KEY_USER_ID] = id }
     suspend fun setFirebaseUid(uid: String) = context.dataStore.edit { it[KEY_FIREBASE_UID] = uid }
     suspend fun setSubscriptionPlan(plan: String) = context.dataStore.edit { it[KEY_SUB_PLAN] = plan }
-    suspend fun clear()              = context.dataStore.edit {
+    suspend fun clear() = context.dataStore.edit {
         it.remove(KEY_USER_ID)
         it.remove(KEY_FIREBASE_UID)
-        // Keep KEY_ONBOARD so returning users don't re-see onboarding
+        // Keep onboarding and harmless UI preferences for returning users.
     }
     suspend fun setMode(m: MatchMode) = context.dataStore.edit {
         it[KEY_MODE] = when (m) { MatchMode.QUESTIONNAIRE -> 0L; MatchMode.ASTROLOGY -> 1L; MatchMode.ADVANCED -> 2L }
     }
     suspend fun setOnboarded(v: Boolean) = context.dataStore.edit { it[KEY_ONBOARD] = v }
     suspend fun setFilter(f: MatchFilter) = context.dataStore.edit {
-        it[KEY_AGE_MIN]   = f.ageMin
-        it[KEY_AGE_MAX]   = f.ageMax
-        it[KEY_CITY]      = f.city
-        it[KEY_STATE]     = f.state
-        it[KEY_CASTE]     = f.caste
+        it[KEY_AGE_MIN] = f.ageMin
+        it[KEY_AGE_MAX] = f.ageMax
+        it[KEY_CITY] = f.city
+        it[KEY_STATE] = f.state
+        it[KEY_CASTE] = f.caste
+        it[KEY_SUB_CASTE] = f.subCaste
         it[KEY_MIN_SCORE] = f.minScore
-        it[KEY_RELIGION]  = f.religion
-        it[KEY_TONGUE]    = f.motherTongue
-        it[KEY_MARITAL]   = f.maritalStatus
-        it[KEY_VERIFIED]  = f.verifiedOnly
+        it[KEY_RELIGION] = f.religion
+        it[KEY_TONGUE] = f.motherTongue
+        it[KEY_MARITAL] = f.maritalStatus
+        it[KEY_VERIFIED] = f.verifiedOnly
         it[KEY_INCOME_MIN] = f.incomeMin
         it[KEY_INCOME_MAX] = f.incomeMax
-        it[KEY_EDUCATION]  = f.educationLevel
-        it[KEY_DIET]       = f.diet
+        it[KEY_EDUCATION] = f.educationLevel
+        it[KEY_DIET] = f.diet
         it[KEY_RESIDENTIAL] = f.residentialStatus
-        it[KEY_CHILDREN]   = f.hasChildren
-        it[KEY_KEYWORD]    = f.keyword
-        it[KEY_GOTHRA]     = f.gothra
+        it[KEY_CHILDREN] = f.hasChildren
+        it[KEY_KEYWORD] = f.keyword
+        it[KEY_GOTHRA] = f.gothra
         it[KEY_NATIVE_STATE] = f.nativeState
-        it[KEY_COUNTRY]    = f.countryOfResidence
-        it[KEY_NRI_ONLY]   = f.nriOnly
-        it[KEY_RELOCATE]   = f.willingToRelocate
+        it[KEY_COUNTRY] = f.countryOfResidence
+        it[KEY_NRI_ONLY] = f.nriOnly
+        it[KEY_RELOCATE] = f.willingToRelocate
         it[KEY_RECENT_DAYS] = f.recentlyJoinedDays
+        it[KEY_SMOKING] = f.smoking
+        it[KEY_DRINKING] = f.drinking
+        it[KEY_FAMILY_TYPE] = f.familyType
+        it[KEY_FAMILY_STATUS] = f.familyStatus
+        it[KEY_PHYSICAL_STATUS] = f.physicalStatus
+        it[KEY_CHILDREN_FILTER] = f.hasChildrenFilter
+        it[KEY_CITIZENSHIP] = f.citizenship
+        it[KEY_NRI_STATUS] = f.nriStatus
+        it[KEY_EDUCATION_FIELD] = f.educationField
+        it[KEY_OCCUPATION_CATEGORY] = f.occupationCategory
+        it[KEY_EMPLOYER_TYPE] = f.employerType
+        it[KEY_NAKSHATRA] = f.nakshatra
+        it[KEY_RASI] = f.rasi
+        it[KEY_MANGLIK] = f.manglik
+        it[KEY_HOBBIES] = f.hobbies
+        it[KEY_PHOTO_ONLY] = f.withPhotoOnly
+        it[KEY_VERIFIED_LEVEL] = f.verifiedLevel
+        it[KEY_PREMIUM_ONLY] = f.premiumOnly
+        it[KEY_LAST_ACTIVE_DAYS] = f.lastActiveWithinDays
+        it[KEY_MIN_PORUTHAM] = f.minPoruthamScore
+        it[KEY_HAS_HOROSCOPE] = f.hasHoroscope
     }
+    suspend fun setReligionExperience(value: ReligionExperiencePreference) = context.dataStore.edit { prefs ->
+        prefs[KEY_RELIGION_LENSES] = value.selected.joinToString(",") { it.storageKey }
+        prefs[KEY_RELIGION_LOCKED] = value.locked
+        prefs[KEY_RELIGION_THEME] = value.religionThemeEnabled
+    }
+    suspend fun setReligionLenses(values: Set<ReligionCategory>) = context.dataStore.edit { prefs ->
+        prefs[KEY_RELIGION_LENSES] = values.joinToString(",") { it.storageKey }
+    }
+    suspend fun setReligionLocked(value: Boolean) = context.dataStore.edit { it[KEY_RELIGION_LOCKED] = value }
+    suspend fun setReligionThemeEnabled(value: Boolean) = context.dataStore.edit { it[KEY_RELIGION_THEME] = value }
     suspend fun setDarkMode(v: Boolean) = context.dataStore.edit { it[KEY_DARK] = v }
     suspend fun setPalette(key: String) = context.dataStore.edit { it[KEY_PALETTE] = key }
     suspend fun setApiBaseUrl(url: String) = context.dataStore.edit { it[KEY_API_BASE] = url }
@@ -175,7 +270,7 @@ class SessionStore(private val context: Context) {
     /** Returns true if the user hasn't interacted in 30+ days. */
     suspend fun isSessionExpired(): Boolean {
         val prefs = context.dataStore.data.map { it[KEY_LAST_ACTIVE] }.first()
-        val last = prefs ?: return false  // no timestamp → fresh install, not expired
+        val last = prefs ?: return false
         return System.currentTimeMillis() - last > SESSION_EXPIRY_MS
     }
 }
