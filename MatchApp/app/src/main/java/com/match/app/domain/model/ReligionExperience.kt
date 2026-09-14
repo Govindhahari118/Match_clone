@@ -1,7 +1,7 @@
 package com.match.app.domain.model
 
 /**
- * Top-level discovery lenses.  These are intentionally broader than the
+ * Top-level discovery lenses. These are intentionally broader than the
  * profile's exact religion value so the home experience stays simple while
  * detailed religion/community/sub-community data remains available to filters.
  */
@@ -15,12 +15,10 @@ enum class ReligionCategory(val storageKey: String, val label: String) {
         fun fromReligion(value: String?): ReligionCategory {
             val normalized = value.orEmpty().trim().lowercase()
             return when {
-                normalized {
-                    normalized.contains("hindu") -> HINDU
-                    normalized.contains("christ") || normalized.contains("catholic") || normalized.contains("orthodox") -> CHRISTIAN
-                    normalized.contains("muslim") || normalized.contains("islam") -> MUSLIM
-                    else -> OTHER
-                }
+                normalized.contains("hindu") -> HINDU
+                normalized.contains("christ") || normalized.contains("catholic") || normalized.contains("orthodox") -> CHRISTIAN
+                normalized.contains("muslim") || normalized.contains("islam") -> MUSLIM
+                else -> OTHER
             }
         }
 
