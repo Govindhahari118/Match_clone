@@ -6,13 +6,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,12 +43,16 @@ class ShortlistViewModel @Inject constructor(
     private val repo: ShortlistRepository,
     private val userDao: UserDao
 ) : ViewModel() {
-    val profiles: StateFlow<List<UserProfile>> = session.userId.filterNotNull()
-        .flatMapLatest { me -> repo.observeSavedIds(me).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } } }
+    /** Firestore is authoritative; repository hydrates public profiles into the Room cache. */
+    val profiles: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            repo.observeSavedIdsRemote(uid).map { ids ->
+                ids.mapNotNull { userDao.findById(it)?.toProfile() }
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val count: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { repo.observeCount(it) }
+    val count: StateFlow<Int> = profiles.map { it.size }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private val _sort = MutableStateFlow(ShortlistSort.NAME)
@@ -60,8 +60,8 @@ class ShortlistViewModel @Inject constructor(
 
     val sorted: StateFlow<List<UserProfile>> = combine(profiles, _sort) { list, s ->
         when (s) {
-            ShortlistSort.NAME     -> list.sortedBy { it.displayName }
-            ShortlistSort.AGE      -> list.sortedBy { it.age }
+            ShortlistSort.NAME -> list.sortedBy { it.displayName }
+            ShortlistSort.AGE -> list.sortedBy { it.age }
             ShortlistSort.VERIFIED -> list.sortedByDescending { it.isVerified }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -70,19 +70,37 @@ class ShortlistViewModel @Inject constructor(
 
     fun remove(targetId: Long) = viewModelScope.launch {
         val me = session.userId.first() ?: return@launch
-        repo.toggle(me, targetId)
+        runCatching { repo.toggle(me, targetId) }
     }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
-        id = id, email = email, displayName = displayName, age = age,
+        id = id,
+        firebaseUid = firebaseUid,
+        email = email,
+        displayName = displayName,
+        age = age,
         gender = runCatching { Gender.valueOf(gender) }.getOrDefault(Gender.OTHER),
         lookingFor = runCatching { LookingFor.valueOf(lookingFor) }.getOrDefault(LookingFor.ANY),
-        city = city, bio = bio, rasi = rasi, nakshatra = nakshatra,
-        hasQuestionnaire = false, primaryPhotoPath = null,
-        religion = religion, caste = caste, motherTongue = motherTongue,
-        education = education, profession = profession,
-        maritalStatus = maritalStatus, heightCm = heightCm,
-        isVerified = isVerified, isPremium = isPremium, state = state
+        city = city,
+        bio = bio,
+        rasi = rasi,
+        nakshatra = nakshatra,
+        hasQuestionnaire = false,
+        primaryPhotoPath = photoUrl.ifBlank { null },
+        religion = religion,
+        caste = caste,
+        motherTongue = motherTongue,
+        education = education,
+        profession = profession,
+        maritalStatus = maritalStatus,
+        heightCm = heightCm,
+        isVerified = isVerified,
+        isPremium = isPremium,
+        state = state,
+        photoUrl = photoUrl,
+        verificationLevel = verificationLevel,
+        subscriptionPlan = subscriptionPlan,
+        subscriptionExpiry = subscriptionExpiry
     )
 }
 
@@ -90,7 +108,6 @@ class ShortlistViewModel @Inject constructor(
 @Composable
 fun ShortlistScreen(
     onOpenProfile: (Long) -> Unit = {},
-    onOpenChat: (Long) -> Unit = {},
     vm: ShortlistViewModel = hiltViewModel()
 ) {
     val profiles by vm.sorted.collectAsState()
@@ -106,16 +123,17 @@ fun ShortlistScreen(
         }
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().testTag("shortlist_screen")) {
-            // Stats strip
-            Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
+            Surface(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(12.dp)
+            ) {
                 Row(Modifier.padding(16.dp, 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     StatItem("$count", t("saved", "Saved"))
                     StatItem(profiles.count { it.isVerified }.toString(), t("verified", "Verified"))
                     StatItem(profiles.count { it.isPremium }.toString(), t("premium", "Premium"))
                 }
             }
-            // Sort controls
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -137,19 +155,25 @@ fun ShortlistScreen(
             if (profiles.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.BookmarkBorder, null, Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        Icon(
+                            Icons.Filled.BookmarkBorder,
+                            null,
+                            Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        )
                         Spacer(Modifier.height(12.dp))
                         Text(t("no_shortlisted_profiles", "No shortlisted profiles"), style = MaterialTheme.typography.titleMedium)
-                        Text(t("shortlist_hint", "Tap the bookmark icon on any match to save them here"),
-                            style = MaterialTheme.typography.bodySmall)
+                        Text(t("shortlist_hint", "Tap the bookmark icon on any match to save them here"), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             } else {
-                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize().testTag("shortlist_list")) {
-                    items(profiles, key = { it.id }) { p ->
-                        ShortlistCard(p, onOpenProfile, onOpenChat, onRemove = { vm.remove(p.id) })
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize().testTag("shortlist_list")
+                ) {
+                    items(profiles, key = { it.firebaseUid.ifBlank { it.id.toString() } }) { p ->
+                        ShortlistCard(p, onOpen = { onOpenProfile(p.id) }, onRemove = { vm.remove(p.id) })
                     }
                 }
             }
@@ -166,13 +190,16 @@ private fun StatItem(value: String, label: String) {
 }
 
 @Composable
-private fun ShortlistCard(p: UserProfile, onOpen: (Long) -> Unit, onChat: (Long) -> Unit, onRemove: () -> Unit) {
-    ElevatedCard(onClick = { onOpen(p.id) }, shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth().testTag("shortlist_card_${p.id}")) {
+private fun ShortlistCard(p: UserProfile, onOpen: () -> Unit, onRemove: () -> Unit) {
+    ElevatedCard(
+        onClick = onOpen,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().testTag("shortlist_card_${p.id}")
+    ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(52.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(p.displayName.first().uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -185,12 +212,10 @@ private fun ShortlistCard(p: UserProfile, onOpen: (Long) -> Unit, onChat: (Long)
                     }
                 }
                 Text("${p.city} • ${p.profession}", style = MaterialTheme.typography.bodySmall)
-                Text("${p.religion} • ${p.motherTongue}", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${p.religion} • ${p.motherTongue}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { onChat(p.id) }) { Icon(Icons.AutoMirrored.Filled.Chat, null) }
             IconButton(onClick = onRemove, modifier = Modifier.testTag("shortlist_remove_${p.id}")) {
-                Icon(Icons.Filled.Bookmark, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Filled.Bookmark, "Remove from shortlist", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
