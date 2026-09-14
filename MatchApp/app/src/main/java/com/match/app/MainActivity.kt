@@ -63,9 +63,6 @@ class MainActivity : FragmentActivity() {
         if (isPermissionPromptInFlight || isBiometricPromptShowing) return
         lifecycleScope.launch { session.touchActivity() }
         lifecycleScope.launch { if (session.biometricLock.first()) showBiometricPrompt() }
-        // Keep one process-wide BillingClient connected while the app is foregrounded. This also
-        // recovers PURCHASED items when checkout completed while the process was killed or when a
-        // pending payment completed outside the app. Entitlements are still server-verified.
         playBilling.connect()
         inAppUpdateManager.checkForUpdate(activity = this, forceUpdateVersionCode = remoteConfig.forceUpdateVersionCode)
     }
@@ -101,10 +98,9 @@ class MainActivity : FragmentActivity() {
                 "new_match", "mutual_match" -> fromUserId?.let { "detail/$it" } ?: "matches"
                 "profile_viewed" -> "who_viewed"
                 "like" -> "interests"
-                "notification" -> "notifications"
-                "boost_expiring" -> "profile_boost"
+                "notification", "reward" -> "notifications"
+                "boost_expiring" -> "pricing"
                 "verification", "verification_update" -> "verification"
-                "reward" -> "daily_rewards"
                 else -> null
             }
             return
