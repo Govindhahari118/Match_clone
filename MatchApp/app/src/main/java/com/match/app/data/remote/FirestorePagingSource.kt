@@ -20,7 +20,9 @@ class FirestorePagingSource(
     private val myUid: String,
     private val myGender: String,
     private val myLookingFor: String,
-    private val filter: MatchFilter
+    private val filter: MatchFilter,
+    private val blockedUids: Set<String> = emptySet(),
+    @Suppress("unused") private val likedUids: Set<String> = emptySet()
 ) : PagingSource<String, UserEntity>() {
 
     private val functions = FirebaseFunctions.getInstance()
@@ -52,7 +54,7 @@ class FirestorePagingSource(
 
         val profiles = rawProfiles.mapNotNull { raw ->
             val uid = raw["firebaseUid"] as? String ?: return@mapNotNull null
-            if (uid.isBlank() || uid == myUid) return@mapNotNull null
+            if (uid.isBlank() || uid == myUid || uid in blockedUids) return@mapNotNull null
             val entity = mapToEntity(uid, raw)
 
             // Defence in depth: the callable already enforces mutual gender preference, block state,
