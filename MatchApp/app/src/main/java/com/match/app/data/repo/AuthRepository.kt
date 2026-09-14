@@ -5,6 +5,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.messaging.FirebaseMessaging
+import com.match.app.data.local.MatchDatabase
 import com.match.app.data.local.dao.LikeDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
@@ -13,7 +14,9 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
 import com.match.app.domain.model.UserProfile
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +32,8 @@ class AuthRepository @Inject constructor(
     private val questionnaireRepo: QuestionnaireRepository,
     private val photoRepo: PhotoRepository,
     private val session: SessionStore,
-    private val firestoreProfile: FirestoreProfileService
+    private val firestoreProfile: FirestoreProfileService,
+    private val localDb: MatchDatabase
 ) {
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
 
@@ -46,12 +50,10 @@ class AuthRepository @Inject constructor(
         if (age !in 18..99) return AuthResult.Error("Age must be between 18 and 99")
 
         return try {
-            // Firebase Auth is the sole password authority. Never persist password verifiers locally.
             val authResult = firebaseAuth.createUserWithEmailAndPassword(e, password).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Firebase account creation failed")
 
-            // Room is an offline profile cache only.
             val entity = UserEntity(
                 firebaseUid = firebaseUid,
                 email = e,
@@ -87,8 +89,6 @@ class AuthRepository @Inject constructor(
         val e = email.trim().lowercase()
 
         return try {
-            // Explicit sign-in always requires Firebase authentication. We do not fall back to a
-            // locally cached password because a disabled/deleted remote account must not regain access.
             val authResult = firebaseAuth.signInWithEmailAndPassword(e, password).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Firebase sign-in failed")
@@ -114,8 +114,6 @@ class AuthRepository @Inject constructor(
             } else if (firestoreEntity != null) {
                 localId = userDao.insert(firestoreEntity.copy(passwordHash = ""))
             } else {
-                // A legacy local profile may be attached only after Firebase has already authenticated
-                // this email/password pair. Its old local password hash is discarded during migration.
                 val legacyUser = userDao.findByEmail(e)
                     ?: return AuthResult.Error("Profile data is unavailable. Please contact support.")
                 val migratedUser = legacyUser.copy(firebaseUid = firebaseUid, passwordHash = "")
@@ -141,7 +139,6 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signOut() {
-        // Revoke this device's notification destination while the user is still authenticated.
         val uid = firebaseAuth.currentUser?.uid
         if (!uid.isNullOrBlank()) {
             try {
@@ -154,7 +151,6 @@ class AuthRepository @Inject constructor(
         session.clear()
     }
 
-    /** Sends a password-reset email via Firebase Auth. Returns null on success or error message. */
     suspend fun sendPasswordReset(email: String): String? {
         return try {
             firebaseAuth.sendPasswordResetEmail(email.trim().lowercase()).await()
@@ -293,11 +289,9 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun getLikeCount(userId: Long): Int =
-        likeDao.observeIncomingCountOnce(userId)
+    suspend fun getLikeCount(userId: Long): Int = likeDao.observeIncomingCountOnce(userId)
 
-    suspend fun getViewCount(userId: Long): Int =
-        userDao.findById(userId)?.profileViewCount ?: 0
+    suspend fun getViewCount(userId: Long): Int = userDao.findById(userId)?.profileViewCount ?: 0
 
     suspend fun activateBoost(userId: Long, durationMs: Long = 24 * 60 * 60 * 1000L) {
         val u = userDao.findById(userId) ?: return
@@ -313,16 +307,14 @@ class AuthRepository @Inject constructor(
         return u.boostActiveUntil > System.currentTimeMillis()
     }
 
-    suspend fun getBoostExpiryMs(userId: Long): Long =
-        userDao.findById(userId)?.boostActiveUntil ?: 0L
+    suspend fun getBoostExpiryMs(userId: Long): Long = userDao.findById(userId)?.boostActiveUntil ?: 0L
 
-    suspend fun getFirebaseUid(userId: Long): String =
-        userDao.findById(userId)?.firebaseUid ?: ""
+    suspend fun getFirebaseUid(userId: Long): String = userDao.findById(userId)?.firebaseUid ?: ""
 
     /**
      * Permanently erases the account through the restartable trusted backend cleanup.
-     * Local state is removed only after the server confirms completion; a network/backend failure
-     * is surfaced so the user can retry instead of being shown a false deletion success.
+     * Local Room state is wiped only after the server confirms remote erasure, so messages,
+     * notes, searches, notifications and other cached rows cannot survive account deletion.
      */
     suspend fun deleteAccount(userId: Long): AuthResult {
         return try {
@@ -331,7 +323,7 @@ class AuthRepository @Inject constructor(
                 .call()
                 .await()
 
-            userDao.deleteById(userId)
+            withContext(Dispatchers.IO) { localDb.clearAllTables() }
             firebaseAuth.signOut()
             session.clear()
             AuthResult.Success(userId)
@@ -341,10 +333,6 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /**
-     * Authenticate using a Google ID token obtained from Credential Manager.
-     * Creates or links the Firebase Auth account, then ensures a local Room user exists.
-     */
     suspend fun signInWithGoogle(idToken: String, displayName: String, email: String): AuthResult {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -369,9 +357,7 @@ class AuthRepository @Inject constructor(
                     }
                     existingLocal.id
                 }
-                firestoreEntity != null -> {
-                    userDao.insert(firestoreEntity.copy(passwordHash = ""))
-                }
+                firestoreEntity != null -> userDao.insert(firestoreEntity.copy(passwordHash = ""))
                 else -> {
                     val entity = UserEntity(
                         firebaseUid = firebaseUid,
