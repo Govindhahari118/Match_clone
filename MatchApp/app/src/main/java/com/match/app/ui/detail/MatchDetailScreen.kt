@@ -1,10 +1,9 @@
 package com.match.app.ui.detail
 
+import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,8 +14,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -28,6 +25,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.match.app.core.analytics.AnalyticsManager
 import com.match.app.core.matching.Astrology
 import com.match.app.core.matching.CombinedMatcher
 import com.match.app.core.matching.Vectors
@@ -35,26 +33,18 @@ import com.match.app.data.local.Vec
 import com.match.app.data.local.dao.QuestionnaireDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PhotoEntity
-import com.match.app.data.repo.AuthRepository
-import com.match.app.data.repo.NoteRepository
-import com.match.app.data.repo.PhotoRepository
-import com.match.app.data.repo.ShortlistRepository
-import com.match.app.data.repo.SocialRepository
-import com.match.app.data.repo.SubscriptionRepository
-import com.match.app.data.repo.WhoViewedRepository
-import com.match.app.data.session.SessionStore
-import com.match.app.domain.model.UserProfile
-import com.match.app.core.analytics.AnalyticsManager
-import com.match.app.core.security.FakeProfileDetector
 import com.match.app.data.remote.MatchApiProvider
 import com.match.app.data.remote.ReportProfileRequest
+import com.match.app.data.repo.*
+import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.ReligionCategory
+import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ActivityStatusChip
 import com.match.app.ui.common.ContactUnlockSheet
-import android.content.Intent
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 data class DetailUi(
@@ -67,19 +57,19 @@ data class DetailUi(
     val qScore: Float = 0f,
     val astroScore: Float = 0f,
     val combinedScore: Float = 0f,
-    val showReportDialog: Boolean = false,
-    val reportSubmitted: Boolean = false,
     val privateNote: String = "",
-    val trustScore: Int = -1,
-    val trustBadge: String = "",
-    // Sprint 7
-    val isSuperLiked: Boolean = false,
     val meIsPremium: Boolean = false,
     val showContactUnlock: Boolean = false,
-    val contactsUsedThisMonth: Int = 0
+    val revealedPhone: String = "",
+    val contactsUsed: Int = 0,
+    val contactsLimit: Int = 0,
+    val contactLoading: Boolean = false,
+    val contactError: String? = null,
+    val showReportDialog: Boolean = false,
+    val reportMessage: String? = null,
+    val loading: Boolean = true
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class MatchDetailViewModel @Inject constructor(
     private val auth: AuthRepository,
@@ -93,115 +83,151 @@ class MatchDetailViewModel @Inject constructor(
     private val analytics: AnalyticsManager,
     private val apiProvider: MatchApiProvider,
     private val noteRepo: NoteRepository,
-    private val fakeDetector: FakeProfileDetector,
     private val subscriptionRepo: SubscriptionRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(DetailUi())
     val ui: StateFlow<DetailUi> = _ui.asStateFlow()
-
-    private var meId: Long = 0L
-    private var targetId: Long = 0L
+    private var meId = 0L
+    private var targetId = 0L
 
     fun load(userId: Long) = viewModelScope.launch {
         targetId = userId
-        meId = session.userId.first() ?: return@launch
+        meId = session.userId.first() ?: run {
+            _ui.value = _ui.value.copy(loading = false)
+            return@launch
+        }
         val profile = auth.currentProfile(userId)
+        if (profile == null) {
+            _ui.value = _ui.value.copy(loading = false)
+            return@launch
+        }
         val photos = photoRepo.observe(userId).first()
-        _ui.value = _ui.value.copy(profile = profile, photos = photos)
-        val meIsLiked = social.isLiked(meId, userId)
-        val theyLikedMe = social.isLiked(userId, meId)
-        val contactsUsed = subscriptionRepo.getContactsUsedThisMonth()
+        val meLiked = social.isLiked(meId, userId)
+        val theyLiked = social.isLiked(userId, meId)
+        val me = auth.currentProfile(meId)
         _ui.value = _ui.value.copy(
-            liked = meIsLiked,
+            profile = profile,
+            photos = photos,
+            liked = meLiked,
             blocked = social.isBlocked(meId, userId),
             shortlisted = shortlistRepo.isSaved(meId, userId),
-            isMutual = meIsLiked && theyLikedMe,
-            isSuperLiked = social.isSuperLike(meId, userId),
-            meIsPremium = auth.currentProfile(meId)?.isPremium == true,
-            contactsUsedThisMonth = contactsUsed
+            isMutual = meLiked && theyLiked,
+            meIsPremium = me?.isPremium == true,
+            loading = false
         )
-        // Observe private note in a separate coroutine
-        viewModelScope.launch {
-            noteRepo.observe(meId, userId).collect { noteEntity ->
-                _ui.value = _ui.value.copy(privateNote = noteEntity?.note ?: "")
+
+        launch {
+            noteRepo.observe(meId, userId).collect { note ->
+                _ui.update { it.copy(privateNote = note?.note.orEmpty()) }
             }
         }
-        // record this as a view
-        whoViewed.record(meId, userId)
+
+        runCatching { whoViewed.record(meId, userId) }
         analytics.logProfileView(userId)
-        val seeker = userDao.findById(meId) ?: return@launch
-        val target = userDao.findById(userId) ?: return@launch
-        val astro = Astrology.score(seeker.rasi, seeker.nakshatra, target.rasi, target.nakshatra)
-        val seekerQ = qDao.forUser(meId)
-        val targetQ = qDao.forUser(userId)
-        val qScore = if (seekerQ != null && targetQ != null) {
-            Vectors.questionnaireScore(
-                Vec.decode(seekerQ.selfVector), Vec.decode(seekerQ.partnerVector),
-                Vec.decode(targetQ.selfVector), Vec.decode(targetQ.partnerVector)
-            )
-        } else 0f
-        _ui.value = _ui.value.copy(
-            qScore = qScore, astroScore = astro,
-            combinedScore = CombinedMatcher.combine(qScore, astro)
-        )
-        // Trust score analysis
-        val trustReport = fakeDetector.analyze(
-            user = target,
-            photoCount = _ui.value.photos.size,
-            hasQuestionnaire = targetQ != null
-        )
-        _ui.value = _ui.value.copy(
-            trustScore = trustReport.overallScore,
-            trustBadge = trustReport.badgeTier.name
-        )
+
+        val seeker = userDao.findById(meId)
+        val target = userDao.findById(userId)
+        if (seeker != null && target != null) {
+            val seekerQ = qDao.forUser(meId)
+            val targetQ = qDao.forUser(userId)
+            val qScore = if (seekerQ != null && targetQ != null) {
+                Vectors.questionnaireScore(
+                    Vec.decode(seekerQ.selfVector), Vec.decode(seekerQ.partnerVector),
+                    Vec.decode(targetQ.selfVector), Vec.decode(targetQ.partnerVector)
+                )
+            } else 0f
+            val astro = if (
+                ReligionCategory.fromReligion(profile.religion) == ReligionCategory.HINDU &&
+                seeker.rasi.isNotBlank() && seeker.nakshatra.isNotBlank() &&
+                target.rasi.isNotBlank() && target.nakshatra.isNotBlank()
+            ) Astrology.score(seeker.rasi, seeker.nakshatra, target.rasi, target.nakshatra) else 0f
+            _ui.update { it.copy(qScore = qScore, astroScore = astro, combinedScore = CombinedMatcher.combine(qScore, astro)) }
+        }
     }
 
     fun toggleLike() = viewModelScope.launch {
-        val nowLiked = social.toggleLike(meId, targetId)
-        _ui.value = _ui.value.copy(liked = nowLiked)
-        if (nowLiked) analytics.logInterestSent(targetId)
-    }
-
-    fun toggleBlock() = viewModelScope.launch {
-        if (_ui.value.blocked) social.unblock(meId, targetId)
-        else social.block(meId, targetId)
-        val nowBlocked = !_ui.value.blocked
-        _ui.value = _ui.value.copy(blocked = nowBlocked)
-        analytics.logBlockToggled(nowBlocked)
+        if (_ui.value.blocked) return@launch
+        val liked = social.toggleLike(meId, targetId)
+        val mutual = liked && social.isLiked(targetId, meId)
+        _ui.update { it.copy(liked = liked, isMutual = mutual, contactError = null) }
+        if (liked) analytics.logInterestSent(targetId)
     }
 
     fun toggleShortlist() = viewModelScope.launch {
-        val nowSaved = shortlistRepo.toggle(meId, targetId)
-        _ui.value = _ui.value.copy(shortlisted = nowSaved)
-        analytics.logShortlistToggled(targetId, nowSaved)
+        val saved = shortlistRepo.toggle(meId, targetId)
+        _ui.update { it.copy(shortlisted = saved) }
+        analytics.logShortlistToggled(targetId, saved)
     }
 
-    fun showReportDialog() { _ui.value = _ui.value.copy(showReportDialog = true) }
-    fun dismissReportDialog() { _ui.value = _ui.value.copy(showReportDialog = false) }
-    fun submitReport(reason: String) = viewModelScope.launch {
-        analytics.logProfileReported(reason)
-        // Try backend; gracefully degrade if offline
-        try {
-            apiProvider.api().reportProfile(
-                ReportProfileRequest(reporterId = meId, targetId = targetId, reason = reason)
+    fun toggleBlock() = viewModelScope.launch {
+        val wasBlocked = _ui.value.blocked
+        if (wasBlocked) social.unblock(meId, targetId) else social.block(meId, targetId)
+        _ui.update {
+            it.copy(
+                blocked = !wasBlocked,
+                showContactUnlock = false,
+                revealedPhone = if (!wasBlocked) "" else it.revealedPhone
             )
-        } catch (_: Exception) { /* queued locally — retry when backend is reachable */ }
-        _ui.value = _ui.value.copy(showReportDialog = false, reportSubmitted = true)
+        }
+        analytics.logBlockToggled(!wasBlocked)
     }
 
     fun saveNote(text: String) = viewModelScope.launch {
-        noteRepo.save(meId, targetId, text)
+        noteRepo.save(meId, targetId, text.trim().take(1000))
     }
 
-    /** Send a Super Interest — premium feature. */
-    fun sendSuperInterest() = viewModelScope.launch {
-        social.superLike(meId, targetId)
-        _ui.value = _ui.value.copy(liked = true, isSuperLiked = true)
-        analytics.logInterestSent(targetId)
+    fun showContactUnlock() {
+        if (!_ui.value.blocked) _ui.update { it.copy(showContactUnlock = true, contactError = null) }
     }
 
-    fun showContactUnlock()    { _ui.value = _ui.value.copy(showContactUnlock = true) }
-    fun dismissContactUnlock() { _ui.value = _ui.value.copy(showContactUnlock = false) }
+    fun dismissContactUnlock() = _ui.update { it.copy(showContactUnlock = false, contactError = null) }
+
+    fun revealContact() = viewModelScope.launch {
+        val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
+        if (targetUid.isBlank()) {
+            _ui.update { it.copy(contactError = "Contact is unavailable for this profile.") }
+            return@launch
+        }
+        _ui.update { it.copy(contactLoading = true, contactError = null) }
+        subscriptionRepo.revealContact(targetUid)
+            .onSuccess { result ->
+                _ui.update {
+                    it.copy(
+                        contactLoading = false,
+                        revealedPhone = result.phoneNumber,
+                        contactsUsed = result.contactsUsed,
+                        contactsLimit = result.contactsLimit,
+                        contactError = null
+                    )
+                }
+            }
+            .onFailure { error ->
+                _ui.update {
+                    it.copy(
+                        contactLoading = false,
+                        contactError = error.message?.take(180) ?: "Unable to reveal contact right now."
+                    )
+                }
+            }
+    }
+
+    fun showReportDialog() = _ui.update { it.copy(showReportDialog = true, reportMessage = null) }
+    fun dismissReportDialog() = _ui.update { it.copy(showReportDialog = false) }
+
+    fun submitReport(reason: String) = viewModelScope.launch {
+        if (reason.isBlank()) return@launch
+        analytics.logProfileReported(reason)
+        val outcome = runCatching {
+            apiProvider.api().reportProfile(ReportProfileRequest(reporterId = meId, targetId = targetId, reason = reason.take(120)))
+        }
+        _ui.update {
+            it.copy(
+                showReportDialog = false,
+                reportMessage = if (outcome.isSuccess) "Report submitted. Thank you for helping keep the community safe."
+                else "Report could not be submitted. Check your connection and try again."
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -210,561 +236,279 @@ fun MatchDetailScreen(
     userId: Long,
     onBack: () -> Unit,
     onChat: () -> Unit,
+    onPricing: () -> Unit = {},
     vm: MatchDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(userId) { vm.load(userId) }
     val ui by vm.ui.collectAsState()
     val p = ui.profile
     val context = LocalContext.current
-    val txtCheckProfile = "Check out"
-    val txtProfile = "Profile"
-    val txtShareProfile = "Share profile via"
-    val txtReportProfile = "Report Profile"
-    val txtReportWhy = "Why are you reporting this profile?"
-    val txtSubmitReport = "Submit Report"
-    val txtCancel = "Cancel"
-    val txtReportSubmitted = "Report submitted. Thank you for keeping the community safe."
-    val txtSendInterest = "Send Interest"
+    var showNote by remember { mutableStateOf(false) }
+    var noteText by remember(ui.privateNote) { mutableStateOf(ui.privateNote) }
+    val snackbar = remember { SnackbarHostState() }
 
-    // ── Contact Unlock Sheet ──────────────────────────────────────────────
+    LaunchedEffect(ui.reportMessage) {
+        ui.reportMessage?.let { snackbar.showSnackbar(it) }
+    }
+
     if (ui.showContactUnlock && p != null) {
         ContactUnlockSheet(
             matchName = p.displayName,
-            matchPhone = p.phoneNumber,
             isPremium = ui.meIsPremium,
             isMutual = ui.isMutual,
-            contactsUsed = ui.contactsUsedThisMonth,
-            contactsLimit = if (ui.meIsPremium) -1 else 0,
-            onUpgrade = { /* navigate to pricing */ },
+            revealedPhone = ui.revealedPhone,
+            contactsUsed = ui.contactsUsed,
+            contactsLimit = ui.contactsLimit,
+            isLoading = ui.contactLoading,
+            errorMessage = ui.contactError,
+            onReveal = vm::revealContact,
+            onUpgrade = onPricing,
+            onMessage = onChat,
             onDismiss = vm::dismissContactUnlock
         )
     }
 
-    // ── Share profile helper ──────────────────────────────────────────────
-    fun shareProfile() {
-        p ?: return
-        val text = buildString {
-            append("$txtCheckProfile ${p.displayName} $txtProfile\n")
-            append("${p.age} years • ${p.city} • ${p.religion}\n")
-            if (p.bio.isNotBlank()) append("\"${p.bio}\"\n")
-            append("\nmatrimonyconnect://match/${p.id}")
-        }
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
-        }
-        context.startActivity(Intent.createChooser(intent, txtShareProfile))
-    }
-
-    // ── Private note dialog ───────────────────────────────────────────────
-    var showNoteDialog by remember { mutableStateOf(false) }
-    var noteText by remember(ui.privateNote) { mutableStateOf(ui.privateNote) }
-
-    if (showNoteDialog) {
+    if (showNote) {
         AlertDialog(
-            onDismissRequest = { showNoteDialog = false },
-            icon = { Icon(Icons.Filled.EditNote, null) },
-            title = { Text("Private Note") },
+            onDismissRequest = { showNote = false },
+            title = { Text("Private note") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Your private note about ${p?.displayName ?: "this person"}. Only you can see this.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(
-                        value = noteText,
-                        onValueChange = { noteText = it },
-                        label = { Text("Your note") },
-                        placeholder = { Text("e.g. Met at conference, seems genuine, follow up...") },
-                        maxLines = 5,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it.take(1000) },
+                    label = { Text("Only you can see this") },
+                    maxLines = 6,
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
-            confirmButton = {
-                TextButton(onClick = { vm.saveNote(noteText); showNoteDialog = false }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNoteDialog = false }) { Text("Cancel") }
-            }
+            confirmButton = { TextButton(onClick = { vm.saveNote(noteText); showNote = false }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { showNote = false }) { Text("Cancel") } }
         )
     }
 
-    // ── Report dialog ─────────────────────────────────────────────────────
     if (ui.showReportDialog) {
-        val reasons = listOf(
-            "Fake profile", "Inappropriate photos", "Harassment",
-            "Spam / scam", "Under age", "Other"
-        )
+        val reasons = listOf("Fake profile", "Inappropriate content", "Harassment", "Spam or scam", "Under age", "Other")
         var selected by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = vm::dismissReportDialog,
-            icon = { Icon(Icons.Filled.Flag, null, tint = Color(0xFFC62828)) },
-            title = { Text(txtReportProfile) },
+            title = { Text("Report profile") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(txtReportWhy,
-                        style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(4.dp))
+                Column {
+                    Text("Choose the reason that best describes the issue.")
                     reasons.forEach { reason ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selected == reason,
-                                onClick = { selected = reason }
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(reason, style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = selected == reason, onClick = { selected = reason })
+                            Text(reason)
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = { selected?.let { vm.submitReport(it) } },
-                    enabled = selected != null
-                ) { Text(txtSubmitReport) }
+                TextButton(enabled = selected != null, onClick = { selected?.let(vm::submitReport) }) { Text("Submit") }
             },
-            dismissButton = {
-                TextButton(onClick = vm::dismissReportDialog) { Text(txtCancel) }
-            }
+            dismissButton = { TextButton(onClick = vm::dismissReportDialog) { Text("Cancel") } }
         )
     }
 
-    // ── Report submitted snackbar ─────────────────────────────────────────
-    if (ui.reportSubmitted) {
-        val snackbarHostState = remember { SnackbarHostState() }
-        LaunchedEffect(Unit) {
-            snackbarHostState.showSnackbar(txtReportSubmitted)
+    fun shareProfile() {
+        val profile = p ?: return
+        val text = buildString {
+            append("${profile.displayName}, ${profile.age}\n")
+            append(listOf(profile.city, profile.religion, profile.profession).filter { it.isNotBlank() }.joinToString(" • "))
+            append("\nmatrimonyconnect://match/${profile.id}")
         }
+        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }, "Share profile"))
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                modifier = Modifier.testTag("detail_topbar"),
-                title = { Text(p?.displayName ?: txtProfile) },
+                title = { Text(p?.displayName ?: "Profile") },
                 navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 },
                 actions = {
-                    // Private note button — yellow if note exists
-                    IconButton(onClick = { showNoteDialog = true }, modifier = Modifier.testTag("detail_note")) {
-                        Icon(
-                            Icons.Filled.EditNote,
-                            contentDescription = "Add note",
-                            tint = if (ui.privateNote.isNotBlank()) Color(0xFFFFB300)
-                                   else MaterialTheme.colorScheme.onSurface
-                        )
+                    IconButton(onClick = { showNote = true }) { Icon(Icons.Filled.EditNote, "Private note") }
+                    IconButton(onClick = vm::toggleShortlist) {
+                        Icon(if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "Shortlist")
                     }
-                    IconButton(onClick = vm::toggleShortlist, modifier = Modifier.testTag("detail_shortlist")) {
-                        Icon(
-                            if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                            contentDescription = "Shortlist",
-                            tint = if (ui.shortlisted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(onClick = vm::toggleLike, modifier = Modifier.testTag("detail_like")) {
-                        Icon(
-                            if (ui.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = "Like",
-                            tint = if (ui.liked) Color(0xFFE91E63) else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(onClick = vm::toggleBlock, modifier = Modifier.testTag("detail_block")) {
-                        Icon(
-                            Icons.Filled.Block,
-                            contentDescription = "Block",
-                            tint = if (ui.blocked) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(onClick = vm::showReportDialog, modifier = Modifier.testTag("detail_report")) {
-                        Icon(
-                            Icons.Filled.Flag,
-                            contentDescription = "Report",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(onClick = ::shareProfile, modifier = Modifier.testTag("detail_share")) {
-                        Icon(
-                            Icons.Filled.Share,
-                            contentDescription = "Share profile",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                    IconButton(onClick = ::shareProfile) { Icon(Icons.Filled.Share, "Share") }
+                    IconButton(onClick = vm::showReportDialog) { Icon(Icons.Filled.Flag, "Report") }
+                    IconButton(onClick = vm::toggleBlock) {
+                        Icon(Icons.Filled.Block, if (ui.blocked) "Unblock" else "Block", tint = if (ui.blocked) MaterialTheme.colorScheme.error else LocalContentColor.current)
                     }
                 }
             )
         },
-        floatingActionButton = {},
         bottomBar = {
-            if (p != null) {
-                Surface(
-                    shadowElevation = 8.dp,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Super Interest or plain Like button
-                        OutlinedButton(
-                            onClick = { if (!ui.isSuperLiked) vm.sendSuperInterest() },
-                            modifier = Modifier.weight(1f).height(50.dp).testTag("detail_super_interest"),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = if (ui.isSuperLiked) Color(0xFFFFB300) else MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(if (ui.isSuperLiked) Icons.Filled.Star else Icons.Filled.StarBorder, null, Modifier.size(18.dp))
+            if (p != null && !ui.blocked) {
+                Surface(shadowElevation = 8.dp) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = vm::showContactUnlock, modifier = Modifier.weight(1f).height(50.dp)) {
+                            Icon(Icons.Filled.Phone, null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Contact")
                         }
                         Button(
-                            onClick = { vm.toggleLike(); onChat() },
-                            modifier = Modifier.weight(2f).height(50.dp).testTag("detail_interest_sticky"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63))
+                            onClick = { if (!ui.liked) vm.toggleLike(); onChat() },
+                            modifier = Modifier.weight(1.4f).height(50.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.Chat, null)
                             Spacer(Modifier.width(6.dp))
-                            Text(txtSendInterest, style = MaterialTheme.typography.titleSmall)
-                        }
-                        // Contact unlock button
-                        OutlinedButton(
-                            onClick = vm::showContactUnlock,
-                            modifier = Modifier.weight(1f).height(50.dp).testTag("detail_contact_unlock")
-                        ) {
-                            Icon(Icons.Filled.Phone, null, Modifier.size(18.dp))
+                            Text(if (ui.isMutual) "Message" else "Interest & chat")
                         }
                     }
                 }
             }
         }
-    ) { pad ->
-        if (p == null) {
-            Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.testTag("detail_loading"))
-            }
-            return@Scaffold
+    ) { padding ->
+        when {
+            ui.loading -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            p == null -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { Text("This profile is unavailable.") }
+            else -> MatchDetailContent(p, ui, Modifier.padding(padding))
         }
-        Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)
-                .testTag("detail_content")
-        ) {
-            // ── Photo carousel ───────────────────────────────────────
-            if (ui.photos.isNotEmpty()) {
-                var photoPage by remember { mutableIntStateOf(0) }
-                Box(
-                    Modifier.fillMaxWidth().height(260.dp).testTag("detail_photo_carousel")
-                ) {
-                    val photo = ui.photos[photoPage]
-                    val canView = photo.privacy == "PUBLIC" ||
-                        (photo.privacy == "ACCEPTED_ONLY" && ui.isMutual)
-                    // HIDDEN photos are never visible to viewers
-                    if (photo.privacy != "HIDDEN" && canView) {
-                        AsyncImage(
-                            model = java.io.File(photo.path),
-                            contentDescription = "Profile photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        // Blurred / locked placeholder
-                        Box(
-                            Modifier.fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Filled.Lock,
-                                    contentDescription = "Photo locked",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    if (photo.privacy == "ACCEPTED_ONLY") "Mutual interest required"
-                                    else "Private photo",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    // dot indicators
-                    if (ui.photos.size > 1) {
-                        Row(
-                            Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            ui.photos.forEachIndexed { idx, _ ->
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (idx == photoPage) Color.White else Color.White.copy(alpha = 0.4f),
-                                    modifier = Modifier.size(if (idx == photoPage) 10.dp else 7.dp)
-                                ) {}
-                            }
-                        }
-                        // prev/next tap areas
-                        Row(Modifier.fillMaxSize()) {
-                            Box(
-                                Modifier.weight(1f).fillMaxHeight()
-                                    .clickable(enabled = photoPage > 0) { photoPage-- }
-                            )
-                            Box(
-                                Modifier.weight(1f).fillMaxHeight()
-                                    .clickable(enabled = photoPage < ui.photos.size - 1) { photoPage++ }
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            } else {
-                // gradient avatar fallback
-                val avatarColors = remember(p.id) {
-                    val palette = listOf(
-                        listOf(Color(0xFFE91E63), Color(0xFFFF5722)),
-                        listOf(Color(0xFF9C27B0), Color(0xFF3F51B5)),
-                        listOf(Color(0xFF009688), Color(0xFF4CAF50)),
-                        listOf(Color(0xFF1976D2), Color(0xFF00BCD4)),
-                        listOf(Color(0xFF795548), Color(0xFF607D8B)),
-                        listOf(Color(0xFFFF9800), Color(0xFFFFEB3B)),
-                    )
-                    palette[(p.id % palette.size).toInt()]
-                }
-                Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.size(120.dp).clip(RoundedCornerShape(36.dp))
-                            .background(Brush.linearGradient(avatarColors))
-                            .testTag("detail_avatar"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            p.displayName.first().uppercase(),
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
+    }
+}
 
-            // ── Main profile card ─────────────────────────────────────
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${p.displayName}, ${p.age}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (p.isVerified) Icon(Icons.Filled.Verified, null, Modifier.size(20.dp), tint = androidx.compose.ui.graphics.Color(0xFF1976D2))
-                        if (p.isPremium) Icon(Icons.Filled.Star, null, Modifier.size(18.dp), tint = androidx.compose.ui.graphics.Color(0xFFFFB300))
-                    }
-                    Text("${p.gender} • ${p.city}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Profile ID: M${p.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                    Spacer(Modifier.height(6.dp))
-                    ActivityStatusChip(lastActiveAt = p.lastActiveAt)
-                    // Trust badge
-                    if (ui.trustScore >= 0) {
-                        Spacer(Modifier.height(6.dp))
-                        val (trustColor, trustLabel) = when {
-                            ui.trustScore >= 75 -> Color(0xFF2E7D32) to "Trusted (${ui.trustScore}%)"
-                            ui.trustScore >= 50 -> Color(0xFFF57F17) to "Moderate (${ui.trustScore}%)"
-                            else -> Color(0xFFC62828) to "Low Trust (${ui.trustScore}%)"
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = trustColor.copy(alpha = 0.12f),
-                            modifier = Modifier.testTag("detail_trust_badge")
-                        ) {
-                            Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Shield, null, Modifier.size(14.dp), tint = trustColor)
-                                Spacer(Modifier.width(4.dp))
-                                Text(trustLabel, style = MaterialTheme.typography.labelSmall, color = trustColor, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text("${p.religion} • ${p.motherTongue}", style = MaterialTheme.typography.bodySmall)
-                    Text("${p.education} • ${p.profession}", style = MaterialTheme.typography.bodySmall)
-                    Text("Height: ${p.heightCm} cm • ${p.maritalStatus}", style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    // Community chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (p.religion.isNotBlank()) {
-                            Surface(shape = RoundedCornerShape(6.dp), color = androidx.compose.ui.graphics.Color(0xFFE8F5E9)) {
-                                Text(p.religion, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium,
-                                    color = androidx.compose.ui.graphics.Color(0xFF1B5E20),
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
-                            }
-                        }
-                        if (p.caste.isNotBlank()) {
-                            Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                                Text(p.caste, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
-                            }
-                        }
-                        if (p.subCaste.isNotBlank()) {
-                            Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Text(p.subCaste, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("Rasi: ${p.rasi}", modifier = Modifier.testTag("detail_rasi"))
-                    Text("Nakshatra: ${p.nakshatra}", modifier = Modifier.testTag("detail_nakshatra"))
-                    if (p.bio.isNotBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(p.bio, modifier = Modifier.testTag("detail_bio"))
-                    }
+@Composable
+private fun MatchDetailContent(p: UserProfile, ui: DetailUi, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("detail_content"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        ProfilePhoto(p, ui.photos, ui.isMutual)
+
+        ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${p.displayName}, ${p.age}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    if (p.isVerified) Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
+                }
+                Text(listOf(p.city, p.state, p.profession).filter { it.isNotBlank() }.joinToString(" • "))
+                Text("${p.religion}${p.caste.takeIf { it.isNotBlank() }?.let { " • $it" }.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (p.showLastActive) ActivityStatusChip(lastActiveAt = p.lastActiveAt)
+                if (p.bio.isNotBlank()) {
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    Text(p.bio)
                 }
             }
+        }
 
-            Spacer(Modifier.height(16.dp))
+        DetailSection("Personal & community") {
+            DetailRow("Marital status", p.maritalStatus)
+            DetailRow("Mother tongue", p.motherTongue)
+            DetailRow("Height", if (p.heightCm > 0) "${p.heightCm} cm" else "")
+            DetailRow("Religion", p.religion)
+            DetailRow("Community", p.caste)
+            DetailRow("Sub-community", p.subCaste)
+            if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) DetailRow("Gothra", p.gothra)
+        }
 
-            // ── Lifestyle ────────────────────────────────────────────────
-            Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("detail_lifestyle")) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Lifestyle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    DetailRow("Diet", p.diet)
-                    DetailRow("Smoking", p.smoking)
-                    DetailRow("Drinking", p.drinking)
-                    DetailRow("Income", p.incomeBand)
-                    DetailRow("Residential status", p.residentialStatus)
-                }
+        if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU && p.showHoroscope) {
+            DetailSection("Birth & astrology") {
+                DetailRow("Rasi", p.rasi)
+                DetailRow("Nakshatra", p.nakshatra)
+                DetailRow("Manglik / Dosham", p.manglik)
+                DetailRow("Birth place", p.birthPlace)
             }
+        }
 
-            Spacer(Modifier.height(12.dp))
+        DetailSection("Education & career") {
+            DetailRow("Education", p.education)
+            DetailRow("Field", p.educationField)
+            DetailRow("Institution", p.institution)
+            DetailRow("Profession", p.profession)
+            DetailRow("Occupation", p.occupationCategory)
+            DetailRow("Employer", p.employer)
+            if (p.incomeDisclosure != "hidden") DetailRow("Income", p.incomeBand)
+        }
 
-            // ── Family details ───────────────────────────────────────────
-            Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("detail_family")) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Family Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    DetailRow("Family type", p.familyType)
-                    DetailRow("Father's occupation", p.fatherOccupation)
-                    DetailRow("Mother's occupation", p.motherOccupation)
-                    DetailRow("Siblings", p.siblings.toString())
-                    DetailRow("Has children", if (p.hasChildren) "Yes" else "No")
-                    DetailRow("Gothra", p.gothra)
-                    DetailRow("Sub-caste", p.subCaste)
-                }
+        DetailSection("Family & lifestyle") {
+            DetailRow("Family type", p.familyType)
+            DetailRow("Family status", p.familyStatus)
+            DetailRow("Family values", p.familyValues)
+            DetailRow("Diet", p.diet)
+            DetailRow("Smoking", p.smoking)
+            DetailRow("Drinking", p.drinking)
+            if (p.aboutFamily.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(p.aboutFamily, style = MaterialTheme.typography.bodyMedium)
             }
+        }
 
-            Spacer(Modifier.height(12.dp))
-
-            // ── Personality & Interests ──────────────────────────────────
-            Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("detail_personality")) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Personality & Interests", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    DetailRow("MBTI type", p.personalityType)
-                    if (p.hobbies.isNotEmpty()) {
-                        Text("Hobbies", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            p.hobbies.take(5).forEach { hobby ->
-                                SuggestionChip(onClick = {}, label = { Text(hobby, style = MaterialTheme.typography.labelSmall) })
-                            }
-                        }
-                    }
-                    if (p.spokenLanguages.isNotEmpty()) {
-                        Text("Languages", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            p.spokenLanguages.take(5).forEach { lang ->
-                                SuggestionChip(onClick = {}, label = { Text(lang, style = MaterialTheme.typography.labelSmall) })
-                            }
-                        }
-                    }
-                }
+        DetailSection("Compatibility") {
+            ScoreRow("Questionnaire", ui.qScore)
+            if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU && p.showHoroscope) {
+                ScoreRow("Astrology", ui.astroScore)
             }
+            ScoreRow("Combined", ui.combinedScore, bold = true)
+            Text(
+                "Compatibility scores are guidance signals, not guarantees.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
-            Spacer(Modifier.height(20.dp))
-
-            // ── Partner Preferences ──────────────────────────────────
-            Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("detail_partner_prefs")) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Favorite, null, Modifier.size(18.dp), tint = Color(0xFFE91E63))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Partner Preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    DetailRow("Looking for", p.lookingFor.name.lowercase().replaceFirstChar { it.uppercase() })
-                    DetailRow("Preferred age", "—")
-                    DetailRow("Preferred religion", p.religion)
-                    DetailRow("Preferred caste", if (p.caste.isNotBlank()) p.caste else "Open to all")
-                    DetailRow("Preferred location", if (p.city.isNotBlank()) p.city else "Anywhere in India")
-                    DetailRow("Preferred education", p.education)
-                }
+        if (ui.blocked) {
+            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Text("You blocked this member. Messaging and contact access are disabled until you unblock them.", Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
 
-            Spacer(Modifier.height(12.dp))
-
-            Card(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("detail_scores")) {
-                Column(Modifier.padding(18.dp)) {
-                    Text("Compatibility Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(12.dp))
-                    ScoreRow("Questionnaire", ui.qScore)
-                    ScoreRow("Astrology", ui.astroScore)
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    ScoreRow("Combined", ui.combinedScore, bold = true)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = vm::toggleLike,
-                    modifier = Modifier.weight(1f).testTag("detail_like_btn")
-                ) {
-                    Icon(if (ui.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (ui.liked) "Unlike" else "Like")
-                }
-                OutlinedButton(
-                    onClick = vm::toggleBlock,
-                    modifier = Modifier.weight(1f).testTag("detail_block_btn"),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (ui.blocked) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(Icons.Filled.Block, null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (ui.blocked) "Unblock" else "Block")
-                }
+@Composable
+private fun ProfilePhoto(p: UserProfile, photos: List<PhotoEntity>, isMutual: Boolean) {
+    val primary = photos.firstOrNull { it.isPrimary } ?: photos.firstOrNull()
+    val canUseLocal = primary != null && primary.privacy != "HIDDEN" && (primary.privacy == "PUBLIC" || (primary.privacy == "ACCEPTED_ONLY" && isMutual))
+    val model: Any? = when {
+        p.photoUrl.isNotBlank() -> p.photoUrl
+        canUseLocal -> File(primary!!.path)
+        else -> null
+    }
+    Surface(Modifier.fillMaxWidth().height(300.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        if (model != null) {
+            AsyncImage(model = model, contentDescription = "Profile photo", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
 @Composable
-private fun ScoreRow(label: String, score: Float, bold: Boolean = false) {
-    val pct = (score * 100).toInt()
-    val color = when {
-        pct >= 80 -> Color(0xFF2E7D32)
-        pct >= 60 -> Color(0xFFEF6C00)
-        else -> Color(0xFFC62828)
-    }
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.weight(1f))
-        LinearProgressIndicator(
-            progress = { score.coerceIn(0f, 1f) },
-            modifier = Modifier.weight(1f).height(8.dp),
-            color = color, trackColor = color.copy(alpha = 0.15f)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text("$pct%", fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = color)
+private fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(18.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            content()
+        }
     }
 }
 
 @Composable
 private fun DetailRow(label: String, value: String) {
-    if (value.isNotBlank()) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-        }
+    if (value.isBlank()) return
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun ScoreRow(label: String, score: Float, bold: Boolean = false) {
+    val safe = score.coerceIn(0f, 1f)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.weight(1f), fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
+        LinearProgressIndicator(progress = { safe }, modifier = Modifier.width(100.dp).height(7.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("${(safe * 100).toInt()}%", fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal)
     }
 }
