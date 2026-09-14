@@ -10,3 +10,4 @@ export * from "./playBilling";
 export * from "./safety";
 export * from "./verification";
 export * from "./discovery";
+export * from "./location";
