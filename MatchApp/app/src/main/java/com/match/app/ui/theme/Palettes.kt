@@ -4,11 +4,13 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import com.match.app.domain.model.ReligionCategory
 
 /**
- * Brand palettes available to the user, mirroring the web app's theme picker
- * (rose, lavender, solar, ocean, mono).  Each palette ships a light & dark
- * Material 3 [ColorScheme] so the entire app re-themes consistently.
+ * Brand palettes available to the user. Religion palettes are optional visual
+ * treatments only; the default remains the neutral VIVAH matrimony theme.
+ * They intentionally avoid sacred text/symbols so the experience stays tasteful
+ * and inclusive while still feeling culturally distinct.
  */
 enum class AppPalette(val label: String, val swatch: Color) {
     ROSE    ("Rose",     Color(0xFFFF5A7D)),
@@ -18,11 +20,22 @@ enum class AppPalette(val label: String, val swatch: Color) {
     MONO    ("Mono",     Color(0xFF424242)),
     GLACIER ("Glacier",  Color(0xFF4FC3F7)),
     TELUGU  ("Telugu",   Color(0xFFD4A017)),
-    VIVAH   ("Vivah",    Color(0xFF8B1A1A));   // Maroon + Gold — industry standard (Shaadi/BharatMatrimony style)
+    VIVAH   ("Vivah",    Color(0xFF8B1A1A)),
+    HINDU   ("Hindu",    Color(0xFFC76B00)),
+    CHRISTIAN("Christian", Color(0xFF315E8A)),
+    MUSLIM  ("Muslim",   Color(0xFF17705A)),
+    COMMUNITY("Community", Color(0xFF6D4C7D));
 
     companion object {
         fun fromKey(key: String?): AppPalette =
-            entries.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: ROSE
+            entries.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: VIVAH
+
+        fun forReligion(category: ReligionCategory): AppPalette = when (category) {
+            ReligionCategory.HINDU -> HINDU
+            ReligionCategory.CHRISTIAN -> CHRISTIAN
+            ReligionCategory.MUSLIM -> MUSLIM
+            ReligionCategory.OTHER -> COMMUNITY
+        }
     }
 }
 
@@ -107,6 +120,30 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         primary = Color(0xFF8B1A1A), primaryContainer = Color(0xFFFFE8E8), onPrimaryContainer = Color(0xFF3E0000),
         secondary = Color(0xFFB8860B), secondaryContainer = Color(0xFFFFF8DC), onSecondaryContainer = Color(0xFF4A3000),
         tertiary = Color(0xFF1B5E20),
+        dark = dark
+    )
+    AppPalette.HINDU -> scheme(
+        primary = Color(0xFFC76B00), primaryContainer = Color(0xFFFFE8C2), onPrimaryContainer = Color(0xFF4A2500),
+        secondary = Color(0xFF8C4A3A), secondaryContainer = Color(0xFFFFDED6), onSecondaryContainer = Color(0xFF4B1710),
+        tertiary = Color(0xFF7C6A00),
+        dark = dark
+    )
+    AppPalette.CHRISTIAN -> scheme(
+        primary = Color(0xFF315E8A), primaryContainer = Color(0xFFD8E9FA), onPrimaryContainer = Color(0xFF0D2B47),
+        secondary = Color(0xFF79536B), secondaryContainer = Color(0xFFF3DCE9), onSecondaryContainer = Color(0xFF3B2030),
+        tertiary = Color(0xFF476A5A),
+        dark = dark
+    )
+    AppPalette.MUSLIM -> scheme(
+        primary = Color(0xFF17705A), primaryContainer = Color(0xFFCDEEE4), onPrimaryContainer = Color(0xFF073D30),
+        secondary = Color(0xFF78613A), secondaryContainer = Color(0xFFF2E2C2), onSecondaryContainer = Color(0xFF3D2D12),
+        tertiary = Color(0xFF386A74),
+        dark = dark
+    )
+    AppPalette.COMMUNITY -> scheme(
+        primary = Color(0xFF6D4C7D), primaryContainer = Color(0xFFEEDDF5), onPrimaryContainer = Color(0xFF351A42),
+        secondary = Color(0xFF8B5E66), secondaryContainer = Color(0xFFF8DDE1), onSecondaryContainer = Color(0xFF461F26),
+        tertiary = Color(0xFF4C6658),
         dark = dark
     )
 }
