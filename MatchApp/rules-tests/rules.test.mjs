@@ -6,7 +6,6 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
-  deleteDoc,
   doc,
   getDoc,
   setDoc,
@@ -36,12 +35,12 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users/alice'), {
       firebaseUid: 'alice', displayName: 'Alice', age: 28, gender: 'FEMALE', lookingFor: 'MALE',
       city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0,
+      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'users/bob'), {
       firebaseUid: 'bob', displayName: 'Bob', age: 30, gender: 'MALE', lookingFor: 'FEMALE',
       city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0,
+      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'userPrivate/alice'), { phoneNumber: '9999999999', email: 'alice@example.test' });
   });
@@ -50,6 +49,16 @@ beforeEach(async () => {
 test('unauthenticated users cannot read profiles', async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertFails(getDoc(doc(db, 'users/alice')));
+});
+
+test('stealth profiles are owner-readable but hidden from other clients', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/bob'), { stealthMode: true });
+  });
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(getDoc(doc(bobDb, 'users/bob')));
+  await assertFails(getDoc(doc(aliceDb, 'users/bob')));
 });
 
 test('private account data is owner-only', async () => {
