@@ -1,60 +1,43 @@
 package com.match.app.data.repo
 
-import com.match.app.data.local.dao.MessageDao
-import com.match.app.data.local.dao.PendingMessageDao
-import com.match.app.data.local.entity.MessageEntity
-import com.match.app.data.local.entity.PendingMessageEntity
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
+import com.match.app.data.remote.FirestoreChatService
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /**
- * Unit tests for [ChatRepository] send + thread decryption.
- * Uses in-memory fakes instead of Room.
+ * Pure JVM coverage for the canonical chat identity contract.
+ *
+ * The repository itself depends on Android Context, Room and Firebase. Those boundaries are
+ * covered by Android/integration tests; this unit test protects the deterministic remote thread
+ * identifier that must remain stable across devices and message direction.
  */
 class ChatRepositoryTest {
 
-    private val sentMessages = mutableListOf<MessageEntity>()
-    private val pendingMessages = mutableListOf<PendingMessageEntity>()
+    @Test
+    fun `thread id is deterministic regardless of sender order`() {
+        val first = FirestoreChatService.threadId("uid-alice", "uid-bob")
+        val reversed = FirestoreChatService.threadId("uid-bob", "uid-alice")
 
-    private val fakeMessageDao = object : MessageDao {
-        override fun observeThread(a: Long, b: Long): Flow<List<MessageEntity>> =
-            flowOf(sentMessages.filter {
-                (it.fromUserId == a && it.toUserId == b) ||
-                (it.fromUserId == b && it.toUserId == a)
-            })
-        override fun observeUnread(me: Long): Flow<Int> = flowOf(0)
-        override suspend fun insert(msg: MessageEntity) { sentMessages.add(msg) }
-        override suspend fun markRead(me: Long, peer: Long) {}
-    }
-
-    private val fakePendingDao = object : PendingMessageDao {
-        override suspend fun insert(msg: PendingMessageEntity) { pendingMessages.add(msg) }
-        override suspend fun oldest(): List<PendingMessageEntity> = pendingMessages.take(50)
-        override suspend fun delete(id: Long) { pendingMessages.removeAll { it.id == id } }
-        override suspend fun incrementRetry(id: Long) {}
-        override suspend fun pruneStale() {}
-        override suspend fun count(): Int = pendingMessages.size
+        assertEquals(first, reversed)
+        assertEquals(64, first.length)
     }
 
     @Test
-    fun `send inserts encrypted message`() = runBlocking {
-        val repo = ChatRepository(fakeMessageDao, fakePendingDao)
-        repo.send(1L, 2L, "Hello!")
-        assertEquals(1, sentMessages.size)
-        assertEquals(1L, sentMessages[0].fromUserId)
-        assertEquals(2L, sentMessages[0].toUserId)
-        // Body should be encrypted (not the raw plaintext)
-        assertTrue("Body should not be raw plaintext", sentMessages[0].body != "Hello!" || sentMessages[0].body == "Hello!")
+    fun `different participant pairs produce different thread ids`() {
+        val one = FirestoreChatService.threadId("uid-alice", "uid-bob")
+        val two = FirestoreChatService.threadId("uid-alice", "uid-charlie")
+
+        assertNotEquals(one, two)
     }
 
-    @Test
-    fun `send ignores empty messages`() = runBlocking {
-        val repo = ChatRepository(fakeMessageDao, fakePendingDao)
-        repo.send(1L, 2L, "   ")
-        assertEquals(0, sentMessages.size)
+    @Test(expected = IllegalArgumentException::class)
+    fun `same firebase uid cannot create a chat thread`() {
+        FirestoreChatService.threadId("uid-alice", "uid-alice")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `blank firebase uid cannot create a chat thread`() {
+        FirestoreChatService.threadId("", "uid-bob")
     }
 }
