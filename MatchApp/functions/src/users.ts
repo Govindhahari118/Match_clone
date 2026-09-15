@@ -175,6 +175,8 @@ export const deleteUserAccount = functions
       await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
       await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
 
+      await deleteCollection(`savedSearches/${uid}/items`);
+      await deleteQuery(db.collection("usernames").where("uid", "==", uid));
       await deleteCollection(`shortlists/${uid}/saved`);
       await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
       await deleteCollection(`blocks/${uid}/blocked`);
@@ -200,6 +202,7 @@ export const deleteUserAccount = functions
       const singletonRefs = [
         db.collection("users").doc(uid),
         db.collection("userPrivate").doc(uid),
+        db.collection("savedSearches").doc(uid),
         db.collection("shortlists").doc(uid),
         db.collection("blocks").doc(uid),
         db.collection("privacyRelations").doc(uid),
