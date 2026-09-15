@@ -1,6 +1,9 @@
 package com.match.app.ui.nearby
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -17,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,7 +41,9 @@ import javax.inject.Inject
 data class NearbyUiState(
     val matches: List<NearbyProfile> = emptyList(),
     val loading: Boolean = false,
+    val statusLoading: Boolean = true,
     val sharingLocation: Boolean = false,
+    val lastSharedAt: Long = 0L,
     val permissionGranted: Boolean = false,
     val precisePermission: Boolean = false,
     val locationServicesEnabled: Boolean = true,
@@ -67,17 +73,73 @@ class NearbyViewModel @Inject constructor(
         }
     }
 
-    fun refresh(radiusKm: Int) = viewModelScope.launch {
+    /**
+     * Restores server-side opt-in state without acquiring a new device location. A member who
+     * previously tapped Stop sharing stays stopped after navigation, restart and sign-in.
+     */
+    fun loadStatus(radiusKm: Int) = viewModelScope.launch {
+        syncPermissionState()
+        _ui.update { it.copy(statusLoading = true, error = null) }
+        runCatching { locationRepository.getSharingStatus() }
+            .onSuccess { status ->
+                _ui.update {
+                    it.copy(
+                        statusLoading = false,
+                        sharingLocation = status.sharing,
+                        lastSharedAt = status.updatedAtMillis,
+                        error = null
+                    )
+                }
+                if (status.sharing) searchStored(radiusKm)
+            }
+            .onFailure { error ->
+                _ui.update {
+                    it.copy(
+                        statusLoading = false,
+                        error = error.message?.take(200) ?: "Unable to check Nearby sharing status."
+                    )
+                }
+            }
+    }
+
+    /** Explicit opt-in. This is the only path that can re-create a deleted location document. */
+    fun enableSharing(radiusKm: Int) = viewModelScope.launch {
         syncPermissionState()
         if (!_ui.value.permissionGranted) {
-            _ui.update { it.copy(error = "Location permission is required to find nearby profiles.") }
+            _ui.update { it.copy(error = "Allow location to enable Nearby.") }
             return@launch
         }
         if (!_ui.value.locationServicesEnabled) {
-            _ui.update { it.copy(error = "Turn on device location and try again.") }
+            _ui.update { it.copy(error = "Turn on device location to enable Nearby.") }
             return@launch
         }
+        refreshInternal(radiusKm, enabling = true)
+    }
 
+    fun refresh(radiusKm: Int) = viewModelScope.launch {
+        syncPermissionState()
+        if (!_ui.value.sharingLocation) {
+            _ui.update { it.copy(error = "Enable Nearby before refreshing your location.") }
+            return@launch
+        }
+        if (!_ui.value.permissionGranted) {
+            _ui.update { it.copy(error = "Location permission is required to refresh your position. You can still stop sharing.") }
+            return@launch
+        }
+        if (!_ui.value.locationServicesEnabled) {
+            _ui.update { it.copy(error = "Turn on device location, then refresh again.") }
+            return@launch
+        }
+        refreshInternal(radiusKm, enabling = false)
+    }
+
+    /** Radius changes query the already-shared point and do not acquire a new location. */
+    fun search(radiusKm: Int) = viewModelScope.launch {
+        if (!_ui.value.sharingLocation) return@launch
+        searchStored(radiusKm)
+    }
+
+    private suspend fun refreshInternal(radiusKm: Int, enabling: Boolean) {
         _ui.update { it.copy(loading = true, error = null) }
         runCatching { locationRepository.refreshAndFindNearby(radiusKm) }
             .onSuccess { profiles ->
@@ -86,6 +148,7 @@ class NearbyViewModel @Inject constructor(
                         matches = profiles,
                         loading = false,
                         sharingLocation = true,
+                        lastSharedAt = System.currentTimeMillis(),
                         error = null,
                         precisePermission = locationRepository.hasPreciseLocationPermission()
                     )
@@ -95,7 +158,28 @@ class NearbyViewModel @Inject constructor(
                 _ui.update {
                     it.copy(
                         loading = false,
+                        sharingLocation = if (enabling) false else it.sharingLocation,
                         error = error.message?.take(200) ?: "Unable to load nearby profiles."
+                    )
+                }
+            }
+    }
+
+    private suspend fun searchStored(radiusKm: Int) {
+        _ui.update { it.copy(loading = true, error = null) }
+        runCatching { locationRepository.findNearby(radiusKm) }
+            .onSuccess { profiles -> _ui.update { it.copy(matches = profiles, loading = false, error = null) } }
+            .onFailure { error ->
+                // If the server expired the location, return to explicit opt-in instead of silently
+                // obtaining a fresh coordinate.
+                val message = error.message?.take(200) ?: "Unable to load nearby profiles."
+                val expired = message.contains("expired", ignoreCase = true) || message.contains("Enable Nearby", ignoreCase = true)
+                _ui.update {
+                    it.copy(
+                        matches = if (expired) emptyList() else it.matches,
+                        loading = false,
+                        sharingLocation = if (expired) false else it.sharingLocation,
+                        error = message
                     )
                 }
             }
@@ -105,7 +189,15 @@ class NearbyViewModel @Inject constructor(
         _ui.update { it.copy(loading = true, error = null) }
         runCatching { locationRepository.stopSharingLocation() }
             .onSuccess {
-                _ui.update { it.copy(matches = emptyList(), loading = false, sharingLocation = false) }
+                _ui.update {
+                    it.copy(
+                        matches = emptyList(),
+                        loading = false,
+                        sharingLocation = false,
+                        lastSharedAt = 0L,
+                        error = null
+                    )
+                }
             }
             .onFailure { error ->
                 _ui.update {
@@ -123,26 +215,21 @@ fun NearbyMatchesScreen(
     vm: NearbyViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
-    var radius by remember { mutableFloatStateOf(25f) }
-    var requestedOnce by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var radius by rememberSaveable { mutableFloatStateOf(25f) }
+    var requestedPermission by rememberSaveable { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        requestedOnce = true
+        requestedPermission = true
         vm.syncPermissionState()
         val granted = grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        if (granted) vm.refresh(radius.toInt())
+        if (granted) vm.enableSharing(radius.toInt())
     }
 
-    LaunchedEffect(Unit) {
-        vm.syncPermissionState()
-        if (ui.permissionGranted && ui.locationServicesEnabled && !requestedOnce) {
-            vm.refresh(radius.toInt())
-            requestedOnce = true
-        }
-    }
+    LaunchedEffect(Unit) { vm.loadStatus(radius.toInt()) }
 
     Scaffold(
         topBar = {
@@ -170,50 +257,114 @@ fun NearbyMatchesScreen(
                             Text("Matches near you", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            "Nearby uses your current foreground location only when this feature is opened. Other members never receive your exact coordinates; they only see distance.",
+                            "Nearby is opt-in. A fresh foreground location is collected only when you enable or refresh this feature. Other members receive distance only, never your coordinates.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (ui.permissionGranted) {
+                        if (ui.statusLoading) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                        } else {
                             AssistChip(
                                 onClick = {},
-                                label = { Text(if (ui.precisePermission) "Precise location allowed" else "Approximate location allowed") },
-                                leadingIcon = { Icon(Icons.Filled.PrivacyTip, null, Modifier.size(16.dp)) }
+                                label = { Text(if (ui.sharingLocation) "Nearby sharing is on" else "Nearby sharing is off") },
+                                leadingIcon = {
+                                    Icon(
+                                        if (ui.sharingLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff,
+                                        null,
+                                        Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                        if (ui.permissionGranted) {
+                            Text(
+                                if (ui.precisePermission) "Device permission: precise location" else "Device permission: approximate location",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
 
-            if (!ui.permissionGranted) {
+            if (!ui.statusLoading && !ui.sharingLocation) {
                 item {
                     Card(shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Enable location for Nearby", fontWeight = FontWeight.Bold)
+                            Text("Enable Nearby", fontWeight = FontWeight.Bold)
                             Text(
-                                "You can allow approximate location. Precise location improves distance accuracy but is optional.",
+                                "Approximate location is enough. Precise location improves distance accuracy but is optional. Nothing is shared until you tap Enable Nearby.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Button(
-                                onClick = {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                                            Manifest.permission.ACCESS_FINE_LOCATION
+                            if (ui.permissionGranted) {
+                                Button(
+                                    onClick = { vm.enableSharing(radius.toInt()) },
+                                    enabled = !ui.loading && ui.locationServicesEnabled,
+                                    modifier = Modifier.fillMaxWidth().testTag("nearby_enable")
+                                ) {
+                                    Icon(Icons.Filled.MyLocation, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Enable Nearby")
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        permissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                                Manifest.permission.ACCESS_FINE_LOCATION
+                                            )
                                         )
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth().testTag("nearby_enable_location")
-                            ) {
-                                Icon(Icons.Filled.MyLocation, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Enable location")
+                                    },
+                                    enabled = !ui.loading,
+                                    modifier = Modifier.fillMaxWidth().testTag("nearby_enable_location")
+                                ) {
+                                    Icon(Icons.Filled.MyLocation, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Allow location & enable")
+                                }
+                                if (requestedPermission) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            context.startActivity(
+                                                Intent(
+                                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                    Uri.parse("package:${context.packageName}")
+                                                )
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Open app settings") }
+                                }
                             }
                         }
                     }
                 }
-            } else {
+            }
+
+            if (!ui.locationServicesEnabled && ui.permissionGranted) {
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.LocationDisabled, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Device location is turned off. Existing Nearby sharing can still be stopped, but enabling or refreshing needs device location.",
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Open location settings") }
+                        }
+                    }
+                }
+            }
+
+            if (ui.sharingLocation) {
                 item {
                     ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,7 +372,7 @@ fun NearbyMatchesScreen(
                             Slider(
                                 value = radius,
                                 onValueChange = { radius = it },
-                                onValueChangeFinished = { vm.refresh(radius.toInt()) },
+                                onValueChangeFinished = { vm.search(radius.toInt()) },
                                 valueRange = 5f..100f,
                                 steps = 18,
                                 enabled = !ui.loading
@@ -233,16 +384,16 @@ fun NearbyMatchesScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = { vm.refresh(radius.toInt()) },
-                                    enabled = !ui.loading,
+                                    enabled = !ui.loading && ui.permissionGranted && ui.locationServicesEnabled,
                                     modifier = Modifier.weight(1f).testTag("nearby_refresh")
                                 ) {
                                     Icon(Icons.Filled.Refresh, null)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Refresh")
+                                    Text("Refresh position")
                                 }
                                 OutlinedButton(
                                     onClick = vm::stopSharing,
-                                    enabled = !ui.loading && ui.sharingLocation,
+                                    enabled = !ui.loading,
                                     modifier = Modifier.weight(1f).testTag("nearby_stop_sharing")
                                 ) {
                                     Icon(Icons.Filled.LocationOff, null)
@@ -250,18 +401,13 @@ fun NearbyMatchesScreen(
                                     Text("Stop sharing")
                                 }
                             }
-                        }
-                    }
-                }
-            }
-
-            if (!ui.locationServicesEnabled && ui.permissionGranted) {
-                item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.LocationDisabled, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Device location is turned off. Turn it on, then tap Refresh.", color = MaterialTheme.colorScheme.onErrorContainer)
+                            if (!ui.permissionGranted) {
+                                Text(
+                                    "Location permission is currently off. Your previously shared point remains available until you stop sharing or it expires; Refresh position is disabled.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -281,7 +427,7 @@ fun NearbyMatchesScreen(
                         CircularProgressIndicator()
                     }
                 }
-            } else if (ui.permissionGranted && ui.sharingLocation && ui.matches.isEmpty() && ui.error == null) {
+            } else if (ui.sharingLocation && ui.matches.isEmpty() && ui.error == null) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.LocationSearching, null, Modifier.size(42.dp), tint = MaterialTheme.colorScheme.outline)
@@ -347,7 +493,7 @@ fun NearbyMatchesScreen(
 
             item {
                 Text(
-                    "Location is retained only to power Nearby and is excluded after 30 days without a refresh. Use Stop sharing to remove it immediately.",
+                    "Exact coordinates are never readable by other clients. Stop sharing deletes your location immediately. Otherwise, the backend automatically deletes stored Nearby coordinates after 30 days without a refresh.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
