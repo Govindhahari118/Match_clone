@@ -4,8 +4,8 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
     function hasNoPrivateProfileFields() { return !('email' in request.resource.data) && !('phoneNumber' in request.resource.data) && !('fcmToken' in request.resource.data) && !('dateOfBirth' in request.resource.data); }
-    function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data); }
-    function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized']); }
+    function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
+    function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt']); }
     function blockedEitherWay(viewerUid, targetUid) {
       return exists(/databases/$(database)/documents/blocks/$(viewerUid)/blocked/$(targetUid)) ||
              exists(/databases/$(database)/documents/blocks/$(targetUid)/blocked/$(viewerUid));
@@ -39,8 +39,6 @@ service cloud.firestore {
       allow create, update: if isOwner(userId) && request.resource.data.keys().hasOnly(['email','phoneNumber','fcmToken','dateOfBirth','rasi','nakshatra','manglik','birthTime','birthPlace','incomeBand','lastActiveAt','updatedAt']);
       allow delete: if isOwner(userId);
     }
-    // Unique username registry is server-owned. Clients search through trusted callables so
-    // handles cannot be enumerated or hijacked with direct Firestore writes.
     match /usernames/{username} { allow read, write: if false; }
 
     match /privacyRelations/{ownerUid}/members/{memberUid} {
