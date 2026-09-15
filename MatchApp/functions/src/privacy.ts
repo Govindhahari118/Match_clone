@@ -13,13 +13,14 @@ function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.Doc
 }
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
-  while (true) {
+  let hasMore = true;
+  while (hasMore) {
     const snap = await query.limit(300).get();
     if (snap.empty) return;
     const batch = db.batch();
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
-    if (snap.size < 300) return;
+    hasMore = snap.size === 300;
   }
 }
 
