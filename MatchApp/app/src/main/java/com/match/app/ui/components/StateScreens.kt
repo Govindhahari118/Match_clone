@@ -66,6 +66,29 @@ fun EmptyState(
 }
 
 /**
+ * Compatibility overload for older positional call sites. Keeping this explicit avoids silently
+ * binding a String into the newer leading Modifier parameter when screens are compiled after the
+ * reusable state component was modernized.
+ */
+@Composable
+fun EmptyState(
+    title: String,
+    subtitle: String?,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+    icon: ImageVector
+) {
+    EmptyState(
+        modifier = Modifier,
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        actionLabel = actionLabel,
+        onAction = onAction
+    )
+}
+
+/**
  * Reusable error state with a retry button.
  */
 @Composable
