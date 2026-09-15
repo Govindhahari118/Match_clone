@@ -25,6 +25,7 @@ beforeEach(async () => {
       firebaseUid: 'alice', displayName: 'Alice', age: 28, gender: 'FEMALE', lookingFor: 'MALE',
       city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
       verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
+      lastActiveAt: 1000,
     });
     await setDoc(doc(context.firestore(), 'usernames/alice_28'), { uid: 'alice', username: 'alice_28' });
   });
@@ -33,6 +34,11 @@ beforeEach(async () => {
 test('profile owner cannot bypass unique username reservation with direct user update', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await assertFails(updateDoc(doc(db, 'users/alice'), { username: 'admin', usernameNormalized: 'admin' }));
+});
+
+test('clients cannot forge online activity timestamps', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(db, 'users/alice'), { lastActiveAt: Date.now() }));
 });
 
 test('clients cannot enumerate or mutate the username registry directly', async () => {
