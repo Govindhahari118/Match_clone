@@ -12,10 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.platformLocale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -30,6 +28,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -141,7 +140,7 @@ fun NotificationsScreen(
 
 @Composable
 private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
-    val locale = LocalLocale.current.platformLocale
+    val locale = Locale.getDefault()
     val formattedTime = remember(n.createdAt, locale) {
         SimpleDateFormat("MMM d, h:mm a", locale).format(Date(n.createdAt))
     }
