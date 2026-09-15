@@ -37,9 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -49,13 +46,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.ReligionCategory
-import com.match.app.ui.nearby.NearbyMatchesScreen
 
-/**
- * Production home intentionally exposes only audited journeys. Nearby is hosted here until the
- * root navigation graph is migrated to typed navigation; its profile opens still use the root
- * profile callback, so there is no duplicate navigation identity.
- */
+/** Production home intentionally exposes only audited journeys. */
 @Composable
 fun HomeLauncherScreen(
     onGoMatches:       () -> Unit,
@@ -109,15 +101,6 @@ fun HomeLauncherScreen(
     onOpenProfile:          (Long) -> Unit = {},
     vm: HomeViewModel = hiltViewModel()
 ) {
-    var showNearby by remember { mutableStateOf(false) }
-    if (showNearby) {
-        NearbyMatchesScreen(
-            onBack = { showNearby = false },
-            onOpenProfile = onOpenProfile
-        )
-        return
-    }
-
     val ui by vm.ui.collectAsState()
     val p = ui.profile
 
@@ -206,7 +189,7 @@ fun HomeLauncherScreen(
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EssentialButton(Icons.Filled.Search, "Discover", Modifier.weight(1f), onGoMatches)
-                EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f)) { showNearby = true }
+                EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f), onGoNearby)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EssentialButton(Icons.Filled.Chat, "Messages", Modifier.weight(1f), onGoMessages)
