@@ -74,10 +74,6 @@ class MatchingRepository @Inject constructor(
         filter: MatchFilter = MatchFilter()
     ): List<MatchResult> {
         val seekerEntity = userDao.findById(seekerId) ?: return emptyList()
-
-        // Only UIDs returned by the current trusted discovery call are eligible for this refresh.
-        // Room is a cache, not an authorization source: old cached profiles must never reappear if
-        // they later block/hide/enable stealth or otherwise become unavailable to this viewer.
         val authorizedUids = syncRemoteCandidates(seekerEntity, filter)
         if (authorizedUids.isEmpty()) return emptyList()
 
@@ -123,7 +119,18 @@ class MatchingRepository @Inject constructor(
                 .filter { filter.rasi.isBlank() || it.rasi.equals(filter.rasi, true) }
                 .filter { filter.manglik.isBlank() || it.manglik.equals(filter.manglik, true) }
                 .filter { filter.hobbies.isBlank() || it.hobbies.contains(filter.hobbies, true) }
-                .filter { filter.keyword.isBlank() || it.displayName.contains(filter.keyword, true) || it.bio.contains(filter.keyword, true) || it.profession.contains(filter.keyword, true) }
+                .filter {
+                    val keyword = filter.keyword.trim().removePrefix("@")
+                    keyword.isBlank() || listOf(
+                        it.displayName,
+                        it.username,
+                        it.matrimonyId,
+                        it.bio,
+                        it.profession,
+                        it.city,
+                        it.state
+                    ).any { value -> value.contains(keyword, true) }
+                }
                 .filter { filter.hasChildren.isBlank() || filter.hasChildren.equals("Any", true) || (filter.hasChildren.equals("Yes", true) == it.hasChildren) }
                 .filter {
                     filter.hasChildrenFilter.isBlank() || filter.hasChildrenFilter.equals("Don't mind", true) ||
@@ -355,7 +362,8 @@ class MatchingRepository @Inject constructor(
         incomeDisclosure = incomeDisclosure,
         subscriptionPlan = subscriptionPlan,
         subscriptionExpiry = subscriptionExpiry,
-        matchScore = matchScore
+        matchScore = matchScore,
+        username = username
     )
 
     private companion object {
