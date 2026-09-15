@@ -4,6 +4,8 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
 import com.match.app.data.local.MatchDatabase
 import com.match.app.data.local.dao.LikeDao
@@ -36,6 +38,7 @@ class AuthRepository @Inject constructor(
     private val localDb: MatchDatabase
 ) {
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 
     suspend fun signUp(
         email: String, password: String, displayName: String,
@@ -99,20 +102,18 @@ class AuthRepository @Inject constructor(
 
             if (localUser != null) {
                 if (firestoreEntity != null) {
-                    val updated = localUser.copy(
-                        passwordHash = "",
-                        displayName = firestoreEntity.displayName,
-                        age = firestoreEntity.age,
-                        city = firestoreEntity.city,
-                        bio = firestoreEntity.bio,
-                        isPremium = firestoreEntity.isPremium,
-                        isVerified = firestoreEntity.isVerified
+                    userDao.update(
+                        firestoreEntity.copy(
+                            id = localUser.id,
+                            email = e,
+                            passwordHash = "",
+                            isSeed = false
+                        )
                     )
-                    userDao.update(updated)
                 }
                 localId = localUser.id
             } else if (firestoreEntity != null) {
-                localId = userDao.insert(firestoreEntity.copy(passwordHash = ""))
+                localId = userDao.insert(firestoreEntity.copy(email = e, passwordHash = "", isSeed = false))
             } else {
                 val legacyUser = userDao.findByEmail(e)
                     ?: return AuthResult.Error("Profile data is unavailable. Please contact support.")
@@ -130,8 +131,6 @@ class AuthRepository @Inject constructor(
             AuthResult.Success(localId)
         } catch (ex: com.google.firebase.auth.FirebaseAuthInvalidCredentialsException) {
             AuthResult.Error("Incorrect email or password")
-        } catch (ex: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
-            AuthResult.Error("No account for that email")
         } catch (ex: Exception) {
             Log.e("AuthRepository", "signIn failed", ex)
             AuthResult.Error("Unable to sign in securely. Check your connection and try again.")
@@ -155,75 +154,52 @@ class AuthRepository @Inject constructor(
         return try {
             firebaseAuth.sendPasswordResetEmail(email.trim().lowercase()).await()
             null
-        } catch (ex: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
-            "No account found for that email address."
         } catch (ex: Exception) {
-            ex.message ?: "Failed to send reset email."
+            Log.w("AuthRepository", "Password reset request failed", ex)
+            "Unable to send the reset email right now. Please retry."
         }
     }
 
-    suspend fun currentProfile(userId: Long): UserProfile? =
-        userDao.findById(userId)?.let { u ->
-            UserProfile(
-                id = u.id, firebaseUid = u.firebaseUid, email = u.email, displayName = u.displayName,
-                age = u.age,
-                gender = runCatching { Gender.valueOf(u.gender) }.getOrDefault(Gender.OTHER),
-                lookingFor = runCatching { LookingFor.valueOf(u.lookingFor) }.getOrDefault(LookingFor.ANY),
-                city = u.city, bio = u.bio,
-                rasi = u.rasi, nakshatra = u.nakshatra,
-                hasQuestionnaire = questionnaireRepo.hasQuestionnaire(u.id),
-                primaryPhotoPath = photoRepo.primaryPath(u.id),
-                religion = u.religion, motherTongue = u.motherTongue,
-                education = u.education, profession = u.profession,
-                maritalStatus = u.maritalStatus, heightCm = u.heightCm,
-                isVerified = u.isVerified, isPremium = u.isPremium,
-                fatherOccupation = u.fatherOccupation,
-                motherOccupation = u.motherOccupation,
-                siblings = u.siblings,
-                familyType = u.familyType,
-                gothra = u.gothra,
-                profileViewCount = u.profileViewCount,
-                nativeState = u.nativeState,
-                countryOfResidence = u.countryOfResidence,
-                visaStatus = u.visaStatus,
-                willingToRelocate = u.willingToRelocate,
-                createdAt = u.createdAt,
-                lastActiveAt = u.lastActiveAt,
-                phoneNumber = u.phoneNumber,
-                isIncognito = u.isIncognito,
-                familyValues = u.familyValues,
-                aboutFamily = u.aboutFamily,
-                manglik = u.manglik,
-                dateOfBirth = u.dateOfBirth,
-                weight = u.weight,
-                complexion = u.complexion,
-                physicalStatus = u.physicalStatus,
-                birthTime = u.birthTime,
-                birthPlace = u.birthPlace,
-                familyStatus = u.familyStatus,
-                educationField = u.educationField,
-                institution = u.institution,
-                graduationYear = u.graduationYear,
-                occupationCategory = u.occupationCategory,
-                employer = u.employer,
-                employerType = u.employerType,
-                citizenship = u.citizenship,
-                isNRI = u.isNRI,
-                fitnessActivities = u.fitnessActivities,
-                matrimonyId = u.matrimonyId,
-                photoUrl = u.photoUrl,
-                voiceBioUrl = u.voiceBioUrl,
-                profileCompleteness = u.profileCompleteness,
-                verificationLevel = u.verificationLevel,
-                stealthMode = u.stealthMode,
-                showLastActive = u.showLastActive,
-                showHoroscope = u.showHoroscope,
-                incomeDisclosure = u.incomeDisclosure,
-                subscriptionPlan = u.subscriptionPlan,
-                subscriptionExpiry = u.subscriptionExpiry,
-                matchScore = u.matchScore
-            )
+    /**
+     * Returns an authorized profile view.
+     *
+     * Other members are fail-closed: before any Room-cached data is exposed we force a server
+     * Firestore read. This re-evaluates block, stealth and per-member privacy rules and prevents a
+     * profile hidden after an earlier view from remaining readable through a stale local cache.
+     * The owner's own profile remains available from Room for normal offline account editing.
+     */
+    suspend fun currentProfile(userId: Long): UserProfile? {
+        var local = userDao.findById(userId) ?: return null
+        val signedInUid = firebaseAuth.currentUser?.uid.orEmpty()
+
+        if (local.firebaseUid.isNotBlank() && local.firebaseUid != signedInUid) {
+            try {
+                val authorization = firestore.collection("users")
+                    .document(local.firebaseUid)
+                    .get(Source.SERVER)
+                    .await()
+                if (!authorization.exists()) return null
+
+                // The successful server read also refreshes Firestore's cache. Hydrate the Room row
+                // while preserving its stable local navigation id and private local account metadata.
+                firestoreProfile.fetchProfile(local.firebaseUid)?.let { remote ->
+                    val refreshed = remote.copy(
+                        id = local.id,
+                        email = local.email,
+                        passwordHash = local.passwordHash,
+                        isSeed = false
+                    )
+                    userDao.update(refreshed)
+                    local = refreshed
+                }
+            } catch (ex: Exception) {
+                Log.w("AuthRepository", "Profile access denied or unavailable for ${local.firebaseUid}", ex)
+                return null
+            }
         }
+
+        return local.toUserProfile()
+    }
 
     suspend fun updateFamilyDetails(
         userId: Long,
@@ -249,7 +225,9 @@ class AuthRepository @Inject constructor(
         )
         userDao.update(updated)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.pushProfile(updated) } catch (_: Exception) {}
+            try { firestoreProfile.pushProfile(updated) } catch (ex: Exception) {
+                Log.w("AuthRepository", "Family details cloud sync failed", ex)
+            }
         }
     }
 
@@ -257,7 +235,9 @@ class AuthRepository @Inject constructor(
         val u = userDao.findById(userId) ?: return
         userDao.updateBio(userId, bio)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("bio" to bio)) } catch (_: Exception) {}
+            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("bio" to bio)) } catch (ex: Exception) {
+                Log.w("AuthRepository", "Bio cloud sync failed", ex)
+            }
         }
     }
 
@@ -265,7 +245,9 @@ class AuthRepository @Inject constructor(
         val u = userDao.findById(userId) ?: return
         userDao.update(u.copy(personalityType = personalityType))
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("personalityType" to personalityType)) } catch (_: Exception) {}
+            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("personalityType" to personalityType)) } catch (ex: Exception) {
+                Log.w("AuthRepository", "Personality cloud sync failed", ex)
+            }
         }
     }
 
@@ -285,7 +267,9 @@ class AuthRepository @Inject constructor(
         )
         userDao.update(updated)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.pushProfile(updated) } catch (_: Exception) {}
+            try { firestoreProfile.pushProfile(updated) } catch (ex: Exception) {
+                Log.w("AuthRepository", "Account details cloud sync failed", ex)
+            }
         }
     }
 
@@ -298,7 +282,9 @@ class AuthRepository @Inject constructor(
         val boostUntil = System.currentTimeMillis() + durationMs
         userDao.updateBoostExpiry(userId, boostUntil)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("boostActiveUntil" to boostUntil)) } catch (_: Exception) {}
+            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("boostActiveUntil" to boostUntil)) } catch (ex: Exception) {
+                Log.w("AuthRepository", "Boost cloud sync failed", ex)
+            }
         }
     }
 
@@ -341,27 +327,33 @@ class AuthRepository @Inject constructor(
                 ?: return AuthResult.Error("Google sign-in failed")
 
             val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
+            val normalizedEmail = email.trim().lowercase()
             val existingLocal = userDao.findByFirebaseUid(firebaseUid)
-                ?: userDao.findByEmail(email.trim().lowercase())
+                ?: userDao.findByEmail(normalizedEmail)
 
             val localId: Long = when {
                 existingLocal != null -> {
                     if (firestoreEntity != null) {
-                        userDao.update(existingLocal.copy(
-                            firebaseUid = firebaseUid,
-                            passwordHash = "",
-                            displayName = firestoreEntity.displayName.ifBlank { displayName },
-                            isPremium = firestoreEntity.isPremium,
-                            isVerified = firestoreEntity.isVerified
-                        ))
+                        userDao.update(
+                            firestoreEntity.copy(
+                                id = existingLocal.id,
+                                email = normalizedEmail.ifBlank { existingLocal.email },
+                                passwordHash = "",
+                                isSeed = false
+                            )
+                        )
+                    } else if (existingLocal.firebaseUid != firebaseUid) {
+                        userDao.update(existingLocal.copy(firebaseUid = firebaseUid, passwordHash = ""))
                     }
                     existingLocal.id
                 }
-                firestoreEntity != null -> userDao.insert(firestoreEntity.copy(passwordHash = ""))
+                firestoreEntity != null -> userDao.insert(
+                    firestoreEntity.copy(email = normalizedEmail, passwordHash = "", isSeed = false)
+                )
                 else -> {
                     val entity = UserEntity(
                         firebaseUid = firebaseUid,
-                        email = email.trim().lowercase(),
+                        email = normalizedEmail,
                         passwordHash = "",
                         displayName = displayName.ifBlank { email.substringBefore('@') },
                         age = 0,
@@ -388,6 +380,88 @@ class AuthRepository @Inject constructor(
             AuthResult.Error(ex.message ?: "Google sign-in failed")
         }
     }
+
+    private suspend fun UserEntity.toUserProfile() = UserProfile(
+        id = id,
+        firebaseUid = firebaseUid,
+        email = if (email.endsWith("@cache.invalid")) "" else email,
+        displayName = displayName,
+        age = age,
+        gender = runCatching { Gender.valueOf(gender) }.getOrDefault(Gender.OTHER),
+        lookingFor = runCatching { LookingFor.valueOf(lookingFor) }.getOrDefault(LookingFor.ANY),
+        city = city,
+        bio = bio,
+        rasi = rasi,
+        nakshatra = nakshatra,
+        hasQuestionnaire = questionnaireRepo.hasQuestionnaire(id),
+        primaryPhotoPath = photoRepo.primaryPath(id),
+        religion = religion,
+        caste = caste,
+        motherTongue = motherTongue,
+        education = education,
+        profession = profession,
+        maritalStatus = maritalStatus,
+        heightCm = heightCm,
+        isVerified = isVerified,
+        isPremium = isPremium,
+        state = state,
+        subCaste = subCaste,
+        gothra = gothra,
+        incomeBand = incomeBand,
+        diet = diet,
+        familyType = familyType,
+        fatherOccupation = fatherOccupation,
+        motherOccupation = motherOccupation,
+        siblings = siblings,
+        smoking = smoking,
+        drinking = drinking,
+        personalityType = personalityType,
+        hobbies = hobbies.split(',').map { it.trim() }.filter { it.isNotBlank() },
+        spokenLanguages = spokenLanguages.split(',').map { it.trim() }.filter { it.isNotBlank() },
+        videoUrl = videoUrl,
+        residentialStatus = residentialStatus,
+        hasChildren = hasChildren,
+        profileViewCount = profileViewCount,
+        nativeState = nativeState,
+        countryOfResidence = countryOfResidence,
+        visaStatus = visaStatus,
+        willingToRelocate = willingToRelocate,
+        createdAt = createdAt,
+        lastActiveAt = lastActiveAt,
+        phoneNumber = phoneNumber,
+        isIncognito = isIncognito,
+        familyValues = familyValues,
+        aboutFamily = aboutFamily,
+        manglik = manglik,
+        dateOfBirth = dateOfBirth,
+        weight = weight,
+        complexion = complexion,
+        physicalStatus = physicalStatus,
+        birthTime = birthTime,
+        birthPlace = birthPlace,
+        familyStatus = familyStatus,
+        educationField = educationField,
+        institution = institution,
+        graduationYear = graduationYear,
+        occupationCategory = occupationCategory,
+        employer = employer,
+        employerType = employerType,
+        citizenship = citizenship,
+        isNRI = isNRI,
+        fitnessActivities = fitnessActivities,
+        matrimonyId = matrimonyId,
+        photoUrl = photoUrl,
+        voiceBioUrl = voiceBioUrl,
+        profileCompleteness = profileCompleteness,
+        verificationLevel = verificationLevel,
+        stealthMode = stealthMode,
+        showLastActive = showLastActive,
+        showHoroscope = showHoroscope,
+        incomeDisclosure = incomeDisclosure,
+        subscriptionPlan = subscriptionPlan,
+        subscriptionExpiry = subscriptionExpiry,
+        matchScore = matchScore
+    )
 
     private suspend fun registerFcmToken(firebaseUid: String) {
         try {
