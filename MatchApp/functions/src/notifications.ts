@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions/v1";
-import { db, getFcmToken, messaging } from "./shared";
+import { getFcmToken, messaging } from "./shared";
 
 export const onInterestCreated = functions.firestore
   .document("interests/{interestId}")
