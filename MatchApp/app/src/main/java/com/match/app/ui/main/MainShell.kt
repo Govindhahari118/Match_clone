@@ -61,10 +61,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Routes intentionally exposed by the production shell.
- * Experimental source files can remain in the repository without becoming user-visible promises.
- */
 object MainRoutes {
     const val HOME = "home"
     const val MATCHES = "matches"
@@ -77,6 +73,7 @@ object MainRoutes {
     const val NOTIFICATIONS = "notifications"
     const val WHO_VIEWED = "who_viewed"
     const val KUNDLI = "kundli"
+    const val KUNDLI_PAIR = "kundli/{targetId}"
     const val PRICING = "pricing"
     const val VERIFICATION = "verification"
     const val HELP = "help"
@@ -93,6 +90,7 @@ object MainRoutes {
 
     fun detail(userId: Long) = "detail/$userId"
     fun chat(peerId: Long) = "chat/$peerId"
+    fun kundli(targetId: Long) = "kundli/$targetId"
 }
 
 private sealed class Tab(val route: String, val label: String, val icon: ImageVector, val tag: String) {
@@ -178,9 +176,7 @@ private fun AppDrawer(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.onPrimary)
-                }
+                Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.onPrimary) }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -193,23 +189,16 @@ private fun AppDrawer(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
             sections.forEach { section ->
                 item {
-                    Text(
-                        section.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
-                    )
+                    Text(section.title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp))
                 }
                 items(section.items) { item ->
                     val selected = currentRoute == item.route
                     val background = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
                     val foreground = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     Row(
-                        Modifier.fillMaxWidth().background(background).clickable {
-                            onNavigate(item.route)
-                            onClose()
-                        }.padding(horizontal = 20.dp, vertical = 11.dp),
+                        Modifier.fillMaxWidth().background(background).clickable { onNavigate(item.route); onClose() }
+                            .padding(horizontal = 20.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(item.icon, null, tint = foreground, modifier = Modifier.size(21.dp))
@@ -241,14 +230,11 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
 
     val activity = LocalContext.current as? MainActivity
     LaunchedEffect(Unit) {
-        activity?.consumeDeepLink()?.let { destination ->
-            nav.navigate(destination) { launchSingleTop = true }
-        }
+        activity?.consumeDeepLink()?.let { destination -> nav.navigate(destination) { launchSingleTop = true } }
     }
 
     val showBottomBar = currentRoute in setOf(
-        MainRoutes.HOME, MainRoutes.MATCHES, MainRoutes.INTERESTS,
-        MainRoutes.CHAT_LIST, MainRoutes.PROFILE
+        MainRoutes.HOME, MainRoutes.MATCHES, MainRoutes.INTERESTS, MainRoutes.CHAT_LIST, MainRoutes.PROFILE
     )
 
     ModalNavigationDrawer(
@@ -288,13 +274,9 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                             }
                         },
                         actions = {
-                            IconButton(onClick = { nav.navigate(MainRoutes.HELP) }) {
-                                Icon(Icons.AutoMirrored.Filled.Help, "Help")
-                            }
+                            IconButton(onClick = { nav.navigate(MainRoutes.HELP) }) { Icon(Icons.AutoMirrored.Filled.Help, "Help") }
                             BadgedBox(badge = { if (unreadNotif > 0) Badge { Text(unreadNotif.toString()) } }) {
-                                IconButton(onClick = { nav.navigate(MainRoutes.NOTIFICATIONS) }) {
-                                    Icon(Icons.Filled.Notifications, "Notifications")
-                                }
+                                IconButton(onClick = { nav.navigate(MainRoutes.NOTIFICATIONS) }) { Icon(Icons.Filled.Notifications, "Notifications") }
                             }
                         }
                     )
@@ -328,11 +310,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
             }
         ) { padding ->
-            NavHost(
-                navController = nav,
-                startDestination = MainRoutes.HOME,
-                modifier = Modifier.fillMaxSize().padding(padding)
-            ) {
+            NavHost(navController = nav, startDestination = MainRoutes.HOME, modifier = Modifier.fillMaxSize().padding(padding)) {
                 composable(MainRoutes.HOME) {
                     HomeLauncherScreen(
                         onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
@@ -355,21 +333,16 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
                     )
                 }
-                composable(MainRoutes.MATCHES) {
-                    MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) })
-                }
+                composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
+                        onCheckKundli = { nav.navigate(MainRoutes.kundli(it)) },
                         onOpenChat = { nav.navigate(MainRoutes.chat(it)) }
                     )
                 }
-                composable(MainRoutes.SHORTLISTS) {
-                    ShortlistScreen(onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
-                }
-                composable(MainRoutes.CHAT_LIST) {
-                    ChatListScreen(onOpenChat = { nav.navigate(MainRoutes.chat(it)) })
-                }
+                composable(MainRoutes.SHORTLISTS) { ShortlistScreen(onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }) }
+                composable(MainRoutes.CHAT_LIST) { ChatListScreen(onOpenChat = { nav.navigate(MainRoutes.chat(it)) }) }
                 composable(MainRoutes.QUIZ) { QuestionnaireScreen() }
                 composable(MainRoutes.PROFILE) {
                     ProfileScreen(
@@ -396,9 +369,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
-                composable(MainRoutes.LANGUAGE_SELECT) {
-                    com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() })
-                }
+                composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
                     NotificationsScreen(
                         onBack = { nav.popBackStack() },
@@ -414,13 +385,17 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     )
                 }
                 composable(MainRoutes.KUNDLI) { KundliScreen(onBack = { nav.popBackStack() }) }
+                composable(
+                    MainRoutes.KUNDLI_PAIR,
+                    arguments = listOf(navArgument("targetId") { type = NavType.LongType })
+                ) { backStack ->
+                    val targetId = backStack.arguments?.getLong("targetId") ?: return@composable
+                    KundliScreen(targetId = targetId, onBack = { nav.popBackStack() })
+                }
                 composable(MainRoutes.PRICING) { PricingScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.VERIFICATION) { VerificationScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.PRIVACY_DASH) {
-                    PrivacyDashboardScreen(
-                        onBack = { nav.popBackStack() },
-                        onGoSettings = { nav.navigate(MainRoutes.SETTINGS) }
-                    )
+                    PrivacyDashboardScreen(onBack = { nav.popBackStack() }, onGoSettings = { nav.navigate(MainRoutes.SETTINGS) })
                 }
                 composable(MainRoutes.HELP) { HelpScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.TERMS) { LegalScreen(type = "terms", onBack = { nav.popBackStack() }) }
@@ -430,28 +405,19 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.REFUNDS) { LegalScreen(type = "refunds", onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.BIODATA) { BiodataScreen(onBack = { nav.popBackStack() }) }
 
-                composable(
-                    MainRoutes.DETAIL,
-                    arguments = listOf(navArgument("userId") { type = NavType.LongType })
-                ) { backStack ->
+                composable(MainRoutes.DETAIL, arguments = listOf(navArgument("userId") { type = NavType.LongType })) { backStack ->
                     val userId = backStack.arguments?.getLong("userId") ?: return@composable
                     MatchDetailScreen(
                         userId = userId,
                         onBack = { nav.popBackStack() },
                         onChat = { nav.navigate(MainRoutes.chat(userId)) },
-                        onPricing = { nav.navigate(MainRoutes.PRICING) }
+                        onPricing = { nav.navigate(MainRoutes.PRICING) },
+                        onKundli = { nav.navigate(MainRoutes.kundli(userId)) }
                     )
                 }
-                composable(
-                    MainRoutes.CHAT,
-                    arguments = listOf(navArgument("peerId") { type = NavType.LongType })
-                ) { backStack ->
+                composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
                     val peerId = backStack.arguments?.getLong("peerId") ?: return@composable
-                    ChatScreen(
-                        peerId = peerId,
-                        onBack = { nav.popBackStack() },
-                        onUpgrade = { nav.navigate(MainRoutes.PRICING) }
-                    )
+                    ChatScreen(peerId = peerId, onBack = { nav.popBackStack() }, onUpgrade = { nav.navigate(MainRoutes.PRICING) })
                 }
             }
         }
