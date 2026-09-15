@@ -66,16 +66,16 @@ fun EmptyState(
 }
 
 /**
- * Compatibility overload for older positional call sites. Keeping this explicit avoids silently
- * binding a String into the newer leading Modifier parameter when screens are compiled after the
- * reusable state component was modernized.
+ * Compatibility overload for older positional call sites. Some ViewModel actions return a Job;
+ * accepting Any? here keeps those legacy method references source-compatible while the public
+ * component still exposes the safer Unit callback contract above.
  */
 @Composable
 fun EmptyState(
     title: String,
     subtitle: String?,
     actionLabel: String?,
-    onAction: (() -> Unit)?,
+    onAction: (() -> Any?)?,
     icon: ImageVector
 ) {
     EmptyState(
@@ -84,7 +84,12 @@ fun EmptyState(
         title = title,
         subtitle = subtitle,
         actionLabel = actionLabel,
-        onAction = onAction
+        onAction = onAction?.let { action ->
+            {
+                action()
+                Unit
+            }
+        }
     )
 }
 
