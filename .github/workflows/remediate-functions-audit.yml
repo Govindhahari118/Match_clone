@@ -27,7 +27,11 @@ jobs:
           cache: npm
           cache-dependency-path: MatchApp/functions/package-lock.json
       - name: Apply non-breaking npm security remediations
-        run: npm audit fix --package-lock-only --omit=dev --no-fund
+        shell: bash
+        run: |
+          # npm audit fix exits non-zero while lower-severity advisories remain. That is expected
+          # here; the dedicated high/critical gate below determines whether this migration is safe.
+          npm audit fix --package-lock-only --omit=dev --no-fund || true
       - name: Verify clean install
         run: npm ci
       - name: Lint
