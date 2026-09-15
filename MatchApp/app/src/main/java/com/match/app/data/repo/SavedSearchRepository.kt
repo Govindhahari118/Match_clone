@@ -29,13 +29,10 @@ class SavedSearchRepository @Inject constructor(
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
-    /** Legacy local cache flow retained for offline/backward compatibility. */
+    /** Legacy local cache flow retained only for existing installs and old callers. */
     fun observeForUser(userId: Long): Flow<List<SavedSearchEntity>> = dao.observeForUser(userId)
 
-    /**
-     * Cross-device source of truth. Saved searches are private to the authenticated owner and
-     * Firestore's local persistence supplies an offline cache automatically.
-     */
+    /** Cross-device source of truth; Firestore persistence also provides an offline read cache. */
     fun observeRemote(): Flow<List<SavedSearchPreset>> = callbackFlow {
         val uid = auth.currentUser?.uid
         if (uid.isNullOrBlank()) {
@@ -50,7 +47,7 @@ class SavedSearchRepository @Inject constructor(
                     close(error)
                     return@addSnapshotListener
                 }
-                val presets = snapshot?.documents.orEmpty().mapNotNull { doc ->
+                trySend(snapshot?.documents.orEmpty().mapNotNull { doc ->
                     val data = doc.data ?: return@mapNotNull null
                     SavedSearchPreset(
                         id = doc.id,
@@ -58,8 +55,7 @@ class SavedSearchRepository @Inject constructor(
                         createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
                         filter = mapToFilter(data)
                     )
-                }
-                trySend(presets)
+                })
             }
         awaitClose { registration.remove() }
     }
@@ -68,7 +64,6 @@ class SavedSearchRepository @Inject constructor(
         val uid = auth.currentUser?.uid ?: error("Sign in required")
         val cleanName = name.trim().replace(Regex("\\s+"), " ").take(60).ifBlank { "Saved search" }
         val items = db.collection("savedSearches").document(uid).collection("items")
-        // Keep the feature intentionally bounded so an account cannot create an unmanageable list.
         val existing = items.limit(MAX_SAVED_SEARCHES.toLong()).get().await()
         if (existing.size() >= MAX_SAVED_SEARCHES) error("You can keep up to $MAX_SAVED_SEARCHES saved searches.")
         val ref = items.document()
@@ -82,11 +77,30 @@ class SavedSearchRepository @Inject constructor(
         db.collection("savedSearches").document(uid).collection("items").document(id).delete().await()
     }
 
-    // Local methods are kept for older installations while the account-level Firestore model is
-    // rolled out. New production UI uses saveRemote/observeRemote/deleteRemote.
+    /**
+     * Legacy Room compatibility intentionally stores only the v18 columns. New production UI uses
+     * Firestore saved searches, which preserve the complete MatchFilter without a Room migration.
+     */
     suspend fun save(userId: Long, name: String, filter: MatchFilter) = withContext(Dispatchers.IO) {
-        val cleanName = name.trim().take(60).ifBlank { "Saved search" }
-        dao.save(entityFrom(userId, cleanName, filter))
+        dao.save(
+            SavedSearchEntity(
+                userId = userId,
+                name = name.trim().take(60).ifBlank { "Saved search" },
+                minAge = filter.ageMin,
+                maxAge = filter.ageMax,
+                city = filter.city,
+                state = filter.state,
+                religions = filter.religion,
+                castes = filter.caste,
+                motherTongues = filter.motherTongue,
+                diet = filter.diet,
+                smoking = filter.smoking,
+                drinking = filter.drinking,
+                incomeBand = filter.incomeMin,
+                education = filter.educationLevel,
+                maritalStatus = filter.maritalStatus
+            )
+        )
     }
 
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) { dao.deleteById(id) }
@@ -97,46 +111,14 @@ class SavedSearchRepository @Inject constructor(
         city = entity.city,
         state = entity.state,
         caste = entity.castes,
-        minScore = entity.minScore,
         religion = entity.religions,
         motherTongue = entity.motherTongues,
         maritalStatus = entity.maritalStatus,
-        verifiedOnly = entity.verifiedOnly,
         incomeMin = entity.incomeBand,
-        incomeMax = entity.incomeMax,
         educationLevel = entity.education,
         diet = entity.diet,
-        residentialStatus = entity.residentialStatus,
-        hasChildren = entity.hasChildren,
-        keyword = entity.keyword,
-        gothra = entity.gothra,
-        nativeState = entity.nativeState,
-        countryOfResidence = entity.countryOfResidence,
-        nriOnly = entity.nriOnly,
-        willingToRelocate = entity.willingToRelocate,
-        recentlyJoinedDays = entity.recentlyJoinedDays,
         smoking = entity.smoking,
-        drinking = entity.drinking,
-        familyType = entity.familyType,
-        familyStatus = entity.familyStatus,
-        physicalStatus = entity.physicalStatus,
-        hasChildrenFilter = entity.hasChildrenFilter,
-        citizenship = entity.citizenship,
-        nriStatus = entity.nriStatus,
-        educationField = entity.educationField,
-        occupationCategory = entity.occupationCategory,
-        employerType = entity.employerType,
-        subCaste = entity.subCaste,
-        nakshatra = entity.nakshatra,
-        rasi = entity.rasi,
-        manglik = entity.manglik,
-        hobbies = entity.hobbies,
-        withPhotoOnly = entity.withPhotoOnly,
-        verifiedLevel = entity.verifiedLevel,
-        premiumOnly = entity.premiumOnly,
-        lastActiveWithinDays = entity.lastActiveWithinDays,
-        minPoruthamScore = entity.minPoruthamScore,
-        hasHoroscope = entity.hasHoroscope
+        drinking = entity.drinking
     )
 
     private fun filterToMap(f: MatchFilter): Map<String, Any> = mapOf(
@@ -189,33 +171,9 @@ class SavedSearchRepository @Inject constructor(
         hasHoroscope = string(data, "hasHoroscope")
     )
 
-    private fun entityFrom(userId: Long, name: String, filter: MatchFilter) = SavedSearchEntity(
-        userId = userId, name = name, minAge = filter.ageMin, maxAge = filter.ageMax,
-        city = filter.city, state = filter.state, religions = filter.religion, castes = filter.caste,
-        motherTongues = filter.motherTongue, diet = filter.diet, smoking = filter.smoking,
-        drinking = filter.drinking, incomeBand = filter.incomeMin, education = filter.educationLevel,
-        maritalStatus = filter.maritalStatus, subCaste = filter.subCaste, minScore = filter.minScore,
-        verifiedOnly = filter.verifiedOnly, incomeMax = filter.incomeMax,
-        residentialStatus = filter.residentialStatus, hasChildren = filter.hasChildren,
-        keyword = filter.keyword, gothra = filter.gothra, nativeState = filter.nativeState,
-        countryOfResidence = filter.countryOfResidence, nriOnly = filter.nriOnly,
-        willingToRelocate = filter.willingToRelocate, recentlyJoinedDays = filter.recentlyJoinedDays,
-        familyType = filter.familyType, familyStatus = filter.familyStatus,
-        physicalStatus = filter.physicalStatus, hasChildrenFilter = filter.hasChildrenFilter,
-        citizenship = filter.citizenship, nriStatus = filter.nriStatus,
-        educationField = filter.educationField, occupationCategory = filter.occupationCategory,
-        employerType = filter.employerType, nakshatra = filter.nakshatra, rasi = filter.rasi,
-        manglik = filter.manglik, hobbies = filter.hobbies, withPhotoOnly = filter.withPhotoOnly,
-        verifiedLevel = filter.verifiedLevel, premiumOnly = filter.premiumOnly,
-        lastActiveWithinDays = filter.lastActiveWithinDays, minPoruthamScore = filter.minPoruthamScore,
-        hasHoroscope = filter.hasHoroscope
-    )
-
     private fun string(data: Map<String, Any?>, key: String) = data[key] as? String ?: ""
     private fun bool(data: Map<String, Any?>, key: String) = data[key] as? Boolean ?: false
     private fun int(data: Map<String, Any?>, key: String) = (data[key] as? Number)?.toInt() ?: 0
 
-    private companion object {
-        const val MAX_SAVED_SEARCHES = 20
-    }
+    private companion object { const val MAX_SAVED_SEARCHES = 20 }
 }
