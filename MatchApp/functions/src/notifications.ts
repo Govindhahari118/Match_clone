@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import { db, getFcmToken, messaging } from "./shared";
 
 export const onInterestCreated = functions.firestore
