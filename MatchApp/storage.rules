@@ -2,18 +2,26 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
+    function profileHiddenFrom(ownerUid, viewerUid) {
+      return firestore.exists(/databases/(default)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)) &&
+        firestore.get(/databases/(default)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.get('profileHidden', false) == true;
+    }
+    function ownerMediaReadable(uid) {
+      return signedIn() && (request.auth.uid == uid || !profileHiddenFrom(uid, request.auth.uid));
+    }
+
     match /photos/{uid}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if ownerMediaReadable(uid);
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /videos/{uid}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if ownerMediaReadable(uid);
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /voicebios/{uid}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if ownerMediaReadable(uid);
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
