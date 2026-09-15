@@ -73,6 +73,15 @@ class MatchFcmService : FirebaseMessagingService() {
             "subscription_expiry", "profile_viewed", "profile_incomplete", "inactivity_nudge" -> CH_SYSTEM
             else -> CHANNEL_ID
         }
+
+        private fun localType(remoteType: String): String = when (remoteType) {
+            "interest_received", "like" -> "INTEREST"
+            "new_match", "mutual_match", "daily_match" -> "MATCH"
+            "message" -> "MESSAGE"
+            "profile_viewed" -> "VIEW"
+            "verification", "verification_update" -> "VERIFICATION"
+            else -> remoteType.uppercase()
+        }
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -87,24 +96,41 @@ class MatchFcmService : FirebaseMessagingService() {
                 profileService.saveFcmToken(uid, token)
                 getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
                     .edit().remove("pending_fcm_token").apply()
-            } catch (e: Exception) {
-                Log.w("MatchFcm", "FCM token sync failed; retained for retry", e)
+            } catch (error: Exception) {
+                Log.w("MatchFcm", "FCM token sync failed; retained for retry", error)
             }
         }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        val title = message.data["title"] ?: message.notification?.title ?: "MatrimonyConnect"
-        val body = message.data["body"] ?: message.notification?.body ?: ""
         val type = message.data["type"] ?: "general"
+        val title = message.data["title"] ?: message.notification?.title ?: "MatrimonyConnect"
+        val body = message.data["body"] ?: message.notification?.body ?: "Open the app for details"
         val fromFirebaseUid = message.data["peer_uid"] ?: message.data["user_id"]
 
         serviceScope.launch {
-            val localPeer = fromFirebaseUid?.let { userDao.findByFirebaseUid(it)?.id }
+            val localPeer = fromFirebaseUid?.let { resolveLocalPeerId(it) }
             showNotification(title, body, type, localPeer, localPeer)
-            persistNotification(type, title, body, localPeer)
+            persistNotification(localType(type), title, body, localPeer)
         }
+    }
+
+    /**
+     * A push may arrive on a freshly installed second device before that peer has ever been cached.
+     * Hydrate the public profile so notification taps can navigate using the stable local Room id.
+     */
+    private suspend fun resolveLocalPeerId(firebaseUid: String): Long? {
+        userDao.findByFirebaseUid(firebaseUid)?.let { return it.id }
+        val remote = runCatching { profileService.fetchProfileFromServer(firebaseUid) }.getOrNull() ?: return null
+        val cached = remote.copy(
+            email = "$firebaseUid@cache.invalid",
+            passwordHash = "",
+            isSeed = false
+        )
+        return runCatching { userDao.insert(cached) }
+            .recoverCatching { userDao.findByFirebaseUid(firebaseUid)?.id ?: throw it }
+            .getOrNull()
     }
 
     private suspend fun persistNotification(type: String, title: String, body: String, fromUserId: Long?) {
@@ -113,15 +139,15 @@ class MatchFcmService : FirebaseMessagingService() {
             notifDao.insert(
                 NotificationEntity(
                     userId = currentMyId,
-                    type = type.uppercase(),
+                    type = type,
                     fromUserId = fromUserId,
                     title = title,
                     body = body,
                     isRead = false
                 )
             )
-        } catch (e: Exception) {
-            Log.e("MatchFcm", "Failed to persist notification", e)
+        } catch (error: Exception) {
+            Log.e("MatchFcm", "Failed to persist notification", error)
         }
     }
 
@@ -149,8 +175,7 @@ class MatchFcmService : FirebaseMessagingService() {
         val notificationId = when (type) {
             "message" -> peerId?.hashCode() ?: 1001
             "interest_received" -> userId?.hashCode() ?: 1002
-            "new_match" -> userId?.hashCode() ?: 1003
-            "mutual_match" -> userId?.hashCode() ?: 1005
+            "new_match", "mutual_match" -> userId?.hashCode() ?: 1005
             "profile_viewed" -> 1004
             else -> requestCode
         }
@@ -160,9 +185,9 @@ class MatchFcmService : FirebaseMessagingService() {
             .setSmallIcon(R.mipmap.ic_launcher)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(pendingIntent)
             .build()
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(notificationId, notification)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(notificationId, notification)
     }
 }
