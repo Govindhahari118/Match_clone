@@ -1,7 +1,6 @@
 package com.match.app.ui.i18n
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -20,12 +19,8 @@ class I18nCatalog(
     private val current: Map<String, String>,
     private val english: Map<String, String>
 ) {
-    /** Simple lookup with English and hardcoded fallback. */
-    fun text(key: String, fallback: String): String {
-        val result = current[key] ?: english[key]
-        if (result == null) Log.w("I18n", "Missing key: $key")
-        return result ?: fallback
-    }
+    /** Pure lookup with English and caller-provided fallback; safe in local JVM tests. */
+    fun text(key: String, fallback: String): String = current[key] ?: english[key] ?: fallback
 
     /** Lookup with named-argument interpolation: replaces `{varName}` placeholders. */
     fun text(key: String, args: Map<String, Any>, fallback: String): String {
@@ -43,7 +38,6 @@ class I18nCatalog(
 
 val LocalI18n = staticCompositionLocalOf { I18nCatalog(emptyMap(), emptyMap()) }
 
-// ── Catalog cache — avoids re-loading JSON on every recomposition ───────────
 private val catalogCache = ConcurrentHashMap<String, Map<String, String>>()
 
 @Composable
@@ -61,7 +55,6 @@ fun rememberI18nCatalog(languageCode: String): I18nCatalog {
     return remember(english, selected) { I18nCatalog(selected, english) }
 }
 
-// ── Composable helpers ────────────────────────────────────────────────────────
 @Composable
 fun t(key: String, fallback: String): String = LocalI18n.current.text(key, fallback)
 
@@ -73,7 +66,6 @@ fun t(key: String, args: Map<String, Any>, fallback: String): String =
 fun tp(key: String, count: Int, fallback: String): String =
     LocalI18n.current.plural(key, count, fallback)
 
-// ── JSON loader with in-memory cache ─────────────────────────────────────────
 private suspend fun loadCatalog(context: Context, code: String): Map<String, String> =
     withContext(Dispatchers.IO) {
         catalogCache.getOrPut(code) {
