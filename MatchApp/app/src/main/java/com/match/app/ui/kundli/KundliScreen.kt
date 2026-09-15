@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.core.matching.Astrology
 import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.KundliRepository
 import com.match.app.data.session.SessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,8 @@ data class KundliUi(
 @HiltViewModel
 class KundliViewModel @Inject constructor(
     private val session: SessionStore,
-    private val auth: AuthRepository
+    private val auth: AuthRepository,
+    private val kundliRepository: KundliRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(KundliUi())
     val ui: StateFlow<KundliUi> = _ui.asStateFlow()
@@ -83,36 +85,69 @@ class KundliViewModel @Inject constructor(
             }
 
             if (targetId == meId) {
-                _ui.value = KundliUi(loading = false, myName = me.displayName, myRasi = me.rasi, myNakshatra = me.nakshatra, targetId = targetId, message = "Choose another member to compare.")
+                _ui.value = KundliUi(
+                    loading = false,
+                    myName = me.displayName,
+                    myRasi = me.rasi,
+                    myNakshatra = me.nakshatra,
+                    targetId = targetId,
+                    message = "Choose another member to compare."
+                )
                 return@launch
             }
 
+            // This read itself is server-reauthorized by AuthRepository. It prevents a stale Room
+            // record from becoming a way to access a profile the member has since hidden/blocked.
             val target = auth.currentProfile(targetId)
-            if (target == null) {
-                _ui.value = KundliUi(loading = false, myName = me.displayName, myRasi = me.rasi, myNakshatra = me.nakshatra, targetId = targetId, message = "This profile is unavailable.")
+            if (target == null || target.firebaseUid.isBlank()) {
+                _ui.value = KundliUi(
+                    loading = false,
+                    myName = me.displayName,
+                    myRasi = me.rasi,
+                    myNakshatra = me.nakshatra,
+                    targetId = targetId,
+                    message = "This profile is unavailable."
+                )
                 return@launch
             }
 
-            val canCompare = target.showHoroscope && me.rasi.isNotBlank() && me.nakshatra.isNotBlank() &&
-                target.rasi.isNotBlank() && target.nakshatra.isNotBlank()
-            _ui.value = KundliUi(
-                loading = false,
-                myName = me.displayName,
-                myRasi = me.rasi,
-                myNakshatra = me.nakshatra,
-                targetName = target.displayName,
-                targetRasi = if (target.showHoroscope) target.rasi else "",
-                targetNakshatra = if (target.showHoroscope) target.nakshatra else "",
-                targetId = targetId,
-                targetAllowsHoroscope = target.showHoroscope,
-                astrologyScore = if (canCompare) Astrology.score(me.rasi, me.nakshatra, target.rasi, target.nakshatra) else null,
-                message = when {
-                    !target.showHoroscope -> "This member chose not to share horoscope details."
-                    me.rasi.isBlank() || me.nakshatra.isBlank() -> "Add your Rasi and Nakshatra before comparing."
-                    target.rasi.isBlank() || target.nakshatra.isBlank() -> "This member has not added enough horoscope information for comparison."
-                    else -> null
+            kundliRepository.getSharedHoroscope(target.firebaseUid)
+                .onSuccess { shared ->
+                    val score = if (shared.available) {
+                        Astrology.score(shared.myRasi, shared.myNakshatra, shared.targetRasi, shared.targetNakshatra)
+                    } else null
+                    _ui.value = KundliUi(
+                        loading = false,
+                        myName = me.displayName,
+                        myRasi = shared.myRasi.ifBlank { me.rasi },
+                        myNakshatra = shared.myNakshatra.ifBlank { me.nakshatra },
+                        targetName = shared.targetName.ifBlank { target.displayName },
+                        targetRasi = if (shared.available) shared.targetRasi else "",
+                        targetNakshatra = if (shared.available) shared.targetNakshatra else "",
+                        targetId = targetId,
+                        targetAllowsHoroscope = shared.reason != "not_shared",
+                        astrologyScore = score,
+                        message = when (shared.reason) {
+                            "not_shared" -> "This member chose not to share horoscope details."
+                            "not_applicable" -> "Kundali comparison is shown only when it is applicable to both members."
+                            "viewer_incomplete" -> "Add your Rasi and Nakshatra before comparing."
+                            "target_incomplete" -> "This member has not added enough horoscope information for comparison."
+                            else -> if (shared.available) null else "Horoscope compatibility is not available for this profile."
+                        }
+                    )
                 }
-            )
+                .onFailure {
+                    _ui.value = KundliUi(
+                        loading = false,
+                        myName = me.displayName,
+                        myRasi = me.rasi,
+                        myNakshatra = me.nakshatra,
+                        targetName = target.displayName,
+                        targetId = targetId,
+                        targetAllowsHoroscope = false,
+                        message = "Kundali details are unavailable for this member right now."
+                    )
+                }
         }
     }
 }
@@ -202,7 +237,7 @@ private fun PairCompatibilityContent(ui: KundliUi, modifier: Modifier) {
             ProfileAstrologyCard(ui.targetName.ifBlank { "Member" }, ui.targetRasi, ui.targetNakshatra)
         }
         ui.message?.let { InfoCard(it) }
-        InfoCard("This comparison uses only the Rasi and Nakshatra information available in the app. It is not a complete birth-chart consultation and should not be treated as a prediction or guarantee.")
+        InfoCard("This comparison uses only the Rasi and Nakshatra information the member has chosen to share. Birth date, time and place remain private here. It is not a complete birth-chart consultation or a prediction/guarantee.")
     }
 }
 
