@@ -63,12 +63,8 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
 }
 
 /**
- * Privacy-safe discovery endpoint.
- *
- * Per-document privacy cannot safely be implemented as a client query because Firestore rules are
- * not filters. This trusted endpoint performs the scan server-side, removes blocks, stealth users
- * and owners who explicitly hid their profile from this viewer, and returns a strict public allowlist.
- * Keyword search is also evaluated here so a hidden member can never be rediscovered by name/handle.
+ * Privacy-safe discovery endpoint. Exact usernames are resolved through a server-only unique
+ * registry, while ordinary name/profile searches are filtered during the activity-ordered scan.
  */
 export const discoverProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
@@ -85,6 +81,7 @@ export const discoverProfiles = functions
     const keyword = typeof data?.keyword === "string"
       ? data.keyword.trim().toLocaleLowerCase("en-IN").slice(0, MAX_KEYWORD_LENGTH)
       : "";
+    const normalizedUsername = keyword.replace(/^@+/, "");
 
     const viewerDoc = await db.collection("users").doc(viewerUid).get();
     if (!viewerDoc.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
@@ -107,7 +104,27 @@ export const discoverProfiles = functions
     ]);
     const outgoing = new Set(outgoingBlocks.docs.map((doc) => doc.id));
 
-    const candidates = scan.docs.filter((doc) => doc.id !== viewerUid && !outgoing.has(doc.id));
+    // On the first page, exact @handle lookup can find a member even when that member is not in
+    // the current activity window. The candidate still passes every privacy/block/gender check.
+    let exactProfile: FirebaseFirestore.DocumentSnapshot | null = null;
+    if (!cursor && normalizedUsername.length >= 3 && /^[a-z0-9][a-z0-9._]{2,29}$/.test(normalizedUsername)) {
+      const registry = await db.collection("usernames").doc(normalizedUsername).get();
+      const exactUid = registry.exists ? stringValue(registry.data()?.uid) : "";
+      if (exactUid && exactUid !== viewerUid && !outgoing.has(exactUid)) {
+        const snap = await db.collection("users").doc(exactUid).get();
+        if (snap.exists) exactProfile = snap;
+      }
+    }
+
+    const candidateById = new Map<string, FirebaseFirestore.DocumentSnapshot>();
+    if (exactProfile) candidateById.set(exactProfile.id, exactProfile);
+    for (const doc of scan.docs) {
+      if (doc.id !== viewerUid && !outgoing.has(doc.id) && !candidateById.has(doc.id)) {
+        candidateById.set(doc.id, doc);
+      }
+    }
+    const candidates = Array.from(candidateById.values());
+
     const reverseBlockRefs = candidates.map((doc) =>
       db.collection("blocks").doc(doc.id).collection("blocked").doc(viewerUid)
     );
@@ -132,7 +149,7 @@ export const discoverProfiles = functions
     for (const doc of candidates) {
       if (profiles.length >= RETURN_LIMIT) break;
       if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
-      const candidate = doc.data();
+      const candidate = doc.data() || {};
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
