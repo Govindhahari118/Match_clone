@@ -19,3 +19,4 @@ export * from "./discovery";
 export * from "./location";
 export * from "./horoscope";
 export * from "./presence";
+export * from "./identity";
