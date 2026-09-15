@@ -1,0 +1,54 @@
+name: Remediate Functions production dependencies
+
+on:
+  push:
+    branches: [Gpt_matree]
+    paths:
+      - .github/workflows/remediate-functions-audit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: MatchApp/functions
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: Gpt_matree
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: MatchApp/functions/package-lock.json
+      - name: Apply non-breaking npm security remediations
+        run: npm audit fix --package-lock-only --omit=dev --no-fund
+      - name: Verify clean install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: TypeScript build
+        run: npm run build
+      - name: Require no high/critical production advisories
+        run: npm audit --omit=dev --audit-level=high
+      - name: Commit remediated lockfile
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- MatchApp/functions/package-lock.json; then
+            echo "No safe lockfile changes were available"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MatchApp/functions/package-lock.json
+          git commit -m "fix(functions): remediate production dependency advisories [skip ci]"
+          git fetch origin Gpt_matree
+          git rebase origin/Gpt_matree
+          git push origin HEAD:Gpt_matree
