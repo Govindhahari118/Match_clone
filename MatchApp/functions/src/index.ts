@@ -18,3 +18,4 @@ export * from "./verification";
 export * from "./discovery";
 export * from "./location";
 export * from "./horoscope";
+export * from "./presence";
