@@ -22,6 +22,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE firebaseUid = :uid LIMIT 1")
     suspend fun findByFirebaseUid(uid: String): UserEntity?
 
+    @Query("SELECT * FROM users WHERE lower(username) = lower(:username) LIMIT 1")
+    suspend fun findByUsername(username: String): UserEntity?
+
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     fun observeById(id: Long): Flow<UserEntity?>
 
