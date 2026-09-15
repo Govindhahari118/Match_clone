@@ -2,6 +2,7 @@ package com.match.app.data.repo
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.match.app.data.local.dao.SavedSearchDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.domain.model.MatchFilter
@@ -28,6 +29,7 @@ class SavedSearchRepository @Inject constructor(
 ) {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
     /** Legacy local cache flow retained only for existing installs and old callers. */
     fun observeForUser(userId: Long): Flow<List<SavedSearchEntity>> = dao.observeForUser(userId)
@@ -60,21 +62,30 @@ class SavedSearchRepository @Inject constructor(
         awaitClose { registration.remove() }
     }
 
+    /**
+     * Creation is server-authoritative so a modified client cannot bypass the per-account quota or
+     * store an unexpected filter schema. The callable sanitizes all values and atomically updates
+     * the saved-search counter.
+     */
     suspend fun saveRemote(name: String, filter: MatchFilter): String = withContext(Dispatchers.IO) {
-        val uid = auth.currentUser?.uid ?: error("Sign in required")
+        check(auth.currentUser != null) { "Sign in required" }
         val cleanName = name.trim().replace(Regex("\\s+"), " ").take(60).ifBlank { "Saved search" }
-        val items = db.collection("savedSearches").document(uid).collection("items")
-        val existing = items.limit(MAX_SAVED_SEARCHES.toLong()).get().await()
-        if (existing.size() >= MAX_SAVED_SEARCHES) error("You can keep up to $MAX_SAVED_SEARCHES saved searches.")
-        val ref = items.document()
-        ref.set(filterToMap(filter) + mapOf("name" to cleanName, "createdAt" to System.currentTimeMillis())).await()
-        ref.id
+        val response = functions.getHttpsCallable("saveSavedSearch")
+            .call(mapOf("name" to cleanName, "filter" to filterToMap(filter)))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val result = response.data as? Map<String, Any?> ?: error("Invalid saved-search response")
+        (result["id"] as? String)?.takeIf { it.isNotBlank() } ?: error("Saved-search id missing")
     }
 
+    /** Deletion also goes through the trusted backend so quota metadata stays transactionally correct. */
     suspend fun deleteRemote(id: String) = withContext(Dispatchers.IO) {
-        val uid = auth.currentUser?.uid ?: error("Sign in required")
+        check(auth.currentUser != null) { "Sign in required" }
         require(id.isNotBlank()) { "Invalid saved search" }
-        db.collection("savedSearches").document(uid).collection("items").document(id).delete().await()
+        functions.getHttpsCallable("deleteSavedSearch")
+            .call(mapOf("id" to id))
+            .await()
+        Unit
     }
 
     /**
@@ -174,6 +185,4 @@ class SavedSearchRepository @Inject constructor(
     private fun string(data: Map<String, Any?>, key: String) = data[key] as? String ?: ""
     private fun bool(data: Map<String, Any?>, key: String) = data[key] as? Boolean ?: false
     private fun int(data: Map<String, Any?>, key: String) = (data[key] as? Number)?.toInt() ?: 0
-
-    private companion object { const val MAX_SAVED_SEARCHES = 20 }
 }
