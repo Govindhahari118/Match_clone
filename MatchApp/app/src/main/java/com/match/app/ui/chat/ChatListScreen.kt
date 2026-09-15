@@ -15,10 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.platformLocale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -191,7 +189,7 @@ fun ChatListScreen(
 
 @Composable
 private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
-    val locale = LocalLocale.current.platformLocale
+    val locale = Locale.getDefault()
     val time = remember(conv.lastAt, locale) { messageTime(conv.lastAt, locale) }
     val activity = remember(conv.lastActiveAt) { ActivityStatusHelper.from(conv.lastActiveAt) }
 
