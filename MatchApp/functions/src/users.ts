@@ -250,15 +250,22 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("invalid-argument", "A valid target profile is required");
   }
 
-  const [target, viewerBlocked, targetBlocked, targetPrivacy] = await Promise.all([
+  const [target, viewerBlocked, targetBlocked, targetPrivacy, viewerPrivacy] = await Promise.all([
     db.collection("users").doc(viewedUid).get(),
     db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
     db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
     db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
+    db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid).get(),
   ]);
   if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-  if (target.data()?.stealthMode === true || viewerBlocked.exists || targetBlocked.exists || targetPrivacy.data()?.profileHidden === true) {
-    throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
+  if (
+    target.data()?.stealthMode === true ||
+    viewerBlocked.exists ||
+    targetBlocked.exists ||
+    targetPrivacy.data()?.profileHidden === true ||
+    viewerPrivacy.data()?.profileHidden === true
+  ) {
+    throw new functions.https.HttpsError("permission-denied", "Profile view is unavailable for this privacy relationship");
   }
 
   const day = new Date().toISOString().slice(0, 10);
@@ -283,8 +290,11 @@ export const onProfileViewed = functions.firestore
     const viewerUid = data.viewerUid as string;
     if (!viewedUid || !viewerUid || viewedUid === viewerUid) return;
 
-    const privacy = await db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get();
-    if (privacy.data()?.profileHidden === true) {
+    const [targetPrivacy, viewerPrivacy] = await Promise.all([
+      db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
+      db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid).get(),
+    ]);
+    if (targetPrivacy.data()?.profileHidden === true || viewerPrivacy.data()?.profileHidden === true) {
       await snap.ref.delete();
       return;
     }
