@@ -36,6 +36,11 @@ data class NearbyProfile(
     val distanceKm: Double
 )
 
+data class NearbySharingStatus(
+    val sharing: Boolean,
+    val updatedAtMillis: Long
+)
+
 @Singleton
 class LocationRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -54,8 +59,19 @@ class LocationRepository @Inject constructor(
 
     fun isLocationServiceEnabled(): Boolean = LocationManagerCompat.isLocationEnabled(locationManager)
 
+    /** Server-side status contains no coordinates and lets Stop sharing remain effective across app restarts. */
+    suspend fun getSharingStatus(): NearbySharingStatus = withContext(Dispatchers.IO) {
+        val response = functions.getHttpsCallable("getNearbyStatus").call().await()
+        @Suppress("UNCHECKED_CAST")
+        val data = response.data as? Map<String, Any?> ?: error("Invalid Nearby status response")
+        NearbySharingStatus(
+            sharing = data["sharing"] as? Boolean ?: false,
+            updatedAtMillis = (data["updatedAtMillis"] as? Number)?.toLong() ?: 0L
+        )
+    }
+
     /**
-     * Gets one fresh foreground location only when Nearby is explicitly used.
+     * Gets one fresh foreground location only when Nearby is explicitly enabled or refreshed.
      * Background tracking is intentionally not used.
      */
     suspend fun currentLocation(): Location {
@@ -88,6 +104,7 @@ class LocationRepository @Inject constructor(
         }
     }
 
+    /** Explicit opt-in/refresh path: acquire current foreground location, then query Nearby. */
     suspend fun refreshAndFindNearby(radiusKm: Int): List<NearbyProfile> = withContext(Dispatchers.IO) {
         val location = currentLocation()
         updateRemoteLocation(location)
@@ -125,8 +142,9 @@ class LocationRepository @Inject constructor(
         }.sortedBy { it.distanceKm }
     }
 
-    suspend fun stopSharingLocation() {
+    suspend fun stopSharingLocation() = withContext(Dispatchers.IO) {
         functions.getHttpsCallable("clearMyLocation").call().await()
+        Unit
     }
 
     private suspend fun updateRemoteLocation(location: Location) {
