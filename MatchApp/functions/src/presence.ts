@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 
 const MIN_HEARTBEAT_INTERVAL_MS = 60_000;
