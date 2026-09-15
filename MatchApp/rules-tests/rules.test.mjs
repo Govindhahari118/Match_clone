@@ -201,6 +201,25 @@ test('profile photo upload is owner-only', async () => {
   await assertFails(uploadBytes(ref(bobStorage, 'photos/alice/attack.jpg'), bytes, { contentType: 'image/jpeg' }));
 });
 
+test('hidden member cannot read profile photo while owner still can', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const object = ref(aliceStorage, 'photos/alice/private-profile.jpg');
+  const bytes = new Uint8Array([8, 6, 7, 5, 3, 0, 9]);
+
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(getBytes(object));
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
+
+  await assertSucceeds(setDoc(doc(aliceDb, 'privacyRelations/alice/members/bob'), {
+    memberUid: 'bob', profileHidden: true, updatedAt: new Date(),
+  }));
+
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
+  await assertSucceeds(getBytes(object));
+});
+
 test('verification documents cannot be read by another client', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
