@@ -1,0 +1,55 @@
+name: Refresh Functions Lockfile
+
+on:
+  push:
+    branches: [Gpt_matree]
+    paths:
+      - MatchApp/functions/package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: functions-lock-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: MatchApp/functions
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: Gpt_matree
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: MatchApp/functions/package-lock.json
+      - name: Regenerate deterministic lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify clean install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: TypeScript build
+        run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Commit regenerated lockfile
+        shell: bash
+        working-directory: .
+        run: |
+          if git diff --quiet -- MatchApp/functions/package-lock.json; then
+            echo "Lockfile already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MatchApp/functions/package-lock.json
+          git commit -m "chore(functions): refresh dependency lockfile [skip ci]"
+          git push origin HEAD:Gpt_matree
