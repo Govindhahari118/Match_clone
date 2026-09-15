@@ -19,10 +19,14 @@ import androidx.lifecycle.lifecycleScope
 import com.match.app.core.config.RemoteConfigManager
 import com.match.app.core.update.InAppUpdateManager
 import com.match.app.data.billing.PlayBillingManager
+import com.match.app.data.repo.PresenceRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.MatchRoot
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,9 +37,11 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var playBilling: PlayBillingManager
     @Inject lateinit var inAppUpdateManager: InAppUpdateManager
     @Inject lateinit var remoteConfig: RemoteConfigManager
+    @Inject lateinit var presenceRepository: PresenceRepository
 
     private var isPermissionPromptInFlight = false
     private var isBiometricPromptShowing = false
+    private var presenceJob: Job? = null
     private val requestNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isPermissionPromptInFlight = false }
 
     var pendingDeepLink: String? = null
@@ -62,9 +68,26 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         if (isPermissionPromptInFlight || isBiometricPromptShowing) return
         lifecycleScope.launch { session.touchActivity() }
+        startPresenceHeartbeat()
         lifecycleScope.launch { if (session.biometricLock.first()) showBiometricPrompt() }
         playBilling.connect()
         inAppUpdateManager.checkForUpdate(activity = this, forceUpdateVersionCode = remoteConfig.forceUpdateVersionCode)
+    }
+
+    override fun onPause() {
+        presenceJob?.cancel()
+        presenceJob = null
+        super.onPause()
+    }
+
+    private fun startPresenceHeartbeat() {
+        if (presenceJob?.isActive == true) return
+        presenceJob = lifecycleScope.launch {
+            while (isActive) {
+                presenceRepository.heartbeat()
+                delay(PRESENCE_HEARTBEAT_INTERVAL_MS)
+            }
+        }
     }
 
     private fun showBiometricPrompt() {
@@ -123,5 +146,9 @@ class MainActivity : FragmentActivity() {
             isPermissionPromptInFlight = true
             requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    private companion object {
+        const val PRESENCE_HEARTBEAT_INTERVAL_MS = 2L * 60L * 1000L
     }
 }
