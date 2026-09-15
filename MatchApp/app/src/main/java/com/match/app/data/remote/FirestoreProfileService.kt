@@ -35,11 +35,12 @@ class FirestoreProfileService @Inject constructor(
         private val SERVER_OWNED_FIELDS = setOf(
             "isPremium", "isVerified", "matrimonyId", "verificationLevel",
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
-            "paymentId", "contactsRevealedThisMonth", "contactsResetAt"
+            "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
+            "username", "usernameNormalized", "lastActiveAt"
         )
         private val PRIVATE_FIELDS = setOf(
             "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
-            "manglik", "birthTime", "birthPlace", "incomeBand", "lastActiveAt"
+            "manglik", "birthTime", "birthPlace", "incomeBand"
         )
     }
 
@@ -85,7 +86,7 @@ class FirestoreProfileService @Inject constructor(
 
     /**
      * Update profile fields without ever permitting the Android client to mutate
-     * billing/verification authority. Sensitive owner fields are routed to userPrivate.
+     * billing/verification/identity authority. Sensitive owner fields are routed to userPrivate.
      */
     suspend fun updateFields(firebaseUid: String, fields: Map<String, Any?>) {
         if (firebaseUid.isBlank() || fields.isEmpty()) return
@@ -103,11 +104,6 @@ class FirestoreProfileService @Inject constructor(
     /** Fetch one profile. Private data is merged only when the signed-in owner is reading it. */
     suspend fun fetchProfile(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.DEFAULT)
 
-    /**
-     * Force a server authorization round-trip before using an already-cached member profile.
-     * This is used by privacy-sensitive surfaces such as request/inbox hydration where a stale
-     * local or Firestore cache must not keep showing someone after a new hide/block/stealth rule.
-     */
     suspend fun fetchProfileFromServer(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.SERVER)
 
     private suspend fun fetchProfile(firebaseUid: String, source: Source): UserEntity? {
@@ -218,7 +214,6 @@ class FirestoreProfileService @Inject constructor(
         "birthTime" to e.birthTime,
         "birthPlace" to e.birthPlace,
         "incomeBand" to e.incomeBand,
-        "lastActiveAt" to e.lastActiveAt,
         "updatedAt" to System.currentTimeMillis()
     )
 
@@ -374,6 +369,7 @@ class FirestoreProfileService @Inject constructor(
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
         subscriptionExpiry = (data["subscriptionExpiry"] as? Number)?.toLong() ?: 0L,
-        matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f
+        matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f,
+        username = data["username"] as? String ?: ""
     )
 }
