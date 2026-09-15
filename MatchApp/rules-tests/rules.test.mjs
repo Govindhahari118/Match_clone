@@ -102,6 +102,41 @@ test('blocking prevents new interests in either direction', async () => {
   }));
 });
 
+test('profile hiding denies that member profile read and new interest', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'privacyRelations/alice/members/bob'), {
+    memberUid: 'bob', profileHidden: true, updatedAt: new Date(),
+  }));
+  await assertFails(getDoc(doc(bobDb, 'users/alice')));
+  await assertFails(setDoc(doc(bobDb, 'interests/bob_alice'), {
+    fromUid: 'bob', toUid: 'alice', isSuperLike: false, createdAt: new Date(),
+  }));
+  await assertSucceeds(getDoc(doc(aliceDb, 'privacyRelations/alice/members/bob')));
+  await assertFails(getDoc(doc(bobDb, 'privacyRelations/alice/members/bob')));
+});
+
+test('contact-only exception does not hide the profile', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'privacyRelations/alice/members/bob'), {
+    memberUid: 'bob', contactHidden: true, updatedAt: new Date(),
+  }));
+  await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
+});
+
+test('only owner can configure global contact visibility', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'privacySettings/alice'), {
+    contactVisibility: 'nobody', updatedAt: new Date(),
+  }));
+  await assertFails(setDoc(doc(bobDb, 'privacySettings/alice'), {
+    contactVisibility: 'mutual_matches', updatedAt: new Date(),
+  }));
+  await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
+});
+
 test('chat thread requires mutual interest and stops after a block', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
