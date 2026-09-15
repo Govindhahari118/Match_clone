@@ -6,8 +6,22 @@ service firebase.storage {
       return firestore.exists(/databases/(default)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)) &&
         firestore.get(/databases/(default)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.get('profileHidden', false) == true;
     }
+    function blockedEitherWay(uidA, uidB) {
+      return firestore.exists(/databases/(default)/documents/blocks/$(uidA)/blocked/$(uidB)) ||
+        firestore.exists(/databases/(default)/documents/blocks/$(uidB)/blocked/$(uidA));
+    }
+    function explicitInterestFrom(ownerUid, viewerUid) {
+      return firestore.exists(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid));
+    }
     function ownerMediaReadable(uid) {
-      return signedIn() && (request.auth.uid == uid || !profileHiddenFrom(uid, request.auth.uid));
+      return signedIn() && (
+        request.auth.uid == uid ||
+        (firestore.exists(/databases/(default)/documents/users/$(uid)) &&
+          !blockedEitherWay(request.auth.uid, uid) &&
+          !profileHiddenFrom(uid, request.auth.uid) &&
+          (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
+            explicitInterestFrom(uid, request.auth.uid)))
+      );
     }
 
     match /photos/{uid}/{allPaths=**} {
