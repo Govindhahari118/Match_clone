@@ -40,6 +40,7 @@ class FirestorePagingSource(
             "ageMax" to filter.ageMax
         )
         params.key?.takeIf { it.isNotBlank() }?.let { payload["cursor"] = it }
+        filter.keyword.trim().takeIf { it.isNotBlank() }?.let { payload["keyword"] = it.take(64) }
 
         val response = functions.getHttpsCallable("discoverProfiles")
             .call(payload)
@@ -57,8 +58,6 @@ class FirestorePagingSource(
             if (uid.isBlank() || uid == myUid || uid in blockedUids) return@mapNotNull null
             val entity = mapToEntity(uid, raw)
 
-            // Defence in depth: the callable already enforces mutual gender preference, block state,
-            // stealth visibility and age bounds. Re-check non-security search filters locally.
             if (!matchesGenderPreference(entity)) return@mapNotNull null
             if (entity.age !in filter.ageMin..filter.ageMax) return@mapNotNull null
             if (!matchesText(filter.city, entity.city)) return@mapNotNull null
@@ -92,10 +91,17 @@ class FirestorePagingSource(
             if (!matchesText(filter.manglik, entity.manglik)) return@mapNotNull null
             if (filter.hobbies.isNotBlank() && !entity.hobbies.contains(filter.hobbies, true)) return@mapNotNull null
             if (filter.keyword.isNotBlank()) {
-                val keyword = filter.keyword
-                if (!entity.displayName.contains(keyword, true) &&
-                    !entity.bio.contains(keyword, true) &&
-                    !entity.profession.contains(keyword, true)) return@mapNotNull null
+                val keyword = filter.keyword.trim().removePrefix("@").lowercase()
+                val searchable = listOf(
+                    entity.displayName,
+                    entity.username,
+                    entity.matrimonyId,
+                    entity.bio,
+                    entity.profession,
+                    entity.city,
+                    entity.state
+                )
+                if (searchable.none { it.lowercase().contains(keyword) }) return@mapNotNull null
             }
             if (filter.hasChildren.isNotBlank() && !filter.hasChildren.equals("Any", true) &&
                 (filter.hasChildren.equals("Yes", true) != entity.hasChildren)) return@mapNotNull null
@@ -228,6 +234,7 @@ class FirestorePagingSource(
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
         subscriptionExpiry = (data["subscriptionExpiry"] as? Number)?.toLong() ?: 0L,
-        matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f
+        matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f,
+        username = data["username"] as? String ?: ""
     )
 }
