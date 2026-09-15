@@ -37,11 +37,9 @@ import javax.inject.Inject
 
 enum class InterestTab { RECEIVED, SENT, MUTUAL }
 
-data class InterestUi(
-    val tab: InterestTab = InterestTab.RECEIVED,
-    val received: List<UserProfile> = emptyList(),
-    val sent: List<UserProfile> = emptyList(),
-    val mutual: List<UserProfile> = emptyList()
+data class InterestActionState(
+    val busyId: Long? = null,
+    val message: String? = null
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -52,36 +50,47 @@ class InterestsViewModel @Inject constructor(
     private val userDao: UserDao
 ) : ViewModel() {
     private val _tab = MutableStateFlow(InterestTab.RECEIVED)
-    val tab: StateFlow<InterestTab> = _tab
+    val tab: StateFlow<InterestTab> = _tab.asStateFlow()
 
-    /** Firestore is authoritative so the inbox remains correct on a fresh/second device. */
+    private val _actions = MutableStateFlow(InterestActionState())
+    val actions: StateFlow<InterestActionState> = _actions.asStateFlow()
+
     val received: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { uid ->
-            social.observeReceivedInterestsRemote(uid).map { ids ->
-                ids.mapNotNull { userDao.findById(it)?.toProfile() }
-            }
+            social.observeReceivedInterestsRemote(uid).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val sent: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { uid ->
-            social.observeSentInterestsRemote(uid).map { ids ->
-                ids.mapNotNull { userDao.findById(it)?.toProfile() }
-            }
+            social.observeSentInterestsRemote(uid).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val mutual: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { uid ->
-            social.observeMutualIdsRemote(uid).map { ids ->
-                ids.mapNotNull { userDao.findById(it)?.toProfile() }
-            }
+            social.observeMutualIdsRemote(uid).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun setTab(t: InterestTab) { _tab.value = t }
 
     fun accept(targetId: Long) = viewModelScope.launch {
+        if (_actions.value.busyId != null) return@launch
         val me = session.userId.first() ?: return@launch
+        _actions.value = InterestActionState(busyId = targetId)
         runCatching { social.like(me, targetId) }
+            .onSuccess { _actions.value = InterestActionState(message = "Interest accepted. You are now matched.") }
+            .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not accept this request.") }
     }
+
+    fun decline(targetId: Long) = viewModelScope.launch {
+        if (_actions.value.busyId != null) return@launch
+        val me = session.userId.first() ?: return@launch
+        _actions.value = InterestActionState(busyId = targetId)
+        runCatching { social.declineIncoming(me, targetId) }
+            .onSuccess { _actions.value = InterestActionState(message = "Request declined.") }
+            .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not decline this request.") }
+    }
+
+    fun clearMessage() { _actions.update { it.copy(message = null) } }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
         id = id,
@@ -110,7 +119,8 @@ class InterestsViewModel @Inject constructor(
         photoUrl = photoUrl,
         verificationLevel = verificationLevel,
         subscriptionPlan = subscriptionPlan,
-        subscriptionExpiry = subscriptionExpiry
+        subscriptionExpiry = subscriptionExpiry,
+        showHoroscope = showHoroscope
     )
 }
 
@@ -118,6 +128,7 @@ class InterestsViewModel @Inject constructor(
 @Composable
 fun InterestsScreen(
     onOpenProfile: (Long) -> Unit = {},
+    onCheckKundli: (Long) -> Unit = {},
     onOpenChat: (Long) -> Unit = {},
     vm: InterestsViewModel = hiltViewModel()
 ) {
@@ -125,8 +136,18 @@ fun InterestsScreen(
     val received by vm.received.collectAsState()
     val sent by vm.sent.collectAsState()
     val mutual by vm.mutual.collectAsState()
+    val actions by vm.actions.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(actions.message) {
+        actions.message?.let {
+            snackbar.showSnackbar(it)
+            vm.clearMessage()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(t("interests", "Interests")) },
@@ -135,9 +156,7 @@ fun InterestsScreen(
                         BadgedBox(
                             badge = { Badge(containerColor = MaterialTheme.colorScheme.error) { Text("${received.size}") } },
                             modifier = Modifier.padding(end = 16.dp)
-                        ) {
-                            Icon(Icons.Filled.MoveToInbox, contentDescription = "Pending interests")
-                        }
+                        ) { Icon(Icons.Filled.MoveToInbox, contentDescription = "Pending interests") }
                     }
                 }
             )
@@ -149,10 +168,7 @@ fun InterestsScreen(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Row(
-                    Modifier.padding(16.dp, 12.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
+                Row(Modifier.padding(16.dp, 12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     InterestStatItem("${received.size}", t("received", "Received"), MaterialTheme.colorScheme.error)
                     InterestStatItem("${mutual.size}", t("mutual", "Mutual"), MaterialTheme.colorScheme.primary)
                     InterestStatItem("${sent.size}", t("sent", "Sent"), MaterialTheme.colorScheme.tertiary)
@@ -177,6 +193,7 @@ fun InterestsScreen(
                     )
                 }
             }
+
             val list = when (tab) {
                 InterestTab.RECEIVED -> received
                 InterestTab.SENT -> sent
@@ -194,7 +211,7 @@ fun InterestsScreen(
                         Text(msg, style = MaterialTheme.typography.titleMedium)
                         Text(
                             when (tab) {
-                                InterestTab.RECEIVED -> t("interests_received_hint", "When someone likes you, they'll appear here")
+                                InterestTab.RECEIVED -> "Review their profile and Kundali before accepting if you want."
                                 InterestTab.SENT -> t("interests_sent_hint", "Like someone from Matches to send an interest")
                                 InterestTab.MUTUAL -> t("interests_mutual_hint", "Mutual interests appear when you both like each other")
                             },
@@ -213,9 +230,12 @@ fun InterestsScreen(
                         InterestCard(
                             profile = p,
                             tab = tab,
+                            busy = actions.busyId == p.id,
                             onOpen = { onOpenProfile(p.id) },
+                            onKundli = { onCheckKundli(p.id) },
                             onChat = { onOpenChat(p.id) },
-                            onAccept = { vm.accept(p.id) }
+                            onAccept = { vm.accept(p.id) },
+                            onDecline = { vm.decline(p.id) }
                         )
                     }
                 }
@@ -236,9 +256,12 @@ private fun InterestStatItem(value: String, label: String, color: Color) {
 private fun InterestCard(
     profile: UserProfile,
     tab: InterestTab,
+    busy: Boolean,
     onOpen: () -> Unit,
+    onKundli: () -> Unit,
     onChat: () -> Unit,
-    onAccept: () -> Unit
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
 ) {
     ElevatedCard(
         onClick = onOpen,
@@ -261,46 +284,64 @@ private fun InterestCard(
                     Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(gradColors)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        profile.displayName.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("${profile.displayName}, ${profile.age}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        if (profile.isVerified) Icon(Icons.Filled.Verified, null, Modifier.size(14.dp), tint = Color(0xFF1976D2))
-                        if (profile.isPremium) Icon(Icons.Filled.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFB300))
+                        if (profile.isVerified) Icon(Icons.Filled.Verified, "Verified", Modifier.size(14.dp), tint = Color(0xFF1976D2))
+                        if (profile.isPremium) Icon(Icons.Filled.Star, "Premium", Modifier.size(14.dp), tint = Color(0xFFFFB300))
                     }
                     Text("${profile.city} • ${profile.profession}", style = MaterialTheme.typography.bodySmall)
                     Text("${profile.religion} • ${profile.motherTongue}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+
             if (tab == InterestTab.RECEIVED) {
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = onAccept,
-                    modifier = Modifier.fillMaxWidth().testTag("interest_accept_${profile.id}")
-                ) {
-                    Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(t("accept", "Accept"))
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onOpen, enabled = !busy, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Person, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Profile")
+                    }
+                    OutlinedButton(
+                        onClick = onKundli,
+                        enabled = !busy && profile.showHoroscope,
+                        modifier = Modifier.weight(1f).testTag("interest_kundli_${profile.id}")
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Kundali")
+                    }
                 }
-                Text(
-                    "Open the profile to block or report an unwanted request.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = onDecline,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f).testTag("interest_decline_${profile.id}"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Filled.Close, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Decline")
+                    }
+                    Button(
+                        onClick = onAccept,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f).testTag("interest_accept_${profile.id}")
+                    ) {
+                        if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(t("accept", "Accept"))
+                    }
+                }
             } else if (tab == InterestTab.MUTUAL) {
                 Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = onChat,
-                    modifier = Modifier.fillMaxWidth().testTag("interest_chat_${profile.id}")
-                ) {
+                Button(onClick = onChat, modifier = Modifier.fillMaxWidth().testTag("interest_chat_${profile.id}")) {
                     Icon(Icons.AutoMirrored.Filled.Chat, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(t("start_chatting", "Start chatting"))
