@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -16,14 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.i18n.t
 
-/**
- * 7-step Profile Wizard — captures all Sprint-10 fields after sign-up.
- * Each step saves immediately so no data is lost on back-press.
- */
+/** One shared 8-step profile flow for members across India and abroad. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileWizardScreen(
@@ -32,14 +32,24 @@ fun ProfileWizardScreen(
 ) {
     val step by vm.currentStep.collectAsState()
     val saving by vm.saving.collectAsState()
+    val error by vm.saveError.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(error) {
+        error?.let {
+            snackbar.showSnackbar(it)
+            vm.clearError()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("${t("step", "Step")} ${step + 1} / 7") },
+                title = { Text("${t("step", "Step")} ${step + 1} / 8") },
                 navigationIcon = {
                     if (step > 0) {
-                        IconButton(onClick = { vm.previousStep() }) {
+                        IconButton(onClick = vm::previousStep) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                         }
                     }
@@ -47,18 +57,13 @@ fun ProfileWizardScreen(
             )
         }
     ) { pad ->
-        Column(
-            Modifier.padding(pad).fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Progress bar
+        Column(Modifier.padding(pad).fillMaxSize()) {
             LinearProgressIndicator(
-                progress = { (step + 1) / 7f },
+                progress = { (step + 1) / 8f },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = Color(0xFF8B1A1A)
             )
 
-            // Step content
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
@@ -66,30 +71,30 @@ fun ProfileWizardScreen(
             ) {
                 AnimatedContent(targetState = step, label = "wizard_step") { currentStep ->
                     when (currentStep) {
-                        0 -> StepBasicInfo(vm)
+                        0 -> StepIdentityLocation(vm)
                         1 -> StepCommunity(vm)
                         2 -> StepEducationCareer(vm)
-                        3 -> StepPhysical(vm)
+                        3 -> StepPhysicalRelationship(vm)
                         4 -> StepFamily(vm)
                         5 -> StepLifestyle(vm)
-                        6 -> StepAstrology(vm)
+                        6 -> StepResidence(vm)
+                        else -> StepAstrology(vm)
                     }
                 }
             }
 
-            // Navigation buttons
             Row(
                 Modifier.fillMaxWidth().padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (step < 6) {
-                    OutlinedButton(
-                        onClick = { vm.skipStep() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text(t("skip", "Skip for now")) }
-
+                if (step in 1..6) {
+                    OutlinedButton(onClick = vm::skipStep, modifier = Modifier.weight(1f)) {
+                        Text(t("skip", "Skip for now"))
+                    }
+                }
+                if (step < 7) {
                     Button(
-                        onClick = { vm.nextStep() },
+                        onClick = vm::nextStep,
                         enabled = !saving,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A1A))
@@ -105,9 +110,10 @@ fun ProfileWizardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A1A))
                     ) {
-                        Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+                        if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        else Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text(t("complete_profile", "Complete Profile"), fontWeight = FontWeight.Bold)
+                        Text(if (saving) "Saving…" else t("complete_profile", "Complete Profile"), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -115,146 +121,193 @@ fun ProfileWizardScreen(
     }
 }
 
-// ── Step Composables ─────────────────────────────────────────────────────────
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChoiceField(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit,
+    required: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(if (required) "$label *" else label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.distinct().forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = { onSelected(option); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SuggestionChips(values: List<String>, selected: String, onSelected: (String) -> Unit) {
+    if (values.isEmpty()) return
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        values.take(12).forEach { value ->
+            FilterChip(selected = value.equals(selected, true), onClick = { onSelected(value) }, label = { Text(value) })
+        }
+    }
+}
 
 @Composable
-private fun StepBasicInfo(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+private fun StepIdentityLocation(vm: ProfileWizardViewModel) {
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Basic Information", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Tell us about yourself", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.displayName, onValueChange = { vm.update(state.copy(displayName = it)) },
-            label = { Text("Full Name *") }, modifier = Modifier.fillMaxWidth().testTag("wiz_name"), singleLine = true)
-        OutlinedTextField(value = state.dateOfBirth, onValueChange = { vm.update(state.copy(dateOfBirth = it)) },
-            label = { Text("Date of Birth (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth().testTag("wiz_dob"), singleLine = true)
-        OutlinedTextField(value = state.city, onValueChange = { vm.update(state.copy(city = it)) },
-            label = { Text("City *") }, modifier = Modifier.fillMaxWidth().testTag("wiz_city"), singleLine = true)
-        OutlinedTextField(value = state.bio, onValueChange = { vm.update(state.copy(bio = it)) },
-            label = { Text("About Me (2-3 lines)") }, modifier = Modifier.fillMaxWidth().testTag("wiz_bio"),
-            minLines = 3, maxLines = 5)
+        SectionHeader("Identity & location", "The app is the same for everyone. Your state and language only personalize discovery defaults, and you can change them later.")
+        OutlinedTextField(
+            value = s.username,
+            onValueChange = { vm.update(s.copy(username = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch == '.' || ch == '_' }.take(30))) },
+            label = { Text("Username *") }, prefix = { Text("@") }, singleLine = true,
+            supportingText = { Text("3–30 letters, numbers, dot or underscore. Username is unique.") },
+            modifier = Modifier.fillMaxWidth().testTag("wiz_username")
+        )
+        OutlinedTextField(s.displayName, { vm.update(s.copy(displayName = it.take(80))) }, label = { Text("Full name *") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("wiz_name"))
+        OutlinedTextField(s.dateOfBirth, { vm.update(s.copy(dateOfBirth = it.take(10))) }, label = { Text("Date of birth * (YYYY-MM-DD)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("wiz_dob"))
+        ChoiceField("State / union territory", s.state, IndiaProfileCatalog.statesAndUnionTerritories, { vm.update(s.copy(state = it)) }, required = true)
+        OutlinedTextField(s.city, { vm.update(s.copy(city = it.take(80))) }, label = { Text("City *") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("wiz_city"))
+        val languageOptions = (IndiaProfileCatalog.languageSuggestionsForState(s.state) + IndiaProfileCatalog.indianLanguages).distinct()
+        ChoiceField("Mother tongue", s.motherTongue, languageOptions, { vm.update(s.copy(motherTongue = it)) }, required = true)
+        OutlinedTextField(s.bio, { vm.update(s.copy(bio = it.take(1000))) }, label = { Text("About me") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth().testTag("wiz_bio"))
     }
 }
 
 @Composable
 private fun StepCommunity(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Community & Background", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Helps find culturally compatible matches", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.religion, onValueChange = { vm.update(state.copy(religion = it)) },
-            label = { Text("Religion *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.caste, onValueChange = { vm.update(state.copy(caste = it)) },
-            label = { Text("Caste") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.subCaste, onValueChange = { vm.update(state.copy(subCaste = it)) },
-            label = { Text("Sub-caste") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.motherTongue, onValueChange = { vm.update(state.copy(motherTongue = it)) },
-            label = { Text("Mother Tongue *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.gothra, onValueChange = { vm.update(state.copy(gothra = it)) },
-            label = { Text("Gothra") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Religion & community", "Choose what describes you. Nothing here is inferred from your state, language, surname or location.")
+        ChoiceField("Religion", s.religion, IndiaProfileCatalog.religions, { vm.update(s.copy(religion = it, caste = "", subCaste = "")) }, required = true)
+        Text("Common community choices", style = MaterialTheme.typography.labelLarge)
+        SuggestionChips(IndiaProfileCatalog.communitySuggestions(s.religion), s.caste) { vm.update(s.copy(caste = if (it == "Other") "" else it)) }
+        OutlinedTextField(s.caste, { vm.update(s.copy(caste = it.take(80))) }, label = { Text("Community / caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.subCaste, { vm.update(s.copy(subCaste = it.take(80))) }, label = { Text("Sub-community / sub-caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.gothra, { vm.update(s.copy(gothra = it.take(80))) }, label = { Text("Gothra / clan (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun StepEducationCareer(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Education & Career", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Your professional background", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.education, onValueChange = { vm.update(state.copy(education = it)) },
-            label = { Text("Highest Education *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.educationField, onValueChange = { vm.update(state.copy(educationField = it)) },
-            label = { Text("Field of Study") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.institution, onValueChange = { vm.update(state.copy(institution = it)) },
-            label = { Text("Institution") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.profession, onValueChange = { vm.update(state.copy(profession = it)) },
-            label = { Text("Occupation *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.employer, onValueChange = { vm.update(state.copy(employer = it)) },
-            label = { Text("Employer / Company") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.incomeBand, onValueChange = { vm.update(state.copy(incomeBand = it)) },
-            label = { Text("Annual Income Range") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Education & career", "Add the information people commonly use while filtering profiles.")
+        ChoiceField("Highest education", s.education, IndiaProfileCatalog.educationLevels, { vm.update(s.copy(education = it)) }, required = true)
+        OutlinedTextField(s.educationField, { vm.update(s.copy(educationField = it.take(100))) }, label = { Text("Field of study") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.institution, { vm.update(s.copy(institution = it.take(120))) }, label = { Text("College / university") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(if (s.graduationYear > 0) s.graduationYear.toString() else "", { vm.update(s.copy(graduationYear = it.toIntOrNull()?.coerceIn(1950, 2100) ?: 0)) }, label = { Text("Graduation year") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.profession, { vm.update(s.copy(profession = it.take(100))) }, label = { Text("Occupation / role *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ChoiceField("Occupation category", s.occupationCategory, IndiaProfileCatalog.occupationCategories, { vm.update(s.copy(occupationCategory = it)) })
+        OutlinedTextField(s.employer, { vm.update(s.copy(employer = it.take(120))) }, label = { Text("Employer / business") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ChoiceField("Employer type", s.employerType, IndiaProfileCatalog.employerTypes, { vm.update(s.copy(employerType = it)) })
+        OutlinedTextField(s.incomeBand, { vm.update(s.copy(incomeBand = it.take(80))) }, label = { Text("Annual income range") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
-private fun StepPhysical(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+private fun StepPhysicalRelationship(vm: ProfileWizardViewModel) {
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Physical Attributes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Height, weight & complexion", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = if (state.heightCm > 0) state.heightCm.toString() else "",
-            onValueChange = { vm.update(state.copy(heightCm = it.toIntOrNull() ?: 0)) },
-            label = { Text("Height (cm) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = if (state.weight > 0f) state.weight.toString() else "",
-            onValueChange = { vm.update(state.copy(weight = it.toFloatOrNull() ?: 0f)) },
-            label = { Text("Weight (kg)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.complexion, onValueChange = { vm.update(state.copy(complexion = it)) },
-            label = { Text("Complexion") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.maritalStatus, onValueChange = { vm.update(state.copy(maritalStatus = it)) },
-            label = { Text("Marital Status *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Personal details", "These fields improve filters while keeping the profile structure consistent across communities.")
+        OutlinedTextField(if (s.heightCm > 0) s.heightCm.toString() else "", { vm.update(s.copy(heightCm = it.toIntOrNull() ?: 0)) }, label = { Text("Height (cm) *") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(if (s.weight > 0f) s.weight.toString() else "", { vm.update(s.copy(weight = it.toFloatOrNull() ?: 0f)) }, label = { Text("Weight (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.complexion, { vm.update(s.copy(complexion = it.take(60))) }, label = { Text("Complexion (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ChoiceField("Physical status", s.physicalStatus, IndiaProfileCatalog.physicalStatuses, { vm.update(s.copy(physicalStatus = it)) })
+        ChoiceField("Marital status", s.maritalStatus, IndiaProfileCatalog.maritalStatuses, { vm.update(s.copy(maritalStatus = it)) }, required = true)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = s.hasChildren, onCheckedChange = { vm.update(s.copy(hasChildren = it)) })
+            Text("I have children")
+        }
     }
 }
 
 @Composable
 private fun StepFamily(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Family Details", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Family background information", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.familyType, onValueChange = { vm.update(state.copy(familyType = it)) },
-            label = { Text("Family Type (Joint / Nuclear)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.familyStatus, onValueChange = { vm.update(state.copy(familyStatus = it)) },
-            label = { Text("Family Status") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.fatherOccupation, onValueChange = { vm.update(state.copy(fatherOccupation = it)) },
-            label = { Text("Father's Occupation") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.motherOccupation, onValueChange = { vm.update(state.copy(motherOccupation = it)) },
-            label = { Text("Mother's Occupation") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = if (state.siblings > 0) state.siblings.toString() else "",
-            onValueChange = { vm.update(state.copy(siblings = it.toIntOrNull() ?: 0)) },
-            label = { Text("Number of Siblings") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.familyValues, onValueChange = { vm.update(state.copy(familyValues = it)) },
-            label = { Text("Family Values (Orthodox / Moderate / Liberal)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Family background", "Optional details can help families understand one another before connecting.")
+        ChoiceField("Native state", s.nativeState, IndiaProfileCatalog.statesAndUnionTerritories, { vm.update(s.copy(nativeState = it)) })
+        ChoiceField("Family type", s.familyType, IndiaProfileCatalog.familyTypes, { vm.update(s.copy(familyType = it)) })
+        ChoiceField("Family status", s.familyStatus, IndiaProfileCatalog.familyStatuses, { vm.update(s.copy(familyStatus = it)) })
+        ChoiceField("Family values", s.familyValues, IndiaProfileCatalog.familyValues, { vm.update(s.copy(familyValues = it)) })
+        OutlinedTextField(s.fatherOccupation, { vm.update(s.copy(fatherOccupation = it.take(100))) }, label = { Text("Father's occupation") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.motherOccupation, { vm.update(s.copy(motherOccupation = it.take(100))) }, label = { Text("Mother's occupation") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(if (s.siblings > 0) s.siblings.toString() else "", { vm.update(s.copy(siblings = it.toIntOrNull()?.coerceIn(0, 20) ?: 0)) }, label = { Text("Number of siblings") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.aboutFamily, { vm.update(s.copy(aboutFamily = it.take(1000))) }, label = { Text("About family") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun StepLifestyle(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Lifestyle", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Diet, habits & interests", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.diet, onValueChange = { vm.update(state.copy(diet = it)) },
-            label = { Text("Diet (Veg / Non-Veg / Eggetarian)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.smoking, onValueChange = { vm.update(state.copy(smoking = it)) },
-            label = { Text("Smoking (Never / Occasionally)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.drinking, onValueChange = { vm.update(state.copy(drinking = it)) },
-            label = { Text("Drinking (Never / Socially)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.fitnessActivities, onValueChange = { vm.update(state.copy(fitnessActivities = it)) },
-            label = { Text("Fitness / Hobbies (comma-separated)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Lifestyle & interests", "Add only what you are comfortable sharing.")
+        ChoiceField("Diet", s.diet, IndiaProfileCatalog.diets, { vm.update(s.copy(diet = it)) })
+        ChoiceField("Smoking", s.smoking, IndiaProfileCatalog.habitOptions, { vm.update(s.copy(smoking = it)) })
+        ChoiceField("Drinking", s.drinking, IndiaProfileCatalog.habitOptions, { vm.update(s.copy(drinking = it)) })
+        OutlinedTextField(s.hobbies, { vm.update(s.copy(hobbies = it.take(300))) }, label = { Text("Hobbies (comma-separated)") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.spokenLanguages, { vm.update(s.copy(spokenLanguages = it.take(300))) }, label = { Text("Languages spoken (comma-separated)") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.personalityType, { vm.update(s.copy(personalityType = it.take(80))) }, label = { Text("Personality / self-description") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.fitnessActivities, { vm.update(s.copy(fitnessActivities = it.take(300))) }, label = { Text("Fitness / activities") }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun StepResidence(vm: ProfileWizardViewModel) {
+    val s by vm.wizardState.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionHeader("Residence & NRI", "Works for members in India and overseas without creating a separate app experience.")
+        ChoiceField("Country of residence", s.countryOfResidence, IndiaProfileCatalog.countriesCommon, { vm.update(s.copy(countryOfResidence = it)) }, required = true)
+        OutlinedTextField(s.citizenship, { vm.update(s.copy(citizenship = it.take(80))) }, label = { Text("Citizenship") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ChoiceField("Residential / visa category", s.residentialStatus, IndiaProfileCatalog.residentialStatuses, { vm.update(s.copy(residentialStatus = it, visaStatus = it)) })
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = s.willingToRelocate, onCheckedChange = { vm.update(s.copy(willingToRelocate = it)) })
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text("Open to relocation", fontWeight = FontWeight.Medium)
+                Text("Show this preference to improve matching.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
 @Composable
 private fun StepAstrology(vm: ProfileWizardViewModel) {
-    val state by vm.wizardState.collectAsState()
+    val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Astrology / Kundali", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("For 10-Porutham compatibility matching", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = state.rasi, onValueChange = { vm.update(state.copy(rasi = it)) },
-            label = { Text("Rasi (Moon Sign) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.nakshatra, onValueChange = { vm.update(state.copy(nakshatra = it)) },
-            label = { Text("Nakshatra (Birth Star) *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.manglik, onValueChange = { vm.update(state.copy(manglik = it)) },
-            label = { Text("Manglik (Yes / No / Partial)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.birthTime, onValueChange = { vm.update(state.copy(birthTime = it)) },
-            label = { Text("Birth Time (HH:MM, 24h format)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = state.birthPlace, onValueChange = { vm.update(state.copy(birthPlace = it)) },
-            label = { Text("Birth Place (city)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        SectionHeader("Astrology / Kundali", "Optional. Used only where relevant to your selected experience and privacy settings.")
+        OutlinedTextField(s.rasi, { vm.update(s.copy(rasi = it.take(80))) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.nakshatra, { vm.update(s.copy(nakshatra = it.take(80))) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.manglik, { vm.update(s.copy(manglik = it.take(40))) }, label = { Text("Manglik (if applicable)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.birthTime, { vm.update(s.copy(birthTime = it.take(5))) }, label = { Text("Birth time (HH:MM, 24h)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(s.birthPlace, { vm.update(s.copy(birthPlace = it.take(100))) }, label = { Text("Birth place") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Card(shape = RoundedCornerShape(14.dp)) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.PrivacyTip, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Text("Exact birth details stay private. Public Kundali compatibility uses only data allowed by your horoscope privacy choice.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
