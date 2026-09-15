@@ -139,7 +139,7 @@ class MatchDetailViewModel @Inject constructor(
                 )
             } else 0f
             val astro = if (
-                ReligionCategory.fromReligion(profile.religion) == ReligionCategory.HINDU &&
+                profile.showHoroscope && ReligionCategory.fromReligion(profile.religion) == ReligionCategory.HINDU &&
                 seeker.rasi.isNotBlank() && seeker.nakshatra.isNotBlank() &&
                 target.rasi.isNotBlank() && target.nakshatra.isNotBlank()
             ) {
@@ -263,6 +263,7 @@ fun MatchDetailScreen(
     onBack: () -> Unit,
     onChat: () -> Unit,
     onPricing: () -> Unit = {},
+    onKundli: () -> Unit = {},
     vm: MatchDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(userId) { vm.load(userId) }
@@ -332,10 +333,7 @@ fun MatchDetailScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { selected?.let(vm::submitReport) },
-                    enabled = selected != null && !ui.reportSubmitting
-                ) {
+                Button(onClick = { selected?.let(vm::submitReport) }, enabled = selected != null && !ui.reportSubmitting) {
                     if (ui.reportSubmitting) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(6.dp))
@@ -354,6 +352,9 @@ fun MatchDetailScreen(
                 title = { Text(p?.displayName ?: "Profile") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
+                    IconButton(onClick = onKundli, enabled = p?.showHoroscope == true && !ui.blocked) {
+                        Icon(Icons.Filled.AutoAwesome, "Check Kundali")
+                    }
                     IconButton(onClick = { showNote = true }, enabled = p != null) { Icon(Icons.Filled.Note, "Private note") }
                     IconButton(onClick = vm::showReportDialog, enabled = p != null) { Icon(Icons.Filled.Flag, "Report profile") }
                 }
@@ -380,11 +381,7 @@ fun MatchDetailScreen(
                 }
 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = vm::toggleLike,
-                        enabled = !ui.blocked,
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Button(onClick = vm::toggleLike, enabled = !ui.blocked, modifier = Modifier.weight(1f)) {
                         Icon(if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(if (ui.liked) "Interest sent" else "Send interest")
@@ -393,6 +390,14 @@ fun MatchDetailScreen(
                         Icon(if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(if (ui.shortlisted) "Saved" else "Shortlist")
+                    }
+                }
+
+                if (p.showHoroscope && !ui.blocked) {
+                    OutlinedButton(onClick = onKundli, modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")) {
+                        Icon(Icons.Filled.AutoAwesome, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Check Kundali compatibility")
                     }
                 }
 
@@ -411,7 +416,7 @@ fun MatchDetailScreen(
 
                 if (!ui.isMutual && !ui.blocked) {
                     Text(
-                        "Messaging and contact reveal unlock only after both members express interest.",
+                        "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -420,13 +425,8 @@ fun MatchDetailScreen(
                 ActualCompatibilityCard(ui)
                 ProfileFacts(p)
 
-                if (p.bio.isNotBlank()) {
-                    SectionCard("About") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
-                }
-
-                if (ui.privateNote.isNotBlank()) {
-                    SectionCard("Your private note") { Text(ui.privateNote, style = MaterialTheme.typography.bodySmall) }
-                }
+                if (p.bio.isNotBlank()) SectionCard("About") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
+                if (ui.privateNote.isNotBlank()) SectionCard("Your private note") { Text(ui.privateNote, style = MaterialTheme.typography.bodySmall) }
 
                 OutlinedButton(
                     onClick = vm::toggleBlock,
@@ -469,10 +469,7 @@ private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().height(180.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
+                Surface(modifier = Modifier.fillMaxWidth().height(180.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
                     }
