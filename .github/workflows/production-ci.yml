@@ -38,7 +38,18 @@ jobs:
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
       - name: Android lint
-        run: ./gradlew --no-daemon lintDebug
+        shell: bash
+        run: |
+          set +e
+          ./gradlew --no-daemon lintDebug
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            report="app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt"
+            echo "---- full Android lint report ----"
+            if [ -f "$report" ]; then cat "$report"; else echo "Lint text report was not produced"; fi
+            echo "---- end Android lint report ----"
+          fi
+          exit "$status"
       - name: Debug build
         run: ./gradlew --no-daemon assembleDebug
       - name: Release bundle / R8 validation
