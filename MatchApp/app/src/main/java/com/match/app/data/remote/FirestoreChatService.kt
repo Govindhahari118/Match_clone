@@ -17,7 +17,6 @@ class FirestoreChatService @Inject constructor() {
     private val db = FirebaseFirestore.getInstance()
 
     companion object {
-        /** Collision-resistant deterministic thread id that does not depend on local Room ids. */
         fun threadId(uid1: String, uid2: String): String {
             require(uid1.isNotBlank() && uid2.isNotBlank() && uid1 != uid2)
             val canonical = listOf(uid1, uid2).sorted().joinToString("\n")
@@ -25,6 +24,31 @@ class FirestoreChatService @Inject constructor() {
                 .digest(canonical.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
         }
+    }
+
+    /**
+     * Account-level conversation list. Unlike Room-only peer lists this is correct on a fresh
+     * second device. Firestore rules still require the signed-in UID to be a thread participant.
+     */
+    fun observeThreads(myUid: String): Flow<List<FirestoreChatThread>> = callbackFlow {
+        require(myUid.isNotBlank())
+        val registration = db.collection("chats")
+            .whereArrayContains("participantUids", myUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                val threads = snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    val participants = (doc.get("participantUids") as? List<*>)?.filterIsInstance<String>().orEmpty()
+                    if (participants.size != 2 || myUid !in participants) return@mapNotNull null
+                    val peerUid = participants.firstOrNull { it != myUid } ?: return@mapNotNull null
+                    FirestoreChatThread(
+                        peerFirebaseUid = peerUid,
+                        lastMessage = doc.getString("lastMessage").orEmpty(),
+                        lastSentAt = doc.getLong("lastSentAt") ?: 0L
+                    )
+                }.sortedByDescending { it.lastSentAt }
+                trySend(threads)
+            }
+        awaitClose { registration.remove() }
     }
 
     fun observeThread(myUid: String, peerUid: String): Flow<List<FirestoreMessage>> = callbackFlow {
@@ -117,6 +141,12 @@ class FirestoreChatService @Inject constructor() {
         awaitClose { reg.remove() }
     }
 }
+
+data class FirestoreChatThread(
+    val peerFirebaseUid: String,
+    val lastMessage: String,
+    val lastSentAt: Long
+)
 
 data class FirestoreMessage(
     val id: String = "",
