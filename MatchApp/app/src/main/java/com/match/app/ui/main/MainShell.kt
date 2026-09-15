@@ -46,6 +46,7 @@ import com.match.app.ui.interests.InterestsScreen
 import com.match.app.ui.kundli.KundliScreen
 import com.match.app.ui.legal.LegalScreen
 import com.match.app.ui.matches.MatchesScreen
+import com.match.app.ui.nearby.NearbyMatchesScreen
 import com.match.app.ui.notifications.NotificationsScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
@@ -64,6 +65,7 @@ import javax.inject.Inject
 object MainRoutes {
     const val HOME = "home"
     const val MATCHES = "matches"
+    const val NEARBY = "nearby"
     const val INTERESTS = "interests"
     const val SHORTLISTS = "shortlists"
     const val CHAT_LIST = "chat_list"
@@ -141,6 +143,7 @@ private fun AppDrawer(
         DrawerSection("MATCH", listOf(
             DrawerItem(MainRoutes.HOME, "Home", "Your activity", Icons.Filled.Home),
             DrawerItem(MainRoutes.MATCHES, "Discover", "Browse compatible profiles", Icons.Filled.Search),
+            DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn),
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -330,10 +333,17 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoFamily = { nav.navigate(MainRoutes.PROFILE) },
                         onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
+                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) },
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
+                composable(MainRoutes.NEARBY) {
+                    NearbyMatchesScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
+                }
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
