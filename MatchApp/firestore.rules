@@ -24,22 +24,6 @@ service cloud.firestore {
     function explicitInterestFrom(profileOwnerUid, viewerUid) {
       return exists(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid));
     }
-    function safeSavedSearch() {
-      return request.resource.data.keys().hasOnly([
-        'name','createdAt','ageMin','ageMax','city','state','caste','subCaste','minScore',
-        'religion','motherTongue','maritalStatus','verifiedOnly','incomeMin','incomeMax',
-        'educationLevel','diet','residentialStatus','hasChildren','keyword','gothra','nativeState',
-        'countryOfResidence','nriOnly','willingToRelocate','recentlyJoinedDays','smoking','drinking',
-        'familyType','familyStatus','physicalStatus','hasChildrenFilter','citizenship','nriStatus',
-        'educationField','occupationCategory','employerType','nakshatra','rasi','manglik','hobbies',
-        'withPhotoOnly','verifiedLevel','premiumOnly','lastActiveWithinDays','minPoruthamScore','hasHoroscope'
-      ]) &&
-      request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60 &&
-      request.resource.data.createdAt is int &&
-      request.resource.data.ageMin is int && request.resource.data.ageMax is int &&
-      request.resource.data.ageMin >= 18 && request.resource.data.ageMax <= 99 && request.resource.data.ageMin <= request.resource.data.ageMax &&
-      request.resource.data.keyword is string && request.resource.data.keyword.size() <= 64;
-    }
 
     match /users/{userId} {
       allow read: if isSignedIn() && (isOwner(userId) ||
@@ -88,9 +72,11 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Saved-search mutations are trusted callable operations. Clients can observe only their own
+    // items; Firebase Admin writes enforce the quota and canonical filter schema transactionally.
     match /savedSearches/{ownerUid}/items/{searchId} {
-      allow read, delete: if isOwner(ownerUid);
-      allow create, update: if isOwner(ownerUid) && safeSavedSearch();
+      allow read: if isOwner(ownerUid);
+      allow create, update, delete: if false;
     }
     match /savedSearches/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
 
