@@ -1,0 +1,48 @@
+name: Patch account cleanup completeness
+
+on:
+  push:
+    branches: [Gpt_matree]
+    paths:
+      - .github/workflows/patch-account-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: Gpt_matree
+          fetch-depth: 0
+      - name: Patch deletion coverage
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('MatchApp/functions/src/users.ts')
+          text = path.read_text()
+          old = '''      await deleteCollection(`shortlists/${uid}/saved`);\n      await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));'''
+          new = '''      await deleteCollection(`savedSearches/${uid}/items`);\n      await deleteQuery(db.collection("usernames").where("uid", "==", uid));\n      await deleteCollection(`shortlists/${uid}/saved`);\n      await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));'''
+          if old not in text:
+              raise SystemExit('expected subcollection cleanup anchor not found')
+          text = text.replace(old, new, 1)
+          old2 = '''        db.collection("userPrivate").doc(uid),\n        db.collection("shortlists").doc(uid),'''
+          new2 = '''        db.collection("userPrivate").doc(uid),\n        db.collection("savedSearches").doc(uid),\n        db.collection("shortlists").doc(uid),'''
+          if old2 not in text:
+              raise SystemExit('expected singleton cleanup anchor not found')
+          text = text.replace(old2, new2, 1)
+          path.write_text(text)
+      - name: Commit deletion coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MatchApp/functions/src/users.ts
+          git commit -m "fix(account): delete saved searches and username registry [skip ci]"
+          git fetch origin Gpt_matree
+          git rebase origin/Gpt_matree
+          git push origin HEAD:Gpt_matree
