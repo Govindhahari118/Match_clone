@@ -21,9 +21,18 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/interests/$(uidA + '_' + uidB)) &&
              exists(/databases/$(database)/documents/interests/$(uidB + '_' + uidA));
     }
+    function explicitInterestFrom(profileOwnerUid, viewerUid) {
+      return exists(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid));
+    }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || (resource.data.stealthMode != true && !blockedEitherWay(request.auth.uid, userId) && !profileHiddenFrom(userId, request.auth.uid)));
+      // Stealth hides a member from general discovery, but a member who explicitly sent an interest
+      // is intentionally visible to that request recipient so they can inspect the profile/Kundali
+      // before accepting. A block or explicit per-member hide always wins.
+      allow read: if isSignedIn() && (isOwner(userId) ||
+        (!blockedEitherWay(request.auth.uid, userId) &&
+         !profileHiddenFrom(userId, request.auth.uid) &&
+         (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
       allow create: if isOwner(userId) && safeUserCreate();
       allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged();
       allow delete: if isOwner(userId);
