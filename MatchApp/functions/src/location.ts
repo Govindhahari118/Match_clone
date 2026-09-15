@@ -67,10 +67,14 @@ function encodeGeohash(latitude: number, longitude: number, precision: number): 
   return hash;
 }
 
+/**
+ * Precision 2 covers enormous regions and can silently truncate a dense cell at MAX_CELL_DOCS.
+ * Keep broad 11-100 km searches at precision 3 so the 3x3 neighborhood remains bounded while
+ * avoiding the severe false-negative behaviour of a single huge precision-2 bucket.
+ */
 function geohashPrecision(radiusKm: number): number {
   if (radiusKm <= 10) return 4;
-  if (radiusKm <= 50) return 3;
-  return 2;
+  return 3;
 }
 
 function nearbyPrefixes(center: Coordinates, radiusKm: number): string[] {
@@ -158,7 +162,12 @@ export const nearbyProfiles = functions
     if (!viewerProfile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
     if (!viewerLocation.exists) throw new functions.https.HttpsError("failed-precondition", "Share your location first");
 
+    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     const viewerLocationData = viewerLocation.data() || {};
+    if (Number(viewerLocationData.updatedAtMillis || 0) < cutoff) {
+      throw new functions.https.HttpsError("failed-precondition", "Refresh your location before searching nearby");
+    }
+
     const center = normalizedLocation(viewerLocationData);
     const prefixes = nearbyPrefixes(center, radiusKm);
     const candidateLocations = new Map<string, FirebaseFirestore.DocumentData>();
@@ -173,7 +182,6 @@ export const nearbyProfiles = functions
     }
 
     const outgoing = new Set(outgoingBlocks.docs.map((doc) => doc.id));
-    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     const distanceEntries = [...candidateLocations.entries()]
       .filter(([candidateUid, value]) => candidateUid !== uid && !outgoing.has(candidateUid) && Number(value.updatedAtMillis || 0) >= cutoff)
       .map(([candidateUid, value]) => {
