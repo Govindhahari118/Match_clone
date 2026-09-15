@@ -38,12 +38,11 @@ jobs:
         run: npm run lint
       - name: TypeScript build
         run: npm run build
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
       - name: Commit regenerated lockfile
         shell: bash
         working-directory: .
         run: |
+          set -euo pipefail
           if git diff --quiet -- MatchApp/functions/package-lock.json; then
             echo "Lockfile already current"
             exit 0
@@ -53,3 +52,5 @@ jobs:
           git add MatchApp/functions/package-lock.json
           git commit -m "chore(functions): refresh dependency lockfile [skip ci]"
           git push origin HEAD:Gpt_matree
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
