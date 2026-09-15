@@ -3,9 +3,10 @@ import { db, requireAppCheck } from "./shared";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
+const MAX_KEYWORD_LENGTH = 64;
 
 const PUBLIC_PROFILE_FIELDS = [
-  "firebaseUid", "displayName", "age", "gender", "lookingFor", "city", "bio",
+  "firebaseUid", "displayName", "username", "age", "gender", "lookingFor", "city", "bio",
   "rasi", "nakshatra", "religion", "motherTongue", "education", "profession",
   "maritalStatus", "heightCm", "isVerified", "isPremium", "profileViewCount",
   "caste", "state", "subCaste", "gothra", "incomeBand", "diet", "familyType",
@@ -25,10 +26,32 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function normalizedSearchValue(value: unknown): string {
+  return stringValue(value).trim().toLocaleLowerCase("en-IN");
+}
+
+function matchesKeyword(data: FirebaseFirestore.DocumentData, keyword: string): boolean {
+  if (!keyword) return true;
+  const normalized = keyword.replace(/^@+/, "");
+  const fields = [
+    data.displayName,
+    data.username,
+    data.matrimonyId,
+    data.profession,
+    data.city,
+    data.state,
+  ];
+  return fields.some((value) => normalizedSearchValue(value).includes(normalized));
+}
+
 function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Record<string, unknown> {
   const result: Record<string, unknown> = { firebaseUid: uid };
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
+    if (field === "lastActiveAt" && data.showLastActive === false) {
+      result.lastActiveAt = 0;
+      continue;
+    }
     const value = data[field];
     if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
       result[field] = value;
@@ -45,6 +68,7 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
  * Per-document privacy cannot safely be implemented as a client query because Firestore rules are
  * not filters. This trusted endpoint performs the scan server-side, removes blocks, stealth users
  * and owners who explicitly hid their profile from this viewer, and returns a strict public allowlist.
+ * Keyword search is also evaluated here so a hidden member can never be rediscovered by name/handle.
  */
 export const discoverProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
@@ -58,6 +82,9 @@ export const discoverProfiles = functions
     const ageMin = Math.max(18, Math.min(99, Number.isFinite(ageMinRaw) ? Math.trunc(ageMinRaw) : 18));
     const ageMax = Math.max(ageMin, Math.min(99, Number.isFinite(ageMaxRaw) ? Math.trunc(ageMaxRaw) : 70));
     const cursor = typeof data?.cursor === "string" && data.cursor.length <= 128 ? data.cursor : "";
+    const keyword = typeof data?.keyword === "string"
+      ? data.keyword.trim().toLocaleLowerCase("en-IN").slice(0, MAX_KEYWORD_LENGTH)
+      : "";
 
     const viewerDoc = await db.collection("users").doc(viewerUid).get();
     if (!viewerDoc.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
@@ -116,6 +143,7 @@ export const discoverProfiles = functions
       const viewerAccepts = viewerLookingFor === "ANY" || viewerLookingFor === candidateGender;
       const candidateAccepts = candidateLookingFor === "ANY" || candidateLookingFor === viewerGender;
       if (!viewerAccepts || !candidateAccepts) continue;
+      if (!matchesKeyword(candidate, keyword)) continue;
 
       profiles.push(publicProfile(doc.id, candidate));
     }
