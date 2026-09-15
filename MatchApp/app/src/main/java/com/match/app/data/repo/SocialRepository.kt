@@ -28,18 +28,25 @@ class SocialRepository @Inject constructor(
     private val firestoreBlock: FirestoreBlockService,
     private val firestoreProfile: FirestoreProfileService
 ) {
-    // ── Likes ──────────────────────────────────────────────────────────────
     suspend fun like(from: Long, to: Long) = withContext(Dispatchers.IO) {
         val synced = syncInterestToFirestore(from, to, isLike = true)
-        if (!synced && !remoteInterestExists(from, to)) {
-            throw IllegalStateException("Interest could not be sent")
-        }
+        if (!synced && !remoteInterestExists(from, to)) throw IllegalStateException("Interest could not be sent")
         likeDao.like(LikeEntity(fromUserId = from, toUserId = to))
     }
 
     suspend fun unlike(from: Long, to: Long) = withContext(Dispatchers.IO) {
         syncInterestToFirestore(from, to, isLike = false)
         likeDao.unlike(from, to)
+    }
+
+    /** Recipient declines a pending request. This does not block the sender. */
+    suspend fun declineIncoming(me: Long, sender: Long) = withContext(Dispatchers.IO) {
+        val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
+        val senderUid = userDao.findById(sender)?.firebaseUid.orEmpty()
+        if (myUid.isBlank() || senderUid.isBlank()) throw IllegalStateException("Profile is not linked to Firebase")
+        firestoreInterest.declineIncomingInterest(senderUid)
+        // Remove only stale local incoming cache if it exists; server remains authoritative.
+        runCatching { likeDao.unlike(sender, me) }
     }
 
     suspend fun toggleLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) {
@@ -52,21 +59,14 @@ class SocialRepository @Inject constructor(
             val theirProfile = userDao.findById(to)
             val myProfile = userDao.findById(from)
             val isMutual = syncInterestToFirestore(from, to, isLike = true)
-            if (!isMutual && !remoteInterestExists(from, to)) {
-                throw IllegalStateException("Interest could not be sent")
-            }
+            if (!isMutual && !remoteInterestExists(from, to)) throw IllegalStateException("Interest could not be sent")
             likeDao.like(LikeEntity(fromUserId = from, toUserId = to))
-
-            if (isMutual || isLiked(to, from)) {
-                notificationHelper.notifyMutualMatch(theirProfile?.displayName ?: "Someone")
-            } else {
-                notificationHelper.notifyInterestReceived(myProfile?.displayName ?: "Someone")
-            }
+            if (isMutual || isLiked(to, from)) notificationHelper.notifyMutualMatch(theirProfile?.displayName ?: "Someone")
+            else notificationHelper.notifyInterestReceived(myProfile?.displayName ?: "Someone")
             true
         }
     }
 
-    /** Firestore is authoritative whenever both profiles have remote identities. */
     suspend fun isLiked(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) {
         val fromUid = userDao.findById(from)?.firebaseUid.orEmpty()
         val toUid = userDao.findById(to)?.firebaseUid.orEmpty()
@@ -81,38 +81,24 @@ class SocialRepository @Inject constructor(
     fun observeMutual(me: Long): Flow<List<LikeEntity>> = likeDao.observeMutualLikes(me)
     fun observeIncoming(me: Long): Flow<Int> = likeDao.observeIncomingCount(me)
 
-    /** Cross-device incoming interests, resolving public remote profiles into the Room cache. */
     fun observeReceivedInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeIncomingInterests(myUid).map { docs ->
-            cacheRemoteUids(docs.map { it.fromUid })
-        }
+        firestoreInterest.observeIncomingInterests(myUid).map { docs -> cacheRemoteUids(docs.map { it.fromUid }) }
 
-    /** Cross-device outgoing interests, resolving public remote profiles into the Room cache. */
     fun observeSentInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeOutgoingInterests(myUid).map { docs ->
-            cacheRemoteUids(docs.map { it.toUid })
-        }
+        firestoreInterest.observeOutgoingInterests(myUid).map { docs -> cacheRemoteUids(docs.map { it.toUid }) }
 
-    /** Cross-device mutual matches, resolving each counterpart into the Room cache. */
     fun observeMutualIdsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeMatches(myUid).map { matches ->
-            cacheRemoteUids(matches.map { it.otherUid })
-        }
+        firestoreInterest.observeMatches(myUid).map { matches -> cacheRemoteUids(matches.map { it.otherUid }) }
 
     suspend fun isMutualMatch(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) {
         val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
         val themUid = userDao.findById(them)?.firebaseUid.orEmpty()
-        if (meUid.isBlank() || themUid.isBlank()) {
-            return@withContext likeDao.isLiked(me, them) && likeDao.isLiked(them, me)
-        }
+        if (meUid.isBlank() || themUid.isBlank()) return@withContext likeDao.isLiked(me, them) && likeDao.isLiked(them, me)
         runCatching {
             firestoreInterest.isInterested(meUid, themUid) && firestoreInterest.isInterested(themUid, meUid)
-        }.getOrElse {
-            likeDao.isLiked(me, them) && likeDao.isLiked(them, me)
-        }
+        }.getOrElse { likeDao.isLiked(me, them) && likeDao.isLiked(them, me) }
     }
 
-    // ── Blocks ─────────────────────────────────────────────────────────────
     suspend fun block(me: Long, them: Long) = withContext(Dispatchers.IO) {
         syncBlockToFirestore(me, them, isBlock = true)
         blockDao.block(BlockEntity(blockerId = me, blockedId = them))
@@ -126,29 +112,19 @@ class SocialRepository @Inject constructor(
     suspend fun isBlocked(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) { blockDao.isBlocked(me, them) }
     suspend fun blockedIds(me: Long): List<Long> = withContext(Dispatchers.IO) { blockDao.blockedIds(me) }
     fun observeBlockedIds(me: Long): Flow<List<Long>> = blockDao.observeBlockedIds(me)
-
-    // ── Local cached interest flows retained for offline presentation ───────
     fun observeReceivedInterests(me: Long): Flow<List<Long>> = likeDao.observeReceivedInterests(me)
     fun observeSentInterests(me: Long): Flow<List<Long>> = likeDao.observeSentInterests(me)
 
-    /** Send a Super Interest. Server sync must succeed before local cache is committed. */
     suspend fun superLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) {
         val myProfile = userDao.findById(from)
         val isMutual = syncInterestToFirestore(from, to, isLike = true, isSuperLike = true)
-        if (!isMutual && !remoteInterestExists(from, to)) {
-            throw IllegalStateException("Super Interest could not be sent")
-        }
-        if (!likeDao.isLiked(from, to)) {
-            likeDao.like(LikeEntity(fromUserId = from, toUserId = to, isSuperLike = true))
-        }
+        if (!isMutual && !remoteInterestExists(from, to)) throw IllegalStateException("Super Interest could not be sent")
+        if (!likeDao.isLiked(from, to)) likeDao.like(LikeEntity(fromUserId = from, toUserId = to, isSuperLike = true))
         notificationHelper.notifyInterestReceived("⭐ ${myProfile?.displayName ?: "Someone"} sent a Super Interest!")
         isMutual
     }
 
-    suspend fun isSuperLike(from: Long, to: Long): Boolean =
-        withContext(Dispatchers.IO) { likeDao.isSuperLike(from, to) }
-
-    // ── Firestore sync helpers ─────────────────────────────────────────────
+    suspend fun isSuperLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) { likeDao.isSuperLike(from, to) }
 
     private suspend fun syncInterestToFirestore(
         fromLocalId: Long,
@@ -158,12 +134,9 @@ class SocialRepository @Inject constructor(
     ): Boolean {
         val fromUid = userDao.findById(fromLocalId)?.firebaseUid.orEmpty()
         val toUid = userDao.findById(toLocalId)?.firebaseUid.orEmpty()
-        if (fromUid.isBlank() || toUid.isBlank()) {
-            throw IllegalStateException("Profile is not linked to Firebase")
-        }
-        return if (isLike) {
-            firestoreInterest.sendInterest(fromUid, toUid, isSuperLike)
-        } else {
+        if (fromUid.isBlank() || toUid.isBlank()) throw IllegalStateException("Profile is not linked to Firebase")
+        return if (isLike) firestoreInterest.sendInterest(fromUid, toUid, isSuperLike)
+        else {
             firestoreInterest.removeInterest(fromUid, toUid)
             false
         }
@@ -179,19 +152,15 @@ class SocialRepository @Inject constructor(
     private suspend fun syncBlockToFirestore(meLocalId: Long, themLocalId: Long, isBlock: Boolean) {
         val meUid = userDao.findById(meLocalId)?.firebaseUid.orEmpty()
         val themUid = userDao.findById(themLocalId)?.firebaseUid.orEmpty()
-        if (meUid.isBlank() || themUid.isBlank()) {
-            throw IllegalStateException("Profile is not linked to Firebase")
-        }
+        if (meUid.isBlank() || themUid.isBlank()) throw IllegalStateException("Profile is not linked to Firebase")
         if (isBlock) firestoreBlock.block(meUid, themUid) else firestoreBlock.unblock(meUid, themUid)
     }
 
-    /** Resolve public remote profiles into local Room IDs without inventing production users. */
     private suspend fun cacheRemoteUids(uids: List<String>): List<Long> = withContext(Dispatchers.IO) {
         uids.distinct().mapNotNull { uid ->
             if (uid.isBlank()) return@mapNotNull null
             val existing = userDao.findByFirebaseUid(uid)
             if (existing != null) return@mapNotNull existing.id
-
             val remote = runCatching { firestoreProfile.fetchProfile(uid) }
                 .onFailure { Log.w("SocialRepository", "Unable to hydrate remote profile $uid", it) }
                 .getOrNull() ?: return@mapNotNull null
@@ -206,11 +175,7 @@ class SocialRepository @Inject constructor(
             userDao.update(merged)
             return merged
         }
-        val cached = remote.copy(
-            email = "${remote.firebaseUid}@cache.invalid",
-            passwordHash = "",
-            isSeed = false
-        )
+        val cached = remote.copy(email = "${remote.firebaseUid}@cache.invalid", passwordHash = "", isSeed = false)
         val id = userDao.insert(cached)
         return cached.copy(id = id)
     }
