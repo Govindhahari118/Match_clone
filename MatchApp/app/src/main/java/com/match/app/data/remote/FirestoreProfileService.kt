@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import kotlinx.coroutines.channels.awaitClose
@@ -47,7 +48,6 @@ class FirestoreProfileService @Inject constructor(
         if (entity.firebaseUid.isBlank()) return
         val uid = entity.firebaseUid
         val publicData = entityToPublicMap(entity).toMutableMap().apply {
-            // Clean legacy deployments where these fields may have lived in the public doc.
             put("email", FieldValue.delete())
             put("phoneNumber", FieldValue.delete())
             put("fcmToken", FieldValue.delete())
@@ -101,12 +101,22 @@ class FirestoreProfileService @Inject constructor(
     }
 
     /** Fetch one profile. Private data is merged only when the signed-in owner is reading it. */
-    suspend fun fetchProfile(firebaseUid: String): UserEntity? {
-        val doc = usersCol.document(firebaseUid).get().await()
+    suspend fun fetchProfile(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.DEFAULT)
+
+    /**
+     * Force a server authorization round-trip before using an already-cached member profile.
+     * This is used by privacy-sensitive surfaces such as request/inbox hydration where a stale
+     * local or Firestore cache must not keep showing someone after a new hide/block/stealth rule.
+     */
+    suspend fun fetchProfileFromServer(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.SERVER)
+
+    private suspend fun fetchProfile(firebaseUid: String, source: Source): UserEntity? {
+        if (firebaseUid.isBlank()) return null
+        val doc = usersCol.document(firebaseUid).get(source).await()
         if (!doc.exists()) return null
         var data: Map<String, Any?> = doc.data ?: return null
         if (auth.currentUser?.uid == firebaseUid) {
-            val privateDoc = privateCol.document(firebaseUid).get().await()
+            val privateDoc = privateCol.document(firebaseUid).get(source).await()
             if (privateDoc.exists()) data = data + (privateDoc.data ?: emptyMap())
         }
         return mapToEntity(firebaseUid, data)
@@ -220,19 +230,16 @@ class FirestoreProfileService @Inject constructor(
         "lookingFor" to e.lookingFor,
         "city" to e.city,
         "bio" to e.bio,
-        "rasi" to if (e.showHoroscope) e.rasi else "",
-        "nakshatra" to if (e.showHoroscope) e.nakshatra else "",
         "religion" to e.religion,
+        "caste" to e.caste,
         "motherTongue" to e.motherTongue,
         "education" to e.education,
         "profession" to e.profession,
         "maritalStatus" to e.maritalStatus,
         "heightCm" to e.heightCm,
-        "caste" to e.caste,
         "state" to e.state,
         "subCaste" to e.subCaste,
         "gothra" to e.gothra,
-        "incomeBand" to if (e.incomeDisclosure.equals("hidden", true)) "" else e.incomeBand,
         "diet" to e.diet,
         "familyType" to e.familyType,
         "fatherOccupation" to e.fatherOccupation,
@@ -246,22 +253,19 @@ class FirestoreProfileService @Inject constructor(
         "videoUrl" to e.videoUrl,
         "residentialStatus" to e.residentialStatus,
         "hasChildren" to e.hasChildren,
+        "boostActiveUntil" to e.boostActiveUntil,
         "nativeState" to e.nativeState,
         "countryOfResidence" to e.countryOfResidence,
         "visaStatus" to e.visaStatus,
         "willingToRelocate" to e.willingToRelocate,
         "createdAt" to e.createdAt,
-        "lastActiveAt" to if (e.showLastActive) e.lastActiveAt else 0L,
+        "ageBucket" to ageBucketFor(e.age),
         "isIncognito" to e.isIncognito,
-        "ageBucket" to (e.ageBucket.ifBlank { ageBucketFor(e.age) }),
         "familyValues" to e.familyValues,
         "aboutFamily" to e.aboutFamily,
-        "manglik" to if (e.showHoroscope) e.manglik else "",
         "weight" to e.weight,
         "complexion" to e.complexion,
         "physicalStatus" to e.physicalStatus,
-        "birthTime" to if (e.showHoroscope) e.birthTime else "",
-        "birthPlace" to if (e.showHoroscope) e.birthPlace else "",
         "familyStatus" to e.familyStatus,
         "educationField" to e.educationField,
         "institution" to e.institution,
@@ -283,27 +287,27 @@ class FirestoreProfileService @Inject constructor(
         "updatedAt" to System.currentTimeMillis()
     )
 
-    private fun mapToEntity(uid: String, data: Map<String, Any?>): UserEntity = UserEntity(
-        firebaseUid = uid,
+    private fun mapToEntity(firebaseUid: String, data: Map<String, Any?>): UserEntity = UserEntity(
+        firebaseUid = firebaseUid,
         email = data["email"] as? String ?: "",
         passwordHash = "",
         displayName = data["displayName"] as? String ?: "",
-        age = (data["age"] as? Number)?.toInt() ?: 25,
-        gender = data["gender"] as? String ?: "MALE",
-        lookingFor = data["lookingFor"] as? String ?: "FEMALE",
+        age = (data["age"] as? Number)?.toInt() ?: 0,
+        gender = data["gender"] as? String ?: "OTHER",
+        lookingFor = data["lookingFor"] as? String ?: "ANY",
         city = data["city"] as? String ?: "",
         bio = data["bio"] as? String ?: "",
         rasi = data["rasi"] as? String ?: "",
         nakshatra = data["nakshatra"] as? String ?: "",
-        religion = data["religion"] as? String ?: "Hindu",
+        religion = data["religion"] as? String ?: "",
+        caste = data["caste"] as? String ?: "",
         motherTongue = data["motherTongue"] as? String ?: "",
         education = data["education"] as? String ?: "",
         profession = data["profession"] as? String ?: "",
-        maritalStatus = data["maritalStatus"] as? String ?: "Never Married",
-        heightCm = (data["heightCm"] as? Number)?.toInt() ?: 165,
+        maritalStatus = data["maritalStatus"] as? String ?: "",
+        heightCm = (data["heightCm"] as? Number)?.toInt() ?: 0,
         isVerified = data["isVerified"] as? Boolean ?: false,
         isPremium = data["isPremium"] as? Boolean ?: false,
-        caste = data["caste"] as? String ?: "",
         state = data["state"] as? String ?: "",
         subCaste = data["subCaste"] as? String ?: "",
         gothra = data["gothra"] as? String ?: "",
@@ -316,19 +320,29 @@ class FirestoreProfileService @Inject constructor(
         smoking = data["smoking"] as? String ?: "",
         drinking = data["drinking"] as? String ?: "",
         personalityType = data["personalityType"] as? String ?: "",
-        hobbies = data["hobbies"] as? String ?: "",
-        spokenLanguages = data["spokenLanguages"] as? String ?: "",
+        hobbies = when (val raw = data["hobbies"]) {
+            is List<*> -> raw.filterIsInstance<String>().joinToString(",")
+            is String -> raw
+            else -> ""
+        },
+        spokenLanguages = when (val raw = data["spokenLanguages"]) {
+            is List<*> -> raw.filterIsInstance<String>().joinToString(",")
+            is String -> raw
+            else -> ""
+        },
         videoUrl = data["videoUrl"] as? String ?: "",
         residentialStatus = data["residentialStatus"] as? String ?: "",
         hasChildren = data["hasChildren"] as? Boolean ?: false,
+        profileViewCount = (data["profileViewCount"] as? Number)?.toInt() ?: 0,
+        boostActiveUntil = (data["boostActiveUntil"] as? Number)?.toLong() ?: 0L,
         nativeState = data["nativeState"] as? String ?: "",
         countryOfResidence = data["countryOfResidence"] as? String ?: "",
         visaStatus = data["visaStatus"] as? String ?: "",
         willingToRelocate = data["willingToRelocate"] as? Boolean ?: false,
         createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
         lastActiveAt = (data["lastActiveAt"] as? Number)?.toLong() ?: 0L,
-        isIncognito = data["isIncognito"] as? Boolean ?: false,
         phoneNumber = data["phoneNumber"] as? String ?: "",
+        isIncognito = data["isIncognito"] as? Boolean ?: false,
         ageBucket = data["ageBucket"] as? String ?: "",
         familyValues = data["familyValues"] as? String ?: "",
         aboutFamily = data["aboutFamily"] as? String ?: "",
