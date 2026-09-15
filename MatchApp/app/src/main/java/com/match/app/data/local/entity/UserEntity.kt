@@ -54,68 +54,67 @@ data class UserEntity(
     val residentialStatus: String = "",
     val hasChildren: Boolean = false,
     // Boost feature
-    val boostActiveUntil: Long = 0L,   // epoch millis; 0 = not boosted
-    // Sprint 5: Family origin filter (8,405 upvotes on Shaadi.com)
-    val nativeState: String = "",      // e.g. "Andhra Pradesh", "Tamil Nadu"
+    val boostActiveUntil: Long = 0L,
+    // Sprint 5: Family origin filter
+    val nativeState: String = "",
     // Sprint 6: NRI filters
-    val countryOfResidence: String = "",  // e.g. "USA", "UK", "UAE"
-    val visaStatus: String = "",          // e.g. "Citizen", "PR", "Work Permit"
+    val countryOfResidence: String = "",
+    val visaStatus: String = "",
     val willingToRelocate: Boolean = false,
     // Sprint 6: Recently joined badge
-    val createdAt: Long = System.currentTimeMillis(),  // epoch millis
-    // Sprint 7: Activity status ("Active today" etc.)
+    val createdAt: Long = System.currentTimeMillis(),
+    // Sprint 7: Activity status
     val lastActiveAt: Long = 0L,
     // Sprint 7: Incognito browse mode
     val isIncognito: Boolean = false,
-    // Sprint 7: Contact reveal (phone visible to premium matches)
+    // Sprint 7: Contact reveal
     val phoneNumber: String = "",
-    // Sprint 9: Discovery 2.0 — discrete age bucket for index-friendly Firestore queries.
-    // Format: "18-22", "23-27", "28-32", ... See Migrations.MIGRATION_14_15.
+    // Sprint 9: Discovery 2.0
     val ageBucket: String = "",
-    // Sprint 10: Family & astrology completeness fields previously silently discarded.
-    val familyValues: String = "",     // e.g. "Traditional", "Moderate", "Liberal"
-    val aboutFamily: String = "",      // free-text describing family background (500 chars max)
-    val manglik: String = "",          // "Yes", "No", "Partial (Anshik)", ""
-
-    // ── Sprint 10: Complete profile schema (Migration 16→17) ──────────────
+    // Sprint 10: Family & astrology completeness
+    val familyValues: String = "",
+    val aboutFamily: String = "",
+    val manglik: String = "",
     // Physical details
-    val dateOfBirth: String = "",      // ISO format "1995-03-15"
-    val weight: Float = 0f,            // kg
-    val complexion: String = "",       // "Very Fair", "Fair", "Wheatish", "Dark"
-    val physicalStatus: String = "",   // "Normal", "Physically Challenged"
+    val dateOfBirth: String = "",
+    val weight: Float = 0f,
+    val complexion: String = "",
+    val physicalStatus: String = "",
     // Kundali essentials
-    val birthTime: String = "",        // "14:30" (24h format for natal chart)
-    val birthPlace: String = "",       // City of birth for Kundali
+    val birthTime: String = "",
+    val birthPlace: String = "",
     // Family economic status
-    val familyStatus: String = "",     // "Middle Class", "Upper Middle Class", "Affluent"
+    val familyStatus: String = "",
     // Education detail
-    val educationField: String = "",   // "Computer Science", "Medicine", "Law"
-    val institution: String = "",      // college/university name
-    val graduationYear: Int = 0,       // e.g. 2018
+    val educationField: String = "",
+    val institution: String = "",
+    val graduationYear: Int = 0,
     // Occupation detail
-    val occupationCategory: String = "", // "Private Sector", "Government", "Business", "Defence"
-    val employer: String = "",           // company name
-    val employerType: String = "",       // "MNC", "Startup", "Government", "PSU"
+    val occupationCategory: String = "",
+    val employer: String = "",
+    val employerType: String = "",
     // Citizenship & NRI
-    val citizenship: String = "",      // "Indian", "American", "British"
-    val isNRI: Boolean = false,        // derived flag for NRI filtering
+    val citizenship: String = "",
+    val isNRI: Boolean = false,
     // Lifestyle detail
-    val fitnessActivities: String = "", // comma-separated: "Gym,Yoga,Running"
+    val fitnessActivities: String = "",
     // Platform identity
-    val matrimonyId: String = "",      // auto-generated "TLG-XXXXX"
-    val photoUrl: String = "",         // primary profile photo URL
-    val voiceBioUrl: String = "",      // voice introduction recording URL
+    val matrimonyId: String = "",
+    val photoUrl: String = "",
+    val voiceBioUrl: String = "",
     // Profile quality
-    val profileCompleteness: Float = 0f, // 0.0 to 1.0 calculated
-    val verificationLevel: Int = 0,      // 0=none, 1=phone, 2=ID, 3=photo, 4=employment, 5=full
+    val profileCompleteness: Float = 0f,
+    val verificationLevel: Int = 0,
     // Privacy settings
-    val stealthMode: Boolean = false,    // shadow profile — views leave no trace
-    val showLastActive: Boolean = true,  // show "Active 2h ago" to others
-    val showHoroscope: Boolean = true,   // show rasi/nakshatra publicly
-    val incomeDisclosure: String = "range", // "exact", "range", "hidden"
+    val stealthMode: Boolean = false,
+    val showLastActive: Boolean = true,
+    val showHoroscope: Boolean = true,
+    val incomeDisclosure: String = "range",
     // Subscription
-    val subscriptionPlan: String = "FREE", // "FREE", "STANDARD", "PREMIUM", "PLATINUM"
-    val subscriptionExpiry: Long = 0L,     // epoch millis; 0 = no active subscription
+    val subscriptionPlan: String = "FREE",
+    val subscriptionExpiry: Long = 0L,
     // Match scoring
-    val matchScore: Float = 0f           // computed compatibility score (0.0–1.0)
+    val matchScore: Float = 0f,
+    /** Unique public handle reserved by the backend, e.g. avinash_21. */
+    val username: String = ""
 )
