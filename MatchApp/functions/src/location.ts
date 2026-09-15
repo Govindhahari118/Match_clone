@@ -6,6 +6,7 @@ const GEOHASH_ALPHABET = "0123456789bcdefghjkmnpqrstuvwxyz";
 const LOCATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_RESULTS = 50;
 const MAX_CELL_DOCS = 250;
+const DELETE_BATCH_SIZE = 300;
 
 type Coordinates = { latitude: number; longitude: number };
 
@@ -119,6 +120,25 @@ function mutuallyCompatible(viewer: FirebaseFirestore.DocumentData, candidate: F
     (candidateLookingFor === "ANY" || candidateLookingFor === viewerGender);
 }
 
+/** Read sharing state without exposing coordinates to the client. */
+export const getNearbyStatus = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const ref = db.collection("userLocations").doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) return { sharing: false, updatedAtMillis: 0 };
+
+  const updatedAtMillis = Number(snap.data()?.updatedAtMillis || 0);
+  if (!Number.isFinite(updatedAtMillis) || updatedAtMillis < Date.now() - LOCATION_MAX_AGE_MS) {
+    // Expired coordinates are removed immediately as well as by the scheduled sweeper.
+    await ref.delete();
+    return { sharing: false, updatedAtMillis: 0 };
+  }
+  return { sharing: true, updatedAtMillis };
+});
+
 export const updateMyLocation = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const uid = context.auth?.uid;
@@ -128,13 +148,14 @@ export const updateMyLocation = functions.https.onCall(async (data, context) => 
   const profile = await db.collection("users").doc(uid).get();
   if (!profile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
 
+  const now = Date.now();
   await db.collection("userLocations").doc(uid).set({
     ...location,
     geohash: encodeGeohash(location.latitude, location.longitude, 8),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAtMillis: Date.now(),
+    updatedAtMillis: now,
   });
-  return { success: true };
+  return { success: true, sharing: true, updatedAtMillis: now };
 });
 
 export const clearMyLocation = functions.https.onCall(async (_data, context) => {
@@ -142,7 +163,7 @@ export const clearMyLocation = functions.https.onCall(async (_data, context) => 
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
   await db.collection("userLocations").doc(uid).delete();
-  return { success: true };
+  return { success: true, sharing: false };
 });
 
 export const nearbyProfiles = functions
@@ -160,24 +181,27 @@ export const nearbyProfiles = functions
       db.collection("blocks").doc(uid).collection("blocked").get(),
     ]);
     if (!viewerProfile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
-    if (!viewerLocation.exists) throw new functions.https.HttpsError("failed-precondition", "Share your location first");
+    if (!viewerLocation.exists) throw new functions.https.HttpsError("failed-precondition", "Enable Nearby first");
 
     const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     const viewerLocationData = viewerLocation.data() || {};
     if (Number(viewerLocationData.updatedAtMillis || 0) < cutoff) {
-      throw new functions.https.HttpsError("failed-precondition", "Refresh your location before searching nearby");
+      await viewerLocation.ref.delete();
+      throw new functions.https.HttpsError("failed-precondition", "Nearby sharing expired. Enable it again to continue.");
     }
 
     const center = normalizedLocation(viewerLocationData);
     const prefixes = nearbyPrefixes(center, radiusKm);
     const candidateLocations = new Map<string, FirebaseFirestore.DocumentData>();
 
-    for (const prefix of prefixes) {
-      const snap = await db.collection("userLocations")
+    const snapshots = await Promise.all(prefixes.map((prefix) =>
+      db.collection("userLocations")
         .where("geohash", ">=", prefix)
         .where("geohash", "<=", `${prefix}\uf8ff`)
         .limit(MAX_CELL_DOCS)
-        .get();
+        .get()
+    ));
+    for (const snap of snapshots) {
       for (const doc of snap.docs) candidateLocations.set(doc.id, doc.data());
     }
 
@@ -222,6 +246,28 @@ export const nearbyProfiles = functions
       });
     }
     return { profiles: result };
+  });
+
+/** Daily privacy sweeper: exact coordinates older than the documented 30-day retention are deleted. */
+export const cleanupStaleLocations = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async () => {
+    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
+    let removed = 0;
+    while (true) {
+      const stale = await db.collection("userLocations")
+        .where("updatedAtMillis", "<", cutoff)
+        .limit(DELETE_BATCH_SIZE)
+        .get();
+      if (stale.empty) break;
+      const batch = db.batch();
+      stale.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+      removed += stale.size;
+      if (stale.size < DELETE_BATCH_SIZE) break;
+    }
+    functions.logger.info("Stale Nearby locations removed", { removed });
+    return null;
   });
 
 /** Ensure exact coordinates do not survive account/profile deletion. */
