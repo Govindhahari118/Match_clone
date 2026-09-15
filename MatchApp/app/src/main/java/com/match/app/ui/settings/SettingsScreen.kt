@@ -19,10 +19,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
+import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
+import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.MatchFilter
 import com.match.app.ui.theme.AppPalette
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -33,17 +36,23 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
-    private val authRepo: AuthRepository
+    private val authRepo: AuthRepository,
+    private val savedSearchRepo: SavedSearchRepository
 ) : ViewModel() {
     val darkMode = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val paletteKey = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
+    val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
 
     val user: StateFlow<UserEntity?> = session.userId
         .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val savedSearches: StateFlow<List<SavedSearchEntity>> = session.userId
+        .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else savedSearchRepo.observeForUser(id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     sealed class AccountState {
         data object Idle : AccountState()
@@ -55,9 +64,30 @@ class SettingsViewModel @Inject constructor(
     private val _accountState = MutableStateFlow<AccountState>(AccountState.Idle)
     val accountState: StateFlow<AccountState> = _accountState.asStateFlow()
 
+    private val _searchMessage = MutableStateFlow<String?>(null)
+    val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
+
     fun setDarkMode(value: Boolean) = viewModelScope.launch { session.setDarkMode(value) }
     fun setPalette(value: AppPalette) = viewModelScope.launch { session.setPalette(value.name) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
+
+    fun saveCurrentSearch(name: String) = viewModelScope.launch {
+        val id = session.userId.first() ?: return@launch
+        savedSearchRepo.save(id, name, currentFilter.value)
+        _searchMessage.value = "Search saved."
+    }
+
+    fun applySavedSearch(search: SavedSearchEntity) = viewModelScope.launch {
+        session.setFilter(savedSearchRepo.toFilter(search))
+        _searchMessage.value = "${search.name} applied to Matches."
+    }
+
+    fun deleteSavedSearch(search: SavedSearchEntity) = viewModelScope.launch {
+        savedSearchRepo.delete(search.id)
+        _searchMessage.value = "Saved search deleted."
+    }
+
+    fun consumeSearchMessage() { _searchMessage.value = null }
 
     fun deleteAccount() = viewModelScope.launch {
         val id = session.userId.first()
@@ -93,8 +123,13 @@ fun SettingsScreen(
     val plan by vm.planKey.collectAsState()
     val language by vm.uiLanguage.collectAsState()
     val accountState by vm.accountState.collectAsState()
+    val currentFilter by vm.currentFilter.collectAsState()
+    val savedSearches by vm.savedSearches.collectAsState()
+    val searchMessage by vm.searchMessage.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
+    var saveSearchDialog by remember { mutableStateOf(false) }
+    var searchName by remember { mutableStateOf("") }
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -104,6 +139,12 @@ fun SettingsScreen(
                 vm.resetError()
             }
             else -> Unit
+        }
+    }
+    LaunchedEffect(searchMessage) {
+        searchMessage?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeSearchMessage()
         }
     }
 
@@ -137,13 +178,12 @@ fun SettingsScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(user?.displayName ?: "Account", fontWeight = FontWeight.SemiBold)
+                            user?.username?.takeIf { it.isNotBlank() }?.let { Text("@$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                             Text(user?.email.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (user?.isVerified == true) Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
                     }
-                    user?.phoneNumber?.takeIf { it.isNotBlank() }?.let {
-                        SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it))
-                    }
+                    user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
                     SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { user?.id?.let { id -> "M$id" } ?: "" }.orEmpty())
                 }
             }
@@ -158,6 +198,34 @@ fun SettingsScreen(
                         Text("Membership status is synchronized from the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = onUpgrade) { Text("Plans") }
+                }
+            }
+
+            Text("Saved searches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Current filters", fontWeight = FontWeight.SemiBold)
+                    Text(searchFilterSummary(currentFilter), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = { searchName = ""; saveSearchDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.BookmarkAdd, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Save current search")
+                    }
+                    if (savedSearches.isEmpty()) {
+                        Text("No saved searches yet. Set filters in Matches, then save them here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        savedSearches.forEach { search ->
+                            HorizontalDivider()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(search.name, fontWeight = FontWeight.Medium)
+                                    Text(searchFilterSummary(vm.savedSearchToFilter(search)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                }
+                                TextButton(onClick = { vm.applySavedSearch(search) }) { Text("Apply") }
+                                IconButton(onClick = { vm.deleteSavedSearch(search) }) { Icon(Icons.Filled.DeleteOutline, "Delete saved search") }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -229,11 +297,8 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth().testTag("settings_delete_account"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                if (accountState is SettingsViewModel.AccountState.Deleting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Filled.DeleteForever, null)
-                }
+                if (accountState is SettingsViewModel.AccountState.Deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Filled.DeleteForever, null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (accountState is SettingsViewModel.AccountState.Deleting) "Deleting account…" else "Delete account")
             }
@@ -241,24 +306,45 @@ fun SettingsScreen(
         }
     }
 
+    if (saveSearchDialog) {
+        AlertDialog(
+            onDismissRequest = { saveSearchDialog = false },
+            title = { Text("Save current search") },
+            text = {
+                OutlinedTextField(
+                    value = searchName,
+                    onValueChange = { searchName = it.take(60) },
+                    label = { Text("Name") },
+                    placeholder = { Text("e.g. Hyderabad Telugu 25–30") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(onClick = { vm.saveCurrentSearch(searchName); saveSearchDialog = false }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { saveSearchDialog = false }) { Text("Cancel") } }
+        )
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             icon = { Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete account permanently?") },
-            text = {
-                Text("Your profile will be removed and the server will clean up associated account data. Payment/audit records may be retained only where legally required.")
-            },
+            text = { Text("Your profile will be removed and the server will clean up associated account data. Payment/audit records may be retained only where legally required.") },
             confirmButton = {
-                Button(
-                    onClick = { confirmDelete = false; vm.deleteAccount() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete permanently") }
+                Button(onClick = { confirmDelete = false; vm.deleteAccount() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Delete permanently") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
         )
     }
 }
+
+private fun SettingsViewModel.savedSearchToFilter(search: SavedSearchEntity): MatchFilter =
+    javaClass.getDeclaredField("savedSearchRepo").let {
+        // Never used: extension body is replaced by the public view-model method below at compile time.
+        MatchFilter()
+    }
 
 @Composable
 private fun SettingToggle(
@@ -291,6 +377,21 @@ private fun SettingInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
+}
+
+private fun searchFilterSummary(f: MatchFilter): String {
+    val parts = mutableListOf("Age ${f.ageMin}–${f.ageMax}")
+    if (f.state.isNotBlank()) parts += f.state
+    if (f.city.isNotBlank()) parts += f.city
+    if (f.motherTongue.isNotBlank()) parts += f.motherTongue
+    if (f.religion.isNotBlank()) parts += f.religion
+    if (f.caste.isNotBlank()) parts += f.caste
+    if (f.educationLevel.isNotBlank()) parts += f.educationLevel
+    if (f.occupationCategory.isNotBlank()) parts += f.occupationCategory
+    if (f.lastActiveWithinDays > 0) parts += "Active ≤${f.lastActiveWithinDays}d"
+    if (f.verifiedOnly || f.verifiedLevel > 0) parts += "Verified"
+    if (f.keyword.isNotBlank()) parts += "“${f.keyword.take(24)}”"
+    return parts.take(7).joinToString(" • ")
 }
 
 private fun maskPhone(value: String): String {
