@@ -31,14 +31,16 @@ service firebase.storage {
     }
     function chatMember(threadId, uid) {
       return chatExists(threadId) &&
-        chatParticipants(threadId) is list &&
         chatParticipants(threadId).size() == 2 &&
         uid in chatParticipants(threadId);
     }
-    function chatPairAllowed(threadId, senderUid, recipientUid) {
-      return senderUid is string && recipientUid is string && senderUid != recipientUid &&
-        chatMember(threadId, senderUid) && recipientUid in chatParticipants(threadId) &&
-        !blockedEitherWay(senderUid, recipientUid);
+    function chatUsable(threadId) {
+      return chatMember(threadId, request.auth.uid) &&
+        !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
+    }
+    function validChatMedia() {
+      return request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('audio/.*'));
     }
 
     match /photos/{uid}/{allPaths=**} {
@@ -62,18 +64,17 @@ service firebase.storage {
       allow delete: if false;
     }
     match /chat-media/{threadId}/{fileName} {
-      allow read: if signedIn() && chatMember(threadId, request.auth.uid) &&
-        !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
-      allow create, update: if signedIn() &&
-        request.auth.uid == request.resource.metadata.senderUid &&
-        request.resource.metadata.threadId == threadId &&
-        request.resource.metadata.kind in ['image', 'voice'] &&
-        chatPairAllowed(threadId, request.resource.metadata.senderUid, request.resource.metadata.recipientUid) &&
-        request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 &&
-        ((request.resource.metadata.kind == 'image' && request.resource.contentType.matches('image/.*')) ||
-          (request.resource.metadata.kind == 'voice' && request.resource.contentType.matches('audio/.*')));
-      allow delete: if signedIn() && resource.metadata.senderUid == request.auth.uid &&
-        chatMember(threadId, request.auth.uid);
+      // The chat document is the authorization source of truth. Client metadata is descriptive
+      // only and cannot grant membership, which prevents forged metadata from opening another chat.
+      allow read: if signedIn() && chatUsable(threadId);
+      allow create: if signedIn() && chatUsable(threadId) && validChatMedia();
+      // A retry may replace the same client-generated object only for the original uploader.
+      allow update: if signedIn() && chatUsable(threadId) &&
+        resource.metadata.senderUid == request.auth.uid &&
+        request.resource.metadata.senderUid == request.auth.uid &&
+        validChatMedia();
+      allow delete: if signedIn() && chatUsable(threadId) &&
+        resource.metadata.senderUid == request.auth.uid;
     }
   }
 }
