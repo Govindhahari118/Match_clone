@@ -5,7 +5,12 @@
 
 export * from "./users";
 export * from "./notifications";
-export * from "./payments";
+export {
+  createRazorpayOrder,
+  verifyRazorpayPayment,
+  razorpayWebhook,
+} from "./payments";
+export { consumeContactReveal } from "./privacy";
 export * from "./playBilling";
 export * from "./safety";
 export * from "./verification";
