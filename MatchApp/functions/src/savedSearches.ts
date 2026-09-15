@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 
 const MAX_SAVED_SEARCHES = 20;
