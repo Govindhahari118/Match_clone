@@ -12,7 +12,7 @@ service cloud.firestore {
     }
     function profileHiddenFrom(ownerUid, viewerUid) {
       return exists(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)) &&
-             get(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.profileHidden == true;
+             get(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.get('profileHidden', false) == true;
     }
     function profileVisibleBetween(uidA, uidB) {
       return !profileHiddenFrom(uidA, uidB) && !profileHiddenFrom(uidB, uidA);
@@ -34,7 +34,6 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    // One-way WhatsApp-style visibility exceptions. Only the owner can enumerate or mutate them.
     match /privacyRelations/{ownerUid}/members/{memberUid} {
       allow read: if isOwner(ownerUid);
       allow create, update: if isOwner(ownerUid) && ownerUid != memberUid &&
