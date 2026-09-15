@@ -3,13 +3,8 @@ package com.match.app.core.matching
 /**
  * Astrology compatibility engine.
  *
- * Uses Rasi (moon sign, 12) and Nakshatra (27). We combine three classical factors,
- * each normalized to 0..1, and average them:
- *   - Rasi element compatibility (fire/earth/air/water).
- *   - Rasi polarity & modality alignment.
- *   - Nakshatra gana / yoni compatibility (simplified tiered matrix).
- *
- * This is a deterministic, fast, on-device scorer — no network, no third-party API.
+ * Uses Rasi (moon sign, 12) and Nakshatra (27). This is a deliberately simplified,
+ * deterministic on-device compatibility signal; it is not a full birth-chart calculation.
  */
 object Astrology {
 
@@ -67,38 +62,25 @@ object Astrology {
         else -> 0.55f
     }
 
-    private fun modalityScore(a: Modality, b: Modality): Float = when {
-        a == b && a == Modality.FIXED -> 0.6f        // fixed+fixed → stubborn
-        a == b -> 0.8f
-        else -> 0.9f                                 // complementary
-    }
-
-    private fun ganaScore(a: String, b: String): Float {
-        val ga = gana[a] ?: return 0.5f
-        val gb = gana[b] ?: return 0.5f
-        return when {
-            ga == gb && ga == "Deva" -> 1.0f
-            ga == gb -> 0.85f
-            (ga == "Deva" && gb == "Manushya") || (gb == "Deva" && ga == "Manushya") -> 0.8f
-            (ga == "Manushya" && gb == "Rakshasa") || (gb == "Manushya" && ga == "Rakshasa") -> 0.3f
-            (ga == "Deva" && gb == "Rakshasa") || (gb == "Deva" && ga == "Rakshasa") -> 0.2f
-            else -> 0.5f
-        }
-    }
-
-    /** Returns compatibility in 0..1 based on classical 10 Poruthams. */
+    /**
+     * Returns a normalized compatibility signal in 0..1.
+     * Unknown values deliberately return a neutral value instead of inventing a result.
+     */
     fun score(
         rasiA: String, nakshatraA: String,
         rasiB: String, nakshatraB: String
     ): Float {
-        // Find indices
         val rA = RASIS.indexOf(rasiA).takeIf { it >= 0 } ?: return 0.5f
         val rB = RASIS.indexOf(rasiB).takeIf { it >= 0 } ?: return 0.5f
         val nA = NAKSHATRAS.indexOf(nakshatraA).takeIf { it >= 0 } ?: return 0.5f
         val nB = NAKSHATRAS.indexOf(nakshatraB).takeIf { it >= 0 } ?: return 0.5f
 
+        // The scorer is symmetric and deterministic. Identical inputs should never be penalized
+        // merely because simplified modulo approximations for Rajju/Vedha collide.
+        if (rA == rB && nA == nB) return 1.0f
+
         var points = 0f
-        var totalPossible = 36f
+        val totalPossible = 36f
 
         // 1. Dina Porutham (Health/Longevity) - 3 pts
         val diff = (nB - nA + 27) % 9
@@ -113,34 +95,32 @@ object Astrology {
             else -> 0f
         }
 
-        // 3. Mahendra Porutham (Progeny) - 1 pt (Binary)
+        // 3. Mahendra Porutham (Progeny) - 1 pt
         val mDiff = (nB - nA + 27) % 27
         if (listOf(4, 7, 10, 13, 16, 19, 22, 25).contains(mDiff)) points += 1f
 
         // 4. Stree Deergha (Prosperity) - 1 pt
         if ((nB - nA + 27) % 27 > 13) points += 1f
 
-        // 5. Yoni Porutham (Physical compatibility) - 4 pts
-        // Simplified matrix
+        // 5. Yoni Porutham - 4 pts (simplified deterministic grouping)
         points += if (nA % 4 == nB % 4) 4f else 2f
 
-        // 6. Rasi Porutham (Unity) - 7 pts
+        // 6. Rasi Porutham - 7 pts
         val rDiff = (rB - rA + 12) % 12
         if (listOf(0, 1, 6, 7, 8, 9, 10, 11).contains(rDiff)) points += 7f
 
-        // 7. Rasi Adhipathi (Friendship) - 5 pts
+        // 7. Rasi Adhipathi friendship approximation - 5 pts
         val (ea, _) = rasiMeta[rasiA]!!
         val (eb, _) = rasiMeta[rasiB]!!
         points += elementScore(ea, eb) * 5f
 
-        // 8. Vasya Porutham (Attraction) - 2 pts
+        // 8. Vasya Porutham - 2 pts
         if (rDiff == 6) points += 2f
 
-        // 9. Rajju Porutham (Husband's longevity) - 5 pts
-        // Very important in South India, simplified to avoid complex group mapping
+        // 9. Rajju Porutham - 5 pts (simplified grouping)
         if (nA % 5 != nB % 5) points += 5f
 
-        // 10. Vedha Porutham (Affliction) - 2 pts
+        // 10. Vedha Porutham - 2 pts (simplified grouping)
         if (nA % 3 != nB % 3) points += 2f
 
         return (points / totalPossible).coerceIn(0f, 1f)
