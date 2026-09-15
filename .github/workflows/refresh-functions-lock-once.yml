@@ -1,0 +1,49 @@
+name: Refresh Functions Lock Once
+
+on:
+  push:
+    branches: [Gpt_matree]
+    paths:
+      - .github/workflows/refresh-functions-lock-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: Gpt_matree
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: MatchApp/functions/package-lock.json
+      - name: Regenerate lockfile from declared dependencies
+        working-directory: MatchApp/functions
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Prove deterministic clean install
+        working-directory: MatchApp/functions
+        run: npm ci --ignore-scripts
+      - name: Lint
+        working-directory: MatchApp/functions
+        run: npm run lint
+      - name: TypeScript build
+        working-directory: MatchApp/functions
+        run: npm run build
+      - name: Commit regenerated lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- MatchApp/functions/package-lock.json; then
+            echo "Lockfile already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MatchApp/functions/package-lock.json
+          git commit -m "chore(functions): refresh Node 22 dependency lock"
+          git push origin HEAD:Gpt_matree
