@@ -192,15 +192,20 @@ export const nearbyProfiles = functions
       db.collection("blocks").doc(entry.uid).collection("blocked").doc(uid)
     );
     const profileRefs = distanceEntries.map((entry) => db.collection("users").doc(entry.uid));
-    const [reverseBlocks, profiles] = await Promise.all([
+    const hiddenFromViewerRefs = distanceEntries.map((entry) =>
+      db.collection("privacyRelations").doc(entry.uid).collection("members").doc(uid)
+    );
+    const [reverseBlocks, profiles, privacyRelations] = await Promise.all([
       db.getAll(...reverseRefs),
       db.getAll(...profileRefs),
+      db.getAll(...hiddenFromViewerRefs),
     ]);
 
     const viewer = viewerProfile.data() || {};
     const result: Array<{ uid: string; distanceKm: number }> = [];
     for (let i = 0; i < distanceEntries.length && result.length < MAX_RESULTS; i += 1) {
       if (reverseBlocks[i].exists || !profiles[i].exists) continue;
+      if (privacyRelations[i].exists && privacyRelations[i].data()?.profileHidden === true) continue;
       const candidate = profiles[i].data() || {};
       if (candidate.stealthMode === true || !mutuallyCompatible(viewer, candidate)) continue;
       result.push({
