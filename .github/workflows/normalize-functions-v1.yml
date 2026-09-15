@@ -1,0 +1,37 @@
+name: Normalize Functions v1 compatibility imports
+
+on:
+  push:
+    branches: [Gpt_matree]
+    paths:
+      - .github/workflows/normalize-functions-v1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: Gpt_matree
+      - name: Normalize Firebase Functions imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          find MatchApp/functions/src -name '*.ts' -type f -print0 | xargs -0 sed -i 's#from "firebase-functions";#from "firebase-functions/v1";#g'
+      - name: Commit compatibility-only changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- MatchApp/functions/src; then
+            echo "All Functions source files already use the v1 compatibility API."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MatchApp/functions/src
+          git commit -m "fix(functions): normalize v1 compatibility imports [skip ci]"
+          git push origin HEAD:Gpt_matree
