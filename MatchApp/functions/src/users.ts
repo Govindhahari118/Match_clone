@@ -143,11 +143,6 @@ async function deleteChatThread(thread: FirebaseFirestore.QueryDocumentSnapshot)
   await thread.ref.delete();
 }
 
-/**
- * Restartable account erasure. Auth is deleted last so a transient Firestore/Storage
- * failure leaves the caller authenticated and able to retry instead of falsely reporting
- * a successful deletion while server data remains.
- */
 export const deleteUserAccount = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
   .https.onCall(async (_data, context) => {
@@ -165,6 +160,8 @@ export const deleteUserAccount = functions
     try {
       await deleteQuery(db.collection("interests").where("fromUid", "==", uid));
       await deleteQuery(db.collection("interests").where("toUid", "==", uid));
+      await deleteQuery(db.collection("interestResponses").where("senderUid", "==", uid));
+      await deleteQuery(db.collection("interestResponses").where("recipientUid", "==", uid));
       await deleteQuery(db.collection("matches").where("users", "array-contains", uid));
       await deleteQuery(db.collection("notifications").where("userId", "==", uid));
       await deleteQuery(db.collection("profileViews").where("viewerUid", "==", uid));
@@ -182,23 +179,20 @@ export const deleteUserAccount = functions
       await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
       await deleteCollection(`blocks/${uid}/blocked`);
       await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
+      await deleteCollection(`privacyRelations/${uid}/members`);
+      await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
       await deleteCollection(`subscriptions/${uid}/usage`);
       await deleteCollection(`profileAnalytics/${uid}/weekly`);
       await deleteCollection(`sessions/${uid}/devices`);
 
-      // Capture thread ids before deleting Firestore so the corresponding Storage media can
-      // be erased as part of the same restartable account-erasure operation.
       const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
       const chatThreadIds = chats.docs.map((thread) => thread.id);
       for (const thread of chats.docs) await deleteChatThread(thread);
 
       const bucket = admin.storage().bucket();
-      const prefixes = ["photos", "videos", "voicebios", "verifications"];
-      for (const prefix of prefixes) {
+      for (const prefix of ["photos", "videos", "voicebios", "verifications"]) {
         await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
       }
-      // A deleted conversation must not leave image/voice objects for either participant.
-      // Deleting the entire thread prefix mirrors the Firestore conversation deletion above.
       for (const threadId of chatThreadIds) {
         await bucket.deleteFiles({ prefix: `chat-media/${threadId}/` });
       }
@@ -208,6 +202,8 @@ export const deleteUserAccount = functions
         db.collection("userPrivate").doc(uid),
         db.collection("shortlists").doc(uid),
         db.collection("blocks").doc(uid),
+        db.collection("privacyRelations").doc(uid),
+        db.collection("privacySettings").doc(uid),
         db.collection("subscriptions").doc(uid),
         db.collection("profileAnalytics").doc(uid),
         db.collection("notificationPrefs").doc(uid),
@@ -216,6 +212,7 @@ export const deleteUserAccount = functions
         db.collection("rewards").doc(uid),
         db.collection("sessions").doc(uid),
         db.collection("fcmTokens").doc(uid),
+        db.collection("userLocations").doc(uid),
       ];
       for (let i = 0; i < singletonRefs.length; i += DELETE_BATCH_SIZE) {
         const batch = db.batch();
@@ -243,11 +240,6 @@ export const deleteUserAccount = functions
     }
   });
 
-/**
- * Records at most one profile view per viewer/target/UTC day.
- * The client never supplies viewer identity or the document id, so views cannot be forged
- * to inflate analytics or generate notification spam.
- */
 export const recordProfileView = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const viewerUid = context.auth?.uid;
@@ -258,30 +250,25 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("invalid-argument", "A valid target profile is required");
   }
 
-  const [target, viewerBlocked, targetBlocked] = await Promise.all([
+  const [target, viewerBlocked, targetBlocked, targetPrivacy] = await Promise.all([
     db.collection("users").doc(viewedUid).get(),
     db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
     db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
+    db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
   ]);
   if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-  if (viewerBlocked.exists || targetBlocked.exists) {
+  if (target.data()?.stealthMode === true || viewerBlocked.exists || targetBlocked.exists || targetPrivacy.data()?.profileHidden === true) {
     throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
   }
 
   const day = new Date().toISOString().slice(0, 10);
-  const viewId = createHash("sha256")
-    .update(`${viewerUid}|${viewedUid}|${day}`)
-    .digest("hex");
+  const viewId = createHash("sha256").update(`${viewerUid}|${viewedUid}|${day}`).digest("hex");
   const viewRef = db.collection("profileViews").doc(viewId);
 
   const recorded = await db.runTransaction(async (tx) => {
     const existing = await tx.get(viewRef);
     if (existing.exists) return false;
-    tx.set(viewRef, {
-      viewerUid,
-      viewedUid,
-      viewedAt: Date.now(),
-    });
+    tx.set(viewRef, { viewerUid, viewedUid, viewedAt: Date.now() });
     return true;
   });
 
@@ -295,6 +282,12 @@ export const onProfileViewed = functions.firestore
     const viewedUid = data.viewedUid as string;
     const viewerUid = data.viewerUid as string;
     if (!viewedUid || !viewerUid || viewedUid === viewerUid) return;
+
+    const privacy = await db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get();
+    if (privacy.data()?.profileHidden === true) {
+      await snap.ref.delete();
+      return;
+    }
 
     await db.collection("users").doc(viewedUid).update({
       profileViewCount: admin.firestore.FieldValue.increment(1),
