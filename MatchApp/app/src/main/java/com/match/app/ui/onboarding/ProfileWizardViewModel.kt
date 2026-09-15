@@ -7,6 +7,7 @@ import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -14,7 +15,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.Period
 import javax.inject.Inject
-import dagger.hilt.android.lifecycle.HiltViewModel
 
 data class WizardState(
     val username: String = "",
@@ -112,24 +112,25 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     fun skipStep() {
-        when (_currentStep.value) {
-            0 -> {
-                _saveError.value = "Please complete your identity, state, city and mother tongue first."
-                return
+        val step = _currentStep.value
+        if (step in REQUIRED_STEPS) {
+            _saveError.value = when (step) {
+                0 -> "Please complete your identity, state, city and mother tongue first."
+                1 -> "Please choose your religion before continuing. You can choose Prefer not to say if you do not want to specify one."
+                2 -> "Please add your highest education and occupation before continuing."
+                3 -> "Please enter a valid height before continuing."
+                else -> "Complete the required fields before continuing."
             }
-            1 -> {
-                _saveError.value = "Please choose your religion before continuing. You can choose Prefer not to say if you do not want to specify one."
-                return
-            }
+            return
         }
         persistDraft()
-        _currentStep.value = (_currentStep.value + 1).coerceAtMost(LAST_STEP)
+        _currentStep.value = (step + 1).coerceAtMost(LAST_STEP)
     }
 
     fun clearError() { _saveError.value = null }
 
     fun finish(onComplete: () -> Unit) = viewModelScope.launch {
-        validateRequiredProfile()?.let { _saveError.value = it; return@launch }
+        validateCompleteProfile()?.let { _saveError.value = it; return@launch }
         if (_saving.value) return@launch
         _saving.value = true
         _saveError.value = null
@@ -145,11 +146,13 @@ class ProfileWizardViewModel @Inject constructor(
             val updated = current.applyWizard(state, username)
                 .copy(profileCompleteness = calculateCompleteness(state))
 
+            // Cloud is authoritative. Persist the completed local copy only after the server accepts
+            // it, so the account gate cannot open on a profile that failed to sync.
             if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated)
             userDao.update(updated)
 
-            // First discovery defaults are personal choices, not demographic inference. Users can
-            // widen or replace them at any time in Discover and can save multiple search presets.
+            // First discovery defaults are explicit choices, never demographic inference. Caste and
+            // sub-caste are deliberately not auto-applied; members can narrow or broaden later.
             val currentFilter = session.filter.first()
             session.setFilter(
                 currentFilter.copy(
@@ -158,6 +161,8 @@ class ProfileWizardViewModel @Inject constructor(
                     religion = state.religion
                 )
             )
+            // Kept only for backwards compatibility with older installs. Root navigation now derives
+            // completion from the signed-in account's actual profile fields instead of this device flag.
             session.setCommunitySetupDone(true)
             onComplete()
         } catch (e: Exception) {
@@ -190,6 +195,7 @@ class ProfileWizardViewModel @Inject constructor(
         usernameRepository.validate(s.username)?.let { return it }
         val dob = runCatching { LocalDate.parse(s.dateOfBirth.trim()) }.getOrNull()
             ?: return "Enter date of birth as YYYY-MM-DD."
+        if (dob.isAfter(LocalDate.now())) return "Date of birth cannot be in the future."
         val age = Period.between(dob, LocalDate.now()).years
         if (age !in 18..99) return "This matrimony service is available only to adults aged 18 or above."
         if (s.state.isBlank()) return "Select your state or union territory."
@@ -198,9 +204,13 @@ class ProfileWizardViewModel @Inject constructor(
         return null
     }
 
-    private fun validateRequiredProfile(): String? {
+    private fun validateCompleteProfile(): String? {
         validateRequiredIdentityAndLocation()?.let { return it }
-        if (_wizardState.value.religion.isBlank()) return "Select your religion or choose Prefer not to say."
+        val s = _wizardState.value
+        if (s.religion.isBlank()) return "Select your religion or choose Prefer not to say."
+        if (s.education.isBlank()) return "Add your highest education."
+        if (s.profession.trim().length < 2) return "Add your occupation or profession."
+        if (s.heightCm !in 90..250) return "Enter a valid height in centimetres."
         return null
     }
 
@@ -260,5 +270,8 @@ class ProfileWizardViewModel @Inject constructor(
         return checks.count { it }.toFloat() / checks.size.toFloat()
     }
 
-    private companion object { const val LAST_STEP = 7 }
+    private companion object {
+        const val LAST_STEP = 7
+        val REQUIRED_STEPS = setOf(0, 1, 2, 3)
+    }
 }
