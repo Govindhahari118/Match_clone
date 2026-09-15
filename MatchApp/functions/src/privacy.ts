@@ -12,6 +12,17 @@ function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.Doc
   return db.collection("privacyRelations").doc(ownerUid).collection("members").doc(memberUid);
 }
 
+async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
+  while (true) {
+    const snap = await query.limit(300).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snap.size < 300) return;
+  }
+}
+
 /**
  * Return a matched member's phone only when the requester is entitled AND the target member's
  * current privacy choices permit it. This replaces the older payment-only contact reveal export.
@@ -99,3 +110,16 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     return { phoneNumber, contactsUsed: nextTargets.length, contactsLimit: contactLimit };
   });
 });
+
+/** Remove owner settings and all references to a deleted account from other users' exception lists. */
+export const cleanupPrivacyOnUserDelete = functions.firestore
+  .document("users/{uid}")
+  .onDelete(async (_snap, context) => {
+    const uid = context.params.uid as string;
+    await Promise.all([
+      deleteQuery(db.collection("privacyRelations").doc(uid).collection("members")),
+      deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid)),
+      db.collection("privacySettings").doc(uid).delete(),
+    ]);
+    await db.collection("privacyRelations").doc(uid).delete().catch(() => undefined);
+  });
