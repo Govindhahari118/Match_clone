@@ -254,17 +254,21 @@ export const cleanupStaleLocations = functions.pubsub
   .onRun(async () => {
     const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     let removed = 0;
-    while (true) {
+    let hasMore = true;
+    while (hasMore) {
       const stale = await db.collection("userLocations")
         .where("updatedAtMillis", "<", cutoff)
         .limit(DELETE_BATCH_SIZE)
         .get();
-      if (stale.empty) break;
+      if (stale.empty) {
+        hasMore = false;
+        continue;
+      }
       const batch = db.batch();
       stale.docs.forEach((doc) => batch.delete(doc.ref));
       await batch.commit();
       removed += stale.size;
-      if (stale.size < DELETE_BATCH_SIZE) break;
+      hasMore = stale.size === DELETE_BATCH_SIZE;
     }
     functions.logger.info("Stale Nearby locations removed", { removed });
     return null;
