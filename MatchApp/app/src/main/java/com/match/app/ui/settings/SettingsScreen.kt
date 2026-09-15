@@ -87,6 +87,7 @@ class SettingsViewModel @Inject constructor(
         _searchMessage.value = "Saved search deleted."
     }
 
+    fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
 
     fun deleteAccount() = viewModelScope.launch {
@@ -319,9 +320,7 @@ fun SettingsScreen(
                     singleLine = true
                 )
             },
-            confirmButton = {
-                Button(onClick = { vm.saveCurrentSearch(searchName); saveSearchDialog = false }) { Text("Save") }
-            },
+            confirmButton = { Button(onClick = { vm.saveCurrentSearch(searchName); saveSearchDialog = false }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { saveSearchDialog = false }) { Text("Cancel") } }
         )
     }
@@ -339,12 +338,6 @@ fun SettingsScreen(
         )
     }
 }
-
-private fun SettingsViewModel.savedSearchToFilter(search: SavedSearchEntity): MatchFilter =
-    javaClass.getDeclaredField("savedSearchRepo").let {
-        // Never used: extension body is replaced by the public view-model method below at compile time.
-        MatchFilter()
-    }
 
 @Composable
 private fun SettingToggle(
