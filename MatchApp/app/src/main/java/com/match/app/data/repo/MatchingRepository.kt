@@ -22,6 +22,7 @@ import com.match.app.domain.model.LookingFor
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.MatchMode
 import com.match.app.domain.model.MatchResult
+import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -74,10 +75,11 @@ class MatchingRepository @Inject constructor(
     ): List<MatchResult> {
         val seekerEntity = userDao.findById(seekerId) ?: return emptyList()
 
-        // Production discovery is Firebase-backed. Hydrate authorized public profiles into Room
-        // first so the existing local numeric navigation IDs remain stable while Firebase UID stays
-        // the canonical network identity for interests, blocks, chat and profile reads.
-        syncRemoteCandidates(seekerEntity, filter)
+        // Only UIDs returned by the current trusted discovery call are eligible for this refresh.
+        // Room is a cache, not an authorization source: old cached profiles must never reappear if
+        // they later block/hide/enable stealth or otherwise become unavailable to this viewer.
+        val authorizedUids = syncRemoteCandidates(seekerEntity, filter)
+        if (authorizedUids.isEmpty()) return emptyList()
 
         return withContext(Dispatchers.Default) {
             val blockedIds = social.blockedIds(seekerId).toSet()
@@ -88,7 +90,7 @@ class MatchingRepository @Inject constructor(
             userDao.allExcluding(seekerId)
                 .asSequence()
                 .filter { !it.isSeed }
-                .filter { it.firebaseUid.isNotBlank() }
+                .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedUids }
                 .filter { it.id !in blockedIds }
                 .filter { !it.stealthMode }
                 .filter { genderFilter(seekerEntity, it) }
@@ -164,7 +166,14 @@ class MatchingRepository @Inject constructor(
                             )
                         } ?: 0f
                     } else 0f
-                    val astro = Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
+                    val astro = if (
+                        ReligionCategory.fromReligion(seekerEntity.religion) == ReligionCategory.HINDU &&
+                        ReligionCategory.fromReligion(candidate.religion) == ReligionCategory.HINDU &&
+                        seekerEntity.rasi.isNotBlank() && seekerEntity.nakshatra.isNotBlank() &&
+                        candidate.rasi.isNotBlank() && candidate.nakshatra.isNotBlank()
+                    ) {
+                        Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
+                    } else 0f
                     MatchResult(
                         user = candidateProfile,
                         questionnaireScore = qScore,
@@ -180,10 +189,11 @@ class MatchingRepository @Inject constructor(
         }
     }
 
-    private suspend fun syncRemoteCandidates(seeker: UserEntity, filter: MatchFilter) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() } ?: return
+    private suspend fun syncRemoteCandidates(seeker: UserEntity, filter: MatchFilter): Set<String> {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() } ?: return emptySet()
         val blocked = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
         val liked = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
+        val authorized = linkedSetOf<String>()
         var cursor: String? = null
 
         repeat(MAX_DISCOVERY_PAGES_PER_REFRESH) {
@@ -204,14 +214,18 @@ class MatchingRepository @Inject constructor(
             )
             when (result) {
                 is PagingSource.LoadResult.Page -> {
-                    result.data.forEach { cacheRemoteCandidate(it) }
+                    result.data.forEach { remote ->
+                        if (remote.firebaseUid.isNotBlank()) authorized += remote.firebaseUid
+                        cacheRemoteCandidate(remote)
+                    }
                     cursor = result.nextKey
-                    if (cursor == null) return
+                    if (cursor == null) return authorized
                 }
-                is PagingSource.LoadResult.Error -> return
-                is PagingSource.LoadResult.Invalid -> return
+                is PagingSource.LoadResult.Error -> return authorized
+                is PagingSource.LoadResult.Invalid -> return authorized
             }
         }
+        return authorized
     }
 
     private suspend fun cacheRemoteCandidate(remote: UserEntity): UserEntity {
@@ -230,9 +244,6 @@ class MatchingRepository @Inject constructor(
             return merged
         }
 
-        // Room requires a unique non-null email, but discovery intentionally never receives private
-        // contact data. This sentinel is internal cache metadata only and is replaced with the real
-        // authenticated email if that Firebase account later signs in on this device.
         val cached = remote.copy(
             email = "${firebaseUid}@cache.invalid",
             passwordHash = "",
