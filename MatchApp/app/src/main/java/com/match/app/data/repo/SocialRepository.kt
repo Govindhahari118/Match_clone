@@ -45,7 +45,6 @@ class SocialRepository @Inject constructor(
         val senderUid = userDao.findById(sender)?.firebaseUid.orEmpty()
         if (myUid.isBlank() || senderUid.isBlank()) throw IllegalStateException("Profile is not linked to Firebase")
         firestoreInterest.declineIncomingInterest(senderUid)
-        // Remove only stale local incoming cache if it exists; server remains authoritative.
         runCatching { likeDao.unlike(sender, me) }
     }
 
@@ -81,14 +80,20 @@ class SocialRepository @Inject constructor(
     fun observeMutual(me: Long): Flow<List<LikeEntity>> = likeDao.observeMutualLikes(me)
     fun observeIncoming(me: Long): Flow<Int> = likeDao.observeIncomingCount(me)
 
+    /**
+     * Interest documents are visible to their participants even after a profile is later hidden.
+     * Therefore every list hydration performs a fresh server-authorized profile read instead of
+     * trusting an old Room row. A hide/block immediately removes that member card on the next
+     * snapshot, while a stealth sender remains visible only through the explicit-request exception.
+     */
     fun observeReceivedInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeIncomingInterests(myUid).map { docs -> cacheRemoteUids(docs.map { it.fromUid }) }
+        firestoreInterest.observeIncomingInterests(myUid).map { docs -> cacheAuthorizedRemoteUids(docs.map { it.fromUid }) }
 
     fun observeSentInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeOutgoingInterests(myUid).map { docs -> cacheRemoteUids(docs.map { it.toUid }) }
+        firestoreInterest.observeOutgoingInterests(myUid).map { docs -> cacheAuthorizedRemoteUids(docs.map { it.toUid }) }
 
     fun observeMutualIdsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeMatches(myUid).map { matches -> cacheRemoteUids(matches.map { it.otherUid }) }
+        firestoreInterest.observeMatches(myUid).map { matches -> cacheAuthorizedRemoteUids(matches.map { it.otherUid }) }
 
     suspend fun isMutualMatch(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) {
         val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
@@ -156,13 +161,11 @@ class SocialRepository @Inject constructor(
         if (isBlock) firestoreBlock.block(meUid, themUid) else firestoreBlock.unblock(meUid, themUid)
     }
 
-    private suspend fun cacheRemoteUids(uids: List<String>): List<Long> = withContext(Dispatchers.IO) {
+    private suspend fun cacheAuthorizedRemoteUids(uids: List<String>): List<Long> = withContext(Dispatchers.IO) {
         uids.distinct().mapNotNull { uid ->
             if (uid.isBlank()) return@mapNotNull null
-            val existing = userDao.findByFirebaseUid(uid)
-            if (existing != null) return@mapNotNull existing.id
-            val remote = runCatching { firestoreProfile.fetchProfile(uid) }
-                .onFailure { Log.w("SocialRepository", "Unable to hydrate remote profile $uid", it) }
+            val remote = runCatching { firestoreProfile.fetchProfileFromServer(uid) }
+                .onFailure { Log.i("SocialRepository", "Profile is no longer visible in social list: $uid") }
                 .getOrNull() ?: return@mapNotNull null
             cacheRemoteProfile(remote).id
         }
@@ -171,7 +174,12 @@ class SocialRepository @Inject constructor(
     private suspend fun cacheRemoteProfile(remote: UserEntity): UserEntity {
         val existing = userDao.findByFirebaseUid(remote.firebaseUid)
         if (existing != null) {
-            val merged = remote.copy(id = existing.id, email = existing.email, passwordHash = "", isSeed = false)
+            val merged = remote.copy(
+                id = existing.id,
+                email = existing.email,
+                passwordHash = "",
+                isSeed = false
+            )
             userDao.update(merged)
             return merged
         }
