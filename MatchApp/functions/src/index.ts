@@ -11,6 +11,7 @@ export {
   razorpayWebhook,
 } from "./payments";
 export { consumeContactReveal } from "./privacy";
+export * from "./interests";
 export * from "./playBilling";
 export * from "./safety";
 export * from "./verification";
