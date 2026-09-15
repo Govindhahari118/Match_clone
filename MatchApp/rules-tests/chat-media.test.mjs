@@ -4,7 +4,8 @@ import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebas
 import { doc, setDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
-const projectId = 'matchapp-chat-media-rules-test';
+// Storage rules that read Firestore must run under the same Firebase project as the emulators.
+const projectId = 'matchapp-rules-test';
 let env;
 
 before(async () => {
