@@ -29,29 +29,35 @@ const valid = {
   minPoruthamScore: 0, hasHoroscope: '',
 };
 
-test('owner can create read and delete a valid saved search', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  const ref = doc(db, 'savedSearches/alice/items/search1');
-  await assertSucceeds(setDoc(ref, valid));
-  await assertSucceeds(getDoc(ref));
-  await assertSucceeds(deleteDoc(ref));
-});
-
-test('another member cannot read write or delete saved searches', async () => {
+async function seedAliceSearch() {
   await env.withSecurityRulesDisabled(async context => {
     await setDoc(doc(context.firestore(), 'savedSearches/alice/items/search1'), valid);
+    await setDoc(doc(context.firestore(), 'savedSearches/alice'), { count: 1, updatedAt: Date.now() });
   });
+}
+
+test('owner can read a server-created saved search', async () => {
+  await seedAliceSearch();
+  const db = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(getDoc(doc(db, 'savedSearches/alice/items/search1')));
+  await assertSucceeds(getDoc(doc(db, 'savedSearches/alice')));
+});
+
+test('clients cannot directly create update or delete saved searches, including the owner', async () => {
+  await seedAliceSearch();
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/new-search'), valid));
+  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/search1'), { ...valid, name: 'Changed' }));
+  await assertFails(deleteDoc(doc(db, 'savedSearches/alice/items/search1')));
+  await assertFails(setDoc(doc(db, 'savedSearches/alice'), { count: 999 }));
+});
+
+test('another member cannot read or mutate saved searches', async () => {
+  await seedAliceSearch();
   const bob = env.authenticatedContext('bob').firestore();
   const ref = doc(bob, 'savedSearches/alice/items/search1');
   await assertFails(getDoc(ref));
   await assertFails(setDoc(ref, valid));
   await assertFails(deleteDoc(ref));
-});
-
-test('saved search rejects unexpected fields and malformed values', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/extra'), { ...valid, secret: 'x' }));
-  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/empty'), { ...valid, name: '' }));
-  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/age'), { ...valid, ageMin: 17 }));
-  await assertFails(setDoc(doc(db, 'savedSearches/alice/items/keyword'), { ...valid, keyword: 'x'.repeat(65) }));
+  await assertFails(getDoc(doc(bob, 'savedSearches/alice')));
 });
