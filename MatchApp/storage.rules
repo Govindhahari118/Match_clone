@@ -23,6 +23,23 @@ service firebase.storage {
             explicitInterestFrom(uid, request.auth.uid)))
       );
     }
+    function chatExists(threadId) {
+      return firestore.exists(/databases/(default)/documents/chats/$(threadId));
+    }
+    function chatParticipants(threadId) {
+      return firestore.get(/databases/(default)/documents/chats/$(threadId)).data.participantUids;
+    }
+    function chatMember(threadId, uid) {
+      return chatExists(threadId) &&
+        chatParticipants(threadId) is list &&
+        chatParticipants(threadId).size() == 2 &&
+        uid in chatParticipants(threadId);
+    }
+    function chatPairAllowed(threadId, senderUid, recipientUid) {
+      return senderUid is string && recipientUid is string && senderUid != recipientUid &&
+        chatMember(threadId, senderUid) && recipientUid in chatParticipants(threadId) &&
+        !blockedEitherWay(senderUid, recipientUid);
+    }
 
     match /photos/{uid}/{allPaths=**} {
       allow read: if ownerMediaReadable(uid);
@@ -45,9 +62,18 @@ service firebase.storage {
       allow delete: if false;
     }
     match /chat-media/{threadId}/{fileName} {
-      allow read: if signedIn() && (request.auth.uid == resource.metadata.senderUid || request.auth.uid == resource.metadata.recipientUid);
-      allow create, update: if signedIn() && request.auth.uid == request.resource.metadata.senderUid && request.resource.metadata.recipientUid is string && request.resource.metadata.recipientUid != request.auth.uid && request.resource.metadata.threadId == threadId && request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('audio/.*'));
-      allow delete: if signedIn() && request.auth.uid == resource.metadata.senderUid;
+      allow read: if signedIn() && chatMember(threadId, request.auth.uid) &&
+        !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
+      allow create, update: if signedIn() &&
+        request.auth.uid == request.resource.metadata.senderUid &&
+        request.resource.metadata.threadId == threadId &&
+        request.resource.metadata.kind in ['image', 'voice'] &&
+        chatPairAllowed(threadId, request.resource.metadata.senderUid, request.resource.metadata.recipientUid) &&
+        request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 &&
+        ((request.resource.metadata.kind == 'image' && request.resource.contentType.matches('image/.*')) ||
+          (request.resource.metadata.kind == 'voice' && request.resource.contentType.matches('audio/.*')));
+      allow delete: if signedIn() && resource.metadata.senderUid == request.auth.uid &&
+        chatMember(threadId, request.auth.uid);
     }
   }
 }
