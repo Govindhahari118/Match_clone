@@ -1,4 +1,3 @@
-import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 import { db, requireAppCheck } from "./shared";
 
@@ -31,7 +30,6 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
     const value = data[field];
-    // Callable payloads should contain plain JSON-compatible profile primitives only.
     if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
       result[field] = value;
     } else if (Array.isArray(value)) {
@@ -44,10 +42,9 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
 /**
  * Privacy-safe discovery endpoint.
  *
- * Firestore client list queries cannot safely combine per-document block/stealth rules because
- * rules are not filters. This trusted endpoint performs the scan server-side, derives the viewer
- * identity from Auth, removes either-direction blocks and stealth profiles, and returns only a
- * strict public-field allowlist. Direct profile reads can therefore remain restrictive.
+ * Per-document privacy cannot safely be implemented as a client query because Firestore rules are
+ * not filters. This trusted endpoint performs the scan server-side, removes blocks, stealth users
+ * and owners who explicitly hid their profile from this viewer, and returns a strict public allowlist.
  */
 export const discoverProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
@@ -87,18 +84,27 @@ export const discoverProfiles = functions
     const reverseBlockRefs = candidates.map((doc) =>
       db.collection("blocks").doc(doc.id).collection("blocked").doc(viewerUid)
     );
+    const hiddenFromViewerRefs = candidates.map((doc) =>
+      db.collection("privacyRelations").doc(doc.id).collection("members").doc(viewerUid)
+    );
+    const [reverseDocs, privacyDocs] = await Promise.all([
+      reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
+      hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
+    ]);
+
     const reverseBlocked = new Set<string>();
-    if (reverseBlockRefs.length > 0) {
-      const reverseDocs = await db.getAll(...reverseBlockRefs);
-      reverseDocs.forEach((doc, index) => {
-        if (doc.exists) reverseBlocked.add(candidates[index].id);
-      });
-    }
+    const hiddenFromViewer = new Set<string>();
+    reverseDocs.forEach((doc, index) => {
+      if (doc.exists) reverseBlocked.add(candidates[index].id);
+    });
+    privacyDocs.forEach((doc, index) => {
+      if (doc.exists && doc.data()?.profileHidden === true) hiddenFromViewer.add(candidates[index].id);
+    });
 
     const profiles: Record<string, unknown>[] = [];
     for (const doc of candidates) {
       if (profiles.length >= RETURN_LIMIT) break;
-      if (reverseBlocked.has(doc.id)) continue;
+      if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
       const candidate = doc.data();
       if (candidate.stealthMode === true) continue;
 
