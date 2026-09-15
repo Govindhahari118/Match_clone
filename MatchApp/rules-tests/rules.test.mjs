@@ -51,7 +51,7 @@ test('unauthenticated users cannot read profiles', async () => {
   await assertFails(getDoc(doc(db, 'users/alice')));
 });
 
-test('stealth profiles are owner-readable but hidden from other clients', async () => {
+test('stealth profiles are owner-readable but hidden from unrelated clients', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users/bob'), { stealthMode: true });
   });
@@ -59,6 +59,20 @@ test('stealth profiles are owner-readable but hidden from other clients', async 
   const aliceDb = env.authenticatedContext('alice').firestore();
   await assertSucceeds(getDoc(doc(bobDb, 'users/bob')));
   await assertFails(getDoc(doc(aliceDb, 'users/bob')));
+});
+
+test('request recipient can inspect stealth sender profile before accepting', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
+  });
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+
+  await assertFails(getDoc(doc(bobDb, 'users/alice')));
+  await assertSucceeds(setDoc(doc(aliceDb, 'interests/alice_bob'), {
+    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
+  }));
+  await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
 });
 
 test('private account data is owner-only', async () => {
@@ -218,6 +232,38 @@ test('hidden member cannot read profile photo while owner still can', async () =
 
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
   await assertSucceeds(getBytes(object));
+});
+
+test('blocked member cannot read profile media', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const object = ref(aliceStorage, 'photos/alice/block-test.jpg');
+  const bytes = new Uint8Array([4, 2, 4, 2]);
+
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
+  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
+});
+
+test('stealth profile media is private except to an explicit interest recipient', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const object = ref(aliceStorage, 'photos/alice/stealth-test.jpg');
+  const bytes = new Uint8Array([1, 9, 9, 9]);
+
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
+  });
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
+
+  await assertSucceeds(setDoc(doc(aliceDb, 'interests/alice_bob'), {
+    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
+  }));
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
 });
 
 test('verification documents cannot be read by another client', async () => {
