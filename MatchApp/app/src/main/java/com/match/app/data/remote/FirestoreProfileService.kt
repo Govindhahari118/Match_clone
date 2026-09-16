@@ -38,24 +38,49 @@ class FirestoreProfileService @Inject constructor(
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt"
         )
+        private val PROTECTED_PROFILE_FIELDS = setOf(
+            "religion", "religionLocked", "religionConfirmedAt"
+        )
         private val PRIVATE_FIELDS = setOf(
             "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
             "manglik", "birthTime", "birthPlace", "incomeBand"
         )
     }
 
-    /** Push the profile while keeping contact/private data out of discoverable documents. */
-    suspend fun pushProfile(entity: UserEntity) {
+    /**
+     * Push the profile while keeping contact/private data out of discoverable documents.
+     * When [confirmReligion] is true, religion is atomically marked as confirmed. The operation is
+     * idempotent: if a prior retry already created the lock, the immutable confirmation timestamp is
+     * preserved and Firestore rules still verify that the religion itself did not change.
+     */
+    suspend fun pushProfile(entity: UserEntity, confirmReligion: Boolean = false) {
         if (entity.firebaseUid.isBlank()) return
         val uid = entity.firebaseUid
+        require(auth.currentUser?.uid == uid) { "Cannot update another user's profile" }
+
         val publicData = entityToPublicMap(entity).toMutableMap().apply {
             put("email", FieldValue.delete())
             put("phoneNumber", FieldValue.delete())
             put("fcmToken", FieldValue.delete())
             put("dateOfBirth", FieldValue.delete())
         }
-        val privateData = entityToPrivateMap(entity)
 
+        if (confirmReligion) {
+            require(entity.religion.isNotBlank()) { "Religion must be selected before confirmation" }
+            val current = usersCol.document(uid).get().await()
+            val alreadyLocked = current.getBoolean("religionLocked") == true
+            if (alreadyLocked) {
+                val canonicalReligion = current.getString("religion").orEmpty()
+                require(canonicalReligion.equals(entity.religion, ignoreCase = true)) {
+                    "Religion is already confirmed and cannot be changed from the app"
+                }
+            } else {
+                publicData["religionLocked"] = true
+                publicData["religionConfirmedAt"] = System.currentTimeMillis()
+            }
+        }
+
+        val privateData = entityToPrivateMap(entity)
         val batch = db.batch()
         batch.set(usersCol.document(uid), publicData, SetOptions.merge())
         batch.set(privateCol.document(uid), privateData, SetOptions.merge())
@@ -87,11 +112,14 @@ class FirestoreProfileService @Inject constructor(
     /**
      * Update profile fields without ever permitting the Android client to mutate
      * billing/verification/identity authority. Sensitive owner fields are routed to userPrivate.
+     * Religion is intentionally excluded from generic patch updates; it is confirmed only by the
+     * onboarding confirmation flow and thereafter protected by Firestore rules.
      */
     suspend fun updateFields(firebaseUid: String, fields: Map<String, Any?>) {
         if (firebaseUid.isBlank() || fields.isEmpty()) return
         require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's profile" }
         require(fields.keys.none { it in SERVER_OWNED_FIELDS }) { "Server-owned field update rejected" }
+        require(fields.keys.none { it in PROTECTED_PROFILE_FIELDS }) { "Protected profile field update rejected" }
 
         val privateUpdates = fields.filterKeys { it in PRIVATE_FIELDS }
         val publicUpdates = fields.filterKeys { it !in PRIVATE_FIELDS }

@@ -8,10 +8,13 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.match.app.domain.model.AppearancePreference
+import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.MatchMode
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ReligionExperiencePreference
+import com.match.app.domain.model.ThemePreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -37,6 +40,9 @@ class SessionStore(private val context: Context) {
     private val KEY_VERIFIED  = booleanPreferencesKey("filter_verified")
     private val KEY_DARK      = booleanPreferencesKey("dark_mode")
     private val KEY_PALETTE   = stringPreferencesKey("palette_key")
+    private val KEY_THEME_PREFERENCE = stringPreferencesKey("appearance_theme_preference")
+    private val KEY_MANUAL_THEME = stringPreferencesKey("appearance_manual_theme")
+    private val KEY_DISPLAY_MODE = stringPreferencesKey("appearance_display_mode")
     private val KEY_API_BASE  = stringPreferencesKey("api_base_url")
     private val KEY_BIOMETRIC = booleanPreferencesKey("biometric_lock")
     private val KEY_INCOME_MIN = stringPreferencesKey("filter_income_min")
@@ -81,17 +87,14 @@ class SessionStore(private val context: Context) {
     private val KEY_DPDP_CONSENT = booleanPreferencesKey("dpdp_consent_given")
     private val KEY_DPDP_CONSENT_AT = longPreferencesKey("dpdp_consent_at")
 
-    // Private discovery experience. These values never redefine the member's
-    // declared religion; they only control discovery defaults and optional UI.
+    // Discovery experience only. These values never redefine the member's declared religion.
     private val KEY_RELIGION_LENSES = stringPreferencesKey("religion_lenses")
     private val KEY_RELIGION_LOCKED = booleanPreferencesKey("religion_lens_locked")
+    // Legacy appearance key retained only for migration/compatibility with older installs.
     private val KEY_RELIGION_THEME = booleanPreferencesKey("religion_theme_enabled")
 
     companion object {
-        /** Auto-logout after 30 days of inactivity. */
         private const val SESSION_EXPIRY_MS = 30L * 24 * 60 * 60 * 1000
-
-        /** Only locales with real, reviewed production copy may be selected or restored. */
         private val SUPPORTED_UI_LANGUAGES = setOf("en", "hi", "te", "ta", "kn", "mr")
     }
 
@@ -110,28 +113,28 @@ class SessionStore(private val context: Context) {
     val onboarded: Flow<Boolean> = context.dataStore.data.map { it[KEY_ONBOARD] ?: false }
     val filter: Flow<MatchFilter> = context.dataStore.data.map {
         MatchFilter(
-            ageMin       = it[KEY_AGE_MIN]   ?: 18,
-            ageMax       = it[KEY_AGE_MAX]   ?: 70,
-            city         = it[KEY_CITY]      ?: "",
-            state        = it[KEY_STATE]     ?: "",
-            caste        = it[KEY_CASTE]     ?: "",
-            subCaste     = it[KEY_SUB_CASTE] ?: "",
-            minScore     = it[KEY_MIN_SCORE] ?: 0f,
-            religion     = it[KEY_RELIGION]  ?: "",
-            motherTongue = it[KEY_TONGUE]    ?: "",
-            maritalStatus= it[KEY_MARITAL]   ?: "",
-            verifiedOnly = it[KEY_VERIFIED]  ?: false,
-            incomeMin    = it[KEY_INCOME_MIN] ?: "",
-            incomeMax    = it[KEY_INCOME_MAX] ?: "",
+            ageMin = it[KEY_AGE_MIN] ?: 18,
+            ageMax = it[KEY_AGE_MAX] ?: 70,
+            city = it[KEY_CITY] ?: "",
+            state = it[KEY_STATE] ?: "",
+            caste = it[KEY_CASTE] ?: "",
+            subCaste = it[KEY_SUB_CASTE] ?: "",
+            minScore = it[KEY_MIN_SCORE] ?: 0f,
+            religion = it[KEY_RELIGION] ?: "",
+            motherTongue = it[KEY_TONGUE] ?: "",
+            maritalStatus = it[KEY_MARITAL] ?: "",
+            verifiedOnly = it[KEY_VERIFIED] ?: false,
+            incomeMin = it[KEY_INCOME_MIN] ?: "",
+            incomeMax = it[KEY_INCOME_MAX] ?: "",
             educationLevel = it[KEY_EDUCATION] ?: "",
-            diet         = it[KEY_DIET]      ?: "",
+            diet = it[KEY_DIET] ?: "",
             residentialStatus = it[KEY_RESIDENTIAL] ?: "",
-            hasChildren  = it[KEY_CHILDREN]  ?: "",
-            keyword      = it[KEY_KEYWORD]   ?: "",
-            gothra       = it[KEY_GOTHRA]    ?: "",
-            nativeState  = it[KEY_NATIVE_STATE] ?: "",
+            hasChildren = it[KEY_CHILDREN] ?: "",
+            keyword = it[KEY_KEYWORD] ?: "",
+            gothra = it[KEY_GOTHRA] ?: "",
+            nativeState = it[KEY_NATIVE_STATE] ?: "",
             countryOfResidence = it[KEY_COUNTRY] ?: "",
-            nriOnly      = it[KEY_NRI_ONLY]  ?: false,
+            nriOnly = it[KEY_NRI_ONLY] ?: false,
             willingToRelocate = it[KEY_RELOCATE] ?: false,
             recentlyJoinedDays = it[KEY_RECENT_DAYS] ?: 0,
             smoking = it[KEY_SMOKING] ?: "",
@@ -157,6 +160,29 @@ class SessionStore(private val context: Context) {
             hasHoroscope = it[KEY_HAS_HOROSCOPE] ?: ""
         )
     }
+
+    /** Presentation state is independent from profile religion and discovery preferences. */
+    val appearancePreference: Flow<AppearancePreference> = context.dataStore.data.map { prefs ->
+        val legacyPalette = prefs[KEY_PALETTE]
+        val themePreference = prefs[KEY_THEME_PREFERENCE]?.let { ThemePreference.fromStorage(it) } ?: when {
+            prefs[KEY_RELIGION_THEME] == true -> ThemePreference.AUTOMATIC
+            prefs[KEY_RELIGION_THEME] == false -> if ((legacyPalette ?: "VIVAH") == "VIVAH") ThemePreference.NEUTRAL else ThemePreference.MANUAL
+            legacyPalette != null -> if (legacyPalette == "VIVAH") ThemePreference.NEUTRAL else ThemePreference.MANUAL
+            else -> ThemePreference.AUTOMATIC
+        }
+        val displayMode = prefs[KEY_DISPLAY_MODE]?.let { DisplayMode.fromStorage(it) } ?: when (prefs[KEY_DARK]) {
+            true -> DisplayMode.DARK
+            false -> DisplayMode.LIGHT
+            null -> DisplayMode.SYSTEM
+        }
+        AppearancePreference(
+            themePreference = themePreference,
+            manualThemeKey = prefs[KEY_MANUAL_THEME] ?: legacyPalette ?: "VIVAH",
+            displayMode = displayMode
+        )
+    }
+
+    // Compatibility flows retained for older call sites while migration is completed.
     val darkMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK] ?: false }
     val paletteKey: Flow<String> = context.dataStore.data.map { it[KEY_PALETTE] ?: "VIVAH" }
     val religionExperience: Flow<ReligionExperiencePreference> = context.dataStore.data.map { prefs ->
@@ -171,14 +197,10 @@ class SessionStore(private val context: Context) {
             religionThemeEnabled = prefs[KEY_RELIGION_THEME] ?: false
         )
     }
-    val apiBaseUrl: Flow<String> = context.dataStore.data.map {
-        it[KEY_API_BASE] ?: ""   // No REST server; Firebase IS the backend. Only set in debug.
-    }
+    val apiBaseUrl: Flow<String> = context.dataStore.data.map { it[KEY_API_BASE] ?: "" }
     val biometricLock: Flow<Boolean> = context.dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
-    val uiLanguage: Flow<String> = context.dataStore.data.map { prefs ->
-        normalizeUiLanguage(prefs[KEY_UI_LANG])
-    }
+    val uiLanguage: Flow<String> = context.dataStore.data.map { prefs -> normalizeUiLanguage(prefs[KEY_UI_LANG]) }
     val communitySetupDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_COMMUNITY_SETUP_DONE] ?: false }
     val hasQuestionnaire: Flow<Boolean> = context.dataStore.data.map { it[booleanPreferencesKey("has_questionnaire")] ?: false }
     val incognitoMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_INCOGNITO] ?: false }
@@ -243,18 +265,59 @@ class SessionStore(private val context: Context) {
         it[KEY_MIN_PORUTHAM] = f.minPoruthamScore
         it[KEY_HAS_HOROSCOPE] = f.hasHoroscope
     }
+
     suspend fun setReligionExperience(value: ReligionExperiencePreference) = context.dataStore.edit { prefs ->
         prefs[KEY_RELIGION_LENSES] = value.selected.joinToString(",") { it.storageKey }
         prefs[KEY_RELIGION_LOCKED] = value.locked
-        prefs[KEY_RELIGION_THEME] = value.religionThemeEnabled
     }
     suspend fun setReligionLenses(values: Set<ReligionCategory>) = context.dataStore.edit { prefs ->
         prefs[KEY_RELIGION_LENSES] = values.joinToString(",") { it.storageKey }
     }
     suspend fun setReligionLocked(value: Boolean) = context.dataStore.edit { it[KEY_RELIGION_LOCKED] = value }
-    suspend fun setReligionThemeEnabled(value: Boolean) = context.dataStore.edit { it[KEY_RELIGION_THEME] = value }
-    suspend fun setDarkMode(v: Boolean) = context.dataStore.edit { it[KEY_DARK] = v }
-    suspend fun setPalette(key: String) = context.dataStore.edit { it[KEY_PALETTE] = key }
+
+    suspend fun setThemePreference(value: ThemePreference, manualThemeKey: String? = null) = context.dataStore.edit { prefs ->
+        prefs[KEY_THEME_PREFERENCE] = value.name
+        when (value) {
+            ThemePreference.AUTOMATIC -> prefs[KEY_RELIGION_THEME] = true
+            ThemePreference.NEUTRAL -> {
+                prefs[KEY_RELIGION_THEME] = false
+                prefs[KEY_PALETTE] = "VIVAH"
+            }
+            ThemePreference.MANUAL -> {
+                val selected = manualThemeKey ?: prefs[KEY_MANUAL_THEME] ?: prefs[KEY_PALETTE] ?: "VIVAH"
+                prefs[KEY_RELIGION_THEME] = false
+                prefs[KEY_MANUAL_THEME] = selected
+                prefs[KEY_PALETTE] = selected
+            }
+        }
+    }
+
+    suspend fun setDisplayMode(value: DisplayMode) = context.dataStore.edit { prefs ->
+        prefs[KEY_DISPLAY_MODE] = value.name
+        when (value) {
+            DisplayMode.DARK -> prefs[KEY_DARK] = true
+            DisplayMode.LIGHT -> prefs[KEY_DARK] = false
+            DisplayMode.SYSTEM -> prefs.remove(KEY_DARK)
+        }
+    }
+
+    // Legacy setters retain coherent new-model state for any remaining old call sites.
+    suspend fun setReligionThemeEnabled(value: Boolean) = context.dataStore.edit { prefs ->
+        prefs[KEY_RELIGION_THEME] = value
+        if (value) prefs[KEY_THEME_PREFERENCE] = ThemePreference.AUTOMATIC.name
+        else if (ThemePreference.fromStorage(prefs[KEY_THEME_PREFERENCE]) == ThemePreference.AUTOMATIC) {
+            prefs[KEY_THEME_PREFERENCE] = ThemePreference.NEUTRAL.name
+            prefs[KEY_PALETTE] = "VIVAH"
+        }
+    }
+    suspend fun setDarkMode(v: Boolean) = context.dataStore.edit { prefs ->
+        prefs[KEY_DARK] = v
+        prefs[KEY_DISPLAY_MODE] = if (v) DisplayMode.DARK.name else DisplayMode.LIGHT.name
+    }
+    suspend fun setPalette(key: String) = context.dataStore.edit { prefs ->
+        prefs[KEY_PALETTE] = key
+        prefs[KEY_MANUAL_THEME] = key
+    }
     suspend fun setApiBaseUrl(url: String) = context.dataStore.edit { it[KEY_API_BASE] = url }
     suspend fun setBiometricLock(v: Boolean) = context.dataStore.edit { it[KEY_BIOMETRIC] = v }
     suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = normalizeUiLanguage(lang) }
@@ -266,10 +329,8 @@ class SessionStore(private val context: Context) {
         it[KEY_DPDP_CONSENT_AT] = System.currentTimeMillis()
     }
 
-    /** Record a heartbeat; call from MatchRoot on each resume. */
     suspend fun touchActivity() = context.dataStore.edit { it[KEY_LAST_ACTIVE] = System.currentTimeMillis() }
 
-    /** Returns true if the user hasn't interacted in 30+ days. */
     suspend fun isSessionExpired(): Boolean {
         val prefs = context.dataStore.data.map { it[KEY_LAST_ACTIVE] }.first()
         val last = prefs ?: return false

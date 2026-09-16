@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
@@ -27,6 +28,8 @@ import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.AppearancePreference
+import com.match.app.domain.model.DisplayMode
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -62,11 +65,8 @@ class RootViewModel @Inject constructor(
 ) : ViewModel() {
     val userId = session.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val onboarded = session.onboarded.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val darkMode = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val palette = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
-    val religionThemeEnabled = session.religionExperience
-        .map { it.religionThemeEnabled }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val appearance = session.appearancePreference
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -104,18 +104,18 @@ class RootViewModel @Inject constructor(
             religion.isNotBlank() &&
             education.isNotBlank() &&
             profession.trim().length >= 2 &&
+            maritalStatus.isNotBlank() &&
             heightCm in 90..250
 }
 
 /** Root decision: app intro → auth → required account profile → main. Only one is composed at a time. */
 @Composable
 fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
-    val darkMode by vm.darkMode.collectAsState()
-    val paletteKey by vm.palette.collectAsState()
-    val religionThemeEnabled by vm.religionThemeEnabled.collectAsState()
+    val appearance by vm.appearance.collectAsState()
     val currentUser by vm.currentUser.collectAsState()
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
+    val systemDark = isSystemInDarkTheme()
 
     LaunchedEffect(Unit) {
         vm.checkSessionExpiry()
@@ -123,10 +123,15 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     }
 
     val effectivePalette = AppearanceThemeResolver.resolve(
-        automaticReligionTheme = religionThemeEnabled,
-        manualPaletteKey = paletteKey,
+        themePreference = appearance.themePreference,
+        manualPaletteKey = appearance.manualThemeKey,
         profileReligion = currentUser?.religion
     )
+    val darkMode = when (appearance.displayMode) {
+        DisplayMode.SYSTEM -> systemDark
+        DisplayMode.LIGHT -> false
+        DisplayMode.DARK -> true
+    }
 
     val layoutDir = if (uiLanguage in setOf("ar", "ur")) LayoutDirection.Rtl else LayoutDirection.Ltr
     MatchTheme(darkMode = darkMode, palette = effectivePalette) {

@@ -23,13 +23,14 @@ data class UserEntity(
     val rasi: String,            // e.g. "Cancer"
     val nakshatra: String,       // e.g. "Pushya"
     val isSeed: Boolean = false,
-    // ── New enrichment fields ──────────────────────────────
-    val religion: String = "Hindu",
-    val motherTongue: String = "Telugu",
-    val education: String = "Graduate",
-    val profession: String = "Software Engineer",
-    val maritalStatus: String = "Never Married",
-    val heightCm: Int = 165,
+    // Profile enrichment fields. New real-user profiles intentionally start unset;
+    // onboarding must collect explicit values rather than fabricating demographics.
+    val religion: String = "",
+    val motherTongue: String = "",
+    val education: String = "",
+    val profession: String = "",
+    val maritalStatus: String = "",
+    val heightCm: Int = 0,
     val isVerified: Boolean = false,
     val isPremium: Boolean = false,
     val isShortlisted: Boolean = false,

@@ -25,12 +25,25 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
 import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.AppearancePreference
+import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.MatchFilter
+import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.theme.AppPalette
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private val manualReligionPalettes = listOf(
+    AppPalette.HINDU,
+    AppPalette.MUSLIM,
+    AppPalette.CHRISTIAN,
+    AppPalette.SIKH,
+    AppPalette.BUDDHIST,
+    AppPalette.JAIN,
+    AppPalette.PARSI
+)
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -39,8 +52,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepo: AuthRepository,
     private val savedSearchRepo: SavedSearchRepository
 ) : ViewModel() {
-    val darkMode = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val paletteKey = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
+    val appearance = session.appearancePreference
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
@@ -67,8 +80,12 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
-    fun setDarkMode(value: Boolean) = viewModelScope.launch { session.setDarkMode(value) }
-    fun setPalette(value: AppPalette) = viewModelScope.launch { session.setPalette(value.name) }
+    fun useAutomaticTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.AUTOMATIC) }
+    fun useNeutralTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.NEUTRAL) }
+    fun useManualTheme(value: AppPalette) = viewModelScope.launch {
+        session.setThemePreference(ThemePreference.MANUAL, value.name)
+    }
+    fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
 
     fun saveCurrentSearch(name: String) = viewModelScope.launch {
@@ -108,7 +125,7 @@ class SettingsViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -118,8 +135,7 @@ fun SettingsScreen(
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val user by vm.user.collectAsState()
-    val darkMode by vm.darkMode.collectAsState()
-    val paletteKey by vm.paletteKey.collectAsState()
+    val appearance by vm.appearance.collectAsState()
     val biometric by vm.biometricLock.collectAsState()
     val plan by vm.planKey.collectAsState()
     val language by vm.uiLanguage.collectAsState()
@@ -131,6 +147,8 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
+
+    val currentPalette = AppPalette.fromKey(appearance.manualThemeKey)
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -231,37 +249,72 @@ fun SettingsScreen(
             }
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            SettingToggle(
-                icon = if (darkMode) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                title = "Dark mode",
-                subtitle = if (darkMode) "Dark appearance enabled" else "Use the light appearance",
-                checked = darkMode,
-                onCheckedChange = vm::setDarkMode
-            )
-
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Standard matrimony palette", fontWeight = FontWeight.SemiBold)
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("App theme", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "This is the default look. Religion-inspired styling is controlled separately from your Profile and remains opt-in.",
+                        "Theme changes presentation only. Your religion, matching preferences, privacy, verification and pricing do not change.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AppPalette.entries.forEach { palette ->
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Surface(
-                                    onClick = { vm.setPalette(palette) },
-                                    shape = CircleShape,
-                                    color = palette.swatch,
-                                    border = if (palette.name == paletteKey) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-                                    modifier = Modifier.size(40.dp)
-                                ) { Box(Modifier) {} }
-                                Spacer(Modifier.height(4.dp))
-                                Text(palette.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                            }
+                    AppearanceChoiceRow(
+                        selected = appearance.themePreference == ThemePreference.AUTOMATIC,
+                        title = "Automatic",
+                        subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let { "Follow my profile religion — $it" }
+                            ?: "Follow my profile religion when available",
+                        onClick = vm::useAutomaticTheme
+                    )
+                    AppearanceChoiceRow(
+                        selected = appearance.themePreference == ThemePreference.NEUTRAL,
+                        title = "Matree Neutral",
+                        subtitle = "Use the standard Matree appearance",
+                        onClick = vm::useNeutralTheme
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Manual theme", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (appearance.themePreference == ThemePreference.MANUAL) "Selected: ${currentPalette.label}"
+                            else "Choose a visual theme below. Selecting one switches to Manual.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        manualReligionPalettes.forEach { palette ->
+                            FilterChip(
+                                selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
+                                onClick = { vm.useManualTheme(palette) },
+                                label = { Text(palette.label) },
+                                leadingIcon = { Surface(shape = CircleShape, color = palette.swatch, modifier = Modifier.size(14.dp)) {} }
+                            )
                         }
                     }
+                    Text(
+                        "Changing theme takes effect immediately and never changes your declared religion.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    HorizontalDivider()
+                    Text("Display", fontWeight = FontWeight.SemiBold)
+                    AppearanceChoiceRow(
+                        selected = appearance.displayMode == DisplayMode.SYSTEM,
+                        title = "System",
+                        subtitle = "Follow the device light/dark setting",
+                        onClick = { vm.setDisplayMode(DisplayMode.SYSTEM) }
+                    )
+                    AppearanceChoiceRow(
+                        selected = appearance.displayMode == DisplayMode.LIGHT,
+                        title = "Light",
+                        subtitle = "Always use the light palette",
+                        onClick = { vm.setDisplayMode(DisplayMode.LIGHT) }
+                    )
+                    AppearanceChoiceRow(
+                        selected = appearance.displayMode == DisplayMode.DARK,
+                        title = "Dark",
+                        subtitle = "Always use the dark palette",
+                        onClick = { vm.setDisplayMode(DisplayMode.DARK) }
+                    )
                 }
             }
 
@@ -336,6 +389,23 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun AppearanceChoiceRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = selected, onClick = onClick)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

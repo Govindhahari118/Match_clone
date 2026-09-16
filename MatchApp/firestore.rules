@@ -6,6 +6,31 @@ service cloud.firestore {
     function hasNoPrivateProfileFields() { return !('email' in request.resource.data) && !('phoneNumber' in request.resource.data) && !('fcmToken' in request.resource.data) && !('dateOfBirth' in request.resource.data); }
     function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
     function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt']); }
+    function validReligionCreate() {
+      let locked = request.resource.data.get('religionLocked', false);
+      return (!locked && !('religionConfirmedAt' in request.resource.data)) ||
+        (locked == true &&
+         request.resource.data.get('religion', '') is string &&
+         request.resource.data.get('religion', '').size() > 0 &&
+         request.resource.data.get('religionConfirmedAt', 0) is int &&
+         request.resource.data.get('religionConfirmedAt', 0) > 0);
+    }
+    function validReligionUpdate() {
+      let wasLocked = resource.data.get('religionLocked', false);
+      let willBeLocked = request.resource.data.get('religionLocked', false);
+      return wasLocked == true
+        ? willBeLocked == true &&
+          request.resource.data.get('religion', '') == resource.data.get('religion', '') &&
+          request.resource.data.get('religionConfirmedAt', 0) == resource.data.get('religionConfirmedAt', 0)
+        : (
+          (!willBeLocked && !('religionConfirmedAt' in request.resource.data)) ||
+          (willBeLocked == true &&
+           request.resource.data.get('religion', '') is string &&
+           request.resource.data.get('religion', '').size() > 0 &&
+           request.resource.data.get('religionConfirmedAt', 0) is int &&
+           request.resource.data.get('religionConfirmedAt', 0) > 0)
+        );
+    }
     function blockedEitherWay(viewerUid, targetUid) {
       return exists(/databases/$(database)/documents/blocks/$(viewerUid)/blocked/$(targetUid)) ||
              exists(/databases/$(database)/documents/blocks/$(targetUid)/blocked/$(viewerUid));
@@ -30,8 +55,8 @@ service cloud.firestore {
         (!blockedEitherWay(request.auth.uid, userId) &&
          !profileHiddenFrom(userId, request.auth.uid) &&
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
-      allow create: if isOwner(userId) && safeUserCreate();
-      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged();
+      allow create: if isOwner(userId) && safeUserCreate() && validReligionCreate();
+      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionUpdate();
       // Account erasure is a server-managed state machine so Auth, Storage and related documents
       // cannot be orphaned by deleting only the public profile document.
       allow delete: if false;

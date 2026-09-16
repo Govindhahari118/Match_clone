@@ -7,6 +7,7 @@ import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.ReligionCategory
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,7 +42,7 @@ data class WizardState(
     val weight: Float = 0f,
     val complexion: String = "",
     val physicalStatus: String = "",
-    val maritalStatus: String = "Never Married",
+    val maritalStatus: String = "",
     val hasChildren: Boolean = false,
     val nativeState: String = "",
     val familyType: String = "",
@@ -86,6 +87,10 @@ class ProfileWizardViewModel @Inject constructor(
     val saving = _saving.asStateFlow()
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError = _saveError.asStateFlow()
+    private val _religionConfirmed = MutableStateFlow(false)
+    val religionConfirmed = _religionConfirmed.asStateFlow()
+    private val _religionConfirmationRequired = MutableStateFlow(false)
+    val religionConfirmationRequired = _religionConfirmationRequired.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -96,14 +101,39 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     fun update(state: WizardState) {
+        if (!state.religion.equals(_wizardState.value.religion, ignoreCase = true)) {
+            _religionConfirmed.value = false
+            _religionConfirmationRequired.value = false
+        }
         _wizardState.value = state
         _saveError.value = null
     }
 
     fun nextStep() {
-        validateStep(_currentStep.value)?.let { _saveError.value = it; return }
+        val step = _currentStep.value
+        validateStep(step)?.let { _saveError.value = it; return }
+        if (step == RELIGION_STEP && !_religionConfirmed.value) {
+            _religionConfirmationRequired.value = true
+            return
+        }
         persistDraft()
-        _currentStep.value = (_currentStep.value + 1).coerceAtMost(LAST_STEP)
+        _currentStep.value = (step + 1).coerceAtMost(LAST_STEP)
+    }
+
+    fun confirmReligionAndContinue() {
+        validateStep(RELIGION_STEP)?.let {
+            _saveError.value = it
+            _religionConfirmationRequired.value = false
+            return
+        }
+        _religionConfirmed.value = true
+        _religionConfirmationRequired.value = false
+        persistDraft()
+        _currentStep.value = (RELIGION_STEP + 1).coerceAtMost(LAST_STEP)
+    }
+
+    fun cancelReligionConfirmation() {
+        _religionConfirmationRequired.value = false
     }
 
     fun previousStep() {
@@ -116,9 +146,9 @@ class ProfileWizardViewModel @Inject constructor(
         if (step in REQUIRED_STEPS) {
             _saveError.value = when (step) {
                 0 -> "Please complete your identity, state, city and mother tongue first."
-                1 -> "Please choose your religion before continuing. You can choose Prefer not to say if you do not want to specify one."
+                1 -> "Please choose and confirm your religion before continuing. You can choose Prefer not to say if you do not want to specify one."
                 2 -> "Please add your highest education and occupation before continuing."
-                3 -> "Please enter a valid height before continuing."
+                3 -> "Please enter a valid height and marital status before continuing."
                 else -> "Complete the required fields before continuing."
             }
             return
@@ -131,6 +161,11 @@ class ProfileWizardViewModel @Inject constructor(
 
     fun finish(onComplete: () -> Unit) = viewModelScope.launch {
         validateCompleteProfile()?.let { _saveError.value = it; return@launch }
+        if (!_religionConfirmed.value) {
+            _saveError.value = "Review and confirm your religion before completing your profile."
+            _currentStep.value = RELIGION_STEP
+            return@launch
+        }
         if (_saving.value) return@launch
         _saving.value = true
         _saveError.value = null
@@ -147,22 +182,13 @@ class ProfileWizardViewModel @Inject constructor(
                 .copy(profileCompleteness = calculateCompleteness(state))
 
             // Cloud is authoritative. Persist the completed local copy only after the server accepts
-            // it, so the account gate cannot open on a profile that failed to sync.
-            if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated)
+            // it, so the account gate cannot open on a profile that failed to sync. Religion is
+            // confirmed here and becomes write-once in Firestore security rules.
+            if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated, confirmReligion = true)
             userDao.update(updated)
 
-            // First discovery defaults are explicit choices, never demographic inference. Caste and
-            // sub-caste are deliberately not auto-applied; members can narrow or broaden later.
-            val currentFilter = session.filter.first()
-            session.setFilter(
-                currentFilter.copy(
-                    state = state.state,
-                    motherTongue = state.motherTongue,
-                    religion = state.religion
-                )
-            )
-            // Kept only for backwards compatibility with older installs. Root navigation now derives
-            // completion from the signed-in account's actual profile fields instead of this device flag.
+            // Own-profile attributes are deliberately NOT copied into partner/discovery filters.
+            // Partner preferences are a separate concept and remain entirely user-controlled.
             session.setCommunitySetupDone(true)
             onComplete()
         } catch (e: Exception) {
@@ -175,7 +201,23 @@ class ProfileWizardViewModel @Inject constructor(
     private fun persistDraft() = viewModelScope.launch {
         val uid = session.userId.first() ?: return@launch
         val user = userDao.findById(uid) ?: return@launch
-        userDao.update(user.applyWizard(_wizardState.value, user.username))
+        val draft = user.applyWizard(_wizardState.value, user.username)
+        val safeDraft = if (_religionConfirmed.value) {
+            draft
+        } else {
+            // Selecting a religion in the UI is not confirmation. Keep canonical religion/community
+            // fields unchanged until the explicit confirmation dialog succeeds.
+            draft.copy(
+                religion = user.religion,
+                caste = user.caste,
+                subCaste = user.subCaste,
+                gothra = user.gothra,
+                rasi = user.rasi,
+                nakshatra = user.nakshatra,
+                manglik = user.manglik
+            )
+        }
+        userDao.update(safeDraft)
     }
 
     private fun validateStep(step: Int): String? {
@@ -184,7 +226,11 @@ class ProfileWizardViewModel @Inject constructor(
             0 -> validateRequiredIdentityAndLocation()
             1 -> if (s.religion.isBlank()) "Select your religion or choose Prefer not to say." else null
             2 -> if (s.education.isBlank() || s.profession.isBlank()) "Add your education and occupation." else null
-            3 -> if (s.heightCm !in 90..250) "Enter a valid height in centimetres." else null
+            3 -> when {
+                s.heightCm !in 90..250 -> "Enter a valid height in centimetres."
+                s.maritalStatus.isBlank() -> "Select your marital status."
+                else -> null
+            }
             else -> null
         }
     }
@@ -211,6 +257,7 @@ class ProfileWizardViewModel @Inject constructor(
         if (s.education.isBlank()) return "Add your highest education."
         if (s.profession.trim().length < 2) return "Add your occupation or profession."
         if (s.heightCm !in 90..250) return "Enter a valid height in centimetres."
+        if (s.maritalStatus.isBlank()) return "Select your marital status."
         return null
     }
 
@@ -236,11 +283,12 @@ class ProfileWizardViewModel @Inject constructor(
     private fun UserEntity.applyWizard(s: WizardState, reservedUsername: String): UserEntity {
         val ageFromDob = runCatching { Period.between(LocalDate.parse(s.dateOfBirth.trim()), LocalDate.now()).years }.getOrNull()
         val isNri = s.countryOfResidence.isNotBlank() && !s.countryOfResidence.equals("India", ignoreCase = true)
+        val isHindu = ReligionCategory.fromReligion(s.religion) == ReligionCategory.HINDU
         return copy(
             username = reservedUsername, displayName = s.displayName.trim(), dateOfBirth = s.dateOfBirth.trim(),
             age = ageFromDob?.takeIf { it in 18..99 } ?: age, state = s.state.trim(), city = s.city.trim(),
             motherTongue = s.motherTongue.trim(), bio = s.bio.trim().take(1000), religion = s.religion.trim(),
-            caste = s.caste.trim(), subCaste = s.subCaste.trim(), gothra = s.gothra.trim(),
+            caste = s.caste.trim(), subCaste = s.subCaste.trim(), gothra = if (isHindu) s.gothra.trim() else "",
             education = s.education.trim(), educationField = s.educationField.trim(), institution = s.institution.trim(),
             graduationYear = s.graduationYear, profession = s.profession.trim(), occupationCategory = s.occupationCategory.trim(),
             employer = s.employer.trim(), employerType = s.employerType.trim(), incomeBand = s.incomeBand.trim(),
@@ -252,26 +300,28 @@ class ProfileWizardViewModel @Inject constructor(
             hobbies = s.hobbies.trim(), spokenLanguages = s.spokenLanguages.trim(), personalityType = s.personalityType.trim(),
             fitnessActivities = s.fitnessActivities.trim(), countryOfResidence = s.countryOfResidence.trim(), citizenship = s.citizenship.trim(),
             residentialStatus = s.residentialStatus.trim(), visaStatus = s.visaStatus.trim(), willingToRelocate = s.willingToRelocate,
-            isNRI = isNri, rasi = s.rasi.trim(), nakshatra = s.nakshatra.trim(), manglik = s.manglik.trim(),
-            birthTime = s.birthTime.trim(), birthPlace = s.birthPlace.trim()
+            isNRI = isNri, rasi = if (isHindu) s.rasi.trim() else "", nakshatra = if (isHindu) s.nakshatra.trim() else "",
+            manglik = if (isHindu) s.manglik.trim() else "", birthTime = s.birthTime.trim(), birthPlace = s.birthPlace.trim()
         )
     }
 
     private fun calculateCompleteness(s: WizardState): Float {
+        // Completeness uses the shared profile model only. Optional religion-specific fields must not
+        // penalize people from religions where those fields do not apply.
         val checks = listOf(
             s.username.isNotBlank(), s.displayName.isNotBlank(), s.dateOfBirth.isNotBlank(),
             s.state.isNotBlank(), s.city.isNotBlank(), s.motherTongue.isNotBlank(), s.bio.isNotBlank(),
-            s.religion.isNotBlank(), s.caste.isNotBlank(), s.education.isNotBlank(), s.profession.isNotBlank(),
+            s.religion.isNotBlank(), s.education.isNotBlank(), s.profession.isNotBlank(),
             s.heightCm > 0, s.maritalStatus.isNotBlank(), s.familyType.isNotBlank(), s.familyValues.isNotBlank(),
-            s.diet.isNotBlank(), s.countryOfResidence.isNotBlank(), s.rasi.isNotBlank(), s.nakshatra.isNotBlank(),
-            s.birthPlace.isNotBlank(), s.incomeBand.isNotBlank(), s.employer.isNotBlank(), s.aboutFamily.isNotBlank(),
-            s.spokenLanguages.isNotBlank()
+            s.diet.isNotBlank(), s.countryOfResidence.isNotBlank(), s.incomeBand.isNotBlank(),
+            s.employer.isNotBlank(), s.aboutFamily.isNotBlank(), s.spokenLanguages.isNotBlank()
         )
         return checks.count { it }.toFloat() / checks.size.toFloat()
     }
 
     private companion object {
         const val LAST_STEP = 7
+        const val RELIGION_STEP = 1
         val REQUIRED_STEPS = setOf(0, 1, 2, 3)
     }
 }
