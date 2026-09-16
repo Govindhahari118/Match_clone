@@ -30,14 +30,13 @@ import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.match.app.data.local.dao.LikeDao
 import com.match.app.data.local.dao.ShortlistDao
-import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PhotoEntity
-import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
+import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,9 +52,7 @@ class ProfileViewModel @Inject constructor(
     private val auth: AuthRepository,
     private val photoRepo: PhotoRepository,
     private val likeDao: LikeDao,
-    private val shortlistDao: ShortlistDao,
-    private val userDao: UserDao,
-    private val firestoreProfile: FirestoreProfileService
+    private val shortlistDao: ShortlistDao
 ) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
@@ -78,22 +75,6 @@ class ProfileViewModel @Inject constructor(
                 _profile.value = id?.let { auth.currentProfile(it) }
             }
         }
-    }
-
-    fun updateReligion(category: ReligionCategory) = viewModelScope.launch {
-        val id = session.userId.first() ?: return@launch
-        val current = userDao.findById(id) ?: return@launch
-        if (current.religion.equals(category.label, ignoreCase = true)) return@launch
-        val updated = current.copy(religion = category.label)
-        userDao.update(updated)
-        if (updated.firebaseUid.isNotBlank()) {
-            runCatching { firestoreProfile.updateFields(updated.firebaseUid, mapOf("religion" to category.label)) }
-        }
-        val experience = session.religionExperience.first()
-        if (experience.locked) {
-            session.setReligionExperience(experience.copy(selected = setOf(category)))
-        }
-        _profile.value = auth.currentProfile(id)
     }
 
     fun importPhoto(uri: Uri) = viewModelScope.launch {
@@ -153,14 +134,13 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
         )
 
-        ReligionExperienceCard(profileReligion = p.religion, onReligionChange = vm::updateReligion)
+        ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
 
         ProfileStats(p.profileViewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
-
         TrustAndVerificationCard(p, photos.isNotEmpty(), onGoVerification)
 
         ProfileSection("Personal details") {
-            InfoRow(Icons.Filled.Person, "${p.age} years • ${p.maritalStatus}")
+            InfoRow(Icons.Filled.Person, listOf("${p.age} years", p.maritalStatus).filter { it.isNotBlank() }.joinToString(" • "))
             InfoRow(Icons.Filled.Height, if (p.heightCm > 0) "${p.heightCm} cm" else "")
             InfoRow(Icons.Filled.Public, listOf(p.city, p.state, p.countryOfResidence).filter { it.isNotBlank() }.joinToString(", "))
             InfoRow(Icons.Filled.Translate, p.motherTongue)
@@ -170,7 +150,13 @@ fun ProfileScreen(
             InfoRow(Icons.Filled.Public, p.religion)
             InfoRow(Icons.Filled.Groups, p.caste)
             InfoRow(Icons.Filled.People, p.subCaste)
-            if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) InfoRow(Icons.Filled.AccountTree, p.gothra)
+            if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) {
+                InfoRow(Icons.Filled.AccountTree, p.gothra)
+            }
+            val schema = ReligionProfileSchemas.forReligion(p.religion)
+            schema.primary?.let { field -> InfoRow(Icons.Filled.Info, labeled(field.label, p.faithTradition)) }
+            schema.secondary?.let { field -> InfoRow(Icons.Filled.Info, labeled(field.label, p.faithSubTradition)) }
+            schema.institution?.let { field -> InfoRow(Icons.Filled.HomeWork, labeled(field.label, p.faithInstitution)) }
         }
 
         if (ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) {
@@ -227,6 +213,9 @@ fun ProfileScreen(
     }
 }
 
+private fun labeled(label: String, value: String): String =
+    if (value.isBlank()) "" else "${label.removeSuffix(" (optional)")}: $value"
+
 @Composable
 private fun ProfileHero(p: UserProfile) {
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
@@ -241,8 +230,8 @@ private fun ProfileHero(p: UserProfile) {
                 Text(p.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 if (p.isVerified) { Spacer(Modifier.size(5.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
             }
-            Text("${p.age} • ${p.city} • ${p.profession}", style = MaterialTheme.typography.bodyMedium)
-            Text("${p.religion}${p.caste.takeIf { it.isNotBlank() }?.let { " • $it" }.orEmpty()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(listOf(p.age.takeIf { it > 0 }?.toString().orEmpty(), p.city, p.profession).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
+            Text(listOf(p.religion, p.caste).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(p.matrimonyId.ifBlank { "Profile ID: M${p.id}" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
     }
