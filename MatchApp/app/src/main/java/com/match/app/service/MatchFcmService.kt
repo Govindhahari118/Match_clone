@@ -108,8 +108,19 @@ class MatchFcmService : FirebaseMessagingService() {
         val title = message.data["title"] ?: message.notification?.title ?: "MatrimonyConnect"
         val body = message.data["body"] ?: message.notification?.body ?: "Open the app for details"
         val fromFirebaseUid = message.data["peer_uid"] ?: message.data["user_id"]
+        val intendedRecipientUid = message.data["recipient_uid"]?.trim()?.takeIf { it.isNotEmpty() }
 
         serviceScope.launch {
+            // FCM tokens can race with logout/account-switch cleanup. A tagged push must never be
+            // shown, persisted, or used to hydrate a peer for a different signed-in account.
+            if (intendedRecipientUid != null) {
+                val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+                if (currentUid != intendedRecipientUid) {
+                    Log.w("MatchFcm", "Dropped push for a different Firebase account")
+                    return@launch
+                }
+            }
+
             val localPeer = fromFirebaseUid?.let { resolveLocalPeerId(it) }
             showNotification(title, body, type, localPeer, localPeer)
             persistNotification(localType(type), title, body, localPeer)
