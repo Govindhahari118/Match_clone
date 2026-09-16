@@ -26,6 +26,7 @@ import com.match.app.data.repo.AuthResult
 import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.MatchFilter
+import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.ui.theme.AppPalette
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -41,6 +42,11 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     val darkMode = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val paletteKey = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
+    val religionExperience = session.religionExperience.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        ReligionExperiencePreference()
+    )
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
@@ -68,7 +74,17 @@ class SettingsViewModel @Inject constructor(
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
     fun setDarkMode(value: Boolean) = viewModelScope.launch { session.setDarkMode(value) }
-    fun setPalette(value: AppPalette) = viewModelScope.launch { session.setPalette(value.name) }
+
+    /** Selecting a manual palette explicitly leaves automatic religion-following mode. */
+    fun setPalette(value: AppPalette) = viewModelScope.launch {
+        session.setPalette(value.name)
+        session.setReligionThemeEnabled(false)
+    }
+
+    fun setAutomaticReligionTheme(enabled: Boolean) = viewModelScope.launch {
+        session.setReligionThemeEnabled(enabled)
+    }
+
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
 
     fun saveCurrentSearch(name: String) = viewModelScope.launch {
@@ -108,7 +124,7 @@ class SettingsViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -120,6 +136,7 @@ fun SettingsScreen(
     val user by vm.user.collectAsState()
     val darkMode by vm.darkMode.collectAsState()
     val paletteKey by vm.paletteKey.collectAsState()
+    val religionExperience by vm.religionExperience.collectAsState()
     val biometric by vm.biometricLock.collectAsState()
     val plan by vm.planKey.collectAsState()
     val language by vm.uiLanguage.collectAsState()
@@ -131,6 +148,19 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
+
+    val manualThemePalettes = remember {
+        listOf(
+            AppPalette.VIVAH,
+            AppPalette.HINDU,
+            AppPalette.MUSLIM,
+            AppPalette.CHRISTIAN,
+            AppPalette.SIKH,
+            AppPalette.BUDDHIST,
+            AppPalette.JAIN,
+            AppPalette.PARSI
+        )
+    }
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -232,6 +262,13 @@ fun SettingsScreen(
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             SettingToggle(
+                icon = Icons.Filled.AutoAwesome,
+                title = "Automatic religion theme",
+                subtitle = "Follow your confirmed profile religion. This changes presentation only.",
+                checked = religionExperience.religionThemeEnabled,
+                onCheckedChange = vm::setAutomaticReligionTheme
+            )
+            SettingToggle(
                 icon = if (darkMode) Icons.Filled.DarkMode else Icons.Filled.LightMode,
                 title = "Dark mode",
                 subtitle = if (darkMode) "Dark appearance enabled" else "Use the light appearance",
@@ -241,25 +278,34 @@ fun SettingsScreen(
 
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Standard matrimony palette", fontWeight = FontWeight.SemiBold)
+                    Text("Manual theme", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "This is the default look. Religion-inspired styling is controlled separately from your Profile and remains opt-in.",
+                        if (religionExperience.religionThemeEnabled) {
+                            "Automatic mode is active. Choose any theme below to switch to a manual override."
+                        } else {
+                            "Matree Neutral is always available. A manual visual theme never changes your profile religion or matching preferences."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AppPalette.entries.forEach { palette ->
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Surface(
-                                    onClick = { vm.setPalette(palette) },
-                                    shape = CircleShape,
-                                    color = palette.swatch,
-                                    border = if (palette.name == paletteKey) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-                                    modifier = Modifier.size(40.dp)
-                                ) { Box(Modifier) {} }
-                                Spacer(Modifier.height(4.dp))
-                                Text(palette.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                            }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        manualThemePalettes.forEach { palette ->
+                            FilterChip(
+                                selected = !religionExperience.religionThemeEnabled && palette.name == paletteKey,
+                                onClick = { vm.setPalette(palette) },
+                                label = { Text(palette.label) },
+                                leadingIcon = {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = palette.swatch,
+                                        modifier = Modifier.size(16.dp)
+                                    ) { Box(Modifier) {} }
+                                }
+                            )
                         }
                     }
                 }
