@@ -1,6 +1,11 @@
 package com.match.app.ui.verification
 
+import android.content.Context
+import android.database.Cursor
 import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,7 +17,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -22,133 +26,168 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+
+private const val MAX_VERIFICATION_BYTES = 5L * 1024L * 1024L
+
+private enum class VerificationStatus {
+    NOT_STARTED, PENDING, VERIFIED, REQUIRES_ACTION;
+
+    companion object {
+        fun fromWire(value: String?): VerificationStatus = when (value?.lowercase()) {
+            "pending" -> PENDING
+            "verified" -> VERIFIED
+            "rejected", "requires_action" -> REQUIRES_ACTION
+            else -> NOT_STARTED
+        }
+    }
+}
 
 data class VerificationUi(
     val isPhoneVerified: Boolean = false,
     val isIdVerified: Boolean = false,
     val isProfileComplete: Boolean = false,
     val isPhotoAdded: Boolean = false,
-    val isPremium: Boolean = false,
-    val verificationStatus: String = "none", // none, pending, verified, rejected
+    val verificationStatus: VerificationStatus = VerificationStatus.NOT_STARTED,
+    val rejectionReason: String = ""
+)
+
+private data class RemoteVerification(
+    val status: VerificationStatus = VerificationStatus.NOT_STARTED,
     val rejectionReason: String = ""
 )
 
 private data class CheckItem(val icon: ImageVector, val title: String, val description: String, val done: Boolean)
 
-private data class VerifMethod(
-    val icon: ImageVector,
-    val title: String,
-    val desc: String,
-    val badge: String,
-    val badgeColor: Color
-)
-
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val session: SessionStore,
     private val auth: AuthRepository
 ) : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
     private val storage = FirebaseStorage.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
-    val ui: StateFlow<VerificationUi> = session.userId.filterNotNull()
-        .map { uid ->
-            val p = auth.currentProfile(uid)
-            val fbUid = p?.firebaseUid ?: ""
-            val currentUser = FirebaseAuth.getInstance().currentUser
-            
-            // Check verification status from Firestore
-            val status = if (fbUid.isNotBlank()) {
-                try {
-                    val doc = firestore.collection("verificationRequests")
-                        .document(fbUid).get().await()
-                    doc.getString("status") ?: "none"
-                } catch (_: Exception) { "none" }
-            } else "none"
-            val reason = if (fbUid.isNotBlank()) {
-                try {
-                    val doc = firestore.collection("verificationRequests")
-                        .document(fbUid).get().await()
-                    doc.getString("rejectionReason") ?: ""
-                } catch (_: Exception) { "" }
-            } else ""
-
-            VerificationUi(
-                isPhoneVerified  = currentUser?.phoneNumber != null || p?.phoneNumber?.isNotBlank() == true,
-                isIdVerified     = (p?.verificationLevel ?: 0) >= 2 || status == "verified",
-                isProfileComplete= p != null && p.bio.isNotBlank() && p.city.isNotBlank(),
-                isPhotoAdded     = (p?.primaryPhotoPath != null || (p?.photoUrl ?: "").isNotBlank()),
-                isPremium        = p?.isPremium ?: false,
-                verificationStatus = status,
-                rejectionReason = reason
-            )
+    private val remoteVerification: Flow<RemoteVerification> = session.firebaseUid
+        .filterNotNull()
+        .flatMapLatest { uid ->
+            callbackFlow {
+                val registration = firestore.collection("verificationRequests").document(uid)
+                    .addSnapshotListener { doc, error ->
+                        if (error != null) {
+                            close(error)
+                            return@addSnapshotListener
+                        }
+                        trySend(
+                            RemoteVerification(
+                                status = VerificationStatus.fromWire(doc?.getString("status")),
+                                rejectionReason = doc?.getString("rejectionReason").orEmpty()
+                            )
+                        )
+                    }
+                awaitClose { registration.remove() }
+            }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, VerificationUi())
+
+    val ui: StateFlow<VerificationUi> = combine(
+        session.userId.filterNotNull(),
+        remoteVerification
+    ) { localId, remote ->
+        val profile = auth.currentProfile(localId)
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        VerificationUi(
+            isPhoneVerified = !currentUser?.phoneNumber.isNullOrBlank(),
+            isIdVerified = remote.status == VerificationStatus.VERIFIED || profile?.isVerified == true,
+            isProfileComplete = profile != null && profile.bio.isNotBlank() && profile.city.isNotBlank(),
+            isPhotoAdded = profile?.primaryPhotoPath != null || !profile?.photoUrl.isNullOrBlank(),
+            verificationStatus = remote.status,
+            rejectionReason = remote.rejectionReason
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VerificationUi())
 
     private val _submitting = MutableStateFlow(false)
     val submitting = _submitting.asStateFlow()
 
-    private val _submitted = MutableStateFlow(false)
-    val submitted = _submitted.asStateFlow()
-
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    fun clearError() { _error.value = null }
+
     /**
-     * Uploads the verification document to Firebase Storage and creates
-     * a verification request in Firestore for admin review.
+     * Uploads one protected government-ID artifact and asks trusted backend code to create the
+     * review state. A missing upload can never become PENDING.
      */
-    fun submitVerification(docType: String, documentUri: Uri? = null) {
-        _submitting.value = true
-        _error.value = null
+    fun submitVerification(docType: String, documentUri: Uri?) {
+        if (_submitting.value) return
+        if (documentUri == null) {
+            _error.value = "Choose a clear government-ID image or PDF before submitting."
+            return
+        }
         viewModelScope.launch {
+            _submitting.value = true
+            _error.value = null
             try {
-                val uid = FirebaseAuth.getInstance().currentUser?.uid
-                    ?: throw Exception("Not signed in")
+                val uid = FirebaseAuth.getInstance().currentUser?.uid ?: error("Sign in required")
+                val contentType = context.contentResolver.getType(documentUri)?.lowercase().orEmpty()
+                require(contentType.startsWith("image/") || contentType == "application/pdf") {
+                    "Choose an image or PDF document."
+                }
+                val knownSize = documentSize(documentUri)
+                require(knownSize <= 0L || knownSize <= MAX_VERIFICATION_BYTES) {
+                    "Verification document must be 5 MB or smaller."
+                }
 
-                // Upload document to Firebase Storage if URI provided
-                val docUrl = if (documentUri != null) {
-                    val ref = storage.reference
-                        .child("verification/$uid/${docType}_${System.currentTimeMillis()}")
-                    ref.putFile(documentUri).await()
-                    ref.downloadUrl.await().toString()
-                } else ""
+                val documentPath = "verifications/$uid/document"
+                val metadata = StorageMetadata.Builder()
+                    .setContentType(contentType)
+                    .setCustomMetadata("ownerUid", uid)
+                    .setCustomMetadata("docType", docType)
+                    .build()
+                storage.reference.child(documentPath).putFile(documentUri, metadata).await()
 
-                // Create verification request in Firestore
-                val request = hashMapOf(
-                    "uid" to uid,
-                    "docType" to docType,
-                    "docUrl" to docUrl,
-                    "status" to "pending",
-                    "submittedAt" to com.google.firebase.Timestamp.now(),
-                    "reviewedAt" to null,
-                    "rejectionReason" to ""
-                )
-                firestore.collection("verificationRequests")
-                    .document(uid)
-                    .set(request)
+                functions.getHttpsCallable("submitVerificationRequest")
+                    .call(mapOf("docType" to docType, "documentPath" to documentPath))
                     .await()
-
+            } catch (error: Exception) {
+                _error.value = error.message?.take(220) ?: "Verification submission failed. Please retry."
+            } finally {
                 _submitting.value = false
-                _submitted.value = true
-            } catch (e: Exception) {
-                _submitting.value = false
-                _error.value = e.message ?: "Verification submission failed"
             }
+        }
+    }
+
+    private fun documentSize(uri: Uri): Long {
+        var cursor: Cursor? = null
+        return try {
+            cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index >= 0 && !cursor.isNull(index)) cursor.getLong(index) else -1L
+            } else -1L
+        } catch (_: Exception) {
+            -1L
+        } finally {
+            cursor?.close()
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun VerificationScreen(
     onBack: () -> Unit = {},
@@ -156,23 +195,39 @@ fun VerificationScreen(
 ) {
     val ui by vm.ui.collectAsState()
     val submitting by vm.submitting.collectAsState()
-    val submitted by vm.submitted.collectAsState()
-    var selectedDocType by remember { mutableStateOf("Aadhaar") }
+    val error by vm.error.collectAsState()
+    var selectedDocType by rememberSaveable { mutableStateOf("Aadhaar") }
+    var selectedDocument by remember { mutableStateOf<Uri?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        selectedDocument = uri
+    }
+
+    LaunchedEffect(error) {
+        error?.let {
+            snackbar.showSnackbar(it)
+            vm.clearError()
+        }
+    }
+
     val checks = listOf(
-        CheckItem(Icons.Filled.PhoneAndroid, "Phone verified",  "Your mobile number has been confirmed",               ui.isPhoneVerified),
-        CheckItem(Icons.Filled.Badge,        "ID verified",     "Government ID checked and approved",                  ui.isIdVerified),
-        CheckItem(Icons.Filled.Person,       "Profile complete","Bio, city, education and other details filled in",    ui.isProfileComplete),
-        CheckItem(Icons.Filled.PhotoCamera,  "Photo added",     "At least one profile photo uploaded",                 ui.isPhotoAdded),
-        CheckItem(Icons.Filled.Star,         "Premium member",  "Active paid subscription for priority trust signals", ui.isPremium),
+        CheckItem(Icons.Filled.PhoneAndroid, "Phone verified", "Firebase-authenticated phone number", ui.isPhoneVerified),
+        CheckItem(Icons.Filled.Badge, "Identity verified", "Government ID reviewed and approved", ui.isIdVerified),
+        CheckItem(Icons.Filled.Person, "Profile complete", "Core matrimonial profile details completed", ui.isProfileComplete),
+        CheckItem(Icons.Filled.PhotoCamera, "Photo added", "At least one profile photo uploaded", ui.isPhotoAdded)
     )
     val passed = checks.count { it.done }
-    val total  = checks.size
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(t("trust_verification", "Trust & Verification")) },
-                navigationIcon = { IconButton(onClick = onBack, modifier = Modifier.testTag("verification_back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } }
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("verification_back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                }
             )
         }
     ) { pad ->
@@ -181,156 +236,104 @@ fun VerificationScreen(
                 .testTag("verification_screen"),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Trust score circle ───────────────────────────────────────
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(t("trust_score", "Trust Score"), style = MaterialTheme.typography.titleMedium)
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(t("trust_progress", "Verification progress"), style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
-                    val pct = (passed.toFloat() / total * 100).toInt()
-                    Text("$pct%", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold,
-                        color = if (pct >= 80) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary)
-                    Text("$passed of $total checks passed", style = MaterialTheme.typography.bodyMedium)
+                    Text("$passed/${checks.size}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text("real account checks completed", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { passed.toFloat() / total },
-                        modifier = Modifier.fillMaxWidth().height(8.dp),
-                        color = if (pct >= 80) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
+                    LinearProgressIndicator(progress = { passed.toFloat() / checks.size }, modifier = Modifier.fillMaxWidth().height(8.dp))
+                }
+            }
+
+            Text(t("verification_checklist", "Verification Checklist"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            checks.forEach { item -> VerificationRow(item.icon, item.title, item.description, item.done) }
+
+            Card(shape = RoundedCornerShape(16.dp)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Filled.PrivacyTip, "Private verification document", tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "Your raw ID file is stored in a protected KYC path and is not readable as profile media. Other members see only the final verification result.",
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
 
-            // ── Checklist ────────────────────────────────────────────────
-            Text(t("verification_checklist", "Verification Checklist"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
-            checks.forEach { (icon, title, desc, done) ->
-                VerificationRow(icon, title, desc, done)
-            }
-            HorizontalDivider()
-
-            // ── Why verify ───────────────────────────────────────────────
-            Text(t("why_verify", "Why verify your profile?"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            listOf(
-                "Get a ✓ verified badge visible to all matches",
-                "Appear higher in search results",
-                "Receive 3× more interest requests",
-                "Build trust with families before meeting"
-            ).forEach { benefit ->
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp).padding(top = 2.dp),
-                        tint = Color(0xFF2E7D32))
-                    Text(benefit, style = MaterialTheme.typography.bodyMedium)
-                }
+            when (ui.verificationStatus) {
+                VerificationStatus.PENDING -> StatusCard(
+                    icon = Icons.Filled.HourglassTop,
+                    title = "Verification pending",
+                    message = "Your uploaded document is awaiting backend/admin review. No verified badge is granted until approval."
+                )
+                VerificationStatus.REQUIRES_ACTION -> StatusCard(
+                    icon = Icons.Filled.ErrorOutline,
+                    title = "Verification needs action",
+                    message = ui.rejectionReason.ifBlank { "The previous submission could not be approved. Choose a clear valid document and resubmit." },
+                    isError = true
+                )
+                VerificationStatus.VERIFIED -> StatusCard(
+                    icon = Icons.Filled.Verified,
+                    title = "Identity verified",
+                    message = "Your government-ID review has been approved."
+                )
+                VerificationStatus.NOT_STARTED -> Unit
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            // ── Verification status ──────────────────────────────────────
-            when {
-                submitted || ui.verificationStatus == "pending" -> {
-                    Card(shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.HourglassTop, null, Modifier.size(24.dp), tint = Color(0xFFE65100))
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(t("verification_pending", "Verification Pending"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text(t("verification_pending_desc", "Your document has been submitted. We'll review within 24-48 hours."),
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-                ui.verificationStatus == "rejected" -> {
-                    Card(shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Error, null, Modifier.size(24.dp), tint = Color(0xFFC62828))
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(t("verification_rejected", "Verification Rejected"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Color(0xFFC62828))
-                                if (ui.rejectionReason.isNotBlank())
-                                    Text("Reason: ${ui.rejectionReason}", style = MaterialTheme.typography.bodySmall)
-                                Text(t("verification_rejected_hint", "Please resubmit with a clear document."), style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-                ui.verificationStatus == "verified" -> {
-                    Card(shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Verified, null, Modifier.size(24.dp), tint = Color(0xFF2E7D32))
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text("ID Verified", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = Color(0xFF2E7D32))
-                                Text("Your identity has been verified.", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Document type selector ───────────────────────────────────
-            if (ui.verificationStatus != "verified" && !submitted) {
-                Text(t("select_verification_method", "Select Verification Method"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
-                // Government ID
-                Text("Government ID", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (ui.verificationStatus != VerificationStatus.VERIFIED && ui.verificationStatus != VerificationStatus.PENDING) {
+                HorizontalDivider()
+                Text("Government ID", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Choose the ID type you are actually submitting. Unsupported verification methods stay hidden until they are fully implemented.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Aadhaar", "Passport", "PAN Card", "Voter ID").forEach { docType ->
                         FilterChip(
                             selected = selectedDocType == docType,
                             onClick = { selectedDocType = docType },
-                            label = { Text(docType, style = MaterialTheme.typography.labelSmall) },
-                            leadingIcon = if (selectedDocType == docType) {{ Icon(Icons.Filled.Check, null, Modifier.size(14.dp)) }} else null
+                            enabled = !submitting,
+                            label = { Text(docType) },
+                            leadingIcon = if (selectedDocType == docType) {
+                                { Icon(Icons.Filled.Check, "Selected", Modifier.size(16.dp)) }
+                            } else null
                         )
                     }
                 }
 
-                // Professional
-                Text("Professional (optional, additional boost)", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("LinkedIn", "Work Email").forEach { method ->
-                        FilterChip(
-                            selected = selectedDocType == method,
-                            onClick = { selectedDocType = method },
-                            label = { Text(method, style = MaterialTheme.typography.labelSmall) },
-                            leadingIcon = if (selectedDocType == method) {{ Icon(Icons.Filled.Check, null, Modifier.size(14.dp)) }} else null
-                        )
-                    }
+                OutlinedButton(
+                    onClick = { documentPicker.launch(arrayOf("image/*", "application/pdf")) },
+                    enabled = !submitting,
+                    modifier = Modifier.fillMaxWidth().testTag("verification_choose_document")
+                ) {
+                    Icon(Icons.Filled.AttachFile, "Choose verification document")
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (selectedDocument == null) "Choose image or PDF" else "Document selected")
                 }
-
-                // Video
-                Text("Video Verification (fastest, highest trust)", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = selectedDocType == "Video Selfie",
-                        onClick = { selectedDocType = "Video Selfie" },
-                        label = { Text("Video Selfie", style = MaterialTheme.typography.labelSmall) },
-                        leadingIcon = if (selectedDocType == "Video Selfie") {{ Icon(Icons.Filled.Check, null, Modifier.size(14.dp)) }} else null
+                selectedDocument?.let { uri ->
+                    Text(
+                        uri.lastPathSegment?.takeLast(80) ?: "Selected document",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Button(
-                    onClick = { vm.submitVerification(selectedDocType) },
-                    enabled = !submitting,
+                    onClick = { vm.submitVerification(selectedDocType, selectedDocument) },
+                    enabled = !submitting && selectedDocument != null,
                     modifier = Modifier.fillMaxWidth().height(50.dp).testTag("verification_request_btn")
                 ) {
                     if (submitting) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(8.dp))
-                        Text(t("submitting", "Submitting…"))
+                        Text("Uploading & validating…")
                     } else {
-                        Icon(Icons.Filled.Upload, null)
+                        Icon(Icons.Filled.Upload, "Submit verification document")
                         Spacer(Modifier.width(8.dp))
                         Text(t("submit_verification", "Submit for Verification"))
                     }
@@ -342,31 +345,58 @@ fun VerificationScreen(
 }
 
 @Composable
+private fun StatusCard(icon: ImageVector, title: String, message: String, isError: Boolean = false) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                icon,
+                null,
+                Modifier.size(24.dp),
+                tint = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(message, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
 private fun VerificationRow(icon: ImageVector, title: String, description: String, done: Boolean) {
     ElevatedCard(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = if (done) Color(0xFF2E7D32).copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+                color = if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, null, Modifier.size(20.dp),
-                        tint = if (done) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(icon, null, Modifier.size(20.dp), tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(description, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (done) {
-                Icon(Icons.Filled.CheckCircle, null, Modifier.size(20.dp), tint = Color(0xFF2E7D32))
-            } else {
-                Icon(Icons.Filled.RadioButtonUnchecked, null, Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Icon(
+                if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                if (done) "$title complete" else "$title incomplete",
+                Modifier.size(20.dp),
+                tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
