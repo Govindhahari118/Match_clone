@@ -18,9 +18,8 @@ import javax.inject.Singleton
  * Syncs user profiles between local Room DB and Firestore.
  *
  * Public/discoverable fields live in `users/{firebaseUid}`. Sensitive account/contact
- * fields live in `userPrivate/{firebaseUid}` and are readable only by the owner or
- * trusted server code. Firebase Auth UID is the only remote security identity; Room IDs
- * are local cache identifiers only.
+ * fields live in `userPrivate/{firebaseUid}` and are readable only by the owner or trusted
+ * server code. Firebase Auth UID is the only remote security identity; Room IDs are cache IDs.
  */
 @Singleton
 class FirestoreProfileService @Inject constructor(
@@ -47,12 +46,6 @@ class FirestoreProfileService @Inject constructor(
         )
     }
 
-    /**
-     * Push the profile while keeping contact/private data out of discoverable documents.
-     * When [confirmReligion] is true, religion is atomically marked as confirmed. The operation is
-     * idempotent: if a prior retry already created the lock, the immutable confirmation timestamp is
-     * preserved and Firestore rules still verify that the religion itself did not change.
-     */
     suspend fun pushProfile(entity: UserEntity, confirmReligion: Boolean = false) {
         if (entity.firebaseUid.isBlank()) return
         val uid = entity.firebaseUid
@@ -63,6 +56,13 @@ class FirestoreProfileService @Inject constructor(
             put("phoneNumber", FieldValue.delete())
             put("fcmToken", FieldValue.delete())
             put("dateOfBirth", FieldValue.delete())
+            put("rasi", FieldValue.delete())
+            put("nakshatra", FieldValue.delete())
+            put("manglik", FieldValue.delete())
+            put("birthTime", FieldValue.delete())
+            put("birthPlace", FieldValue.delete())
+            put("incomeBand", FieldValue.delete())
+            put("lastActiveAt", FieldValue.delete())
         }
 
         if (confirmReligion) {
@@ -80,10 +80,9 @@ class FirestoreProfileService @Inject constructor(
             }
         }
 
-        val privateData = entityToPrivateMap(entity)
         val batch = db.batch()
         batch.set(usersCol.document(uid), publicData, SetOptions.merge())
-        batch.set(privateCol.document(uid), privateData, SetOptions.merge())
+        batch.set(privateCol.document(uid), entityToPrivateMap(entity), SetOptions.merge())
         batch.commit().await()
     }
 
@@ -101,20 +100,14 @@ class FirestoreProfileService @Inject constructor(
         val hi = minOf(ageMax, 70)
         if (hi < lo) return emptyList()
         val buckets = linkedSetOf<String>()
-        var a = lo
-        while (a <= hi) {
-            buckets.add(ageBucketFor(a))
-            a += 1
+        var age = lo
+        while (age <= hi) {
+            buckets.add(ageBucketFor(age))
+            age += 1
         }
         return buckets.toList()
     }
 
-    /**
-     * Update profile fields without ever permitting the Android client to mutate
-     * billing/verification/identity authority. Sensitive owner fields are routed to userPrivate.
-     * Religion is intentionally excluded from generic patch updates; it is confirmed only by the
-     * onboarding confirmation flow and thereafter protected by Firestore rules.
-     */
     suspend fun updateFields(firebaseUid: String, fields: Map<String, Any?>) {
         if (firebaseUid.isBlank() || fields.isEmpty()) return
         require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's profile" }
@@ -129,7 +122,6 @@ class FirestoreProfileService @Inject constructor(
         batch.commit().await()
     }
 
-    /** Fetch one profile. Private data is merged only when the signed-in owner is reading it. */
     suspend fun fetchProfile(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.DEFAULT)
 
     suspend fun fetchProfileFromServer(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.SERVER)
@@ -155,6 +147,7 @@ class FirestoreProfileService @Inject constructor(
         }
     }
 
+    /** Legacy direct discovery helper retained for callers that have not moved to the callable yet. */
     suspend fun discoverProfiles(
         excludeUid: String,
         gender: String? = null,
@@ -167,7 +160,6 @@ class FirestoreProfileService @Inject constructor(
         var query = usersCol.limit(limit.toLong())
         query = query.whereGreaterThanOrEqualTo("age", ageMin)
             .whereLessThanOrEqualTo("age", ageMax)
-
         val snap = query.get().await()
         return snap.documents.mapNotNull { doc ->
             if (doc.id == excludeUid) return@mapNotNull null
@@ -199,10 +191,11 @@ class FirestoreProfileService @Inject constructor(
     ): List<UserEntity> {
         val buckets = ageBucketsFor(ageMin, ageMax)
         if (buckets.isEmpty()) return emptyList()
+        // Precise activity moved to server-only presence. Never sort a public query by lastActiveAt.
         val query = usersCol
             .whereEqualTo("gender", gender)
             .whereIn("ageBucket", buckets)
-            .orderBy("lastActiveAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .limit(limit.toLong())
         val snap = query.get().await()
         return snap.documents.mapNotNull { doc ->
@@ -263,6 +256,9 @@ class FirestoreProfileService @Inject constructor(
         "state" to e.state,
         "subCaste" to e.subCaste,
         "gothra" to e.gothra,
+        "faithTradition" to e.faithTradition,
+        "faithSubTradition" to e.faithSubTradition,
+        "faithInstitution" to e.faithInstitution,
         "diet" to e.diet,
         "familyType" to e.familyType,
         "fatherOccupation" to e.fatherOccupation,
@@ -334,6 +330,9 @@ class FirestoreProfileService @Inject constructor(
         state = data["state"] as? String ?: "",
         subCaste = data["subCaste"] as? String ?: "",
         gothra = data["gothra"] as? String ?: "",
+        faithTradition = data["faithTradition"] as? String ?: "",
+        faithSubTradition = data["faithSubTradition"] as? String ?: "",
+        faithInstitution = data["faithInstitution"] as? String ?: "",
         incomeBand = data["incomeBand"] as? String ?: "",
         diet = data["diet"] as? String ?: "",
         familyType = data["familyType"] as? String ?: "",
