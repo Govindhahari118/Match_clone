@@ -54,15 +54,15 @@ class ReligionExperienceViewModel @Inject constructor(
 }
 
 /**
- * Profile-level discovery controls. The declared religion is canonical profile data and is shown
- * read-only here; discovery lenses remain a separate, reversible preference. Appearance belongs
- * exclusively in Settings > Appearance and never changes the declared religion or discovery lens.
+ * Declared religion is canonical, protected profile data. Discovery lenses and appearance are
+ * separate reversible preferences. A correction is deliberately routed to support/account review;
+ * this card never writes the religion field itself.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReligionExperienceCard(
     profileReligion: String,
-    onReligionChange: (ReligionCategory) -> Unit = {},
+    onRequestCorrection: () -> Unit,
     vm: ReligionExperienceViewModel = hiltViewModel()
 ) {
     val preference by vm.preference.collectAsState()
@@ -79,7 +79,7 @@ fun ReligionExperienceCard(
                 Column(Modifier.weight(1f)) {
                     Text("Religion & discovery", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "Your declared religion is profile data. Discovery preferences below do not modify it.",
+                        "Your declared religion is protected profile data. Discovery choices below do not modify it.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -91,14 +91,17 @@ fun ReligionExperienceCard(
             AssistChip(
                 onClick = {},
                 enabled = false,
-                label = { Text(declared.label) },
+                label = { Text(profileReligion.ifBlank { "Not specified" }) },
                 leadingIcon = { Icon(Icons.Filled.Lock, "Protected profile field", Modifier.size(16.dp)) }
             )
             Text(
-                "Religion is protected profile information. A correction should use the account-review flow rather than changing discovery settings.",
+                "If this was entered incorrectly during onboarding, request a reviewed correction. It cannot be changed by a normal client profile edit.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            OutlinedButton(onClick = onRequestCorrection, modifier = Modifier.fillMaxWidth()) {
+                Text("Request religion correction")
+            }
 
             HorizontalDivider()
             Text("Discovery communities", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
@@ -119,7 +122,7 @@ fun ReligionExperienceCard(
                 Column(Modifier.weight(1f)) {
                     Text("Restrict discovery to my religion", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "When enabled, Home and Discover default to ${declared.label} only. This is a discovery preference, not a profile lock.",
+                        "When enabled, Home and Discover default to ${declared.label} only. This is a partner-discovery preference, not the religion lock.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -128,7 +131,7 @@ fun ReligionExperienceCard(
             }
 
             Text(
-                "Visual theme is managed separately in Settings > Appearance.",
+                "Visual theme is managed separately in Settings > Appearance and can always be neutral or manually selected.",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
