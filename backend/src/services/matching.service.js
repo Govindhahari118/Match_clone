@@ -1,6 +1,8 @@
 const prisma = require('../config/prisma');
 const privacyService = require('./privacy.service');
 const profileExtensionService = require('./profile-extension.service');
+const trustService = require('./trust.service');
+const exposureService = require('./exposure.service');
 
 const INCOME_ALIASES = {
     below_5L: ['below_5L', 'below 5l', 'below_3l', 'below 3l', '3-5l', '3-5L', 'Below 3L', 'Below 5L'],
@@ -9,7 +11,6 @@ const INCOME_ALIASES = {
     '25-50L': ['25-50L', '25-50l'],
     '50L+': ['50L+', '50l+', 'above 50l', 'Above 50L'],
 };
-
 const MARITAL_STATUS_ALIASES = {
     never_married: ['never_married', 'never married', 'Never Married'],
     divorced: ['divorced', 'Divorced'],
@@ -18,7 +19,6 @@ const MARITAL_STATUS_ALIASES = {
     separated: ['separated', 'Separated'],
     awaiting_divorce: ['awaiting_divorce', 'awaiting divorce', 'Awaiting Divorce'],
 };
-
 const EDUCATION_ALIASES = {
     high_school: ['high_school', 'high school', '10th', '12th', 'Diploma'],
     bachelors: ['bachelors', 'bachelor', "bachelor's", 'Graduate', 'MBBS', 'B.Tech', 'B.Com', 'B.Sc', 'LLB', 'B.Arch', 'B.Des'],
@@ -27,154 +27,169 @@ const EDUCATION_ALIASES = {
 };
 
 function normalize(value) {
-    return String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[_\s]+/g, '_');
+    return String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '_');
 }
-
-function expandAliasValue(value, aliasMap) {
-    const normalizedInput = normalize(value);
-    const matched = Object.entries(aliasMap).find(([canonical, aliases]) => {
-        const canonicalMatches = normalize(canonical) === normalizedInput;
-        const aliasMatches = aliases.some((alias) => normalize(alias) === normalizedInput);
-        return canonicalMatches || aliasMatches;
-    });
-
-    if (!matched) {
-        return [value];
-    }
-
-    const [canonical, aliases] = matched;
-    return Array.from(new Set([canonical, ...aliases]));
-}
-
 function isAny(value) {
     return value === undefined || value === null || String(value).trim() === '' || String(value).trim().toLowerCase() === 'any';
 }
-
 function parseInteger(value) {
-    const number = Number.parseInt(value, 10);
-    return Number.isNaN(number) ? null : number;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
 }
-
+function parsePositiveInteger(value, fallback) {
+    const parsed = parseInteger(value);
+    return parsed && parsed > 0 ? parsed : fallback;
+}
 function boolValue(value) {
     if (typeof value === 'boolean') return value;
     if (value === undefined || value === null) return false;
-    const lowered = String(value).trim().toLowerCase();
-    return lowered === 'true' || lowered === '1' || lowered === 'yes';
+    return ['true', '1', 'yes'].includes(String(value).trim().toLowerCase());
 }
-
-function normalizePhotoVisibilityValue(value) {
-    const normalized = normalize(value);
-    if (!normalized || normalized === 'any') return null;
-    if (['request_access', 'request', 'requestaccess'].includes(normalized)) return 'request_access';
-    if (['public', 'protected'].includes(normalized)) return normalized;
-    return null;
+function expandAliasValue(value, map) {
+    const input = normalize(value);
+    const matched = Object.entries(map).find(([canonical, aliases]) =>
+        normalize(canonical) === input || aliases.some((alias) => normalize(alias) === input));
+    return matched ? Array.from(new Set([matched[0], ...matched[1]])) : [value];
 }
-
-function normalizeProfileVisibilityValue(value) {
-    const normalized = normalize(value);
-    if (!normalized || normalized === 'any') return null;
-    if (['premium', 'premium_only'].includes(normalized)) return 'premium_only';
-    if (['verified', 'verified_only'].includes(normalized)) return 'verified_only';
-    if (['public', 'hidden'].includes(normalized)) return normalized;
-    return null;
-}
-
-function normalizeVerificationLevelValue(value) {
-    const normalized = normalize(value);
-    if (!normalized || normalized === 'any') return null;
-    if (['blue_tick', 'blue', 'tier_2', 'id_verified'].includes(normalized)) return 'id_verified';
-    if (['basic', 'phone_email', 'contact_verified'].includes(normalized)) return 'basic';
-    return null;
-}
-
-function passesVerificationLevel(user, level) {
-    if (!level) return true;
-    if (level === 'basic') {
-        return Boolean(user?.isVerified);
-    }
-    if (level === 'id_verified') {
-        return Boolean(user?.isVerified && user?.identityStatus === 'verified');
-    }
-    return true;
-}
-
 function getAge(dateOfBirth) {
     if (!dateOfBirth) return null;
     const now = new Date();
     const dob = new Date(dateOfBirth);
     let age = now.getFullYear() - dob.getFullYear();
     const monthDelta = now.getMonth() - dob.getMonth();
-    if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dob.getDate())) {
-        age -= 1;
-    }
+    if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dob.getDate())) age -= 1;
     return age;
 }
-
-function deterministicScore(viewerId, user, profile) {
-    const seed = `${viewerId}|${user.id}|${profile.religion || ''}|${profile.city || ''}|${profile.educationLevel || ''}|${profile.profession || ''}`;
-    const hash = seed.split('').reduce((acc, char) => ((acc * 31) + char.charCodeAt(0)) % 997, 7);
-    const qualityBoost =
-        (user.isVerified ? 8 : 0) +
-        (profile.educationLevel ? 5 : 0) +
-        (profile.profession ? 5 : 0) +
-        (profile.city ? 3 : 0) +
-        (profile.motherTongue ? 3 : 0);
-    return Math.min(99, Math.max(60, 60 + (hash % 21) + qualityBoost));
-}
-
-function parsePositiveInteger(value, fallback) {
-    const parsed = parseInteger(value);
-    if (!parsed || parsed < 1) {
-        return fallback;
-    }
-    return parsed;
-}
-
-function activeSubscriptionFilter() {
-    return {
-        some: {
-            status: 'active',
-            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        },
-    };
-}
-
 function hasHoroscopeDetails(profile) {
     return Boolean(profile?.gothra || profile?.zodiacSign || profile?.nakshatra || profile?.birthTime || profile?.birthPlace);
 }
+function activeSubscriptionFilter() {
+    return { some: { status: { in: ['active', 'grace'] }, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } };
+}
+function normalizePhotoVisibilityValue(value) {
+    const parsed = normalize(value);
+    if (!parsed || parsed === 'any') return null;
+    if (['request_access', 'request', 'requestaccess'].includes(parsed)) return 'request_access';
+    return ['public', 'protected'].includes(parsed) ? parsed : null;
+}
+function normalizeProfileVisibilityValue(value) {
+    const parsed = normalize(value);
+    if (!parsed || parsed === 'any') return null;
+    if (['premium', 'premium_only'].includes(parsed)) return 'premium_only';
+    if (['verified', 'verified_only'].includes(parsed)) return 'verified_only';
+    return ['public', 'hidden'].includes(parsed) ? parsed : null;
+}
+function normalizeVerificationLevelValue(value) {
+    const parsed = normalize(value);
+    if (!parsed || parsed === 'any') return null;
+    if (['blue_tick', 'blue', 'tier_2', 'id_verified'].includes(parsed)) return 'id_verified';
+    if (['basic', 'phone_email', 'contact_verified'].includes(parsed)) return 'basic';
+    return null;
+}
+function passesVerificationLevel(user, level) {
+    if (!level) return true;
+    if (level === 'basic') return Boolean(user.isVerified || user.verifications?.some((row) => row.status === 'verified'));
+    if (level === 'id_verified') return user.identityStatus === 'verified';
+    return true;
+}
 
-function buildMatchReasons({ candidateUser, candidateProfile, filters, viewerProfile, isPremium }) {
+function preferenceCompatibility(viewerProfile, viewerPreference, candidateProfile) {
     const reasons = [];
+    let earned = 0;
+    let possible = 0;
 
-    if (candidateUser.isVerified) reasons.push('Verified profile');
-    if (isPremium) reasons.push('Premium member');
+    if (viewerPreference) {
+        possible += 25;
+        const age = getAge(candidateProfile.dateOfBirth);
+        if (age !== null && age >= viewerPreference.minAge && age <= viewerPreference.maxAge) {
+            earned += 25;
+            reasons.push('Age preference matches');
+        }
 
-    if (!isAny(filters.religion) && String(candidateProfile.religion || '').toLowerCase() === String(filters.religion).toLowerCase()) {
-        reasons.push('Matches selected religion');
-    }
-    if (!isAny(filters.city) && String(candidateProfile.city || '').toLowerCase().includes(String(filters.city).toLowerCase())) {
-        reasons.push('Matches preferred city');
-    }
-    if (!isAny(filters.education) && String(candidateProfile.educationLevel || '').toLowerCase().includes(String(filters.education).toLowerCase())) {
-        reasons.push('Education preference aligned');
-    }
-    if (!isAny(filters.profession) && String(candidateProfile.profession || '').toLowerCase().includes(String(filters.profession).toLowerCase())) {
-        reasons.push('Profession preference aligned');
-    }
-    if (viewerProfile?.city && candidateProfile.city && String(viewerProfile.city).toLowerCase() === String(candidateProfile.city).toLowerCase()) {
-        reasons.push('Same city');
-    }
-    if (candidateUser.lastLogin && new Date(candidateUser.lastLogin).getTime() > Date.now() - 24 * 60 * 60 * 1000) {
-        reasons.push('Recently active');
-    }
-    if (hasHoroscopeDetails(candidateProfile)) {
-        reasons.push('Horoscope details available');
+        if (viewerPreference.preferredLocations?.length) {
+            possible += 20;
+            const locations = viewerPreference.preferredLocations.map((item) => String(item).toLowerCase());
+            if ([candidateProfile.city, candidateProfile.state, candidateProfile.country]
+                .filter(Boolean)
+                .some((item) => locations.includes(String(item).toLowerCase()))) {
+                earned += 20;
+                reasons.push('Location preference matches');
+            }
+        }
+
+        if (viewerPreference.preferredReligions?.length) {
+            possible += 15;
+            if (viewerPreference.preferredReligions.includes(candidateProfile.religion)) {
+                earned += 15;
+                reasons.push('Religion preference aligns');
+            }
+        }
+
+        if (viewerPreference.preferredCastes?.length) {
+            possible += 10;
+            if (viewerPreference.preferredCastes.includes(candidateProfile.caste)) {
+                earned += 10;
+                reasons.push('Community preference aligns');
+            }
+        }
+
+        if (viewerPreference.foodHabitPreferences?.length) {
+            possible += 10;
+            if (viewerPreference.foodHabitPreferences.includes(candidateProfile.foodHabit)) {
+                earned += 10;
+                reasons.push('Lifestyle preference aligns');
+            }
+        }
     }
 
-    return Array.from(new Set(reasons)).slice(0, 3);
+    if (viewerProfile?.city && candidateProfile.city) {
+        possible += 10;
+        if (viewerProfile.city.toLowerCase() === candidateProfile.city.toLowerCase()) {
+            earned += 10;
+            reasons.push('Same city');
+        }
+    }
+    if (viewerProfile?.motherTongue && candidateProfile.motherTongue) {
+        possible += 10;
+        if (viewerProfile.motherTongue.toLowerCase() === candidateProfile.motherTongue.toLowerCase()) {
+            earned += 10;
+            reasons.push('Same mother tongue');
+        }
+    }
+
+    const score = possible > 0 ? Math.round((earned / possible) * 100) : null;
+    return {
+        score,
+        strength: score === null ? 'unknown' : score >= 75 ? 'strong' : score >= 50 ? 'good' : 'partial',
+        reasons: Array.from(new Set(reasons)),
+    };
+}
+
+function hardPreferencePasses(preference, candidateProfile) {
+    if (!preference?.hardFields?.length) return true;
+    const hard = new Set(preference.hardFields.map(normalize));
+    const age = getAge(candidateProfile.dateOfBirth);
+
+    if (hard.has('age') && (age === null || age < preference.minAge || age > preference.maxAge)) return false;
+    if (hard.has('location') && preference.preferredLocations?.length) {
+        const values = [candidateProfile.city, candidateProfile.state, candidateProfile.country].filter(Boolean).map((v) => v.toLowerCase());
+        const wanted = preference.preferredLocations.map((v) => String(v).toLowerCase());
+        if (!values.some((value) => wanted.includes(value))) return false;
+    }
+    if (hard.has('religion') && preference.preferredReligions?.length && !preference.preferredReligions.includes(candidateProfile.religion)) return false;
+    if (hard.has('caste') && preference.preferredCastes?.length && !preference.preferredCastes.includes(candidateProfile.caste)) return false;
+    if (hard.has('food_habit') && preference.foodHabitPreferences?.length && !preference.foodHabitPreferences.includes(candidateProfile.foodHabit)) return false;
+    return true;
+}
+
+function freshnessPoints(activity) {
+    switch (activity.code) {
+        case 'active_today': return 20;
+        case 'active_this_week': return 16;
+        case 'active_recently': return 10;
+        case 'low_activity': return 4;
+        default: return 0;
+    }
 }
 
 const matchingService = {
@@ -184,78 +199,62 @@ const matchingService = {
         const sort = String(options.sort ?? filters.sort ?? 'relevance').toLowerCase();
         const includeMeta = Boolean(options.returnMeta);
 
-        // 1. Get viewer context to exclude already-interacted profiles.
-        const [viewer, viewerProfile] = await Promise.all([
-            prisma.user.findUnique({
-                where: { id: userId },
-                include: {
-                    likesSent: { select: { receiverId: true } },
-                    matches: { select: { userBId: true } },
-                    matchesAsUserB: { select: { userAId: true } },
-                    subscriptions: {
-                        where: {
-                            status: 'active',
-                            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-                        },
-                        select: { id: true },
-                        take: 1,
-                    },
-                },
+        const viewer = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                profile: true,
+                partnerPreference: true,
+                likesSent: { select: { receiverId: true } },
+                matches: { where: { isActive: true }, select: { userBId: true } },
+                matchesAsUserB: { where: { isActive: true }, select: { userAId: true } },
+                subscriptions: { where: activeSubscriptionFilter().some, select: { id: true }, take: 1 },
+            },
+        });
+        if (!viewer) return includeMeta ? { items: [], page, limit, total: 0, hasNextPage: false, sort } : [];
+
+        const [blocks, exposureExcluded] = await Promise.all([
+            prisma.userBlock.findMany({
+                where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
+                select: { blockerId: true, blockedUserId: true },
             }),
-            prisma.profile.findUnique({ where: { userId } }),
+            exposureService.getExcludedCandidateIds(userId),
         ]);
-
-        if (!viewer) {
-            return includeMeta
-                ? { items: [], page, limit, total: 0, hasNextPage: false, sort }
-                : [];
-        }
-
-        const viewerIsPremium = Boolean(viewer.subscriptions?.length);
-        const viewerIsVerified = Boolean(viewer.isVerified);
-
-        const excludeIds = [
+        const blockedIds = blocks.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId);
+        const excludeIds = Array.from(new Set([
             userId,
-            ...viewer.likesSent.map((item) => item.receiverId),
-            ...viewer.matches.map((item) => item.userBId),
-            ...viewer.matchesAsUserB.map((item) => item.userAId),
-        ];
+            ...blockedIds,
+            ...exposureExcluded,
+            ...viewer.likesSent.map((row) => row.receiverId),
+            ...viewer.matches.map((row) => row.userBId),
+            ...viewer.matchesAsUserB.map((row) => row.userAId),
+        ]));
 
-        // 2. Build query
         const where = {
             id: { notIn: excludeIds },
             isBanned: false,
             isActive: true,
-            profile: {
-                is: {},
-            },
+            deletedAt: null,
+            searchStatus: { in: ['active', 'low_activity'] },
+            profile: { is: {} },
         };
 
-        if (!isAny(filters.gender)) {
-            where.profile.is.gender = filters.gender;
-        }
-
+        if (!isAny(filters.gender)) where.profile.is.gender = filters.gender;
         const minAge = parseInteger(filters.minAge);
         const maxAge = parseInteger(filters.maxAge);
         if (minAge) {
-            const maxBirthDate = new Date();
-            maxBirthDate.setFullYear(maxBirthDate.getFullYear() - minAge);
-            where.profile.is.dateOfBirth = { ...where.profile.is.dateOfBirth, lte: maxBirthDate };
+            const maxBirth = new Date(); maxBirth.setFullYear(maxBirth.getFullYear() - minAge);
+            where.profile.is.dateOfBirth = { ...(where.profile.is.dateOfBirth || {}), lte: maxBirth };
         }
         if (maxAge) {
-            const minBirthDate = new Date();
-            minBirthDate.setFullYear(minBirthDate.getFullYear() - maxAge - 1);
-            where.profile.is.dateOfBirth = { ...where.profile.is.dateOfBirth, gte: minBirthDate };
+            const minBirth = new Date(); minBirth.setFullYear(minBirth.getFullYear() - maxAge - 1);
+            where.profile.is.dateOfBirth = { ...(where.profile.is.dateOfBirth || {}), gte: minBirth };
         }
-
         if (!isAny(filters.religion)) where.profile.is.religion = filters.religion;
         if (!isAny(filters.caste)) where.profile.is.caste = filters.caste;
-
         if (!isAny(filters.maritalStatus)) {
-            const maritalValues = expandAliasValue(filters.maritalStatus, MARITAL_STATUS_ALIASES);
-            where.profile.is.maritalStatus = maritalValues.length === 1 ? maritalValues[0] : { in: maritalValues };
+            const values = expandAliasValue(filters.maritalStatus, MARITAL_STATUS_ALIASES);
+            where.profile.is.maritalStatus = values.length === 1 ? values[0] : { in: values };
         }
-
         if (!isAny(filters.city)) where.profile.is.city = { contains: filters.city, mode: 'insensitive' };
         if (!isAny(filters.state)) where.profile.is.state = { contains: filters.state, mode: 'insensitive' };
         if (!isAny(filters.country)) where.profile.is.country = { contains: filters.country, mode: 'insensitive' };
@@ -263,57 +262,25 @@ const matchingService = {
 
         const minHeight = parseInteger(filters.minHeight);
         const maxHeight = parseInteger(filters.maxHeight);
-        if (minHeight || maxHeight) {
-            where.profile.is.heightCm = {
-                ...(minHeight ? { gte: minHeight } : {}),
-                ...(maxHeight ? { lte: maxHeight } : {}),
-            };
-        }
-
+        if (minHeight || maxHeight) where.profile.is.heightCm = { ...(minHeight ? { gte: minHeight } : {}), ...(maxHeight ? { lte: maxHeight } : {}) };
         if (!isAny(filters.education)) {
-            const educationValues = expandAliasValue(filters.education, EDUCATION_ALIASES);
-            where.profile.is.educationLevel = educationValues.length === 1 ? educationValues[0] : { in: educationValues };
+            const values = expandAliasValue(filters.education, EDUCATION_ALIASES);
+            where.profile.is.educationLevel = values.length === 1 ? values[0] : { in: values };
         }
-
-        if (!isAny(filters.profession)) {
-            where.profile.is.profession = { contains: filters.profession, mode: 'insensitive' };
-        }
-
+        if (!isAny(filters.profession)) where.profile.is.profession = { contains: filters.profession, mode: 'insensitive' };
         if (!isAny(filters.income)) {
-            const incomeValues = expandAliasValue(filters.income, INCOME_ALIASES);
-            where.profile.is.incomeBand = incomeValues.length === 1 ? incomeValues[0] : { in: incomeValues };
+            const values = expandAliasValue(filters.income, INCOME_ALIASES);
+            where.profile.is.incomeBand = values.length === 1 ? values[0] : { in: values };
         }
-
-        if (boolValue(filters.verifiedOnly)) {
-            where.isVerified = true;
-        }
-
-        if (boolValue(filters.withPhotoOnly)) {
-            where.photos = { some: {} };
-        }
-
-        if (boolValue(filters.premiumOnly)) {
-            where.subscriptions = activeSubscriptionFilter();
-        }
-
-        if (boolValue(filters.withHoroscopeOnly)) {
-            where.profile.is.OR = [
-                { gothra: { not: null } },
-                { zodiacSign: { not: null } },
-                { nakshatra: { not: null } },
-            ];
-        }
-
-        if (boolValue(filters.onlineNow)) {
-            const onlineThreshold = new Date(Date.now() - (15 * 60 * 1000));
-            where.lastLogin = { gte: onlineThreshold };
-        }
-
+        if (boolValue(filters.verifiedOnly)) where.isVerified = true;
+        if (boolValue(filters.withPhotoOnly)) where.photos = { some: { moderationStatus: 'approved' } };
+        if (boolValue(filters.premiumOnly)) where.subscriptions = activeSubscriptionFilter();
+        if (boolValue(filters.withHoroscopeOnly)) where.profile.is.OR = [
+            { gothra: { not: null } }, { zodiacSign: { not: null } }, { nakshatra: { not: null } },
+        ];
+        if (boolValue(filters.onlineNow)) where.lastActiveAt = { gte: new Date(Date.now() - 15 * 60000) };
         const lastActiveDays = parseInteger(filters.lastActiveDays);
-        if (lastActiveDays && lastActiveDays > 0) {
-            const activityThreshold = new Date(Date.now() - (lastActiveDays * 24 * 60 * 60 * 1000));
-            where.lastLogin = { ...(where.lastLogin || {}), gte: activityThreshold };
-        }
+        if (lastActiveDays && lastActiveDays > 0) where.lastActiveAt = { gte: new Date(Date.now() - lastActiveDays * 86400000) };
 
         const keyword = String(filters.keyword || filters.query || '').trim();
         if (keyword) {
@@ -321,7 +288,6 @@ const matchingService = {
                 { profile: { is: { firstName: { contains: keyword, mode: 'insensitive' } } } },
                 { profile: { is: { lastName: { contains: keyword, mode: 'insensitive' } } } },
                 { profile: { is: { city: { contains: keyword, mode: 'insensitive' } } } },
-                { profile: { is: { state: { contains: keyword, mode: 'insensitive' } } } },
                 { profile: { is: { profession: { contains: keyword, mode: 'insensitive' } } } },
                 { profile: { is: { religion: { contains: keyword, mode: 'insensitive' } } } },
                 { profile: { is: { caste: { contains: keyword, mode: 'insensitive' } } } },
@@ -332,24 +298,26 @@ const matchingService = {
             where,
             include: {
                 profile: true,
-                photos: { where: { isPrimary: true }, take: 1 },
-                subscriptions: {
-                    where: {
-                        status: 'active',
-                        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-                    },
-                    take: 1,
-                },
+                partnerPreference: true,
+                photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1 },
+                verifications: true,
+                subscriptions: { where: activeSubscriptionFilter().some, take: 1 },
             },
-            take: includeMeta ? Math.min(Math.max(limit * 5, 100), 500) : 80,
+            take: Math.min(Math.max(limit * 8, 120), 500),
         });
 
-        const candidateIds = users.map((userRow) => userRow.id);
-        const [privacyMap, extensionMap] = await Promise.all([
+        const candidateIds = users.map((user) => user.id);
+        const [privacyMap, extensionMap, photoGrants] = await Promise.all([
             privacyService.getUsersPrivacySettings(candidateIds),
             profileExtensionService.getUsersProfileExtensions(candidateIds),
+            prisma.photoAccessRequest.findMany({
+                where: { requesterId: userId, targetId: { in: candidateIds }, status: 'approved' },
+                select: { targetId: true },
+            }),
         ]);
-
+        const photoGrantIds = new Set(photoGrants.map((row) => row.targetId));
+        const viewerIsPremium = Boolean(viewer.subscriptions.length);
+        const viewerIsVerified = Boolean(viewer.isVerified);
         const requestedPhotoVisibility = normalizePhotoVisibilityValue(filters.photoVisibility);
         const requestedProfileVisibility = normalizeProfileVisibilityValue(filters.profileVisibility);
         const requestedVerificationLevel = normalizeVerificationLevelValue(filters.verificationLevel);
@@ -357,108 +325,120 @@ const matchingService = {
         const requestedResidentialStatus = profileExtensionService.normalizeResidentialStatus(filters.residentialStatus);
         const requestedDistrict = String(filters.district || '').trim().toLowerCase();
 
-        const mapped = users
-            .filter((userRow) => userRow.profile)
-            .map((userRow) => {
-                const profile = userRow.profile;
-                const isPremium = userRow.subscriptions.length > 0;
-                const privacySettings = privacyMap.get(userRow.id) || privacyService.DEFAULT_PRIVACY_SETTINGS;
-                const extension = extensionMap.get(userRow.id) || profileExtensionService.DEFAULT_PROFILE_EXTENSION;
+        const mapped = users.map((candidate) => {
+            const profile = candidate.profile;
+            if (!profile || trustService.isStale(candidate)) return null;
+            if (!hardPreferencePasses(viewer.partnerPreference, profile)) return null;
 
-                const canViewProfile = privacyService.canViewProfile({
-                    settings: privacySettings,
-                    isOwner: false,
-                    viewerIsPremium,
-                    viewerIsVerified,
-                });
-                if (!canViewProfile) return null;
+            const privacy = privacyMap.get(candidate.id) || privacyService.DEFAULT_PRIVACY_SETTINGS;
+            if (!privacyService.canViewProfile({ settings: privacy, isOwner: false, viewerIsPremium, viewerIsVerified })) return null;
+            if (requestedPhotoVisibility && privacy.photoVisibility !== requestedPhotoVisibility) return null;
+            if (requestedProfileVisibility && privacy.profileVisibility !== requestedProfileVisibility) return null;
+            if (!passesVerificationLevel(candidate, requestedVerificationLevel)) return null;
 
-                if (requestedPhotoVisibility && privacySettings.photoVisibility !== requestedPhotoVisibility) return null;
-                if (requestedProfileVisibility && privacySettings.profileVisibility !== requestedProfileVisibility) return null;
-                if (!passesVerificationLevel(userRow, requestedVerificationLevel)) return null;
+            const extension = extensionMap.get(candidate.id) || profileExtensionService.DEFAULT_PROFILE_EXTENSION;
+            if (requestedHasChildren && extension.hasChildren !== requestedHasChildren) return null;
+            if (requestedResidentialStatus && extension.residentialStatus !== requestedResidentialStatus) return null;
+            if (requestedDistrict && !String(extension.district || '').toLowerCase().includes(requestedDistrict)) return null;
 
-                if (requestedHasChildren && extension.hasChildren !== requestedHasChildren) return null;
-                if (requestedResidentialStatus && extension.residentialStatus !== requestedResidentialStatus) return null;
-                if (requestedDistrict && !String(extension.district || '').toLowerCase().includes(requestedDistrict)) return null;
+            const canViewPhotos = privacyService.canViewPhotos({
+                settings: privacy,
+                isOwner: false,
+                isMutualMatch: false,
+                hasExplicitPhotoAccess: photoGrantIds.has(candidate.id),
+            });
+            if (boolValue(filters.withPhotoOnly) && (!candidate.photos.length || !canViewPhotos)) return null;
 
-                const canViewPhotos = privacyService.canViewPhotos({
-                    settings: privacySettings,
-                    isOwner: false,
-                    isMutualMatch: false,
-                    viewerIsPremium,
-                });
-                if (boolValue(filters.withPhotoOnly) && !canViewPhotos) return null;
+            const verification = trustService.verificationSummary(candidate);
+            const profileCompleteness = trustService.calculateCompleteness({
+                profile,
+                photos: candidate.photos,
+                preferences: candidate.partnerPreference,
+                verification,
+            });
+            const activity = trustService.activityBucket(candidate);
+            const compatibility = preferenceCompatibility(viewer.profile, viewer.partnerPreference, profile);
+            const reasons = [...compatibility.reasons];
+            if (verification.identity === 'verified') reasons.push('Identity verification completed');
+            else if (verification.photo === 'verified') reasons.push('Photo verified');
+            if (['active_today', 'active_this_week'].includes(activity.code)) reasons.push(activity.label);
+            const uniqueReasons = Array.from(new Set(reasons)).slice(0, 4);
 
-                const matchScore = deterministicScore(userId, userRow, profile);
-                const photo = canViewPhotos
-                    ? (userRow.photos[0]?.thumbnailUrl || userRow.photos[0]?.photoUrl || 'https://via.placeholder.com/150')
-                    : 'https://via.placeholder.com/150?text=Photo+Protected';
-                const reasons = buildMatchReasons({
-                    candidateUser: userRow,
-                    candidateProfile: profile,
-                    filters,
-                    viewerProfile,
-                    isPremium,
-                });
+            const rankingScore = (compatibility.score ?? 40) + freshnessPoints(activity) + Math.round(profileCompleteness / 20) + (verification.identity === 'verified' ? 5 : 0);
+            const photo = canViewPhotos
+                ? (candidate.photos[0]?.thumbnailUrl || candidate.photos[0]?.photoUrl || null)
+                : null;
 
-                return {
-                    id: userRow.id,
-                    userId: userRow.id,
-                    firstName: profile.firstName,
-                    lastName: profile.lastName,
-                    age: getAge(profile.dateOfBirth),
-                    city: profile.city,
-                    state: profile.state,
-                    country: profile.country,
-                    district: extension.district,
-                    profession: profile.profession,
-                    photo,
-                    photoLocked: !canViewPhotos,
-                    isVerified: userRow.isVerified,
-                    isPremium,
-                    match: matchScore,
-                    religion: profile.religion,
-                    caste: profile.caste,
-                    motherTongue: profile.motherTongue,
-                    maritalStatus: profile.maritalStatus,
-                    education: profile.educationLevel,
-                    income: profile.incomeBand,
-                    heightCm: profile.heightCm,
-                    hasChildren: extension.hasChildren,
-                    residentialStatus: extension.residentialStatus,
-                    lastActiveAt: privacySettings.showLastSeen ? userRow.lastLogin : null,
-                    reasons,
-                };
-            })
-            .filter(Boolean);
+            return {
+                id: candidate.id,
+                userId: candidate.id,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                age: getAge(profile.dateOfBirth),
+                city: profile.city,
+                state: profile.state,
+                country: profile.country,
+                district: extension.district,
+                profession: profile.profession,
+                education: profile.educationLevel,
+                religion: profile.religion,
+                caste: profile.caste,
+                motherTongue: profile.motherTongue,
+                maritalStatus: profile.maritalStatus,
+                income: profile.incomeBand,
+                heightCm: profile.heightCm,
+                hasChildren: extension.hasChildren,
+                residentialStatus: extension.residentialStatus,
+                photo,
+                photoLocked: !canViewPhotos,
+                isVerified: candidate.isVerified,
+                isPremium: candidate.subscriptions.length > 0,
+                compatibilityScore: compatibility.score,
+                compatibilityStrength: compatibility.strength,
+                match: compatibility.score,
+                reasons: uniqueReasons,
+                whyRecommended: uniqueReasons,
+                verification,
+                activity,
+                lastActiveAt: privacy.showLastSeen ? trustService.latestActivity(candidate) : null,
+                managedBy: profile.role || 'self',
+                managerRelationship: profile.managerRelationship,
+                profileCompleteness,
+                statusReconfirmedAt: candidate.statusReconfirmedAt,
+                searchStatus: candidate.searchStatus,
+                _rankingScore: rankingScore,
+            };
+        }).filter(Boolean);
 
-        const sorted = [...mapped].sort((a, b) => {
-            switch (sort) {
-                case 'newest':
-                    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
-                case 'activity':
-                    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
-                case 'compatibility':
-                case 'relevance':
-                default:
-                    return (b.match || 0) - (a.match || 0);
+        const sorted = mapped.sort((a, b) => {
+            if (sort === 'newest' || sort === 'activity') {
+                const rank = { active_today: 4, active_this_week: 3, active_recently: 2, low_activity: 1 };
+                return (rank[b.activity.code] || 0) - (rank[a.activity.code] || 0) || b._rankingScore - a._rankingScore;
             }
+            return b._rankingScore - a._rankingScore;
         });
 
-        if (!includeMeta) {
-            return sorted.slice(0, 50);
-        }
-
         const start = (page - 1) * limit;
-        const items = sorted.slice(start, start + limit);
-        const total = sorted.length;
+        const pageItems = (includeMeta ? sorted.slice(start, start + limit) : sorted.slice(0, 50))
+            .map(({ _rankingScore, ...item }) => item);
+
+        await exposureService.recordPage(userId, pageItems.map((item) => item.userId));
+        await trustService.recordActivity(userId);
+
+        if (!includeMeta) return pageItems;
         return {
-            items,
+            items: pageItems,
             page,
             limit,
-            total,
-            hasNextPage: start + limit < total,
+            total: sorted.length,
+            hasNextPage: start + limit < sorted.length,
             sort,
+            transparency: {
+                hardFiltersNeverAutoRelaxed: true,
+                paidPlanChangesEligibility: false,
+                repetitionCooldownEnabled: true,
+                staleProfilesSuppressed: true,
+            },
         };
     },
 };
