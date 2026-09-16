@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -28,7 +27,6 @@ import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.session.SessionStore
-import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -36,7 +34,7 @@ import com.match.app.ui.i18n.rememberI18nCatalog
 import com.match.app.ui.main.MainShell
 import com.match.app.ui.onboarding.OnboardingScreen
 import com.match.app.ui.onboarding.ProfileWizardScreen
-import com.match.app.ui.theme.AppPalette
+import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatchTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -66,11 +64,9 @@ class RootViewModel @Inject constructor(
     val onboarded = session.onboarded.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val darkMode = session.darkMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val palette = session.paletteKey.stateIn(viewModelScope, SharingStarted.Eagerly, "VIVAH")
-    val religionExperience = session.religionExperience.stateIn(
-        viewModelScope,
-        SharingStarted.Eagerly,
-        ReligionExperiencePreference()
-    )
+    val religionThemeEnabled = session.religionExperience
+        .map { it.religionThemeEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
@@ -78,13 +74,17 @@ class RootViewModel @Inject constructor(
     val sessionReady = combine(session.onboarded, session.userId) { _, _ -> true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** Canonical signed-in profile. Appearance may read religion from here, never from discovery filters. */
+    val currentUser = session.userId
+        .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     /**
      * Profile completion is account-scoped and derived from the signed-in user's actual persisted
      * profile. It intentionally does not use the old device-global communitySetupDone preference,
      * which could be inherited by a different account on the same phone.
      */
-    val profileSetupComplete = session.userId
-        .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
+    val profileSetupComplete = currentUser
         .map { it?.isRequiredProfileComplete() == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -112,7 +112,8 @@ class RootViewModel @Inject constructor(
 fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val darkMode by vm.darkMode.collectAsState()
     val paletteKey by vm.palette.collectAsState()
-    val religionExperience by vm.religionExperience.collectAsState()
+    val religionThemeEnabled by vm.religionThemeEnabled.collectAsState()
+    val currentUser by vm.currentUser.collectAsState()
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
 
@@ -121,12 +122,11 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         vm.touchActivity()
     }
 
-    val selectedReligion = religionExperience.selected.singleOrNull()
-    val effectivePalette = if (religionExperience.religionThemeEnabled && selectedReligion != null) {
-        AppPalette.forReligion(selectedReligion)
-    } else {
-        AppPalette.fromKey(paletteKey)
-    }
+    val effectivePalette = AppearanceThemeResolver.resolve(
+        automaticReligionTheme = religionThemeEnabled,
+        manualPaletteKey = paletteKey,
+        profileReligion = currentUser?.religion
+    )
 
     val layoutDir = if (uiLanguage in setOf("ar", "ur")) LayoutDirection.Rtl else LayoutDirection.Ltr
     MatchTheme(darkMode = darkMode, palette = effectivePalette) {
