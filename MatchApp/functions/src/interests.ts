@@ -48,7 +48,8 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   const forwardBlockRef = db.collection("blocks").doc(fromUid).collection("blocked").doc(toUid);
   const reverseBlockRef = db.collection("blocks").doc(toUid).collection("blocked").doc(fromUid);
   const dayKey = utcDayKey();
-  const usageRef = db.collection("interestUsage").doc(`${fromUid}_${dayKey}`);
+  // Reuse the existing server-only usage subtree so account deletion already removes quota data.
+  const usageRef = db.collection("subscriptions").doc(fromUid).collection("usage").doc(`interests_${dayKey}`);
   const nowMillis = Date.now();
 
   const result = await db.runTransaction(async (tx) => {
