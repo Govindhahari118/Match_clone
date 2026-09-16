@@ -16,9 +16,12 @@ object AppearanceThemeResolver {
         ThemePreference.NEUTRAL -> AppPalette.VIVAH
         ThemePreference.MANUAL -> AppPalette.fromKey(manualPaletteKey)
         ThemePreference.AUTOMATIC -> {
-            if (profileReligion.isNullOrBlank()) return AppPalette.VIVAH
-            val religion = ReligionCategory.fromReligion(profileReligion)
-            if (religion == ReligionCategory.OTHER) AppPalette.VIVAH else AppPalette.forReligion(religion)
+            if (profileReligion.isNullOrBlank()) {
+                AppPalette.VIVAH
+            } else {
+                val religion = ReligionCategory.fromReligion(profileReligion)
+                if (religion == ReligionCategory.OTHER) AppPalette.VIVAH else AppPalette.forReligion(religion)
+            }
         }
     }
 }
