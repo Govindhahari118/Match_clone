@@ -1,240 +1,247 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import api from "../../../services/api";
-import { toast } from "react-toastify";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { toast } from "react-toastify";
+import api from "../../../services/api";
+import { useAuth } from "../../../context/AuthContext";
 
-const PLANS_STATIC = [
-    {
-        id: "silver",
-        name: "Silver",
-        price: 999,
-        originalPrice: 1499,
-        durationMonths: 3,
-        color: "from-gray-400 to-gray-600",
-        features: [
-            "View 50 Contact Numbers / Month",
-            "Send Unlimited Interests",
-            "Chat with Mutual Matches",
-            "Priority in Search Results",
-            "Ad-Free Experience",
-        ],
-    },
-    {
-        id: "gold",
-        name: "Gold",
-        price: 1799,
-        originalPrice: 2499,
-        durationMonths: 6,
-        popular: true,
-        color: "from-yellow-500 to-amber-600",
-        features: [
-            "View 200 Contact Numbers / Month",
-            "Send Unlimited Interests",
-            "Unlimited Chat",
-            "Top Priority in Search",
-            "WhatsApp & Video Support",
-            "Highlighted Profile Badge",
-            "AI Match Score Reports",
-        ],
-    },
-    {
-        id: "platinum",
-        name: "Platinum",
-        price: 2999,
-        originalPrice: 4499,
-        durationMonths: 12,
-        color: "from-purple-600 to-indigo-700",
-        features: [
-            "Unlimited Contact Numbers",
-            "Send Unlimited Interests",
-            "Unlimited Chat",
-            "#1 Search Ranking",
-            "Dedicated Relationship Manager",
-            "Profile Photo Verification",
-            "AI Match Score Reports",
-            "Video Calling with Matches",
-            "Profile Makeover Service",
-        ],
-    },
-];
+function humanize(value) {
+  return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
-const COMPARISON = [
-    { feature: "Contact Numbers", silver: "50/month", gold: "200/month", platinum: "Unlimited" },
-    { feature: "Interests", silver: "Unlimited", gold: "Unlimited", platinum: "Unlimited" },
-    { feature: "Chat", silver: "Mutual only", gold: "Unlimited", platinum: "Unlimited" },
-    { feature: "Search Ranking", silver: "Priority", gold: "Top Priority", platinum: "#1 Ranked" },
-    { feature: "Video Calling", silver: "✗", gold: "✗", platinum: "✓" },
-    { feature: "Relationship Manager", silver: "✗", gold: "✗", platinum: "✓" },
-    { feature: "AI Match Reports", silver: "✗", gold: "✓", platinum: "✓" },
-    { feature: "Profile Badge", silver: "✗", gold: "✓", platinum: "✓" },
-];
+function entitlementRows(entitlements = {}) {
+  return [
+    ["Daily recommendations", entitlements.dailyRecommendations],
+    ["Interests per day", entitlements.interestsPerDay],
+    ["Contact requests per month", entitlements.contactRequestsPerMonth],
+    ["Messages with connections", entitlements.messagesWithConnections],
+    ["Profile boosts per week", entitlements.visibilityBoostsPerWeek],
+    ["Who viewed me", entitlements.canViewWhoViewed ? "Included" : "Not included"],
+    ["Voice calling", entitlements.canVoiceCall ? "Included" : "Not included"],
+    ["Video calling", entitlements.canVideoCall ? "Included" : "Not included"],
+  ];
+}
+
+function loadRazorpayScript() {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[data-matrimony-razorpay="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.dataset.matrimonyRazorpay = "true";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 export default function PricingPage() {
-    const [plans, setPlans] = useState(PLANS_STATIC);
-    const [loading, setLoading] = useState(false);
-    const [showComparison, setShowComparison] = useState(false);
-    const router = useRouter();
+  const { user } = useAuth();
+  const [plans, setPlans] = useState([]);
+  const [current, setCurrent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [checkoutPlan, setCheckoutPlan] = useState(null);
+  const [pendingOrder, setPendingOrder] = useState(null);
+  const [error, setError] = useState("");
 
-    useEffect(() => {
-        const fetchFromAPI = async () => {
-            try {
-                const res = await api.get("/payment/plans");
-                if (res.data?.length) setPlans(res.data);
-            } catch { }
-        };
-        fetchFromAPI();
-    }, []);
-
-    const handlePurchase = async (plan) => {
-        try {
-            const orderRes = await api.post("/payment/create-order", { planId: plan.id });
-            const order = orderRes.data;
-            const isConfirmed = confirm(`Proceed to pay ₹${plan.price} for ${plan.name} plan (${plan.durationMonths} months)?`);
-            if (isConfirmed) {
-                const verifyRes = await api.post("/payment/verify", {
-                    paymentId: `pay_mock_${plan.id}_${order.orderId || "ord_mock"}`,
-                    orderId: order.orderId || `ord_mock`,
-                    planId: plan.id,
-                });
-                if (verifyRes.data.success) {
-                    toast.success(`🎉 Welcome to ${plan.name} Membership!`);
-                    router.push("/profile");
-                }
-            }
-        } catch {
-            // Demo mode
-            toast.success(`🎉 Welcome to ${plan.name} Membership! (Demo Mode)`);
-            router.push("/matches");
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [plansResponse, entitlementResponse] = await Promise.all([
+          api.get("/payment/plans"),
+          api.get("/subscription/entitlements").catch(() => ({ data: null })),
+        ]);
+        if (cancelled) return;
+        setPlans(Array.isArray(plansResponse.data) ? plansResponse.data : []);
+        setCurrent(entitlementResponse.data || null);
+      } catch (requestError) {
+        if (!cancelled) {
+          setPlans([]);
+          setError(requestError?.response?.data?.error || "Plans could not be loaded. No fallback prices are shown because billing must remain authoritative.");
         }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
-    return (
-        <div className="max-w-5xl mx-auto">
-            {/* Header */}
-            <div className="text-center mb-10">
-                <div className="inline-flex items-center gap-2 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
-                    👑 Limited Time Offer — Up to 40% Off
-                </div>
-                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">
-                    Choose Your Plan
-                </h1>
-                <p className="text-gray-500 max-w-2xl mx-auto">
-                    Upgrade to unlock contact numbers, video calling, and priority matching. All plans include a 7-day money-back guarantee.
-                </p>
-            </div>
+  const currentLabel = useMemo(() => current?.plan ? humanize(current.plan) : "Free", [current]);
 
-            {/* Plans */}
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-                {plans.map((plan) => (
-                    <div
-                        key={plan.id || plan.name}
-                        className={`relative bg-white rounded-2xl border overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col ${plan.popular ? "border-yellow-400 ring-2 ring-yellow-300 scale-105" : "border-gray-200"
-                            }`}
-                    >
-                        {plan.popular && (
-                            <div className="bg-gradient-to-r from-yellow-500 to-amber-500 text-white text-xs font-bold text-center py-1.5 tracking-wider uppercase">
-                                ⭐ Most Popular
-                            </div>
-                        )}
+  const refreshEntitlements = async () => {
+    const response = await api.get("/subscription/entitlements");
+    setCurrent(response.data);
+    return response.data;
+  };
 
-                        <div className={`bg-gradient-to-br ${plan.color || "from-gray-500 to-gray-700"} p-6 text-white`}>
-                            <h2 className="text-2xl font-extrabold mb-1">{plan.name}</h2>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-4xl font-extrabold">₹{plan.price || plan.price}</span>
-                                {plan.originalPrice && <span className="text-sm line-through opacity-70">₹{plan.originalPrice}</span>}
-                            </div>
-                            <p className="text-white/80 text-sm mt-1">for {plan.durationMonths} months</p>
-                            {plan.originalPrice && (
-                                <div className="mt-2 text-xs bg-white/20 px-2 py-0.5 rounded-full inline-block font-semibold">
-                                    Save ₹{plan.originalPrice - plan.price}
-                                </div>
-                            )}
-                        </div>
+  const reconcileOrder = async (orderId) => {
+    if (!orderId) return;
+    try {
+      const response = await api.get(`/payment/status/${orderId}`);
+      if (response.data?.status === "completed") {
+        await refreshEntitlements();
+        setPendingOrder(null);
+        toast.success("Payment confirmed and membership is active.");
+      } else {
+        toast.info(`Payment status: ${humanize(response.data?.status || "pending")}`);
+      }
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.error || "Payment status could not be checked.");
+    }
+  };
 
-                        <div className="p-6 flex-1 flex flex-col">
-                            <ul className="space-y-3 flex-1 mb-6">
-                                {(plan.features || []).map((feature, i) => (
-                                    <li key={i} className="flex items-start gap-2.5 text-sm text-gray-700">
-                                        <span className="text-green-500 font-bold flex-shrink-0 mt-0.5">✓</span>
-                                        {feature}
-                                    </li>
-                                ))}
-                            </ul>
+  const handlePurchase = async (plan) => {
+    if (!user) {
+      toast.info("Please login before purchasing a membership.");
+      return;
+    }
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    if (!keyId) {
+      toast.error("Checkout is not configured in this environment. No payment was attempted.");
+      return;
+    }
 
-                            <button
-                                onClick={() => handlePurchase(plan)}
-                                disabled={loading}
-                                className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${plan.popular
-                                        ? "bg-gradient-to-r from-yellow-500 to-amber-500 text-white hover:shadow-lg hover:shadow-yellow-200"
-                                        : "bg-gradient-to-r from-pink-600 to-red-600 text-white hover:shadow-lg hover:shadow-pink-200"
-                                    } disabled:opacity-50`}
-                            >
-                                Get {plan.name} Plan
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
+    setCheckoutPlan(plan.id);
+    setError("");
+    try {
+      const idempotencyKey = typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pay_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const orderResponse = await api.post(
+        "/payment/create-order",
+        { planId: plan.id, idempotencyKey },
+        { headers: { "Idempotency-Key": idempotencyKey } }
+      );
+      const order = orderResponse.data;
+      setPendingOrder(order);
 
-            {/* Comparison Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
-                <button
-                    onClick={() => setShowComparison(!showComparison)}
-                    className="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition"
-                >
-                    <span className="font-bold text-gray-900">Compare All Plans</span>
-                    <span className="text-gray-400 text-xl">{showComparison ? "−" : "+"}</span>
-                </button>
-                {showComparison && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="px-6 py-3 text-left font-bold text-gray-600">Feature</th>
-                                    <th className="px-4 py-3 text-center font-bold text-gray-600">Silver</th>
-                                    <th className="px-4 py-3 text-center font-bold text-yellow-600">Gold ⭐</th>
-                                    <th className="px-4 py-3 text-center font-bold text-purple-600">Platinum</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {COMPARISON.map((row, i) => (
-                                    <tr key={i} className="border-t border-gray-50">
-                                        <td className="px-6 py-3 text-gray-700 font-medium">{row.feature}</td>
-                                        <td className="px-4 py-3 text-center text-gray-500">{row.silver}</td>
-                                        <td className="px-4 py-3 text-center text-yellow-700 font-semibold">{row.gold}</td>
-                                        <td className="px-4 py-3 text-center text-purple-700 font-semibold">{row.platinum}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+      const scriptReady = await loadRazorpayScript();
+      if (!scriptReady || !window.Razorpay) throw new Error("Secure checkout could not be loaded");
 
-            {/* Guarantees */}
-            <div className="grid sm:grid-cols-3 gap-4 mb-8">
-                {[
-                    { icon: "🔒", title: "Secure Payment", desc: "Razorpay / SSL encrypted checkout" },
-                    { icon: "↩️", title: "7-Day Refund", desc: "Not satisfied? Get a full refund" },
-                    { icon: "📞", title: "24/7 Support", desc: "Dedicated team ready to help you" },
-                ].map(item => (
-                    <div key={item.title} className="bg-gray-50 rounded-xl p-4 flex items-center gap-3 border border-gray-100">
-                        <div className="text-2xl">{item.icon}</div>
-                        <div>
-                            <p className="font-bold text-gray-800 text-sm">{item.title}</p>
-                            <p className="text-xs text-gray-500">{item.desc}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
+      const checkout = new window.Razorpay({
+        key: keyId,
+        order_id: order.orderId,
+        amount: Math.round(Number(order.amount) * 100),
+        currency: order.currency || "INR",
+        name: "Matrimony Membership",
+        description: `${plan.name} · ${plan.durationMonths} months`,
+        prefill: {
+          email: user?.email || "",
+          contact: user?.phone || "",
+        },
+        modal: {
+          ondismiss: () => {
+            toast.info("Checkout closed. If money was debited, use Check payment status instead of paying again.");
+          },
+        },
+        handler: async (response) => {
+          try {
+            await api.post("/payment/verify", {
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              signature: response.razorpay_signature,
+              planId: plan.id,
+            });
+            await refreshEntitlements();
+            setPendingOrder(null);
+            toast.success(`${plan.name} membership activated.`);
+          } catch (verifyError) {
+            toast.error(verifyError?.response?.data?.error || "Payment was received but confirmation is pending. Check payment status before retrying.");
+          }
+        },
+      });
+      checkout.open();
+    } catch (requestError) {
+      setError(requestError?.response?.data?.error || requestError?.message || "Checkout could not start.");
+    } finally {
+      setCheckoutPlan(null);
+    }
+  };
 
-            {/* Free plan reminder */}
-            <div className="text-center text-sm text-gray-500">
-                Want to use the free version? <Link href="/matches" className="text-pink-600 font-bold hover:underline">Continue with basic plan</Link>
-            </div>
+  return (
+    <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: "1rem" }}>
+      <header className="panel" style={{ padding: "1.2rem", textAlign: "center" }}>
+        <p className="section-label" style={{ marginBottom: "0.25rem" }}>Membership</p>
+        <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "2rem" }}>Transparent plans, exact limits</h1>
+        <p style={{ margin: "0.5rem auto 0", maxWidth: 720, color: "var(--ink-muted)", lineHeight: 1.55 }}>
+          Your plan changes available tools and quotas. It never fabricates matches, changes compatibility, or overrides another member’s contact or photo privacy.
+        </p>
+        <div style={{ marginTop: "0.75rem" }}><span className="chip chip-support">Current plan: {currentLabel}</span></div>
+      </header>
+
+      {error && <div className="panel" style={{ padding: "0.85rem", borderColor: "#efb4a9" }}>{error}</div>}
+
+      {pendingOrder && (
+        <div className="panel" style={{ padding: "0.9rem", display: "flex", justifyContent: "space-between", gap: "0.7rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <strong>Payment confirmation available</strong>
+            <p style={{ margin: "0.2rem 0 0", color: "var(--ink-muted)", fontSize: "0.82rem" }}>Order {pendingOrder.orderId}. If your connection dropped after payment, check status instead of creating another order.</p>
+          </div>
+          <button className="button button-secondary" type="button" onClick={() => reconcileOrder(pendingOrder.orderId)}>Check payment status</button>
         </div>
-    );
+      )}
+
+      {loading ? (
+        <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>Loading authoritative plan details…</div>
+      ) : plans.length === 0 ? (
+        <div className="panel" style={{ padding: "2rem", textAlign: "center" }}>No purchasable plans are available right now. You can continue using the free plan.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: "0.8rem" }}>
+          {plans.map((plan) => (
+            <article key={plan.id} className="panel panel-hover" style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+              <div>
+                <p className="section-label" style={{ marginBottom: "0.2rem" }}>{plan.name}</p>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "0.35rem" }}>
+                  <strong style={{ fontSize: "2rem" }}>₹{Number(plan.price).toLocaleString("en-IN")}</strong>
+                  <span style={{ color: "var(--ink-muted)" }}>/ {plan.durationMonths} months</span>
+                </div>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--ink-muted)", fontSize: "0.78rem" }}>{plan.renewal}</p>
+              </div>
+
+              <div style={{ display: "grid", gap: "0.35rem" }}>
+                {entitlementRows(plan.entitlements).map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "0.7rem", borderBottom: "1px solid var(--line)", padding: "0.38rem 0" }}>
+                    <span style={{ color: "var(--ink-muted)", fontSize: "0.8rem" }}>{label}</span>
+                    <strong style={{ textAlign: "right", fontSize: "0.8rem" }}>{String(value ?? "Not included")}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div className="panel" style={{ padding: "0.55rem", background: "#faf8f4" }}>
+                <p style={{ margin: 0, fontSize: "0.75rem", lineHeight: 1.45 }}>{plan.contactPrivacy}</p>
+                <p style={{ margin: "0.28rem 0 0", fontSize: "0.75rem", color: "var(--ink-muted)" }}>{plan.taxes}</p>
+              </div>
+
+              <button className="button button-primary" type="button" disabled={checkoutPlan === plan.id} onClick={() => handlePurchase(plan)}>
+                {checkoutPlan === plan.id ? "Opening secure checkout…" : `Choose ${plan.name}`}
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div className="panel" style={{ padding: "0.9rem" }}>
+        <strong>Billing principles</strong>
+        <p style={{ margin: "0.35rem 0 0", color: "var(--ink-muted)", lineHeight: 1.55, fontSize: "0.82rem" }}>
+          Critical plan limits come from the backend entitlement service, not marketing copy. No fake discounts, hidden “unlimited” caps, automatic contact disclosure, or demo-mode purchase success is shown here.
+        </p>
+      </div>
+
+      <div style={{ textAlign: "center", fontSize: "0.85rem" }}>
+        <Link href="/matches" className="button button-secondary">Continue with current plan</Link>
+      </div>
+    </div>
+  );
 }
