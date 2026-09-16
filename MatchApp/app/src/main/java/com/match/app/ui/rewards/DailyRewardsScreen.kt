@@ -1,5 +1,6 @@
 package com.match.app.ui.rewards
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.runtime.Composable
