@@ -1,32 +1,12 @@
 package com.match.app.ui.components
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.LockClock
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +28,7 @@ object MatreeDimens {
     val MinTouchTarget = 48.dp
 }
 
-/**
- * Standard destination scaffold. Feature screens can migrate to this without duplicating
- * top-bar spacing/back semantics. Content receives insets and remains responsible for its
- * own scrolling strategy.
- */
+/** Standard destination scaffold used to keep navigation, spacing and semantics consistent. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatreeScreen(
@@ -195,6 +171,7 @@ fun MatreeFeatureTile(
 
 enum class MatreeStatusTone { NEUTRAL, POSITIVE, WARNING, ERROR }
 
+/** Non-interactive status label. Never use a clickable chip for display-only status. */
 @Composable
 fun MatreeStatusChip(
     label: String,
@@ -213,14 +190,93 @@ fun MatreeStatusChip(
         MatreeStatusTone.WARNING -> MaterialTheme.colorScheme.onSecondaryContainer
         MatreeStatusTone.ERROR -> MaterialTheme.colorScheme.onErrorContainer
     }
-    AssistChip(
-        modifier = modifier,
-        onClick = {},
-        label = { Text(label) },
-        leadingIcon = null,
-        colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
-            containerColor = container,
-            labelColor = content
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.small, color = container) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = content,
+            fontWeight = FontWeight.SemiBold
         )
-    )
+    }
+}
+
+/**
+ * Canonical production state for a service whose backend/provider is not enabled yet.
+ * It replaces fake balances, simulated purchases, fabricated providers and dead action buttons.
+ */
+@Composable
+fun MatreeUnavailableFeature(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    requirements: List<String>,
+    modifier: Modifier = Modifier,
+    onHelp: (() -> Unit)? = null
+) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(
+                Modifier.padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(64.dp),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primary
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                    }
+                }
+                MatreeStatusChip("Not enabled in production", MatreeStatusTone.WARNING)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+
+        Text("Required before launch", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        requirements.forEach { requirement ->
+            ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+                Row(
+                    Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Filled.LockClock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        requirement,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (onHelp != null) {
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(
+                onClick = onHelp,
+                modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDimens.MinTouchTarget),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(Icons.Filled.HelpOutline, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Contact support")
+            }
+        }
+    }
 }
