@@ -41,27 +41,31 @@ async function createUnconfirmedProfile(uid = 'alice') {
   return db;
 }
 
-test('owner can confirm religion once and still edit unrelated profile fields', async () => {
+test('client-created profile must begin with unconfirmed religion', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(db, 'users/alice'), {
+    firebaseUid: 'alice', displayName: 'Alice', religion: 'Hindu',
+    isPremium: false, isVerified: false, verificationLevel: 0,
+    subscriptionPlan: 'FREE', subscriptionExpiry: 0,
+  }));
+  await createUnconfirmedProfile();
+});
+
+test('client cannot directly confirm or change canonical religion', async () => {
   const db = await createUnconfirmedProfile();
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { religion: 'Hindu' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Hindu' }));
   await assertSucceeds(updateDoc(doc(db, 'users/alice'), { city: 'Secunderabad' }));
 });
 
-test('populated religion is immutable even before metadata backfill trigger runs', async () => {
-  const db = await createUnconfirmedProfile();
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { religion: 'Hindu' }));
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Muslim' }));
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: '' }));
-});
-
-test('legacy populated profile without lock metadata is protected', async () => {
+test('legacy populated profile can only be corrected through trusted backend', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'users/alice'), {
-      firebaseUid: 'alice', displayName: 'Alice', religion: 'Christian', city: 'Hyderabad',
+      firebaseUid: 'alice', displayName: 'Alice', religion: 'Hindu', city: 'Hyderabad',
     });
   });
   const db = env.authenticatedContext('alice').firestore();
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Hindu' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Muslim' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: '' }));
   await assertSucceeds(updateDoc(doc(db, 'users/alice'), { city: 'Chennai' }));
 });
 
@@ -72,8 +76,8 @@ test('client cannot forge religion authority metadata', async () => {
   await assertFails(updateDoc(doc(db, 'users/alice'), { religionConfirmedAt: new Date() }));
 });
 
-test('unsupported religion display values are rejected on client writes', async () => {
+test('arbitrary religion values cannot be written through profile updates', async () => {
   const db = await createUnconfirmedProfile();
   await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'arbitrary-client-value' }));
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { religion: 'Prefer not to say' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Prefer not to say' }));
 });
