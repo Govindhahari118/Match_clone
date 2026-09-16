@@ -62,13 +62,16 @@ service cloud.firestore {
     }
 
     // Relationship mutations are trusted callable operations. Clients may observe only their own
-    // relationship documents; quotas, privacy checks and mutual-match creation are server-side.
+    // non-blocked relationship documents; quotas, privacy checks and match creation are server-side.
     match /interests/{interestId} {
-      allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow read: if isSignedIn() &&
+        (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid) &&
+        !blockedEitherWay(resource.data.fromUid, resource.data.toUid);
       allow create, update, delete: if false;
     }
     match /matches/{matchId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.users;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.users &&
+        resource.data.users.size() == 2 && !blockedEitherWay(resource.data.users[0], resource.data.users[1]);
       allow create, update, delete: if false;
     }
     match /interestResponses/{responseId} { allow read, write: if false; }
@@ -83,18 +86,31 @@ service cloud.firestore {
 
     match /shortlists/{ownerUid}/saved/{targetUid} { allow read, write: if isOwner(ownerUid) && !blockedEitherWay(ownerUid, targetUid) && !profileHiddenFrom(targetUid, ownerUid); }
     match /shortlists/{ownerUid} { allow read: if isOwner(ownerUid); }
-    match /blocks/{blockerUid}/blocked/{blockedUid} { allow read, write: if isOwner(blockerUid); }
-    match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); }
+
+    // Block mutations are backend-authoritative because blocking also atomically removes both
+    // interest directions and any mutual match. Clients may only observe their own block list.
+    match /blocks/{blockerUid}/blocked/{blockedUid} { allow read: if isOwner(blockerUid); allow write: if false; }
+    match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); allow write: if false; }
 
     match /chats/{threadId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participantUids;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantUids &&
+        resource.data.participantUids.size() == 2 && !blockedEitherWay(resource.data.participantUids[0], resource.data.participantUids[1]);
       allow create: if isSignedIn() && request.resource.data.participantUids is list && request.resource.data.participantUids.size() == 2 && request.resource.data.participantUids[0] != request.resource.data.participantUids[1] && request.auth.uid in request.resource.data.participantUids && mutualInterest(request.resource.data.participantUids[0], request.resource.data.participantUids[1]) && !blockedEitherWay(request.resource.data.participantUids[0], request.resource.data.participantUids[1]) && request.resource.data.keys().hasOnly(['participantUids','lastMessage','lastSentAt']);
       allow update: if isSignedIn() && request.auth.uid in resource.data.participantUids && request.resource.data.participantUids == resource.data.participantUids && mutualInterest(resource.data.participantUids[0], resource.data.participantUids[1]) && !blockedEitherWay(resource.data.participantUids[0], resource.data.participantUids[1]) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage','lastSentAt']);
       allow delete: if false;
       match /messages/{messageId} {
-        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
+          !blockedEitherWay(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          );
         allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids && mutualInterest(get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0], get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]) && !blockedEitherWay(get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0], get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]) && request.resource.data.fromFirebaseUid == request.auth.uid && request.resource.data.toFirebaseUid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids && request.resource.data.toFirebaseUid != request.auth.uid && request.resource.data.body is string && request.resource.data.body.size() <= 3000 && request.resource.data.sentAt is int && request.resource.data.isRead == false && request.resource.data.keys().hasOnly(['body','sentAt','isRead','fromFirebaseUid','toFirebaseUid','voiceUri','imageUri','voiceDurationMs']);
-        allow update: if isSignedIn() && resource.data.toFirebaseUid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) && request.resource.data.isRead == true;
+        allow update: if isSignedIn() && resource.data.toFirebaseUid == request.auth.uid &&
+          !blockedEitherWay(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) && request.resource.data.isRead == true;
         allow delete: if false;
       }
     }
