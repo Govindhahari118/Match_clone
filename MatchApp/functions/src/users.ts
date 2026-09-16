@@ -31,7 +31,9 @@ export const sendInactivityNudge = functions.pubsub
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const fourteenDaysAgo = now - 14 * 24 * 60 * 60 * 1000;
-    const nudge7 = await db.collection("users")
+    // Activity timestamps are intentionally private. Scheduled backend work can still use them
+    // without exposing precise presence to discovery/profile readers.
+    const nudge7 = await db.collection("presencePrivate")
       .where("lastActiveAt", "<=", sevenDaysAgo)
       .where("lastActiveAt", ">", fourteenDaysAgo)
       .limit(100).get();
@@ -205,6 +207,7 @@ export const deleteUserAccount = functions
       const singletonRefs = [
         db.collection("users").doc(uid),
         db.collection("userPrivate").doc(uid),
+        db.collection("presencePrivate").doc(uid),
         db.collection("savedSearches").doc(uid),
         db.collection("shortlists").doc(uid),
         db.collection("blocks").doc(uid),
