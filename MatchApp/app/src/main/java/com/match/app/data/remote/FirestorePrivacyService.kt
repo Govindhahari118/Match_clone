@@ -26,6 +26,23 @@ enum class ContactVisibility(val wireValue: String) {
     }
 }
 
+enum class ActivityVisibility(val wireValue: String, val label: String) {
+    EVERYONE("everyone", "Everyone"),
+    INTERESTS("interests", "People with an interest"),
+    MUTUAL("mutual", "Mutual interests"),
+    NOBODY("nobody", "Nobody");
+
+    companion object {
+        fun fromWire(value: String?): ActivityVisibility =
+            entries.firstOrNull { it.wireValue == value } ?: MUTUAL
+    }
+}
+
+data class ActivityPrivacy(
+    val onlineVisibility: ActivityVisibility = ActivityVisibility.MUTUAL,
+    val lastActiveVisibility: ActivityVisibility = ActivityVisibility.MUTUAL
+)
+
 /**
  * Owner-controlled privacy settings.
  *
@@ -33,7 +50,7 @@ enum class ContactVisibility(val wireValue: String) {
  * The target member cannot list or read the owner's exception list.
  *
  * `privacySettings/{ownerUid}` stores global privacy choices that trusted backend functions
- * consult before releasing private data such as a phone number.
+ * consult before releasing private data such as a phone number or precise activity timestamp.
  */
 @Singleton
 class FirestorePrivacyService @Inject constructor() {
@@ -121,6 +138,42 @@ class FirestorePrivacyService @Inject constructor() {
             trySend(ContactVisibility.fromWire(snapshot?.getString("contactVisibility")))
         }
         awaitClose { registration.remove() }
+    }
+
+    suspend fun setOnlineVisibility(ownerUid: String, visibility: ActivityVisibility) {
+        setActivityField(ownerUid, "onlineVisibility", visibility)
+    }
+
+    suspend fun setLastActiveVisibility(ownerUid: String, visibility: ActivityVisibility) {
+        setActivityField(ownerUid, "lastActiveVisibility", visibility)
+    }
+
+    fun observeActivityPrivacy(ownerUid: String): Flow<ActivityPrivacy> = callbackFlow {
+        require(ownerUid.isNotBlank()) { "Missing account identity" }
+        val registration = settings(ownerUid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                close(error)
+                return@addSnapshotListener
+            }
+            trySend(
+                ActivityPrivacy(
+                    onlineVisibility = ActivityVisibility.fromWire(snapshot?.getString("onlineVisibility")),
+                    lastActiveVisibility = ActivityVisibility.fromWire(snapshot?.getString("lastActiveVisibility"))
+                )
+            )
+        }
+        awaitClose { registration.remove() }
+    }
+
+    private suspend fun setActivityField(ownerUid: String, field: String, visibility: ActivityVisibility) {
+        require(ownerUid.isNotBlank()) { "Missing account identity" }
+        settings(ownerUid).set(
+            mapOf(
+                field to visibility.wireValue,
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            SetOptions.merge()
+        ).await()
     }
 
     private fun validate(ownerUid: String, memberUid: String) {
