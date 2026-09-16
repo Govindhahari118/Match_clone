@@ -3,7 +3,18 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-    function hasNoPrivateProfileFields() { return !('email' in request.resource.data) && !('phoneNumber' in request.resource.data) && !('fcmToken' in request.resource.data) && !('dateOfBirth' in request.resource.data); }
+    function hasNoPrivateProfileFields() {
+      return !('email' in request.resource.data) &&
+             !('phoneNumber' in request.resource.data) &&
+             !('fcmToken' in request.resource.data) &&
+             !('dateOfBirth' in request.resource.data) &&
+             !('rasi' in request.resource.data) &&
+             !('nakshatra' in request.resource.data) &&
+             !('manglik' in request.resource.data) &&
+             !('birthTime' in request.resource.data) &&
+             !('birthPlace' in request.resource.data) &&
+             !('incomeBand' in request.resource.data);
+    }
     function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
     function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt']); }
     function validReligionCreate() {
@@ -81,10 +92,16 @@ service cloud.firestore {
     match /privacySettings/{ownerUid} {
       allow read: if isOwner(ownerUid);
       allow create, update: if isOwner(ownerUid) &&
-        request.resource.data.keys().hasOnly(['contactVisibility','updatedAt']) &&
-        request.resource.data.contactVisibility in ['mutual_matches','nobody'];
+        request.resource.data.keys().hasOnly(['contactVisibility','onlineVisibility','lastActiveVisibility','updatedAt']) &&
+        (!('contactVisibility' in request.resource.data) || request.resource.data.contactVisibility in ['mutual_matches','nobody']) &&
+        (!('onlineVisibility' in request.resource.data) || request.resource.data.onlineVisibility in ['everyone','interests','mutual','nobody']) &&
+        (!('lastActiveVisibility' in request.resource.data) || request.resource.data.lastActiveVisibility in ['everyone','interests','mutual','nobody']);
       allow delete: if isOwner(ownerUid);
     }
+
+    // Presence timestamps are server-owned and can be released only through the permission-checked
+    // callable. A signed-in client cannot enumerate or directly read precise activity timestamps.
+    match /presencePrivate/{uid} { allow read, write: if false; }
 
     // Relationship mutations are trusted callable operations. Clients may observe only their own
     // relationship documents; quotas, privacy checks and mutual-match creation are server-side.
