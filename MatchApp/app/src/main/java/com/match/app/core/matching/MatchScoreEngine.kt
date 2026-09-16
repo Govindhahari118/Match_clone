@@ -1,22 +1,22 @@
 package com.match.app.core.matching
 
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.domain.model.ReligionId
+import com.match.app.domain.profile.ReligionFieldKey
+import com.match.app.domain.profile.ReligionFieldRegistry
 
 /**
- * Multi-dimensional Match Score™ engine.
+ * Deterministic profile-similarity signal used by detailed compatibility UI.
  *
- * Computes a 0.0–1.0 compatibility score across 9 weighted dimensions:
- *   1. Astrology (10-Porutham)       — 20%
- *   2. Religion & caste              — 15%
- *   3. Education & career level      — 10%
- *   4. Location proximity            — 10%
- *   5. Age compatibility             — 10%
- *   6. Family values alignment       — 10%
- *   7. Lifestyle compatibility       — 10%
- *   8. Physical preferences          — 10%
- *   9. Personality type              — 5%
- *
- * All computation is on-device (no API calls). Deterministic.
+ * Important invariants:
+ * - Missing data never receives a synthetic neutral score.
+ * - Astrology contributes only when it is applicable to both profiles and both supplied the
+ *   required astrology fields.
+ * - The total is normalized across dimensions that can actually be compared.
+ * - [ScoreBreakdown.coverage] communicates how much of the potentially applicable comparison
+ *   data was available, so a high score based on sparse data is not presented as high confidence.
+ * - Physical appearance is not scored until the product has explicit, consented partner
+ *   preferences; raw height difference is not treated as compatibility.
  */
 object MatchScoreEngine {
 
@@ -30,83 +30,120 @@ object MatchScoreEngine {
         val familyValues: Float,
         val lifestyle: Float,
         val physical: Float,
-        val personality: Float
+        val personality: Float,
+        val coverage: Float = 0f,
+        val astrologyApplicable: Boolean = false
+    )
+
+    private data class WeightedDimension(
+        val weight: Float,
+        val score: Float?
     )
 
     fun compute(me: UserEntity, candidate: UserEntity): ScoreBreakdown {
-        val astrology = computeAstrology(me, candidate)
-        val religionCaste = computeReligionCaste(me, candidate)
+        val astrologyApplicable = astrologyApplicable(me, candidate)
+        val astrology = computeAstrology(me, candidate, astrologyApplicable)
+        val religionCommunity = computeReligionCommunity(me, candidate)
         val educationCareer = computeEducationCareer(me, candidate)
         val location = computeLocation(me, candidate)
         val age = computeAge(me, candidate)
         val familyValues = computeFamilyValues(me, candidate)
         val lifestyle = computeLifestyle(me, candidate)
-        val physical = computePhysical(me, candidate)
         val personality = computePersonality(me, candidate)
 
-        val total = (
-            astrology * 0.20f +
-            religionCaste * 0.15f +
-            educationCareer * 0.10f +
-            location * 0.10f +
-            age * 0.10f +
-            familyValues * 0.10f +
-            lifestyle * 0.10f +
-            physical * 0.10f +
-            personality * 0.05f
-        ).coerceIn(0f, 1f)
+        val dimensions = listOf(
+            WeightedDimension(if (astrologyApplicable) 0.20f else 0f, astrology),
+            WeightedDimension(0.15f, religionCommunity),
+            WeightedDimension(0.10f, educationCareer),
+            WeightedDimension(0.10f, location),
+            WeightedDimension(0.10f, age),
+            WeightedDimension(0.10f, familyValues),
+            WeightedDimension(0.10f, lifestyle),
+            // Physical scoring is intentionally disabled until explicit preference data exists.
+            WeightedDimension(0f, null),
+            WeightedDimension(0.05f, personality)
+        )
+
+        val availableWeight = dimensions.sumOf { d -> if (d.score != null) d.weight.toDouble() else 0.0 }.toFloat()
+        val potentialWeight = dimensions.sumOf { it.weight.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+        val weightedScore = dimensions.sumOf { d ->
+            ((d.score ?: 0f) * d.weight).toDouble()
+        }.toFloat()
+        val total = if (availableWeight > 0f) weightedScore / availableWeight else 0f
+        val coverage = (availableWeight / potentialWeight).coerceIn(0f, 1f)
 
         return ScoreBreakdown(
-            total = total,
-            astrology = astrology,
-            religionCaste = religionCaste,
-            educationCareer = educationCareer,
-            location = location,
+            total = total.coerceIn(0f, 1f),
+            astrology = astrology ?: 0f,
+            religionCaste = religionCommunity ?: 0f,
+            educationCareer = educationCareer ?: 0f,
+            location = location ?: 0f,
             age = age,
-            familyValues = familyValues,
-            lifestyle = lifestyle,
-            physical = physical,
-            personality = personality
+            familyValues = familyValues ?: 0f,
+            lifestyle = lifestyle ?: 0f,
+            physical = 0f,
+            personality = personality ?: 0f,
+            coverage = coverage,
+            astrologyApplicable = astrologyApplicable
         )
     }
 
-    private fun computeAstrology(me: UserEntity, candidate: UserEntity): Float {
-        if (me.nakshatra.isBlank() || candidate.nakshatra.isBlank()) return 0.5f
-        if (me.rasi.isBlank() || candidate.rasi.isBlank()) return 0.5f
+    private fun astrologyApplicable(me: UserEntity, candidate: UserEntity): Boolean {
+        fun supportsAstrology(user: UserEntity): Boolean {
+            val religion = ReligionId.fromProfileValue(user.religion) ?: return false
+            val schema = ReligionFieldRegistry.schemaFor(religion)
+            return schema.supports(ReligionFieldKey.RASHI) &&
+                schema.supports(ReligionFieldKey.NAKSHATRA)
+        }
+        return supportsAstrology(me) && supportsAstrology(candidate)
+    }
+
+    private fun computeAstrology(
+        me: UserEntity,
+        candidate: UserEntity,
+        applicable: Boolean
+    ): Float? {
+        if (!applicable) return null
+        if (me.nakshatra.isBlank() || candidate.nakshatra.isBlank()) return null
+        if (me.rasi.isBlank() || candidate.rasi.isBlank()) return null
         val result = TenPorutham.calculate(
-            nakshatraBride = me.nakshatra, rasiBride = me.rasi,
-            nakshatraGroom = candidate.nakshatra, rasiGroom = candidate.rasi
+            nakshatraBride = me.nakshatra,
+            rasiBride = me.rasi,
+            nakshatraGroom = candidate.nakshatra,
+            rasiGroom = candidate.rasi
         )
-        return result.score.toFloat() / 10f
+        return (result.score.toFloat() / 10f).coerceIn(0f, 1f)
     }
 
-    private fun computeReligionCaste(me: UserEntity, candidate: UserEntity): Float {
-        var score = 0f
-        if (me.religion.equals(candidate.religion, ignoreCase = true)) score += 0.5f
-        if (me.caste.isNotBlank() && me.caste.equals(candidate.caste, ignoreCase = true)) score += 0.3f
-        if (me.motherTongue.equals(candidate.motherTongue, ignoreCase = true)) score += 0.2f
-        return score
-    }
+    private fun computeReligionCommunity(me: UserEntity, candidate: UserEntity): Float? =
+        weightedAverage(
+            0.50f to compareStrings(me.religion, candidate.religion),
+            0.30f to compareStrings(me.caste, candidate.caste),
+            0.20f to compareStrings(me.motherTongue, candidate.motherTongue)
+        )
 
-    private fun computeEducationCareer(me: UserEntity, candidate: UserEntity): Float {
-        var score = 0f
-        // Same education level
-        if (me.education.isNotBlank() && me.education.equals(candidate.education, ignoreCase = true)) score += 0.4f
-        // Same field
-        if (me.educationField.isNotBlank() && me.educationField.equals(candidate.educationField, ignoreCase = true)) score += 0.2f
-        // Same occupation category
-        if (me.occupationCategory.isNotBlank() && me.occupationCategory.equals(candidate.occupationCategory, ignoreCase = true)) score += 0.2f
-        // Similar income (within same bracket)
-        if (me.incomeBand.isNotBlank() && me.incomeBand.equals(candidate.incomeBand, ignoreCase = true)) score += 0.2f
-        return score
-    }
+    private fun computeEducationCareer(me: UserEntity, candidate: UserEntity): Float? =
+        weightedAverage(
+            0.40f to compareStrings(me.education, candidate.education),
+            0.20f to compareStrings(me.educationField, candidate.educationField),
+            0.20f to compareStrings(me.occupationCategory, candidate.occupationCategory),
+            0.20f to compareStrings(me.incomeBand, candidate.incomeBand)
+        )
 
-    private fun computeLocation(me: UserEntity, candidate: UserEntity): Float {
-        var score = 0f
-        if (me.city.isNotBlank() && me.city.equals(candidate.city, ignoreCase = true)) score += 0.6f
-        else if (me.state.isNotBlank() && me.state.equals(candidate.state, ignoreCase = true)) score += 0.3f
-        if (me.countryOfResidence.isNotBlank() && me.countryOfResidence.equals(candidate.countryOfResidence, ignoreCase = true)) score += 0.4f
-        return score.coerceAtMost(1f)
+    private fun computeLocation(me: UserEntity, candidate: UserEntity): Float? {
+        val cityOrState = when {
+            me.city.isNotBlank() && candidate.city.isNotBlank() ->
+                if (me.city.equals(candidate.city, ignoreCase = true)) 1f
+                else if (me.state.isNotBlank() && candidate.state.isNotBlank() &&
+                    me.state.equals(candidate.state, ignoreCase = true)) 0.5f else 0f
+            me.state.isNotBlank() && candidate.state.isNotBlank() ->
+                if (me.state.equals(candidate.state, ignoreCase = true)) 1f else 0f
+            else -> null
+        }
+        return weightedAverage(
+            0.60f to cityOrState,
+            0.40f to compareStrings(me.countryOfResidence, candidate.countryOfResidence)
+        )
     }
 
     private fun computeAge(me: UserEntity, candidate: UserEntity): Float {
@@ -114,53 +151,51 @@ object MatchScoreEngine {
         return when {
             diff <= 2 -> 1.0f
             diff <= 4 -> 0.85f
-            diff <= 6 -> 0.7f
-            diff <= 8 -> 0.5f
-            diff <= 10 -> 0.3f
-            else -> 0.1f
+            diff <= 6 -> 0.70f
+            diff <= 8 -> 0.50f
+            diff <= 10 -> 0.30f
+            else -> 0.10f
         }
     }
 
-    private fun computeFamilyValues(me: UserEntity, candidate: UserEntity): Float {
-        var score = 0f
-        if (me.familyValues.isNotBlank() && me.familyValues.equals(candidate.familyValues, ignoreCase = true)) score += 0.4f
-        if (me.familyType.isNotBlank() && me.familyType.equals(candidate.familyType, ignoreCase = true)) score += 0.3f
-        if (me.familyStatus.isNotBlank() && me.familyStatus.equals(candidate.familyStatus, ignoreCase = true)) score += 0.3f
-        return score
-    }
+    private fun computeFamilyValues(me: UserEntity, candidate: UserEntity): Float? =
+        weightedAverage(
+            0.40f to compareStrings(me.familyValues, candidate.familyValues),
+            0.30f to compareStrings(me.familyType, candidate.familyType),
+            0.30f to compareStrings(me.familyStatus, candidate.familyStatus)
+        )
 
-    private fun computeLifestyle(me: UserEntity, candidate: UserEntity): Float {
-        var score = 0f
-        if (me.diet.isNotBlank() && me.diet.equals(candidate.diet, ignoreCase = true)) score += 0.3f
-        if (me.smoking.isNotBlank() && me.smoking.equals(candidate.smoking, ignoreCase = true)) score += 0.25f
-        if (me.drinking.isNotBlank() && me.drinking.equals(candidate.drinking, ignoreCase = true)) score += 0.25f
-        // Overlapping hobbies
-        if (me.hobbies.isNotBlank() && candidate.hobbies.isNotBlank()) {
-            val myHobbies = me.hobbies.split(",").map { it.trim().lowercase() }.toSet()
-            val theirHobbies = candidate.hobbies.split(",").map { it.trim().lowercase() }.toSet()
-            val overlap = myHobbies.intersect(theirHobbies).size
-            if (overlap > 0) score += (0.2f * (overlap.toFloat() / myHobbies.size.coerceAtLeast(1))).coerceAtMost(0.2f)
+    private fun computeLifestyle(me: UserEntity, candidate: UserEntity): Float? {
+        val hobbyScore = if (me.hobbies.isBlank() || candidate.hobbies.isBlank()) {
+            null
+        } else {
+            val mine = me.hobbies.split(',').map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+            val theirs = candidate.hobbies.split(',').map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+            if (mine.isEmpty() || theirs.isEmpty()) null
+            else mine.intersect(theirs).size.toFloat() / mine.union(theirs).size.toFloat().coerceAtLeast(1f)
         }
-        return score
+        return weightedAverage(
+            0.30f to compareStrings(me.diet, candidate.diet),
+            0.25f to compareStrings(me.smoking, candidate.smoking),
+            0.25f to compareStrings(me.drinking, candidate.drinking),
+            0.20f to hobbyScore
+        )
     }
 
-    private fun computePhysical(me: UserEntity, candidate: UserEntity): Float {
-        // Physical preferences are subjective; score based on completeness and matching criteria
-        var score = 0.5f // Base: neutral when no data
-        if (me.heightCm > 0 && candidate.heightCm > 0) {
-            val diff = kotlin.math.abs(me.heightCm - candidate.heightCm)
-            score = when {
-                diff <= 10 -> 0.9f
-                diff <= 20 -> 0.7f
-                else -> 0.5f
-            }
-        }
-        return score
+    private fun computePersonality(me: UserEntity, candidate: UserEntity): Float? =
+        compareStrings(me.personalityType, candidate.personalityType)
+
+    private fun compareStrings(left: String, right: String): Float? {
+        if (left.isBlank() || right.isBlank()) return null
+        return if (left.trim().equals(right.trim(), ignoreCase = true)) 1f else 0f
     }
 
-    private fun computePersonality(me: UserEntity, candidate: UserEntity): Float {
-        if (me.personalityType.isBlank() || candidate.personalityType.isBlank()) return 0.5f
-        // Same personality = good
-        return if (me.personalityType.equals(candidate.personalityType, ignoreCase = true)) 0.9f else 0.5f
+    private fun weightedAverage(vararg values: Pair<Float, Float?>): Float? {
+        val available = values.filter { it.second != null }
+        if (available.isEmpty()) return null
+        val weight = available.sumOf { it.first.toDouble() }.toFloat()
+        if (weight <= 0f) return null
+        val weighted = available.sumOf { (w, score) -> (w * (score ?: 0f)).toDouble() }.toFloat()
+        return (weighted / weight).coerceIn(0f, 1f)
     }
 }

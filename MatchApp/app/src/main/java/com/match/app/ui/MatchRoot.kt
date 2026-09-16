@@ -30,6 +30,7 @@ import com.match.app.data.repo.ReligionProfileRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.domain.model.ReligionId
+import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -103,8 +104,8 @@ class RootViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
-     * Profile completion is account-scoped and derived from the signed-in user's actual persisted
-     * profile. It intentionally does not use the old device-global communitySetupDone preference.
+     * Profile completion is account-scoped and derived from the signed-in user's persisted fields.
+     * No identity field is silently fabricated simply to let the member enter the main app.
      */
     val profileSetupComplete = signedInUser
         .map { it?.isRequiredProfileComplete() == true }
@@ -126,7 +127,8 @@ class RootViewModel @Inject constructor(
             ReligionId.fromProfileValue(religion) != null &&
             education.isNotBlank() &&
             profession.trim().length >= 2 &&
-            heightCm in 90..250
+            heightCm in 90..250 &&
+            maritalStatus in IndiaProfileCatalog.maritalStatuses
 }
 
 /** Root decision: app intro → auth → required account profile → main. Only one is composed at a time. */
@@ -145,8 +147,6 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         vm.touchActivity()
     }
 
-    // Automatic religion styling follows only a confirmed canonical profile religion. Search and
-    // discovery preferences remain independent, and unconfirmed/legacy accounts stay neutral.
     val effectivePalette = if (
         religionExperience.religionThemeEnabled &&
         religionConfirmed == true &&

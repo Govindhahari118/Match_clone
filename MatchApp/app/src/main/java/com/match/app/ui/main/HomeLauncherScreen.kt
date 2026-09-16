@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
@@ -47,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.ReligionCategory
 
-/** Production home intentionally exposes only audited journeys. */
+/** Production home intentionally exposes focused journeys and one complete feature hub. */
 @Composable
 fun HomeLauncherScreen(
     onGoMatches:       () -> Unit,
@@ -66,6 +67,7 @@ fun HomeLauncherScreen(
     onGoWhoViewed:     () -> Unit,
     onGoFamily:        () -> Unit,
     onGoHelp:          () -> Unit,
+    onGoFeatureHub:        () -> Unit = {},
     onGoBiodata:            () -> Unit = {},
     onGoSecondMarriage:     () -> Unit = {},
     onGoCompatibilityQuiz:  () -> Unit = {},
@@ -115,7 +117,7 @@ fun HomeLauncherScreen(
         if (p == null) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(20.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -159,7 +161,7 @@ fun HomeLauncherScreen(
         Card(
             onClick = if (religion == ReligionCategory.HINDU) onGoKundli else onGoQuiz,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
             Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -200,6 +202,15 @@ fun HomeLauncherScreen(
                 EssentialButton(Icons.Filled.PrivacyTip, "Privacy", Modifier.weight(1f), onGoPrivacyDash)
             }
             EssentialButton(Icons.Filled.WorkspacePremium, "Membership", Modifier.fillMaxWidth(), onGoPricing)
+            Button(
+                onClick = onGoFeatureHub,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(Icons.Filled.Explore, contentDescription = null)
+                Spacer(Modifier.padding(4.dp))
+                Text("Explore all Matree tools")
+            }
         }
 
         Spacer(Modifier.height(18.dp))
@@ -224,7 +235,7 @@ private fun HomeActionCard(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(16.dp)) {
+    Card(onClick = onClick, modifier = modifier, shape = MaterialTheme.shapes.medium) {
         Column(
             Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -238,7 +249,7 @@ private fun HomeActionCard(
 
 @Composable
 private fun EssentialButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = modifier.height(52.dp)) {
+    OutlinedButton(onClick = onClick, modifier = modifier.height(52.dp), shape = MaterialTheme.shapes.medium) {
         Icon(icon, null)
         Spacer(Modifier.padding(4.dp))
         Text(label)

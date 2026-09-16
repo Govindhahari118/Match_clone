@@ -3,10 +3,6 @@ package com.match.app.ui.community
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -15,252 +11,254 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.match.app.ui.i18n.t
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.match.app.data.session.SessionStore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class CommunityGroup(
     val name: String,
-    val emoji: String,
-    val color: Color,
-    val communities: List<CommunityItem>
+    val religion: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val communities: List<String>
 )
 
-data class CommunityItem(
-    val name: String,
-    val count: String,
-    val religion: String
+private val COMMUNITY_GROUPS = listOf(
+    CommunityGroup(
+        "Hindu communities", "Hindu", Icons.Filled.TempleHindu,
+        listOf("Brahmin", "Rajput", "Kshatriya", "Vaishya", "Nadar", "Mudaliar", "Pillai", "Naidu", "Reddy", "Nair", "Iyer", "Iyengar", "Aggarwal", "Jat", "Patel", "Maratha", "Kamma", "Kapu", "Velama")
+    ),
+    CommunityGroup(
+        "Muslim communities", "Muslim", Icons.Filled.Mosque,
+        listOf("Sunni", "Shia", "Bohra", "Memon", "Ansari", "Sheikh", "Syed", "Pathan", "Mappila")
+    ),
+    CommunityGroup(
+        "Christian communities", "Christian", Icons.Filled.Church,
+        listOf("Catholic", "Protestant", "Church of South India", "Jacobite", "Pentecostal")
+    ),
+    CommunityGroup(
+        "Sikh communities", "Sikh", Icons.Filled.Star,
+        listOf("Jat Sikh", "Khatri Sikh", "Arora Sikh", "Ramgharia", "Saini")
+    ),
+    CommunityGroup(
+        "Jain communities", "Jain", Icons.Filled.Diamond,
+        listOf("Digambara", "Shwetambar", "Oswal", "Porwal")
+    ),
+    CommunityGroup(
+        "Buddhist communities", "Buddhist", Icons.Filled.SelfImprovement,
+        emptyList()
+    ),
+    CommunityGroup(
+        "Parsi / Zoroastrian communities", "Parsi/Zoroastrian", Icons.Filled.AutoAwesome,
+        emptyList()
+    ),
+    CommunityGroup(
+        "Other communities", "Other", Icons.Filled.Groups,
+        emptyList()
+    )
 )
 
-private val communityGroups = listOf(
-    CommunityGroup("Hindu Communities", "🕉️", Color(0xFFFF6F00), listOf(
-        CommunityItem("Brahmin", "45K+", "Hindu"),
-        CommunityItem("Rajput", "32K+", "Hindu"),
-        CommunityItem("Kshatriya", "28K+", "Hindu"),
-        CommunityItem("Vaishya", "41K+", "Hindu"),
-        CommunityItem("Nadar", "19K+", "Hindu"),
-        CommunityItem("Mudaliar", "15K+", "Hindu"),
-        CommunityItem("Pillai", "22K+", "Hindu"),
-        CommunityItem("Naidu", "27K+", "Hindu"),
-        CommunityItem("Reddy", "36K+", "Hindu"),
-        CommunityItem("Nair", "18K+", "Hindu"),
-        CommunityItem("Iyer", "25K+", "Hindu"),
-        CommunityItem("Iyengar", "21K+", "Hindu"),
-        CommunityItem("Aggarwal", "38K+", "Hindu"),
-        CommunityItem("Jat", "17K+", "Hindu"),
-        CommunityItem("Patel", "44K+", "Hindu"),
-        CommunityItem("Maratha", "30K+", "Hindu"),
-        CommunityItem("Kamma", "23K+", "Hindu"),
-        CommunityItem("Kapu", "14K+", "Hindu"),
-        CommunityItem("Velama", "11K+", "Hindu"),
-        CommunityItem("SC/ST", "20K+", "Hindu"),
-    )),
-    CommunityGroup("Muslim Communities", "☪️", Color(0xFF1B5E20), listOf(
-        CommunityItem("Sunni", "55K+", "Muslim"),
-        CommunityItem("Shia", "18K+", "Muslim"),
-        CommunityItem("Bohra", "12K+", "Muslim"),
-        CommunityItem("Memon", "16K+", "Muslim"),
-        CommunityItem("Ansari", "14K+", "Muslim"),
-        CommunityItem("Sheikh", "21K+", "Muslim"),
-        CommunityItem("Syed", "24K+", "Muslim"),
-        CommunityItem("Pathan", "19K+", "Muslim"),
-        CommunityItem("Mappila", "10K+", "Muslim"),
-    )),
-    CommunityGroup("Christian Communities", "✝️", Color(0xFF1565C0), listOf(
-        CommunityItem("Catholic", "22K+", "Christian"),
-        CommunityItem("Protestant", "15K+", "Christian"),
-        CommunityItem("Church of South India", "9K+", "Christian"),
-        CommunityItem("Jacobite", "7K+", "Christian"),
-        CommunityItem("Pentecostal", "11K+", "Christian"),
-    )),
-    CommunityGroup("Sikh Communities", "☬", Color(0xFF4A148C), listOf(
-        CommunityItem("Jat Sikh", "28K+", "Sikh"),
-        CommunityItem("Khatri Sikh", "15K+", "Sikh"),
-        CommunityItem("Arora Sikh", "17K+", "Sikh"),
-        CommunityItem("Ramgharia", "8K+", "Sikh"),
-        CommunityItem("Saini", "6K+", "Sikh"),
-    )),
-    CommunityGroup("Jain Communities", "🔱", Color(0xFF006064), listOf(
-        CommunityItem("Digambara", "11K+", "Jain"),
-        CommunityItem("Shwetambar", "14K+", "Jain"),
-        CommunityItem("Oswal", "19K+", "Jain"),
-        CommunityItem("Porwal", "8K+", "Jain"),
-    )),
-    CommunityGroup("Other Religions", "🌟", Color(0xFF37474F), listOf(
-        CommunityItem("Buddhist", "7K+", "Buddhist"),
-        CommunityItem("Parsi", "4K+", "Parsi"),
-        CommunityItem("Jewish", "2K+", "Jewish"),
-        CommunityItem("Bahai", "1K+", "Bahai"),
-    ))
-)
+@HiltViewModel
+class CommunityBrowseViewModel @Inject constructor(
+    private val session: SessionStore
+) : ViewModel() {
+    fun apply(religion: String, community: String?, onApplied: () -> Unit) = viewModelScope.launch {
+        val current = session.filter.first()
+        session.setFilter(
+            current.copy(
+                religion = religion,
+                caste = community.orEmpty()
+            )
+        )
+        onApplied()
+    }
+}
 
+/**
+ * Community browsing is a discovery-filter launcher. Bundled labels are taxonomy options only;
+ * Matree does not attach fabricated member counts or popularity claims to them.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommunityBrowseScreen(
     onBack: () -> Unit = {},
-    onBrowse: (String, String) -> Unit = { _, _ -> }
+    onBrowse: (String, String) -> Unit = { _, _ -> },
+    vm: CommunityBrowseViewModel = hiltViewModel()
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var expandedGroup by remember { mutableStateOf<String?>("Hindu Communities") }
+    var query by remember { mutableStateOf("") }
+    var expandedGroup by remember { mutableStateOf<String?>(null) }
 
-    val filteredGroups = if (searchQuery.isBlank()) communityGroups else {
-        communityGroups.mapNotNull { group ->
-            val filtered = group.communities.filter {
-                it.name.contains(searchQuery, ignoreCase = true)
+    val filteredGroups = remember(query) {
+        val needle = query.trim()
+        if (needle.isBlank()) COMMUNITY_GROUPS
+        else COMMUNITY_GROUPS.mapNotNull { group ->
+            val matchingCommunities = group.communities.filter { it.contains(needle, ignoreCase = true) }
+            when {
+                group.name.contains(needle, ignoreCase = true) || group.religion.contains(needle, ignoreCase = true) -> group
+                matchingCommunities.isNotEmpty() -> group.copy(communities = matchingCommunities)
+                else -> null
             }
-            if (filtered.isNotEmpty()) group.copy(communities = filtered) else null
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(t("browse_by_community", "Browse by Community")) },
+                title = { Text("Browse by Community", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("community_back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
-    ) { pad ->
+    ) { padding ->
         LazyColumn(
-            Modifier.padding(pad).fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(padding).testTag("community_browse_screen"),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Search
             item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text(t("search_community", "Search community...")) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Clear, null)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // Stats row
-            item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("6 Religions", "50+ Communities", "500K+ Profiles").forEach { label ->
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                            )
-                        }
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Filled.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "Choose a religion or community to apply it to your discovery filters. Counts are shown only when Matree has live, privacy-reviewed data.",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }
 
-            // Community groups
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().testTag("community_search"),
+                    label = { Text("Search religion or community") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (query.isNotBlank()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium
+                )
+            }
+
             filteredGroups.forEach { group ->
                 item(key = group.name) {
-                    ElevatedCard(
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    val expanded = expandedGroup == group.name || query.isNotBlank()
+                    ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column {
-                            // Group header
                             Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
+                                Modifier.fillMaxWidth().clickable {
+                                    if (group.communities.isEmpty()) {
+                                        vm.apply(group.religion, null) { onBrowse(group.religion, "") }
+                                    } else {
                                         expandedGroup = if (expandedGroup == group.name) null else group.name
                                     }
-                                    .padding(16.dp),
+                                }.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = group.color.copy(alpha = 0.1f),
-                                    modifier = Modifier.size(40.dp)
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    modifier = Modifier.size(44.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text(group.emoji, style = MaterialTheme.typography.titleMedium)
+                                        Icon(group.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                                     }
                                 }
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(group.name, style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.SemiBold)
-                                    Text("${group.communities.size} communities",
+                                    Text(group.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        if (group.communities.isEmpty()) "Apply religion filter" else "${group.communities.size} filter options",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                                 Icon(
-                                    if (expandedGroup == group.name) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    null, tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (group.communities.isEmpty()) Icons.Filled.ArrowForward
+                                    else if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            // Communities grid
-                            if (expandedGroup == group.name) {
+                            if (expanded && group.communities.isNotEmpty()) {
                                 HorizontalDivider()
-                                Column(Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    group.communities.chunked(2).forEach { row ->
-                                        Row(
-                                            Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            row.forEach { community ->
-                                                Card(
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    colors = CardDefaults.cardColors(
-                                                        containerColor = group.color.copy(alpha = 0.06f)
-                                                    ),
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clickable { onBrowse(community.religion, community.name) }
-                                                ) {
-                                                    Row(
-                                                        Modifier.padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                    ) {
-                                                        Column(Modifier.weight(1f)) {
-                                                            Text(community.name,
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                fontWeight = FontWeight.SemiBold)
-                                                            Text(community.count,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = group.color)
-                                                        }
-                                                        Icon(Icons.Filled.ChevronRight, null,
-                                                            Modifier.size(16.dp),
-                                                            tint = group.color)
-                                                    }
+                                Column(
+                                    Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            vm.apply(group.religion, null) { onBrowse(group.religion, "") }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Public, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("All ${group.religion} profiles")
+                                    }
+
+                                    group.communities.forEach { community ->
+                                        OutlinedButton(
+                                            onClick = {
+                                                vm.apply(group.religion, community) {
+                                                    onBrowse(group.religion, community)
                                                 }
-                                            }
-                                            // Pad if odd number
-                                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                                            },
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                                        ) {
+                                            Text(community, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                                            Icon(Icons.Filled.ArrowForward, contentDescription = "Browse $community")
                                         }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            if (filteredGroups.isEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Filled.SearchOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No matching community option", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Try a broader search or use the main Matches filters.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

@@ -4,147 +4,198 @@ import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.match.app.ui.i18n.t
 
-private val ROSE = Color(0xFFC62828)
+private data class PlannerTask(val id: String, val title: String, val category: String)
+private data class BudgetCategory(val id: String, val title: String)
+private data class VendorTask(val id: String, val title: String, val detail: String)
 
-private data class ChecklistItem(val id: Int, val text: String, val category: String, val done: Boolean = false)
-private data class VendorCategory(val name: String, val icon: ImageVector, val count: Int, val color: Color)
-private data class BudgetItem(val category: String, val estimated: Int, val actual: Int)
+private val PLANNER_TASKS = listOf(
+    PlannerTask("date", "Agree on the ceremony / wedding date", "Planning"),
+    PlannerTask("guest_list", "Prepare the first guest-list estimate", "Planning"),
+    PlannerTask("venue", "Choose and confirm the venue", "Venue"),
+    PlannerTask("ceremony", "Plan religious, cultural or civil ceremony requirements", "Ceremony"),
+    PlannerTask("registration", "Review marriage-registration requirements", "Legal"),
+    PlannerTask("catering", "Choose catering and menu preferences", "Food"),
+    PlannerTask("photo", "Arrange photography / videography", "Media"),
+    PlannerTask("attire", "Plan attire and accessories", "Attire"),
+    PlannerTask("decor", "Plan decor, flowers and stage requirements", "Decor"),
+    PlannerTask("invites", "Prepare invitations and communication plan", "Invitations"),
+    PlannerTask("music", "Arrange music / entertainment if needed", "Entertainment"),
+    PlannerTask("transport", "Plan guest and family transportation", "Logistics"),
+    PlannerTask("stay", "Arrange accommodation for travelling guests", "Logistics"),
+    PlannerTask("schedule", "Create the event-day schedule", "Planning"),
+    PlannerTask("emergency", "Keep emergency contacts and essential documents ready", "Safety"),
+    PlannerTask("travel", "Plan post-wedding travel only if relevant", "Travel")
+)
+
+private val BUDGET_CATEGORIES = listOf(
+    BudgetCategory("venue", "Venue & setup"),
+    BudgetCategory("food", "Food & catering"),
+    BudgetCategory("media", "Photography & video"),
+    BudgetCategory("attire", "Attire & accessories"),
+    BudgetCategory("decor", "Decor & flowers"),
+    BudgetCategory("beauty", "Grooming / beauty"),
+    BudgetCategory("entertainment", "Music & entertainment"),
+    BudgetCategory("travel", "Travel & accommodation"),
+    BudgetCategory("invites", "Invitations & gifts"),
+    BudgetCategory("legal", "Legal / registration"),
+    BudgetCategory("other", "Other / contingency")
+)
+
+private val VENDOR_TASKS = listOf(
+    VendorTask("venue", "Venue", "Shortlist, compare terms and confirm the booking."),
+    VendorTask("caterer", "Catering", "Confirm menu, headcount policy and service details."),
+    VendorTask("photo", "Photography / video", "Confirm deliverables, hours, storage and usage rights."),
+    VendorTask("decor", "Decor / flowers", "Confirm scope, setup time and venue restrictions."),
+    VendorTask("attire", "Attire / tailoring", "Track fittings, delivery dates and alterations."),
+    VendorTask("grooming", "Grooming / beauty", "Confirm timing, trial needs and travel charges."),
+    VendorTask("music", "Music / entertainment", "Check venue rules, equipment and timing."),
+    VendorTask("ceremony", "Ceremony support", "Arrange the officiant or ceremony support relevant to your chosen tradition or civil format."),
+    VendorTask("transport", "Transport", "Confirm vehicles, routes, pickup points and contingency."),
+    VendorTask("stay", "Accommodation", "Confirm room blocks, check-in rules and guest list."),
+    VendorTask("legal", "Registration support", "Use official/local legal guidance where professional help is required.")
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeddingPlannerScreen(onBack: () -> Unit = {}) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("wedding_planner", Context.MODE_PRIVATE) }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val prefs = remember { context.getSharedPreferences("wedding_planner_v2", Context.MODE_PRIVATE) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("Checklist", "Budget", "Vendors")
 
-    // Checklist state — persist completed IDs to SharedPreferences
-    val completedIds = remember {
-        prefs.getStringSet("completed_items", emptySet())
-            ?.mapNotNull { it.toIntOrNull() }?.toMutableSet() ?: mutableSetOf()
+    val completedTasks = remember {
+        mutableStateOf(prefs.getStringSet("completed_tasks", emptySet())?.toSet() ?: emptySet())
     }
-    val checklist = remember { mutableStateListOf(
-        ChecklistItem(1, "Finalise wedding date", "Planning"),
-        ChecklistItem(2, "Book venue / banquet hall", "Venue"),
-        ChecklistItem(3, "Hire wedding photographer", "Photography"),
-        ChecklistItem(4, "Order wedding invitations", "Stationery"),
-        ChecklistItem(5, "Book caterer & finalise menu", "Catering"),
-        ChecklistItem(6, "Select wedding outfit / lehenga", "Attire"),
-        ChecklistItem(7, "Book priest / pandit", "Ceremony"),
-        ChecklistItem(8, "Arrange music / DJ / band", "Entertainment"),
-        ChecklistItem(9, "Book mehendi artist", "Beauty"),
-        ChecklistItem(10, "Arrange transportation", "Logistics"),
-        ChecklistItem(11, "Order flowers & decorations", "Decor"),
-        ChecklistItem(12, "Book makeup artist", "Beauty"),
-        ChecklistItem(13, "Finalise guest list", "Planning"),
-        ChecklistItem(14, "Purchase wedding rings", "Jewellery"),
-        ChecklistItem(15, "Book honeymoon travel", "Travel"),
-        ChecklistItem(16, "Legal: marriage registration", "Legal"),
-        ChecklistItem(17, "Gift registry setup", "Gifts"),
-        ChecklistItem(18, "Pre-wedding shoot", "Photography"),
-        ChecklistItem(19, "Sangeet / haldi ceremony plan", "Events"),
-        ChecklistItem(20, "Reception party arrangements", "Events")
-    ).map { it.copy(done = it.id in completedIds) }.toMutableStateList()
+    val completedVendors = remember {
+        mutableStateOf(prefs.getStringSet("completed_vendors", emptySet())?.toSet() ?: emptySet())
     }
-
-    val vendors = remember { listOf(
-        VendorCategory("Venues", Icons.Filled.LocationCity, 280, Color(0xFF6A1B9A)),
-        VendorCategory("Photographers", Icons.Filled.CameraAlt, 190, Color(0xFF00838F)),
-        VendorCategory("Caterers", Icons.Filled.Restaurant, 145, Color(0xFFD84315)),
-        VendorCategory("Decorators", Icons.Filled.Palette, 120, Color(0xFF2E7D32)),
-        VendorCategory("Makeup Artists", Icons.Filled.Face, 95, Color(0xFFC2185B)),
-        VendorCategory("DJs & Bands", Icons.Filled.MusicNote, 80, Color(0xFF1565C0)),
-        VendorCategory("Mehendi Artists", Icons.Filled.Brush, 65, Color(0xFFFF6F00)),
-        VendorCategory("Pandits", Icons.Filled.Star, 50, Color(0xFF4E342E)),
-        VendorCategory("Jewellers", Icons.Filled.Diamond, 110, Color(0xFF827717)),
-        VendorCategory("Travel Agents", Icons.Filled.Flight, 70, Color(0xFF0D47A1))
-    )}
-
-    val budget = remember { listOf(
-        BudgetItem("Venue & Decor", 500000, 0),
-        BudgetItem("Catering", 300000, 0),
-        BudgetItem("Photography & Video", 150000, 0),
-        BudgetItem("Attire & Jewellery", 200000, 0),
-        BudgetItem("Makeup & Mehendi", 50000, 0),
-        BudgetItem("Entertainment", 75000, 0),
-        BudgetItem("Travel & Honeymoon", 200000, 0),
-        BudgetItem("Invitations & Gifts", 50000, 0),
-        BudgetItem("Misc & Buffer", 100000, 0)
-    )}
-    val totalBudget = budget.sumOf { it.estimated }
+    val budgetValues = remember {
+        mutableStateMapOf<String, String>().apply {
+            BUDGET_CATEGORIES.forEach { category ->
+                val stored = prefs.getLong("budget_${category.id}", 0L)
+                put(category.id, if (stored > 0L) stored.toString() else "")
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(t("wedding_planner", "Wedding Planner")) },
-                navigationIcon = { IconButton(onClick = onBack, Modifier.testTag("wedding_back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } }
+                title = { Text("Wedding Planner", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("wedding_back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
             )
         }
-    ) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().testTag("wedding_planner_screen")) {
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).testTag("wedding_planner_screen")) {
             TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { i, t ->
-                    Tab(selected = selectedTab == i, onClick = { selectedTab = i },
-                        text = { Text(t) }, icon = {
-                            Icon(when (i) { 0 -> Icons.Filled.Checklist; 1 -> Icons.Filled.AccountBalance; else -> Icons.Filled.Store }, null, Modifier.size(18.dp))
-                        })
+                tabs.forEachIndexed { index, label ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index },
+                        text = { Text(label) },
+                        icon = {
+                            Icon(
+                                when (index) {
+                                    0 -> Icons.Filled.Checklist
+                                    1 -> Icons.Filled.AccountBalanceWallet
+                                    else -> Icons.Filled.Handyman
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
                 }
             }
+
             when (selectedTab) {
-                0 -> ChecklistTab(checklist) { idx ->
-                    val item = checklist[idx]
-                    val newDone = !item.done
-                    checklist[idx] = item.copy(done = newDone)
-                    if (newDone) completedIds.add(item.id) else completedIds.remove(item.id)
-                    prefs.edit().putStringSet("completed_items", completedIds.map { it.toString() }.toSet()).apply()
-                }
-                1 -> BudgetTab(budget, totalBudget)
-                2 -> VendorsTab(vendors)
+                0 -> ChecklistTab(
+                    completed = completedTasks.value,
+                    onToggle = { id ->
+                        completedTasks.value = completedTasks.value.toMutableSet().apply {
+                            if (!add(id)) remove(id)
+                        }
+                        prefs.edit().putStringSet("completed_tasks", completedTasks.value).apply()
+                    }
+                )
+
+                1 -> BudgetTab(
+                    values = budgetValues,
+                    onValueChange = { id, raw ->
+                        val digits = raw.filter(Char::isDigit).take(10)
+                        budgetValues[id] = digits
+                        prefs.edit().putLong("budget_$id", digits.toLongOrNull() ?: 0L).apply()
+                    }
+                )
+
+                else -> VendorChecklistTab(
+                    completed = completedVendors.value,
+                    onToggle = { id ->
+                        completedVendors.value = completedVendors.value.toMutableSet().apply {
+                            if (!add(id)) remove(id)
+                        }
+                        prefs.edit().putStringSet("completed_vendors", completedVendors.value).apply()
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ChecklistTab(items: List<ChecklistItem>, onToggle: (Int) -> Unit) {
-    val done = items.count { it.done }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun ChecklistTab(completed: Set<String>, onToggle: (String) -> Unit) {
+    val done = PLANNER_TASKS.count { it.id in completed }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         item {
-            ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = ROSE.copy(0.06f))) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("$done of ${items.size} tasks done", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    LinearProgressIndicator(progress = { done.toFloat() / items.size }, modifier = Modifier.fillMaxWidth().height(8.dp), color = if (done > items.size / 2) Color(0xFF2E7D32) else ROSE)
-                }
-            }
+            PlannerIntro(
+                icon = Icons.Filled.Checklist,
+                title = "$done of ${PLANNER_TASKS.size} planning tasks complete",
+                body = "This is a neutral planning checklist. Keep only the tasks relevant to your ceremony, family and local legal requirements."
+            )
         }
-        items(items.size) { idx ->
-            val item = items[idx]
-            ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = item.done, onCheckedChange = { onToggle(idx) }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFF2E7D32)))
+
+        items(PLANNER_TASKS, key = { it.id }) { task ->
+            val checked = task.id in completed
+            ElevatedCard(shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(checked = checked, onCheckedChange = { onToggle(task.id) })
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(item.text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                            textDecoration = if (item.done) TextDecoration.LineThrough else TextDecoration.None)
-                        Text(item.category, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            task.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
+                        )
+                        Text(task.category, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -153,50 +204,97 @@ private fun ChecklistTab(items: List<ChecklistItem>, onToggle: (Int) -> Unit) {
 }
 
 @Composable
-private fun BudgetTab(items: List<BudgetItem>, total: Int) {
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun BudgetTab(values: Map<String, String>, onValueChange: (String, String) -> Unit) {
+    val total = BUDGET_CATEGORIES.sumOf { values[it.id]?.toLongOrNull() ?: 0L }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         item {
-            ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFF1B5E20).copy(0.08f))) {
-                Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(t("total_estimated_budget", "Total Estimated Budget"), style = MaterialTheme.typography.labelMedium)
-                    Text("₹${"%,d".format(total)}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-                    Text(t("customise_amounts", "Customise amounts below"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            PlannerIntro(
+                icon = Icons.Filled.AccountBalanceWallet,
+                title = if (total > 0L) "Current planned total: ₹${"%,d".format(total)}" else "Build your own budget",
+                body = "Matree does not insert assumed wedding costs. Enter only the amounts you want to plan for; values are stored on this device."
+            )
         }
-        items(items) { b ->
-            ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(b.category, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                        Text("${(b.estimated.toFloat() / total * 100).toInt()}% of budget", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("₹${"%,d".format(b.estimated)}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = Color(0xFF1B5E20))
-                }
-            }
+
+        items(BUDGET_CATEGORIES, key = { it.id }) { category ->
+            OutlinedTextField(
+                value = values[category.id].orEmpty(),
+                onValueChange = { onValueChange(category.id, it) },
+                modifier = Modifier.fillMaxWidth().testTag("wedding_budget_${category.id}"),
+                label = { Text(category.title) },
+                leadingIcon = { Text("₹") },
+                placeholder = { Text("0") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                supportingText = { Text("Your planned amount") }
+            )
         }
+
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
 @Composable
-private fun VendorsTab(vendors: List<VendorCategory>) {
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun VendorChecklistTab(completed: Set<String>, onToggle: (String) -> Unit) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         item {
-            Text("Browse ${vendors.sumOf { it.count }}+ verified vendors", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            PlannerIntro(
+                icon = Icons.Filled.Handyman,
+                title = "Vendor planning checklist",
+                body = "This is not a vendor marketplace and Matree is not claiming any provider is verified here. Use these categories only to track what you still need to arrange."
+            )
         }
-        items(vendors) { v ->
-            ElevatedCard(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape, color = v.color.copy(0.12f), modifier = Modifier.size(44.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(v.icon, null, Modifier.size(24.dp), tint = v.color) }
-                    }
-                    Spacer(Modifier.width(14.dp))
+
+        items(VENDOR_TASKS, key = { it.id }) { vendor ->
+            val checked = vendor.id in completed
+            ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                    Checkbox(checked = checked, onCheckedChange = { onToggle(vendor.id) })
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(v.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
-                        Text("${v.count} verified vendors", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            vendor.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textDecoration = if (checked) TextDecoration.LineThrough else TextDecoration.None
+                        )
+                        Text(vendor.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+        }
+
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun PlannerIntro(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String
+) {
+    ElevatedCard(
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
     }

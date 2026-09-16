@@ -2,16 +2,23 @@ package com.match.app.ui.family
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -31,9 +38,8 @@ data class FamilyInfo(
     val fatherOccupation: String = "",
     val motherOccupation: String = "",
     val siblings: Int = 0,
-    val familyType: String = "Nuclear",       // Nuclear / Joint
-    val familyStatus: String = "Middle Class", // Affluent / Middle Class / Upper Middle Class
-    val familyValues: String = "Moderate",     // Orthodox / Traditional / Moderate / Liberal
+    val familyType: String = "",
+    val familyValues: String = "",
     val nativePlace: String = "",
     val gotra: String = "",
     val aboutFamily: String = ""
@@ -49,7 +55,6 @@ class FamilyViewModel @Inject constructor(
     val isSaved = MutableStateFlow(false)
 
     init {
-        // In a full implementation, load from DB. Here we pre-fill with defaults.
         viewModelScope.launch {
             val uid = session.userId.first() ?: return@launch
             val p = auth.currentProfile(uid) ?: return@launch
@@ -57,33 +62,36 @@ class FamilyViewModel @Inject constructor(
                 fatherOccupation = p.fatherOccupation,
                 motherOccupation = p.motherOccupation,
                 siblings = p.siblings,
-                familyType = p.familyType.ifBlank { "Nuclear" },
-                nativePlace = p.city,
-                gotra = p.gothra
+                familyType = p.familyType,
+                familyValues = p.familyValues,
+                nativePlace = p.nativeState.ifBlank { p.city },
+                gotra = p.gothra,
+                aboutFamily = p.aboutFamily
             )
         }
     }
 
     fun update(info: FamilyInfo) { _info.value = info }
+
     fun save() = viewModelScope.launch {
         val uid = session.userId.first() ?: return@launch
-        val info = _info.value
+        val value = _info.value
         auth.updateFamilyDetails(
             userId = uid,
-            fatherOccupation = info.fatherOccupation,
-            motherOccupation = info.motherOccupation,
-            siblings = info.siblings,
-            familyType = info.familyType,
-            familyValues = info.familyValues,
-            nativePlace = info.nativePlace,
-            gotra = info.gotra,
-            aboutFamily = info.aboutFamily
+            fatherOccupation = value.fatherOccupation.trim(),
+            motherOccupation = value.motherOccupation.trim(),
+            siblings = value.siblings.coerceAtLeast(0),
+            familyType = value.familyType,
+            familyValues = value.familyValues,
+            nativePlace = value.nativePlace.trim(),
+            gotra = value.gotra.trim(),
+            aboutFamily = value.aboutFamily.trim()
         )
         isSaved.value = true
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FamilyScreen(
     onBack: () -> Unit = {},
@@ -94,23 +102,18 @@ fun FamilyScreen(
 
     var father by remember(info) { mutableStateOf(info.fatherOccupation) }
     var mother by remember(info) { mutableStateOf(info.motherOccupation) }
-    var siblings by remember(info) { mutableStateOf(info.siblings.toString()) }
+    var siblings by remember(info) { mutableStateOf(if (info.siblings > 0) info.siblings.toString() else "") }
     var familyType by remember(info) { mutableStateOf(info.familyType) }
-    var familyStatus by remember(info) { mutableStateOf(info.familyStatus) }
     var familyValues by remember(info) { mutableStateOf(info.familyValues) }
     var nativePlace by remember(info) { mutableStateOf(info.nativePlace) }
     var gotra by remember(info) { mutableStateOf(info.gotra) }
     var aboutFamily by remember(info) { mutableStateOf(info.aboutFamily) }
-    var familyIncome by remember { mutableStateOf("") }
-    var propertyDetails by remember { mutableStateOf("") }
-    var brothersMarried by remember { mutableStateOf("") }
-    var sistersMarried by remember { mutableStateOf("") }
 
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(saved) {
         if (saved) {
-            snackbar.showSnackbar("Family details saved!")
+            snackbar.showSnackbar("Family details saved")
             vm.isSaved.value = false
         }
     }
@@ -118,7 +121,7 @@ fun FamilyScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(t("family_details", "Family Details")) },
+                title = { Text(t("family_details", "Family Details"), fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("family_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -133,163 +136,119 @@ fun FamilyScreen(
                 .padding(pad)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(16.dp)
                 .testTag("family_screen"),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Info banner ──────────────────────────────────────────────
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "Sharing family details helps matches understand your background and build trust.",
+                        "Add only the family information you want represented on your profile. Nothing here is pre-filled as a personal fact.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
 
-            // ── Parents ──────────────────────────────────────────────────
-            SectionHeader(Icons.Filled.Group, "Parents & Siblings")
-
+            SectionHeader(Icons.Filled.Group, "Parents & siblings")
             OutlinedTextField(
-                value = father, onValueChange = { father = it },
+                value = father,
+                onValueChange = { father = it },
                 label = { Text("Father's occupation") },
                 leadingIcon = { Icon(Icons.Filled.Work, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_father"),
                 singleLine = true
             )
             OutlinedTextField(
-                value = mother, onValueChange = { mother = it },
+                value = mother,
+                onValueChange = { mother = it },
                 label = { Text("Mother's occupation") },
                 leadingIcon = { Icon(Icons.Filled.Work, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_mother"),
                 singleLine = true
             )
             OutlinedTextField(
-                value = siblings, onValueChange = { siblings = it },
+                value = siblings,
+                onValueChange = { if (it.all(Char::isDigit)) siblings = it.take(2) },
                 label = { Text("Number of siblings") },
                 leadingIcon = { Icon(Icons.Filled.People, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_siblings"),
                 singleLine = true
             )
 
-            // ── Family type ────────────────────────────────────────────
-            SectionHeader(Icons.Filled.Home, "Family Background")
-
-            ChipGroup(
+            SectionHeader(Icons.Filled.Home, "Family background")
+            ChoiceChips(
                 label = "Family type",
                 options = listOf("Nuclear", "Joint"),
                 selected = familyType,
                 onSelect = { familyType = it }
             )
-            ChipGroup(
-                label = "Family status",
-                options = listOf("Middle Class", "Upper Middle Class", "Affluent"),
-                selected = familyStatus,
-                onSelect = { familyStatus = it }
-            )
-            ChipGroup(
+            ChoiceChips(
                 label = "Family values",
                 options = listOf("Orthodox", "Traditional", "Moderate", "Liberal"),
                 selected = familyValues,
                 onSelect = { familyValues = it }
             )
 
-            // ── Origin ────────────────────────────────────────────────
-            SectionHeader(Icons.Filled.Place, "Origin & Tradition")
-
+            SectionHeader(Icons.Filled.Place, "Origin & tradition")
             OutlinedTextField(
-                value = nativePlace, onValueChange = { nativePlace = it },
+                value = nativePlace,
+                onValueChange = { nativePlace = it },
                 label = { Text("Native place") },
                 leadingIcon = { Icon(Icons.Filled.LocationOn, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_native"),
                 singleLine = true
             )
             OutlinedTextField(
-                value = gotra, onValueChange = { gotra = it },
-                label = { Text("Gotra (optional)") },
+                value = gotra,
+                onValueChange = { gotra = it },
+                label = { Text("Lineage / gotra (optional, if applicable)") },
+                supportingText = { Text("Leave blank when this field is not part of your community tradition.") },
                 leadingIcon = { Icon(Icons.Filled.AutoAwesome, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_gotra"),
                 singleLine = true
             )
 
-            // ── Siblings detail ──────────────────────────────────────────
-            SectionHeader(Icons.Filled.People, "Siblings Detail")
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = brothersMarried, onValueChange = { brothersMarried = it },
-                    label = { Text("Brothers married") },
-                    modifier = Modifier.weight(1f).testTag("family_bros_married"),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = sistersMarried, onValueChange = { sistersMarried = it },
-                    label = { Text("Sisters married") },
-                    modifier = Modifier.weight(1f).testTag("family_sis_married"),
-                    singleLine = true
-                )
-            }
-
-            // ── Family income & property ────────────────────────────────
-            SectionHeader(Icons.Filled.AccountBalance, "Family Finances")
-
-            Text(t("family_annual_income", "Family annual income"), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("< 5L", "5-10L", "10-25L", "25-50L", "50L-1Cr", "1Cr+").forEach { band ->
-                    FilterChip(
-                        selected = familyIncome == band,
-                        onClick = { familyIncome = band },
-                        label = { Text(band, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-
+            SectionHeader(Icons.Filled.Description, "About family")
             OutlinedTextField(
-                value = propertyDetails, onValueChange = { propertyDetails = it },
-                label = { Text("Property / assets (optional)") },
-                leadingIcon = { Icon(Icons.Filled.HomeWork, null) },
-                modifier = Modifier.fillMaxWidth().testTag("family_property"),
-                singleLine = true
-            )
-
-            // ── About ─────────────────────────────────────────────────
-            SectionHeader(Icons.Filled.Description, "About Family")
-
-            OutlinedTextField(
-                value = aboutFamily, onValueChange = { aboutFamily = it },
+                value = aboutFamily,
+                onValueChange = { aboutFamily = it.take(1000) },
                 label = { Text("Describe your family (optional)") },
-                modifier = Modifier.fillMaxWidth().height(120.dp).testTag("family_about"),
-                maxLines = 5
+                supportingText = { Text("${aboutFamily.length}/1000") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).testTag("family_about"),
+                minLines = 4,
+                maxLines = 7
             )
 
-            Spacer(Modifier.height(8.dp))
             Button(
                 onClick = {
                     vm.update(
                         FamilyInfo(
-                            fatherOccupation = father, motherOccupation = mother,
+                            fatherOccupation = father,
+                            motherOccupation = mother,
                             siblings = siblings.toIntOrNull() ?: 0,
-                            familyType = familyType, familyStatus = familyStatus,
-                            familyValues = familyValues, nativePlace = nativePlace,
-                            gotra = gotra, aboutFamily = aboutFamily
+                            familyType = familyType,
+                            familyValues = familyValues,
+                            nativePlace = nativePlace,
+                            gotra = gotra,
+                            aboutFamily = aboutFamily
                         )
                     )
                     vm.save()
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("family_save")
+                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("family_save"),
+                shape = MaterialTheme.shapes.medium
             ) {
                 Icon(Icons.Filled.Save, null)
                 Spacer(Modifier.width(8.dp))
                 Text(t("save_family_details", "Save family details"))
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -297,24 +256,28 @@ fun FamilyScreen(
 @Composable
 private fun SectionHeader(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun ChipGroup(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    Column {
+private fun ChoiceChips(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { opt ->
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { option ->
                 FilterChip(
-                    selected = selected == opt,
-                    onClick = { onSelect(opt) },
-                    label = { Text(opt, style = MaterialTheme.typography.labelMedium) }
+                    selected = selected == option,
+                    onClick = { onSelect(option) },
+                    label = { Text(option) }
                 )
             }
         }
