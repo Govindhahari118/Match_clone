@@ -1,6 +1,6 @@
 package com.match.app.data.remote
 
-import com.google.firebase.firestore.FieldValue
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
@@ -10,54 +10,38 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Firestore service for interests and mutual matches. */
+/** Firestore reads plus trusted callable mutations for interests and mutual matches. */
 @Singleton
 class FirestoreInterestService @Inject constructor() {
 
+    private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
     private val functions = FirebaseFunctions.getInstance()
     private val interestsCol = db.collection("interests")
     private val matchesCol = db.collection("matches")
 
+    /**
+     * Interest creation is server-authoritative. The callable derives the sender from Firebase Auth,
+     * enforces blocks/privacy and the free daily quota, and creates a mutual match transactionally.
+     */
     suspend fun sendInterest(fromUid: String, toUid: String, isSuperLike: Boolean = false): Boolean {
         require(fromUid.isNotBlank() && toUid.isNotBlank() && fromUid != toUid) { "Invalid interest participants" }
-        val docId = "${fromUid}_${toUid}"
-        val reverseDocId = "${toUid}_${fromUid}"
+        require(auth.currentUser?.uid == fromUid) { "Interest sender does not match signed-in account" }
 
-        interestsCol.document(docId).set(
-            mapOf(
-                "fromUid" to fromUid,
-                "toUid" to toUid,
-                "isSuperLike" to isSuperLike,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-        ).await()
-
-        return db.runTransaction { txn ->
-            val reverseRef = interestsCol.document(reverseDocId)
-            val reverseSnap = txn.get(reverseRef)
-            if (reverseSnap.exists()) {
-                val matchId = matchDocId(fromUid, toUid)
-                val matchRef = matchesCol.document(matchId)
-                txn.set(matchRef, mapOf(
-                    "users" to listOf(fromUid, toUid).sorted(),
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "lastActivity" to FieldValue.serverTimestamp()
-                ))
-                true
-            } else {
-                false
-            }
-        }.await()
+        val result = functions.getHttpsCallable("sendInterest")
+            .call(mapOf("toUid" to toUid, "isSuperLike" to isSuperLike))
+            .await()
+        val data = result.data as? Map<*, *>
+        return data?.get("mutual") as? Boolean ?: false
     }
 
-    /** Sender withdraws their own outgoing interest. */
+    /** Sender withdraws only their own still-pending outgoing interest. */
     suspend fun removeInterest(fromUid: String, toUid: String) {
         if (fromUid.isBlank() || toUid.isBlank()) return
-        interestsCol.document("${fromUid}_${toUid}").delete().await()
-        val matchId = matchDocId(fromUid, toUid)
-        val matchDoc = matchesCol.document(matchId).get().await()
-        if (matchDoc.exists()) matchesCol.document(matchId).delete().await()
+        require(auth.currentUser?.uid == fromUid) { "Interest sender does not match signed-in account" }
+        functions.getHttpsCallable("withdrawInterest")
+            .call(mapOf("toUid" to toUid))
+            .await()
     }
 
     /** Recipient declines a still-pending incoming request without blocking its sender. */
@@ -136,11 +120,6 @@ class FirestoreInterestService @Inject constructor() {
     suspend fun getReceivedInterestUids(myUid: String): Set<String> {
         val snap = interestsCol.whereEqualTo("toUid", myUid).get().await()
         return snap.documents.mapNotNull { it.getString("fromUid") }.toSet()
-    }
-
-    private fun matchDocId(uid1: String, uid2: String): String {
-        val sorted = listOf(uid1, uid2).sorted()
-        return "${sorted[0]}_${sorted[1]}"
     }
 }
 
