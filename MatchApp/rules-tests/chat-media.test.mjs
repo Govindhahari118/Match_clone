@@ -95,12 +95,19 @@ test('signed-in user cannot invent a non-existent chat thread using forged metad
 });
 
 test('block immediately prevents further chat media access and writes', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'chat-media/thread123/message.jpg');
   await assertSucceeds(uploadBytes(object, new Uint8Array([7, 8, 9]), imageMetadata));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+
+  // Blocking is a trusted callable in production. Seed the resulting server state directly so
+  // this rule test verifies the post-condition rather than bypassing callable authorization.
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
+
   await assertFails(getBytes(object));
   await assertFails(getBytes(ref(bobStorage, 'chat-media/thread123/message.jpg')));
   await assertFails(uploadBytes(
