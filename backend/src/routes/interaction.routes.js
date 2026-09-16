@@ -5,20 +5,22 @@ const authMiddleware = require('../middleware/auth.middleware');
 
 router.use(authMiddleware);
 
-// ── Interests CRUD ────────────────────────────────────────
-router.get('/interests', interactionController.getInterests);          // ?type=received|sent|mutual
+router.get('/interests', interactionController.getInterests);
 router.post('/like', interactionController.likeUser);
 router.post('/reject', interactionController.rejectUser);
-router.post('/decline', interactionController.declineInterest);        // receiver declines an incoming interest
+router.post('/decline', interactionController.declineInterest);
+router.post('/withdraw', interactionController.withdrawInterest);
 
-// ── Report / Safety ────────────────────────────────────────
 router.post('/report', interactionController.reportUser);
+router.post('/block/:userId', interactionController.blockUser);
+router.delete('/block/:userId', interactionController.unblockUser);
 
-// ── Profile Views ─────────────────────────────────────────
-// ── Profile Views ─────────────────────────────────────────
+router.post('/contact/:userId', interactionController.requestContact);
+router.post('/contact-requests/:requestId/respond', interactionController.respondContact);
+router.post('/photo-access/:userId', interactionController.requestPhotoAccess);
+router.post('/photo-access-requests/:requestId/respond', interactionController.respondPhotoAccess);
+
 router.get('/profile-viewers', interactionController.getProfileViewers);
-
-// ── Features ─────────────────────────────────────────
 router.get('/horoscope/:targetUserId', interactionController.getHoroscopeMatch);
 
 module.exports = router;
