@@ -47,6 +47,7 @@ export const sendInactivityNudge = functions.pubsub
             type: "inactivity_nudge",
             title: "We miss you! 💝",
             body: "New profiles matching your preferences are waiting. Come back and explore!",
+            recipient_uid: doc.id,
           },
           android: { priority: "normal", notification: { channelId: "match_system" } },
         });
@@ -78,6 +79,7 @@ export const sendProfileIncompleteD2 = functions.pubsub
           type: "profile_incomplete",
           title: "Complete your profile 📝",
           body: "Complete your profile to improve match quality and visibility.",
+          recipient_uid: doc.id,
         },
         android: { priority: "normal", notification: { channelId: "match_system" } },
       });
@@ -107,6 +109,7 @@ export const sendProfileIncompleteD7 = functions.pubsub
           type: "profile_incomplete",
           title: "Finish your profile 💡",
           body: "Add your remaining details and photo to improve match quality.",
+          recipient_uid: doc.id,
         },
         android: { priority: "normal", notification: { channelId: "match_system" } },
       });
@@ -318,6 +321,7 @@ export const onProfileViewed = functions.firestore
         title: "Profile Viewed 👀",
         body: `${viewerName} viewed your profile`,
         user_id: viewerUid,
+        recipient_uid: viewedUid,
       },
       android: { priority: "normal", notification: { channelId: "match_system" } },
     });

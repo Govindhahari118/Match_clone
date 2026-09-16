@@ -20,6 +20,7 @@ export const onInterestCreated = functions.firestore
         title: "New interest",
         body: "Someone is interested in your profile. Open the app to view it.",
         user_id: fromUid,
+        recipient_uid: toUid,
       },
       android: { priority: "high", notification: { channelId: "match_interests" } },
     });
@@ -43,6 +44,7 @@ export const onMatchCreated = functions.firestore
           title: "New mutual match",
           body: "You have a new mutual match. Open the app to view the profile.",
           user_id: uid2,
+          recipient_uid: uid1,
         },
         android: { priority: "high", notification: { channelId: "match_matches" } },
       }));
@@ -55,6 +57,7 @@ export const onMatchCreated = functions.firestore
           title: "New mutual match",
           body: "You have a new mutual match. Open the app to view the profile.",
           user_id: uid1,
+          recipient_uid: uid2,
         },
         android: { priority: "high", notification: { channelId: "match_matches" } },
       }));
@@ -80,6 +83,7 @@ export const onNewMessage = functions.firestore
         title: "New message",
         body: "Open the app to view your message.",
         peer_uid: fromFirebaseUid,
+        recipient_uid: toFirebaseUid,
       },
       android: { priority: "high", notification: { channelId: "match_messages" } },
     });

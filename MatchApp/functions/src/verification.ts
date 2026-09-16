@@ -64,6 +64,7 @@ export const approveVerification = functions.https.onCall(async (data, context) 
           type: "verification_update",
           title: approved ? "Verification Approved ✅" : "Verification Update",
           body: approved ? "Your profile is now verified." : "Your verification needs attention. Open the app for details.",
+          recipient_uid: targetUid,
         },
         android: { priority: "high", notification: { channelId: "match_system" } },
       });
