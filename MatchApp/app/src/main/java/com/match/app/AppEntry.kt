@@ -3,9 +3,6 @@ package com.match.app
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.match.app.core.config.RemoteConfigManager
 import com.match.app.service.MatchFcmService
@@ -30,16 +27,10 @@ class AppEntry : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // App Check is installed before any app-owned Firebase traffic. Debug builds use
-        // the official debug provider so local/emulator development remains possible;
-        // release builds use Play Integrity and must be distributed through a Play-backed
-        // install path for production enforcement.
-        val appCheck = FirebaseAppCheck.getInstance()
-        if (BuildConfig.DEBUG) {
-            appCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
-        } else {
-            appCheck.installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
-        }
+        // App Check provider implementations are build-type specific: debug uses the
+        // Firebase debug provider while release uses Play Integrity. Keeping the concrete
+        // providers out of main prevents debug-only code from entering the release classpath.
+        AppCheckProviderInstaller.install()
 
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
         MatchFcmService.createNotificationChannel(this)
