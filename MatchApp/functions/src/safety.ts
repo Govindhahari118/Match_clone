@@ -12,6 +12,8 @@ const REPORT_REASONS = new Set([
   "Other",
 ]);
 
+const MAX_UID_LENGTH = 128;
+
 function dayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -19,6 +21,57 @@ function dayKey(): string {
 function stableId(...parts: string[]): string {
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
+
+function requireTargetUid(value: unknown, ownUid: string): string {
+  const targetUid = typeof value === "string" ? value.trim() : "";
+  if (!targetUid || targetUid === ownUid || targetUid.length > MAX_UID_LENGTH) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+  return targetUid;
+}
+
+/**
+ * Block is a trusted atomic safety action: create the block first-class state and remove both
+ * interest directions plus any mutual-match record in the same transaction. Security rules make
+ * the block immediately terminate profile/chat/media access even if a client still has stale UI.
+ */
+export const blockUser = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const blockerUid = context.auth?.uid;
+  if (!blockerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const blockedUid = requireTargetUid(data?.targetUid, blockerUid);
+
+  const targetRef = db.collection("users").doc(blockedUid);
+  const blockRef = db.collection("blocks").doc(blockerUid).collection("blocked").doc(blockedUid);
+  const outgoingRef = db.collection("interests").doc(`${blockerUid}_${blockedUid}`);
+  const incomingRef = db.collection("interests").doc(`${blockedUid}_${blockerUid}`);
+  const matchRef = db.collection("matches").doc([blockerUid, blockedUid].sort().join("_"));
+
+  await db.runTransaction(async (tx) => {
+    const target = await tx.get(targetRef);
+    if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+
+    tx.set(blockRef, {
+      blockedUid,
+      blockedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    tx.delete(outgoingRef);
+    tx.delete(incomingRef);
+    tx.delete(matchRef);
+  });
+
+  return { success: true };
+});
+
+export const unblockUser = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const blockerUid = context.auth?.uid;
+  if (!blockerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const blockedUid = requireTargetUid(data?.targetUid, blockerUid);
+
+  await db.collection("blocks").doc(blockerUid).collection("blocked").doc(blockedUid).delete();
+  return { success: true };
+});
 
 export const submitProfileReport = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
