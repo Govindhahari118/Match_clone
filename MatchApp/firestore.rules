@@ -47,7 +47,9 @@ service cloud.firestore {
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
       allow create: if isOwner(userId) && safeUserCreate();
       allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionValue(request.resource.data);
-      allow delete: if isOwner(userId);
+      // Account erasure is a server-managed state machine so Auth, Storage and related documents
+      // cannot be orphaned by deleting only the public profile document.
+      allow delete: if false;
     }
     match /userPrivate/{userId} {
       allow read: if isOwner(userId);
@@ -74,19 +76,20 @@ service cloud.firestore {
       allow delete: if isOwner(ownerUid);
     }
 
+    // Relationship mutations are trusted callable operations. Clients may observe only their own
+    // relationship documents; quotas, privacy checks and mutual-match creation are server-side.
     match /interests/{interestId} {
       allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.fromUid == request.auth.uid && request.resource.data.toUid is string && request.resource.data.toUid != request.auth.uid && !blockedEitherWay(request.auth.uid, request.resource.data.toUid) && profileVisibleBetween(request.auth.uid, request.resource.data.toUid) && interestId == request.auth.uid + '_' + request.resource.data.toUid;
-      allow delete: if isSignedIn() && resource.data.fromUid == request.auth.uid;
-      allow update: if false;
+      allow create, update, delete: if false;
     }
     match /matches/{matchId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.users;
-      allow create: if isSignedIn() && request.resource.data.users is list && request.resource.data.users.size() == 2 && request.auth.uid in request.resource.data.users && request.resource.data.users[0] != request.resource.data.users[1] && mutualInterest(request.resource.data.users[0], request.resource.data.users[1]) && !blockedEitherWay(request.resource.data.users[0], request.resource.data.users[1]) && profileVisibleBetween(request.resource.data.users[0], request.resource.data.users[1]);
-      allow delete: if isSignedIn() && request.auth.uid in resource.data.users;
-      allow update: if false;
+      allow create, update, delete: if false;
     }
+    match /interestResponses/{responseId} { allow read, write: if false; }
 
+    // Saved-search mutations are trusted callable operations. Clients can observe only their own
+    // items; Firebase Admin writes enforce the quota and canonical filter schema transactionally.
     match /savedSearches/{ownerUid}/items/{searchId} {
       allow read: if isOwner(ownerUid);
       allow create, update, delete: if false;
