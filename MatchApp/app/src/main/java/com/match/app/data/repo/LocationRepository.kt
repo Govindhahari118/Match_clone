@@ -22,7 +22,7 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** A privacy-safe nearby result. Exact coordinates never leave this repository as UI data. */
+/** A privacy-safe nearby result. Exact coordinates and precise distances never become UI data. */
 data class NearbyProfile(
     val userId: Long,
     val firebaseUid: String,
@@ -33,12 +33,13 @@ data class NearbyProfile(
     val photoUrl: String,
     val isVerified: Boolean,
     val isPremium: Boolean,
-    val distanceKm: Double
+    val distanceLabel: String
 )
 
 data class NearbySharingStatus(
     val sharing: Boolean,
-    val updatedAtMillis: Long
+    val updatedAtMillis: Long,
+    val expiresAtMillis: Long
 )
 
 @Singleton
@@ -59,14 +60,15 @@ class LocationRepository @Inject constructor(
 
     fun isLocationServiceEnabled(): Boolean = LocationManagerCompat.isLocationEnabled(locationManager)
 
-    /** Server-side status contains no coordinates and lets Stop sharing remain effective across app restarts. */
+    /** Server-side status contains no coordinates and lets Stop sharing remain effective across restarts. */
     suspend fun getSharingStatus(): NearbySharingStatus = withContext(Dispatchers.IO) {
         val response = functions.getHttpsCallable("getNearbyStatus").call().await()
         @Suppress("UNCHECKED_CAST")
         val data = response.data as? Map<String, Any?> ?: error("Invalid Nearby status response")
         NearbySharingStatus(
             sharing = data["sharing"] as? Boolean ?: false,
-            updatedAtMillis = (data["updatedAtMillis"] as? Number)?.toLong() ?: 0L
+            updatedAtMillis = (data["updatedAtMillis"] as? Number)?.toLong() ?: 0L,
+            expiresAtMillis = (data["expiresAtMillis"] as? Number)?.toLong() ?: 0L
         )
     }
 
@@ -104,7 +106,6 @@ class LocationRepository @Inject constructor(
         }
     }
 
-    /** Explicit opt-in/refresh path: acquire current foreground location, then query Nearby. */
     suspend fun refreshAndFindNearby(radiusKm: Int): List<NearbyProfile> = withContext(Dispatchers.IO) {
         val location = currentLocation()
         updateRemoteLocation(location)
@@ -120,11 +121,12 @@ class LocationRepository @Inject constructor(
         val data = response.data as? Map<String, Any?> ?: error("Invalid nearby response")
         val rawProfiles = data["profiles"] as? List<*> ?: emptyList<Any>()
 
+        // Keep server ordering. The client receives only a coarse label, not a sortable precise value.
         rawProfiles.mapNotNull { raw ->
             @Suppress("UNCHECKED_CAST")
             val entry = raw as? Map<String, Any?> ?: return@mapNotNull null
             val uid = entry["uid"] as? String ?: return@mapNotNull null
-            val distance = (entry["distanceKm"] as? Number)?.toDouble() ?: return@mapNotNull null
+            val distanceLabel = entry["distanceBucket"] as? String ?: return@mapNotNull null
             val remote = runCatching { profileService.fetchProfile(uid) }.getOrNull() ?: return@mapNotNull null
             val cached = cacheRemoteProfile(remote)
             NearbyProfile(
@@ -137,9 +139,9 @@ class LocationRepository @Inject constructor(
                 photoUrl = cached.photoUrl,
                 isVerified = cached.isVerified,
                 isPremium = cached.isPremium,
-                distanceKm = distance
+                distanceLabel = distanceLabel
             )
-        }.sortedBy { it.distanceKm }
+        }
     }
 
     suspend fun stopSharingLocation() = withContext(Dispatchers.IO) {
@@ -172,9 +174,6 @@ class LocationRepository @Inject constructor(
             userDao.update(merged)
             return merged
         }
-
-        // Public discovery never receives another member's private email. This unique sentinel is
-        // local cache metadata only and is not shown to the user or written back to Firestore.
         val cached = remote.copy(
             email = "$uid@cache.invalid",
             passwordHash = "",
