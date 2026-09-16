@@ -25,9 +25,12 @@ beforeEach(async () => {
       firebaseUid: 'alice', displayName: 'Alice', age: 28, gender: 'FEMALE', lookingFor: 'MALE',
       city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
       verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
-      lastActiveAt: 1000,
+      lastActiveAt: 1000, matrimonyId: 'MAT-ABCDEFGH2345',
     });
     await setDoc(doc(context.firestore(), 'usernames/alice_28'), { uid: 'alice', username: 'alice_28' });
+    await setDoc(doc(context.firestore(), 'matrimonyIds/MAT-ABCDEFGH2345'), {
+      uid: 'alice', createdAt: new Date(),
+    });
   });
 });
 
@@ -45,4 +48,10 @@ test('clients cannot enumerate or mutate the username registry directly', async 
   const db = env.authenticatedContext('alice').firestore();
   await assertFails(getDoc(doc(db, 'usernames/alice_28')));
   await assertFails(setDoc(doc(db, 'usernames/stolen'), { uid: 'alice', username: 'stolen' }));
+});
+
+test('clients cannot enumerate or mutate the matrimony ID registry', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(getDoc(doc(db, 'matrimonyIds/MAT-ABCDEFGH2345')));
+  await assertFails(setDoc(doc(db, 'matrimonyIds/MAT-STOLEN234567'), { uid: 'alice' }));
 });
