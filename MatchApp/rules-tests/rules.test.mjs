@@ -106,7 +106,7 @@ test('clients cannot grant themselves premium or verification', async () => {
   await assertFails(updateDoc(doc(db, 'users/alice'), { verificationLevel: 5 }));
 });
 
-test('interest and match mutations are server-only', async () => {
+test('relationship and block mutations are server-only', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
   await assertFails(setDoc(doc(aliceDb, 'interests/alice_bob'), {
@@ -121,18 +121,25 @@ test('interest and match mutations are server-only', async () => {
   await assertFails(setDoc(doc(aliceDb, 'interestUsage/alice_2099-01-01'), {
     uid: 'alice', dayKey: '2099-01-01', count: 0,
   }));
+  await assertFails(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), {
+    blockedUid: 'bob', blockedAt: new Date(),
+  }));
 });
 
-test('blocking prevents new direct interest writes in either direction', async () => {
+test('server-created block prevents profile access and relationship reads', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
-  await assertFails(setDoc(doc(aliceDb, 'interests/alice_bob'), {
-    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
-  }));
   const bobDb = env.authenticatedContext('bob').firestore();
-  await assertFails(setDoc(doc(bobDb, 'interests/bob_alice'), {
-    fromUid: 'bob', toUid: 'alice', isSuperLike: false, createdAt: new Date(),
-  }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'interests/alice_bob'), {
+      fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
+    });
+    await setDoc(doc(db, 'blocks/alice/blocked/bob'), { blockedUid: 'bob', blockedAt: new Date() });
+  });
+  await assertFails(getDoc(doc(bobDb, 'users/alice')));
+  await assertFails(getDoc(doc(bobDb, 'interests/alice_bob')));
+  await assertSucceeds(getDoc(doc(aliceDb, 'blocks/alice/blocked/bob')));
+  await assertFails(getDoc(doc(bobDb, 'blocks/alice/blocked/bob')));
 });
 
 test('profile hiding denies that member profile read and direct new interest write', async () => {
@@ -170,7 +177,7 @@ test('only owner can configure global contact visibility', async () => {
   await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
 });
 
-test('chat thread requires server-created mutual interest and stops after a block', async () => {
+test('chat thread requires server-created mutual interest and block terminates reads and writes', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
   const thread = doc(aliceDb, 'chats/alice_bob');
@@ -188,13 +195,20 @@ test('chat thread requires server-created mutual interest and stops after a bloc
     });
   });
   await assertSucceeds(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-  await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m1'), {
+  const firstMessage = doc(aliceDb, 'chats/alice_bob/messages/m1');
+  await assertSucceeds(setDoc(firstMessage, {
     body: 'hello', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
     voiceUri: null, imageUri: null, voiceDurationMs: null,
   }));
 
-  await assertSucceeds(setDoc(doc(bobDb, 'blocks/bob/blocked/alice'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
+      blockedUid: 'alice', blockedAt: new Date(),
+    });
+  });
+  await assertFails(getDoc(thread));
+  await assertFails(getDoc(firstMessage));
   await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m2'), {
     body: 'blocked', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
@@ -258,7 +272,6 @@ test('hidden member cannot read profile photo while owner still can', async () =
 });
 
 test('blocked member cannot read profile media', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'photos/alice/block-test.jpg');
@@ -266,7 +279,11 @@ test('blocked member cannot read profile media', async () => {
 
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: new Date(),
+    });
+  });
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
 });
 
