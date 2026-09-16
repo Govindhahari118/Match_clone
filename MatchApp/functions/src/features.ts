@@ -13,9 +13,19 @@ function authUid(context: functions.https.CallableContext): string {
   return uid;
 }
 
+function containsDisallowedControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if ((code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function text(value: unknown, field: string, maxLength: number, required = true): string {
   const result = typeof value === "string" ? value.trim() : "";
-  if ((required && !result) || result.length > maxLength || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(result)) {
+  if ((required && !result) || result.length > maxLength || containsDisallowedControlCharacter(result)) {
     throw new functions.https.HttpsError("invalid-argument", `Invalid ${field}`);
   }
   return result;
