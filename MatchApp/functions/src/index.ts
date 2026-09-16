@@ -21,3 +21,4 @@ export * from "./horoscope";
 export * from "./presence";
 export * from "./identity";
 export * from "./savedSearches";
+export * from "./features";

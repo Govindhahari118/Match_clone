@@ -1,29 +1,24 @@
 package com.match.app.ui.rewards
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.ui.i18n.t
-
-private val GOLD = Color(0xFFFF8F00)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,19 +27,41 @@ fun DailyRewardsScreen(
     vm: DailyRewardsViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
-    val scrollState = rememberScrollState()
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(ui.message) {
+        ui.message?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeMessage()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(t("rewards_badges", "Rewards & Badges")) },
-                navigationIcon = { IconButton(onClick = onBack, Modifier.testTag("rewards_back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                title = { Text(t("rewards_badges", "Rewards")) },
+                navigationIcon = {
+                    IconButton(onClick = onBack, Modifier.testTag("rewards_back")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                },
                 actions = {
-                    Surface(shape = RoundedCornerShape(20.dp), color = GOLD.copy(0.15f)) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("🪙", style = MaterialTheme.typography.titleSmall)
-                            Spacer(Modifier.width(4.dp))
-                            Text("${ui.totalCoins}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, color = GOLD)
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Paid, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "${ui.totalCoins}",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -56,114 +73,103 @@ fun DailyRewardsScreen(
             Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-        } else {
-            Column(Modifier.padding(pad).fillMaxSize().verticalScroll(scrollState).padding(16.dp).testTag("rewards_screen"),
-                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            return@Scaffold
+        }
 
-                // Streak + claim
-                Surface(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth(), shadowElevation = 4.dp) {
-                    Box(Modifier.background(Brush.horizontalGradient(listOf(GOLD, Color(0xFFFF6F00)))).padding(24.dp)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("🔥 ${ui.streak} Day Streak!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("Login daily to maintain your streak and earn bonus coins", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.85f), textAlign = TextAlign.Center)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                (1..7).forEach { day ->
-                                    val active = day <= ui.streak
-                                    Surface(shape = CircleShape, color = if (active) Color.White else Color.White.copy(0.3f), modifier = Modifier.size(36.dp)) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(if (active) "✓" else "$day", fontWeight = FontWeight.Bold, color = if (active) GOLD else Color.White)
-                                        }
-                                    }
-                                }
-                            }
-                            if (!ui.claimedToday) {
-                                Button(
-                                    onClick = vm::claimDaily,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth().height(50.dp)
-                                ) {
-                                    Text("Claim ${10 + ui.streak * 5} Coins 🪙", color = GOLD, fontWeight = FontWeight.Bold)
-                                }
-                            } else {
-                                Surface(shape = RoundedCornerShape(12.dp), color = Color.White.copy(0.3f), modifier = Modifier.fillMaxWidth()) {
-                                    Text("Claimed today ✓", Modifier.padding(14.dp), color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Daily tasks
-                Text(t("daily_tasks", "Daily Tasks"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                ui.tasks.forEach { task ->
-                    ElevatedCard(
-                        onClick = { if (!task.done) vm.completeTask(task.id, task.coins) },
-                        shape = RoundedCornerShape(16.dp), 
-                        modifier = Modifier.fillMaxWidth()
+        Column(
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(16.dp).testTag("rewards_screen"),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.LocalFireDepartment,
+                        null,
+                        Modifier.size(38.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        if (ui.streak > 0) "${ui.streak}-day claim streak" else "Start your daily claim streak",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "Daily coins are calculated and granted by the server. Reopening or modifying the app cannot create extra claims.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Button(
+                        onClick = vm::claimDaily,
+                        enabled = !ui.claimedToday && !ui.working,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("rewards_claim_daily")
                     ) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(task.icon, null, Modifier.size(24.dp), tint = if (task.done) Color(0xFF2E7D32) else GOLD)
-                            Spacer(Modifier.width(16.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(task.title, style = MaterialTheme.typography.bodyLarge, fontWeight = if (task.done) FontWeight.Normal else FontWeight.SemiBold)
-                                if (!task.done) Text("Earn ${task.coins} coins", style = MaterialTheme.typography.labelSmall, color = GOLD)
-                            }
-                            if (task.done) {
-                                Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(24.dp))
-                            } else {
-                                Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                        if (ui.working && !ui.claimedToday) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
                         }
+                        Text(if (ui.claimedToday) "Claimed today" else "Claim today's coins")
                     }
                 }
-
-                // Badges
-                Text("Badges (${ui.badges.count { it.earned }}/${ui.badges.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
-                    items(ui.badges.size) { i ->
-                        val b = ui.badges[i]
-                        ElevatedCard(
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.width(140.dp),
-                            colors = if (b.earned) CardDefaults.elevatedCardColors(containerColor = GOLD.copy(0.08f)) else CardDefaults.elevatedCardColors()
-                        ) {
-                            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(b.emoji, style = MaterialTheme.typography.headlineLarge)
-                                Text(b.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
-                                Text(b.desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, maxLines = 2, minLines = 2)
-                                if (!b.earned) {
-                                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                                        Text("LOCKED", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Redeem
-                Text(t("redeem_coins", "Redeem Coins"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                ui.rewards.forEach { r ->
-                    ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(r.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                                Text(r.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Button(
-                                onClick = { vm.redeemReward(r.id, r.coins) },
-                                enabled = ui.totalCoins >= r.coins,
-                                colors = ButtonDefaults.buttonColors(containerColor = GOLD),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("${r.coins} 🪙", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(32.dp))
             }
+
+            Text("Redeem coins", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Only rewards that the backend can actually grant are listed here. Coin costs and entitlement duration are verified server-side.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            ui.rewards.forEach { reward ->
+                ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Bolt, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(reward.title, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                reward.desc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Button(
+                            onClick = { vm.redeemReward(reward.id, reward.coins) },
+                            enabled = ui.totalCoins >= reward.coins && !ui.working,
+                            modifier = Modifier.testTag("rewards_redeem_${reward.id}")
+                        ) {
+                            Text("${reward.coins}")
+                        }
+                    }
+                }
+            }
+
+            if (ui.totalCoins < (ui.rewards.minOfOrNull { it.coins } ?: Int.MAX_VALUE)) {
+                Text(
+                    "Keep claiming on eligible days to build your balance.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.height(20.dp))
         }
     }
 }

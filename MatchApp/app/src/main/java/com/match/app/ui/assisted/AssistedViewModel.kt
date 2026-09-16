@@ -43,26 +43,34 @@ class AssistedViewModel @Inject constructor(
             _ui.update { it.copy(
                 leadName = request["name"] as? String ?: "",
                 leadPhone = request["phone"] as? String ?: "",
-                selectedPlan = request["plan"] as? String ?: "Gold RM",
+                selectedPlan = request["plan"] as? String ?: "FREE",
                 submitted = true
-            )}
+            ) }
         }
     }
 
-    fun onNameChange(name: String) = _ui.update { it.copy(leadName = name) }
-    fun onPhoneChange(phone: String) = _ui.update { it.copy(leadPhone = phone.filter { it.isDigit() }.take(10)) }
-    fun onPreferenceChange(pref: String) = _ui.update { it.copy(leadPreference = pref) }
+    fun onNameChange(name: String) = _ui.update { it.copy(leadName = name.take(100)) }
+    fun onPhoneChange(phone: String) = _ui.update { it.copy(leadPhone = phone.filter { ch -> ch.isDigit() }.take(15)) }
+    fun onPreferenceChange(pref: String) = _ui.update { it.copy(leadPreference = pref.take(2000)) }
     fun onPlanSelect(plan: String) = _ui.update { it.copy(selectedPlan = plan) }
 
     fun submitRequest() = viewModelScope.launch {
         val uid = session.firebaseUid.firstOrNull() ?: return@launch
+        val name = _ui.value.leadName.trim()
+        val phone = _ui.value.leadPhone.trim()
+        if (name.length < 2 || phone.length < 7) {
+            _ui.update { it.copy(error = "Enter a valid name and phone number before submitting.") }
+            return@launch
+        }
         _ui.update { it.copy(loading = true, error = null) }
-        
+
         try {
             featureService.requestRM(
                 uid = uid,
                 plan = _ui.value.selectedPlan,
-                preferences = "Name: ${_ui.value.leadName}, Phone: ${_ui.value.leadPhone}, Prefs: ${_ui.value.leadPreference}"
+                preferences = _ui.value.leadPreference.trim(),
+                name = name,
+                phone = phone
             )
             _ui.update { it.copy(loading = false, submitted = true) }
         } catch (e: Exception) {
