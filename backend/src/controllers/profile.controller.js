@@ -2,27 +2,27 @@ const prisma = require('../config/prisma');
 const interactionService = require('../services/interaction.service');
 const privacyService = require('../services/privacy.service');
 const profileExtensionService = require('../services/profile-extension.service');
+const trustService = require('../services/trust.service');
+const safetyService = require('../services/safety.service');
 
 const getProfileById = async (req, res) => {
     try {
         const { id } = req.params;
         const viewerId = req.user?.sub;
 
-        const [profile, viewer] = await Promise.all([
-            prisma.profile.findUnique({
-                where: { userId: id },
+        if (viewerId && viewerId !== id && await safetyService.isBlocked(viewerId, id)) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        const [targetUser, viewer] = await Promise.all([
+            prisma.user.findUnique({
+                where: { id },
                 include: {
-                    photos: true,
-                    user: {
-                        select: {
-                            id: true,
-                            lastLogin: true,
-                            isVerified: true,
-                            isActive: true,
-                            isBanned: true,
-                        }
-                    }
-                }
+                    profile: true,
+                    partnerPreference: true,
+                    photos: { where: { moderationStatus: 'approved' }, orderBy: [{ isPrimary: 'desc' }, { uploadedAt: 'asc' }] },
+                    verifications: true,
+                },
             }),
             viewerId
                 ? prisma.user.findUnique({
@@ -32,7 +32,7 @@ const getProfileById = async (req, res) => {
                         isVerified: true,
                         subscriptions: {
                             where: {
-                                status: 'active',
+                                status: { in: ['active', 'grace'] },
                                 OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
                             },
                             select: { id: true },
@@ -43,91 +43,105 @@ const getProfileById = async (req, res) => {
                 : null,
         ]);
 
-        if (!profile) return res.status(404).json({ error: 'Profile not found' });
-        const isOwner = viewerId && viewerId === id;
+        if (!targetUser?.profile) return res.status(404).json({ error: 'Profile not found' });
+        const profile = targetUser.profile;
+        const isOwner = Boolean(viewerId && viewerId === id);
 
-        if (!isOwner && (!profile.user.isActive || profile.user.isBanned)) {
+        if (!isOwner && (
+            !targetUser.isActive ||
+            targetUser.isBanned ||
+            targetUser.deletedAt ||
+            !['active', 'low_activity'].includes(targetUser.searchStatus) ||
+            trustService.isStale(targetUser)
+        )) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
         const viewerIsPremium = Boolean(viewer?.subscriptions?.length);
         const viewerIsVerified = Boolean(viewer?.isVerified);
-
         const [{ settings }, { extension }] = await Promise.all([
             privacyService.getUserPrivacySettings(id),
             profileExtensionService.getUserProfileExtension(id),
         ]);
 
-        const canViewProfile = privacyService.canViewProfile({
-            settings,
-            isOwner,
-            viewerIsPremium,
-            viewerIsVerified,
-        });
-        if (!canViewProfile) {
+        if (!privacyService.canViewProfile({ settings, isOwner, viewerIsPremium, viewerIsVerified })) {
             return res.status(403).json({ error: 'Profile visibility restricted by user privacy settings' });
         }
 
         let isMutualMatch = false;
+        let hasExplicitPhotoAccess = false;
+        let canViewContact = false;
         if (viewerId && viewerId !== id) {
-            const mutualMatch = await prisma.match.findFirst({
-                where: {
-                    isActive: true,
-                    OR: [
-                        { userAId: viewerId, userBId: id },
-                        { userAId: id, userBId: viewerId },
-                    ],
-                },
-                select: { id: true },
-            });
+            const [mutualMatch, explicitPhotoAccess, contactAccess] = await Promise.all([
+                prisma.match.findFirst({
+                    where: {
+                        isActive: true,
+                        OR: [{ userAId: viewerId, userBId: id }, { userAId: id, userBId: viewerId }],
+                    },
+                    select: { id: true },
+                }),
+                safetyService.hasPhotoAccess(viewerId, id),
+                safetyService.canViewContact(viewerId, id),
+            ]);
             isMutualMatch = Boolean(mutualMatch);
+            hasExplicitPhotoAccess = explicitPhotoAccess;
+            canViewContact = contactAccess;
         }
 
         const canViewPhotos = privacyService.canViewPhotos({
             settings,
             isOwner,
             isMutualMatch,
-            viewerIsPremium,
+            hasExplicitPhotoAccess,
         });
 
-        // Record profile view asynchronously so profile read path stays fast.
-        if (viewerId && viewerId !== id) {
-            interactionService.recordProfileView(viewerId, id).catch(() => { });
-        }
+        if (viewerId && viewerId !== id) interactionService.recordProfileView(viewerId, id).catch(() => {});
 
-        let compatibilityScore = null;
-        if (viewerId && viewerId !== id) {
-            try {
-                compatibilityScore = await interactionService.getCompatibilityScore(viewerId, profile.id);
-            } catch {
-                compatibilityScore = null;
-            }
-        }
+        const [compatibility, trust] = await Promise.all([
+            viewerId && viewerId !== id
+                ? interactionService.getCompatibilitySummary(viewerId, id).catch(() => ({ score: null, strength: 'unknown', reasons: [] }))
+                : Promise.resolve(null),
+            trustService.getTrustSummary(id),
+        ]);
 
-        const projectedProfile = {
+        const publicTrust = trust ? {
+            ...trust,
+            lastActiveAt: (settings.showLastSeen || isOwner) ? trust.lastActiveAt : null,
+        } : null;
+
+        return res.json({
             ...profile,
-            photos: canViewPhotos ? profile.photos : [],
+            photos: canViewPhotos ? targetUser.photos : [],
             user: {
-                ...profile.user,
-                lastLogin: (settings.showLastSeen || isOwner) ? profile.user.lastLogin : null,
+                id: targetUser.id,
+                isVerified: targetUser.isVerified,
+                identityStatus: targetUser.identityStatus,
+                searchStatus: targetUser.searchStatus,
+                lastLogin: (settings.showLastSeen || isOwner) ? targetUser.lastLogin : null,
+            },
+            contact: {
+                canView: isOwner || (canViewContact && settings.showPhone),
+                phone: isOwner || (canViewContact && settings.showPhone) ? targetUser.phone : null,
+                requiresApproval: !isOwner && !canViewContact,
             },
             hasChildren: extension.hasChildren,
             residentialStatus: extension.residentialStatus,
             district: extension.district,
-        };
-
-        return res.json({
-            ...projectedProfile,
-            compatibilityScore,
+            compatibilityScore: compatibility?.score ?? null,
+            compatibilityStrength: compatibility?.strength || 'unknown',
+            whyRecommended: compatibility?.reasons || [],
+            trust: publicTrust,
             privacy: {
                 canViewPhotos,
+                hasExplicitPhotoAccess,
                 photoVisibility: settings.photoVisibility,
                 profileVisibility: settings.profileVisibility,
             },
         });
     } catch (error) {
         console.error('Get Profile Error:', error);
-        return res.status(500).json({ error: 'Failed to fetch profile' });
+        const status = Number(error.statusCode) || 500;
+        return res.status(status).json({ error: status >= 500 ? 'Failed to fetch profile' : error.message });
     }
 };
 
