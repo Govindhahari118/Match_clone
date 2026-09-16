@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.profile.IndiaProfileCatalog
+import com.match.app.domain.profile.ReligionFieldDefinition
+import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.i18n.t
 
 /** One shared 8-step profile flow for members across India and abroad. */
@@ -95,11 +97,7 @@ fun ProfileWizardScreen(
                     }
                 }
                 if (step < 7) {
-                    Button(
-                        onClick = vm::nextStep,
-                        enabled = !saving,
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Button(onClick = vm::nextStep, enabled = !saving, modifier = Modifier.weight(1f)) {
                         Text(t("next", "Next"))
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp))
@@ -112,8 +110,7 @@ fun ProfileWizardScreen(
                     ) {
                         if (saving) {
                             CircularProgressIndicator(
-                                Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
+                                Modifier.size(18.dp), strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
@@ -135,9 +132,7 @@ fun ProfileWizardScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("You selected ${wizardState.religion}.")
-                    Text(
-                        "Religion becomes protected profile information after profile creation because it affects community and compatibility information. Theme choice remains separate and can be changed later."
-                    )
+                    Text("Religion becomes protected profile information after profile creation because it affects community and compatibility information. Theme choice remains separate and can be changed later.")
                     Text(
                         "If this selection is incorrect, review it now. A later correction uses the controlled account-review process rather than a casual profile edit.",
                         style = MaterialTheme.typography.bodySmall,
@@ -145,12 +140,8 @@ fun ProfileWizardScreen(
                     )
                 }
             },
-            confirmButton = {
-                Button(onClick = vm::confirmReligionAndContinue) { Text("Confirm") }
-            },
-            dismissButton = {
-                TextButton(onClick = vm::cancelReligionConfirmation) { Text("Review") }
-            }
+            confirmButton = { Button(onClick = vm::confirmReligionAndContinue) { Text("Confirm") } },
+            dismissButton = { TextButton(onClick = vm::cancelReligionConfirmation) { Text("Review") } }
         )
     }
 }
@@ -186,12 +177,32 @@ private fun ChoiceField(
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.distinct().forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = { onSelected(option); expanded = false }
-                )
+                DropdownMenuItem(text = { Text(option) }, onClick = { onSelected(option); expanded = false })
             }
         }
+    }
+}
+
+@Composable
+private fun ReligionFieldInput(
+    definition: ReligionFieldDefinition,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    if (definition.options.isNotEmpty()) {
+        ChoiceField(definition.label, value, definition.options, onValueChange)
+        if (definition.helper.isNotBlank()) {
+            Text(definition.helper, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it.take(160)) },
+            label = { Text(definition.label) },
+            supportingText = { if (definition.helper.isNotBlank()) Text(definition.helper) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -232,33 +243,29 @@ private fun StepIdentityLocation(vm: ProfileWizardViewModel) {
 private fun StepCommunity(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
     val religionCategory = ReligionCategory.fromReligion(s.religion)
+    val schema = remember(s.religion) { ReligionProfileSchemas.forReligion(s.religion) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader("Religion & community", "Choose what describes you. Nothing here is inferred from your state, language, surname or location.")
-        ChoiceField(
-            "Religion",
-            s.religion,
-            IndiaProfileCatalog.religions,
-            {
-                vm.update(
-                    s.copy(
-                        religion = it,
-                        caste = "",
-                        subCaste = "",
-                        gothra = "",
-                        rasi = "",
-                        nakshatra = "",
-                        manglik = ""
-                    )
-                )
-            },
-            required = true
-        )
+        ChoiceField("Religion", s.religion, IndiaProfileCatalog.religions, { vm.update(s.copy(religion = it)) }, required = true)
         Text("Common community choices", style = MaterialTheme.typography.labelLarge)
         SuggestionChips(IndiaProfileCatalog.communitySuggestions(s.religion), s.caste) { vm.update(s.copy(caste = if (it == "Other") "" else it)) }
         OutlinedTextField(s.caste, { vm.update(s.copy(caste = it.take(80))) }, label = { Text("Community / caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(s.subCaste, { vm.update(s.copy(subCaste = it.take(80))) }, label = { Text("Sub-community / sub-caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (religionCategory == ReligionCategory.HINDU) {
             OutlinedTextField(s.gothra, { vm.update(s.copy(gothra = it.take(80))) }, label = { Text("Gothra (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (s.religion.isNotBlank()) {
+            HorizontalDivider()
+            Text(schema.sectionTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            schema.primary?.let { definition ->
+                ReligionFieldInput(definition, s.faithTradition) { vm.update(s.copy(faithTradition = it)) }
+            }
+            schema.secondary?.let { definition ->
+                ReligionFieldInput(definition, s.faithSubTradition) { vm.update(s.copy(faithSubTradition = it)) }
+            }
+            schema.institution?.let { definition ->
+                ReligionFieldInput(definition, s.faithInstitution) { vm.update(s.copy(faithInstitution = it)) }
+            }
         }
     }
 }
