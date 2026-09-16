@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -43,7 +44,7 @@ import javax.inject.Inject
 
 private const val MAX_VERIFICATION_BYTES = 5L * 1024L * 1024L
 
-private enum class VerificationStatus {
+enum class VerificationStatus {
     NOT_STARTED, PENDING, VERIFIED, REQUIRES_ACTION;
 
     companion object {
@@ -128,10 +129,6 @@ class VerificationViewModel @Inject constructor(
 
     fun clearError() { _error.value = null }
 
-    /**
-     * Uploads one protected government-ID artifact and asks trusted backend code to create the
-     * review state. A missing upload can never become PENDING.
-     */
     fun submitVerification(docType: String, documentUri: Uri?) {
         if (_submitting.value) return
         if (documentUri == null) {
