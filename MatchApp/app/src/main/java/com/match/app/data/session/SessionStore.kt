@@ -90,6 +90,16 @@ class SessionStore(private val context: Context) {
     companion object {
         /** Auto-logout after 30 days of inactivity. */
         private const val SESSION_EXPIRY_MS = 30L * 24 * 60 * 60 * 1000
+
+        /** Only locales with real, reviewed production copy may be selected or restored. */
+        private val SUPPORTED_UI_LANGUAGES = setOf("en", "hi", "te", "ta", "kn", "mr")
+    }
+
+    private fun normalizeUiLanguage(value: String?): String {
+        val requested = value?.trim()?.lowercase().orEmpty()
+        if (requested in SUPPORTED_UI_LANGUAGES) return requested
+        val systemLanguage = java.util.Locale.getDefault().language.lowercase()
+        return systemLanguage.takeIf { it in SUPPORTED_UI_LANGUAGES } ?: "en"
     }
 
     val userId: Flow<Long?> = context.dataStore.data.map { it[KEY_USER_ID]?.takeIf { id -> id > 0 } }
@@ -167,15 +177,7 @@ class SessionStore(private val context: Context) {
     val biometricLock: Flow<Boolean> = context.dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
     val uiLanguage: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_UI_LANG] ?: run {
-            val supported = setOf(
-                "en","hi","te","ta","kn","mr","bn","gu","ml","pa","ur",
-                "es","pt","ru","ar","de","fr","it","ja","ko","zh",
-                "id","tr","sw","vi","th"
-            )
-            val sys = java.util.Locale.getDefault().language
-            if (sys in supported) sys else "en"
-        }
+        normalizeUiLanguage(prefs[KEY_UI_LANG])
     }
     val communitySetupDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_COMMUNITY_SETUP_DONE] ?: false }
     val hasQuestionnaire: Flow<Boolean> = context.dataStore.data.map { it[booleanPreferencesKey("has_questionnaire")] ?: false }
@@ -255,7 +257,7 @@ class SessionStore(private val context: Context) {
     suspend fun setPalette(key: String) = context.dataStore.edit { it[KEY_PALETTE] = key }
     suspend fun setApiBaseUrl(url: String) = context.dataStore.edit { it[KEY_API_BASE] = url }
     suspend fun setBiometricLock(v: Boolean) = context.dataStore.edit { it[KEY_BIOMETRIC] = v }
-    suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = lang }
+    suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = normalizeUiLanguage(lang) }
     suspend fun setCommunitySetupDone(v: Boolean) = context.dataStore.edit { it[KEY_COMMUNITY_SETUP_DONE] = v }
     suspend fun setHasQuestionnaire(v: Boolean) = context.dataStore.edit { it[booleanPreferencesKey("has_questionnaire")] = v }
     suspend fun setIncognitoMode(v: Boolean) = context.dataStore.edit { it[KEY_INCOGNITO] = v }
