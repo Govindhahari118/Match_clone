@@ -59,16 +59,18 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
+      // Raw KYC material is never client-readable. The owner can upload/replace only their own
+      // protected review object and must stamp authenticated ownership for backend validation.
       allow read: if false;
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/pdf'));
+      allow create, update: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.metadata.ownerUid == uid &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
       allow delete: if false;
     }
     match /chat-media/{threadId}/{fileName} {
-      // The chat document is the authorization source of truth. Client metadata is descriptive
-      // only and cannot grant membership, which prevents forged metadata from opening another chat.
       allow read: if signedIn() && chatUsable(threadId);
       allow create: if signedIn() && chatUsable(threadId) && validChatMedia();
-      // A retry may replace the same client-generated object only for the original uploader.
       allow update: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid &&
         request.resource.metadata.senderUid == request.auth.uid &&
