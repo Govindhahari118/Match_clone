@@ -37,24 +37,57 @@ import com.match.app.MainActivity
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.aiinsights.AIMatchInsightsScreen
+import com.match.app.ui.analytics.ProfileAnalyticsScreen
+import com.match.app.ui.assisted.AssistedServiceScreen
+import com.match.app.ui.bgcheck.BackgroundCheckScreen
 import com.match.app.ui.biodata.BiodataScreen
+import com.match.app.ui.biogen.BioGeneratorScreen
+import com.match.app.ui.boost.ProfileBoostScreen
 import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
+import com.match.app.ui.circles.CirclesScreen
+import com.match.app.ui.community.CommunityBrowseScreen
+import com.match.app.ui.counselling.CounsellingScreen
+import com.match.app.ui.deepcompat.CompatibilityDeepDiveScreen
 import com.match.app.ui.detail.MatchDetailScreen
+import com.match.app.ui.discovery.SwipeDiscoveryScreen
+import com.match.app.ui.events.LiveEventsScreen
+import com.match.app.ui.family.FamilyScreen
+import com.match.app.ui.guides.GuidesScreen
 import com.match.app.ui.help.HelpScreen
+import com.match.app.ui.horoscope.AdvancedHoroscopeScreen
 import com.match.app.ui.interests.InterestsScreen
 import com.match.app.ui.kundli.KundliScreen
 import com.match.app.ui.legal.LegalScreen
+import com.match.app.ui.likes.LikesScreen
 import com.match.app.ui.matches.MatchesScreen
+import com.match.app.ui.meet.VirtualMeetScreen
+import com.match.app.ui.muhurat.AstroCalendarScreen
 import com.match.app.ui.nearby.NearbyMatchesScreen
 import com.match.app.ui.notifications.NotificationsScreen
+import com.match.app.ui.nri.NRIMatchScreen
+import com.match.app.ui.photoeditor.PhotoEditorScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
 import com.match.app.ui.profile.ProfileScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
+import com.match.app.ui.quiz.CompatibilityQuizScreen
+import com.match.app.ui.recentlyjoined.RecentlyJoinedScreen
+import com.match.app.ui.referral.MatchmakerReferralScreen
+import com.match.app.ui.regions.RegionsScreen
+import com.match.app.ui.rewards.DailyRewardsScreen
+import com.match.app.ui.safety.SafetyCenterScreen
+import com.match.app.ui.secondmarriage.SecondMarriageScreen
+import com.match.app.ui.securecall.SecureCallScreen
 import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
+import com.match.app.ui.stories.SuccessStoriesScreen
+import com.match.app.ui.testimonials.TestimonialsScreen
+import com.match.app.ui.timeline.RelationshipTimelineScreen
 import com.match.app.ui.verification.VerificationScreen
+import com.match.app.ui.videoprofile.VideoProfileScreen
+import com.match.app.ui.wedding.WeddingPlannerScreen
 import com.match.app.ui.whoviewed.WhoViewedScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,6 +95,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Single source of truth for every production-reachable main-app destination. */
 object MainRoutes {
     const val HOME = "home"
     const val MATCHES = "matches"
@@ -90,9 +124,45 @@ object MainRoutes {
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
 
+    const val FEATURE_HUB = "feature_hub"
+    const val AI_INSIGHTS = "ai_insights"
+    const val PROFILE_ANALYTICS = "profile_analytics"
+    const val ASSISTED = "assisted"
+    const val BACKGROUND_CHECK = "background_check"
+    const val BIO_GENERATOR = "bio_generator"
+    const val PROFILE_BOOST = "profile_boost"
+    const val CIRCLES = "circles"
+    const val COMMUNITY_BROWSE = "community_browse"
+    const val COUNSELLING = "counselling"
+    const val COMPAT_QUIZ = "compat_quiz"
+    const val DEEP_COMPAT = "deep_compat/{candidateId}"
+    const val SWIPE_DISCOVER = "swipe_discover"
+    const val LIVE_EVENTS = "live_events"
+    const val FAMILY = "family"
+    const val GUIDES = "guides"
+    const val ADV_HOROSCOPE = "advanced_horoscope"
+    const val LIKES = "likes"
+    const val VIRTUAL_MEET = "virtual_meet"
+    const val MUHURAT = "muhurat"
+    const val NRI_MATCH = "nri_match"
+    const val PHOTO_EDITOR = "photo_editor"
+    const val RECENTLY_JOINED = "recently_joined"
+    const val REFERRAL = "referral"
+    const val REGIONS = "regions"
+    const val REWARDS = "rewards"
+    const val SAFETY_CENTER = "safety_center"
+    const val SECOND_MARRIAGE = "second_marriage"
+    const val SECURE_CALL = "secure_call"
+    const val STORIES = "stories"
+    const val TESTIMONIALS = "testimonials"
+    const val TIMELINE = "timeline"
+    const val VIDEO_PROFILE = "video_profile"
+    const val WEDDING_PLANNER = "wedding_planner"
+
     fun detail(userId: Long) = "detail/$userId"
     fun chat(peerId: Long) = "chat/$peerId"
     fun kundli(targetId: Long) = "kundli/$targetId"
+    fun deepCompat(candidateId: Long) = "deep_compat/$candidateId"
 }
 
 private sealed class Tab(val route: String, val label: String, val icon: ImageVector, val tag: String) {
@@ -146,27 +216,39 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn),
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
-            DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
+            DrawerItem(MainRoutes.WHO_VIEWED, "Who viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye),
+            DrawerItem(MainRoutes.LIKES, "Mutual matches", "People where interest is mutual", Icons.Filled.Favorite)
+        )),
+        DrawerSection("EXPLORE", listOf(
+            DrawerItem(MainRoutes.FEATURE_HUB, "Explore Matree", "All discovery, profile and journey tools", Icons.Filled.Explore),
+            DrawerItem(MainRoutes.REGIONS, "Regions & community", "Browse by place, language and community", Icons.Filled.Public),
+            DrawerItem(MainRoutes.CIRCLES, "Circles", "Curated discovery circles", Icons.Filled.Groups),
+            DrawerItem(MainRoutes.RECENTLY_JOINED, "Recently joined", "Newer member profiles", Icons.Filled.FiberNew)
         )),
         DrawerSection("CONNECT", listOf(
             DrawerItem(MainRoutes.CHAT_LIST, "Messages", "Mutual-match conversations", Icons.Filled.Forum, unreadMsg),
-            DrawerItem(MainRoutes.NOTIFICATIONS, "Notifications", "Account and match updates", Icons.Filled.Notifications, unreadNotif)
+            DrawerItem(MainRoutes.NOTIFICATIONS, "Notifications", "Account and match updates", Icons.Filled.Notifications, unreadNotif),
+            DrawerItem(MainRoutes.VIRTUAL_MEET, "Virtual meet", "Private video meeting tools", Icons.Filled.VideoCall),
+            DrawerItem(MainRoutes.SECURE_CALL, "Secure calls", "Call without sharing your number", Icons.Filled.Phone)
         )),
         DrawerSection("ACCOUNT", listOf(
             DrawerItem(MainRoutes.PROFILE, "Profile", "Your matrimonial profile", Icons.Filled.Person),
             DrawerItem(MainRoutes.VERIFICATION, "Verification", "Identity verification", Icons.Filled.Verified),
             DrawerItem(MainRoutes.PRIVACY_DASH, "Privacy", "Visibility and account privacy", Icons.Filled.PrivacyTip),
+            DrawerItem(MainRoutes.SAFETY_CENTER, "Safety center", "Safety guidance and controls", Icons.Filled.HealthAndSafety),
             DrawerItem(MainRoutes.PRICING, "Membership", "Google Play membership plans", Icons.Filled.WorkspacePremium),
             DrawerItem(MainRoutes.SETTINGS, "Settings", "Language, security and account", Icons.Filled.Settings),
             DrawerItem(MainRoutes.HELP, "Help", "Support and guidance", Icons.AutoMirrored.Filled.Help)
         )),
         DrawerSection("COMPATIBILITY", listOf(
             DrawerItem(MainRoutes.QUIZ, "Questionnaire", "Values and partner preferences", Icons.AutoMirrored.Filled.ListAlt),
-            DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome)
+            DrawerItem(MainRoutes.COMPAT_QUIZ, "Compatibility quiz", "Lifestyle and values reflection", Icons.Filled.Quiz),
+            DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome),
+            DrawerItem(MainRoutes.AI_INSIGHTS, "Match insights", "Explain matching signals", Icons.Filled.Psychology)
         )),
         DrawerSection("LEGAL", listOf(
             DrawerItem(MainRoutes.TERMS, "Terms", "Terms of service", Icons.Filled.Gavel),
-            DrawerItem(MainRoutes.PRIVACY, "Privacy Policy", "How data is handled", Icons.Filled.Policy),
+            DrawerItem(MainRoutes.PRIVACY, "Privacy policy", "How data is handled", Icons.Filled.Policy),
             DrawerItem(MainRoutes.GUIDELINES, "Guidelines", "Community standards", Icons.Filled.Shield),
             DrawerItem(MainRoutes.SECURITY_PAGE, "Security", "Security practices", Icons.Filled.Lock),
             DrawerItem(MainRoutes.REFUNDS, "Refunds", "Membership refund policy", Icons.Filled.Receipt)
@@ -183,8 +265,8 @@ private fun AppDrawer(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("MatrimonyConnect", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Matree", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Matrimony with clearer choices", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close menu") }
         }
@@ -192,16 +274,23 @@ private fun AppDrawer(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
             sections.forEach { section ->
                 item {
-                    Text(section.title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp))
+                    Text(
+                        section.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp)
+                    )
                 }
                 items(section.items) { item ->
                     val selected = currentRoute == item.route
                     val background = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
                     val foreground = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     Row(
-                        Modifier.fillMaxWidth().background(background).clickable { onNavigate(item.route); onClose() }
-                            .padding(horizontal = 20.dp, vertical = 11.dp),
+                        Modifier.fillMaxWidth().background(background).clickable {
+                            onNavigate(item.route)
+                            onClose()
+                        }.padding(horizontal = 20.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(item.icon, null, tint = foreground, modifier = Modifier.size(21.dp))
@@ -262,12 +351,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
             topBar = {
                 if (showBottomBar) {
                     val pageTitle = when (currentRoute) {
-                        MainRoutes.HOME -> "MatrimonyConnect"
+                        MainRoutes.HOME -> "Matree"
                         MainRoutes.MATCHES -> "Discover"
                         MainRoutes.INTERESTS -> "Interests"
                         MainRoutes.CHAT_LIST -> "Messages"
                         MainRoutes.PROFILE -> "My Profile"
-                        else -> "MatrimonyConnect"
+                        else -> "Matree"
                     }
                     TopAppBar(
                         title = { Text(pageTitle, fontWeight = FontWeight.Bold) },
@@ -277,9 +366,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                             }
                         },
                         actions = {
+                            IconButton(onClick = { nav.navigate(MainRoutes.FEATURE_HUB) }) { Icon(Icons.Filled.Explore, "Explore Matree") }
                             IconButton(onClick = { nav.navigate(MainRoutes.HELP) }) { Icon(Icons.AutoMirrored.Filled.Help, "Help") }
                             BadgedBox(badge = { if (unreadNotif > 0) Badge { Text(unreadNotif.toString()) } }) {
-                                IconButton(onClick = { nav.navigate(MainRoutes.NOTIFICATIONS) }) { Icon(Icons.Filled.Notifications, "Notifications") }
+                                IconButton(onClick = { nav.navigate(MainRoutes.NOTIFICATIONS) }) {
+                                    Icon(Icons.Filled.Notifications, "Notifications")
+                                }
                             }
                         }
                     )
@@ -313,36 +405,69 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
             }
         ) { padding ->
-            NavHost(navController = nav, startDestination = MainRoutes.HOME, modifier = Modifier.fillMaxSize().padding(padding)) {
+            NavHost(
+                navController = nav,
+                startDestination = MainRoutes.HOME,
+                modifier = Modifier.fillMaxSize().padding(padding)
+            ) {
                 composable(MainRoutes.HOME) {
                     HomeLauncherScreen(
                         onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
                         onGoQuiz = { nav.navigate(MainRoutes.QUIZ) },
-                        onGoStories = {},
+                        onGoStories = { nav.navigate(MainRoutes.STORIES) },
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoRegions = { nav.navigate(MainRoutes.MATCHES) },
-                        onGoCircles = {},
+                        onGoRegions = { nav.navigate(MainRoutes.REGIONS) },
+                        onGoCircles = { nav.navigate(MainRoutes.CIRCLES) },
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
                         onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
                         onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
-                        onGoFamily = { nav.navigate(MainRoutes.PROFILE) },
+                        onGoFamily = { nav.navigate(MainRoutes.FAMILY) },
                         onGoHelp = { nav.navigate(MainRoutes.HELP) },
+                        onGoFeatureHub = { nav.navigate(MainRoutes.FEATURE_HUB) },
+                        onGoBiodata = { nav.navigate(MainRoutes.BIODATA) },
+                        onGoSecondMarriage = { nav.navigate(MainRoutes.SECOND_MARRIAGE) },
+                        onGoCompatibilityQuiz = { nav.navigate(MainRoutes.COMPAT_QUIZ) },
+                        onGoAssisted = { nav.navigate(MainRoutes.ASSISTED) },
+                        onGoVirtualMeet = { nav.navigate(MainRoutes.VIRTUAL_MEET) },
+                        onGoBioGen = { nav.navigate(MainRoutes.BIO_GENERATOR) },
+                        onGoPhotoEditor = { nav.navigate(MainRoutes.PHOTO_EDITOR) },
+                        onGoCounselling = { nav.navigate(MainRoutes.COUNSELLING) },
+                        onGoGuides = { nav.navigate(MainRoutes.GUIDES) },
+                        onGoBoost = { nav.navigate(MainRoutes.PROFILE_BOOST) },
+                        onGoVideoProfile = { nav.navigate(MainRoutes.VIDEO_PROFILE) },
+                        onGoRecentlyJoined = { nav.navigate(MainRoutes.RECENTLY_JOINED) },
+                        onGoTestimonials = { nav.navigate(MainRoutes.TESTIMONIALS) },
+                        onGoSwipeDiscover = { nav.navigate(MainRoutes.SWIPE_DISCOVER) },
+                        onGoCommunityBrowse = { nav.navigate(MainRoutes.COMMUNITY_BROWSE) },
+                        onGoLiveEvents = { nav.navigate(MainRoutes.LIVE_EVENTS) },
+                        onGoBgCheck = { nav.navigate(MainRoutes.BACKGROUND_CHECK) },
+                        onGoSecureCall = { nav.navigate(MainRoutes.SECURE_CALL) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
+                        onGoAIInsights = { nav.navigate(MainRoutes.AI_INSIGHTS) },
+                        onGoAnalytics = { nav.navigate(MainRoutes.PROFILE_ANALYTICS) },
+                        onGoWeddingPlanner = { nav.navigate(MainRoutes.WEDDING_PLANNER) },
+                        onGoAdvHoroscope = { nav.navigate(MainRoutes.ADV_HOROSCOPE) },
+                        onGoDailyRewards = { nav.navigate(MainRoutes.REWARDS) },
                         onGoNearby = { nav.navigate(MainRoutes.NEARBY) },
+                        onGoNRIMatch = { nav.navigate(MainRoutes.NRI_MATCH) },
+                        onGoSafetyCenter = { nav.navigate(MainRoutes.SAFETY_CENTER) },
+                        onGoTimeline = { nav.navigate(MainRoutes.TIMELINE) },
+                        onGoReferral = { nav.navigate(MainRoutes.REFERRAL) },
+                        onGoMuhurat = { nav.navigate(MainRoutes.MUHURAT) },
+                        onGoDeepCompat = { nav.navigate(MainRoutes.MATCHES) },
+                        onGoWizard = { nav.navigate(MainRoutes.PROFILE) },
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
                     )
                 }
+
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
                 composable(MainRoutes.NEARBY) {
-                    NearbyMatchesScreen(
-                        onBack = { nav.popBackStack() },
-                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
-                    )
+                    NearbyMatchesScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
                 }
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
@@ -379,7 +504,9 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
-                composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.LANGUAGE_SELECT) {
+                    com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() })
+                }
                 composable(MainRoutes.NOTIFICATIONS) {
                     NotificationsScreen(
                         onBack = { nav.popBackStack() },
@@ -414,6 +541,83 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.SECURITY_PAGE) { LegalScreen(type = "security", onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.REFUNDS) { LegalScreen(type = "refunds", onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.BIODATA) { BiodataScreen(onBack = { nav.popBackStack() }) }
+
+                composable(MainRoutes.FEATURE_HUB) {
+                    FeatureHubScreen(onBack = { nav.popBackStack() }, onNavigate = { nav.navigate(it) })
+                }
+                composable(MainRoutes.AI_INSIGHTS) {
+                    AIMatchInsightsScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
+                }
+                composable(MainRoutes.PROFILE_ANALYTICS) { ProfileAnalyticsScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.ASSISTED) { AssistedServiceScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.BACKGROUND_CHECK) { BackgroundCheckScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.BIO_GENERATOR) { BioGeneratorScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.PROFILE_BOOST) { ProfileBoostScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.CIRCLES) {
+                    CirclesScreen(
+                        onBack = { nav.popBackStack() },
+                        onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
+                }
+                composable(MainRoutes.COMMUNITY_BROWSE) {
+                    CommunityBrowseScreen(
+                        onBack = { nav.popBackStack() },
+                        onBrowse = { _, _ -> nav.navigate(MainRoutes.MATCHES) }
+                    )
+                }
+                composable(MainRoutes.COUNSELLING) { CounsellingScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.COMPAT_QUIZ) { CompatibilityQuizScreen(onBack = { nav.popBackStack() }) }
+                composable(
+                    MainRoutes.DEEP_COMPAT,
+                    arguments = listOf(navArgument("candidateId") { type = NavType.LongType })
+                ) { backStack ->
+                    val candidateId = backStack.arguments?.getLong("candidateId") ?: return@composable
+                    CompatibilityDeepDiveScreen(
+                        candidateId = candidateId,
+                        onBack = { nav.popBackStack() },
+                        onUpgrade = { nav.navigate(MainRoutes.PRICING) }
+                    )
+                }
+                composable(MainRoutes.SWIPE_DISCOVER) {
+                    SwipeDiscoveryScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
+                }
+                composable(MainRoutes.LIVE_EVENTS) { LiveEventsScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.FAMILY) { FamilyScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.GUIDES) { GuidesScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.ADV_HOROSCOPE) { AdvancedHoroscopeScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.LIKES) {
+                    LikesScreen(
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
+                        onOpenChat = { nav.navigate(MainRoutes.chat(it)) }
+                    )
+                }
+                composable(MainRoutes.VIRTUAL_MEET) { VirtualMeetScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.MUHURAT) { AstroCalendarScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.NRI_MATCH) { NRIMatchScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.PHOTO_EDITOR) { PhotoEditorScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.RECENTLY_JOINED) {
+                    RecentlyJoinedScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
+                }
+                composable(MainRoutes.REFERRAL) { MatchmakerReferralScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.REGIONS) {
+                    RegionsScreen(
+                        onBack = { nav.popBackStack() },
+                        onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
+                }
+                composable(MainRoutes.REWARDS) { DailyRewardsScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.SAFETY_CENTER) { SafetyCenterScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.SECOND_MARRIAGE) {
+                    SecondMarriageScreen(onBack = { nav.popBackStack() }, onOpenProfile = { nav.navigate(MainRoutes.detail(it)) })
+                }
+                composable(MainRoutes.SECURE_CALL) { SecureCallScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.STORIES) { SuccessStoriesScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.TESTIMONIALS) { TestimonialsScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.TIMELINE) { RelationshipTimelineScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.VIDEO_PROFILE) { VideoProfileScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.WEDDING_PLANNER) { WeddingPlannerScreen(onBack = { nav.popBackStack() }) }
 
                 composable(MainRoutes.DETAIL, arguments = listOf(navArgument("userId") { type = NavType.LongType })) { backStack ->
                     val userId = backStack.arguments?.getLong("userId") ?: return@composable
