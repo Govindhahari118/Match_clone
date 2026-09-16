@@ -25,9 +25,7 @@ before(async () => {
   });
 });
 
-after(async () => {
-  await env?.cleanup();
-});
+after(async () => { await env?.cleanup(); });
 
 beforeEach(async () => {
   await env.clearFirestore();
@@ -55,6 +53,14 @@ async function seedInterest(fromUid, toUid) {
   });
 }
 
+async function seedBlock(blockerUid, blockedUid) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `blocks/${blockerUid}/blocked/${blockedUid}`), {
+      blockedUid, blockedAt: Date.now(),
+    });
+  });
+}
+
 test('unauthenticated users cannot read profiles', async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertFails(getDoc(doc(db, 'users/alice')));
@@ -75,7 +81,6 @@ test('request recipient can inspect stealth sender profile before accepting', as
     await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
   });
   const bobDb = env.authenticatedContext('bob').firestore();
-
   await assertFails(getDoc(doc(bobDb, 'users/alice')));
   await seedInterest('alice', 'bob');
   await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
@@ -128,10 +133,13 @@ test('clients cannot create or delete interest and match authority documents dir
   }));
 });
 
-test('blocking relationship remains owner-controlled and private', async () => {
+test('block mutations are server-only and the block list remains owner-private', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await assertFails(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), {
+    blockedUid: 'bob', blockedAt: Date.now(),
+  }));
+  await seedBlock('alice', 'bob');
   await assertSucceeds(getDoc(doc(aliceDb, 'blocks/alice/blocked/bob')));
   await assertFails(getDoc(doc(bobDb, 'blocks/alice/blocked/bob')));
 });
@@ -168,9 +176,8 @@ test('only owner can configure global contact visibility', async () => {
   await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
 });
 
-test('chat thread requires server-created mutual interests and stops after a block', async () => {
+test('chat thread requires server-created mutual interests and stops reads/writes after a block', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
-  const bobDb = env.authenticatedContext('bob').firestore();
   const thread = doc(aliceDb, 'chats/alice_bob');
 
   await seedInterest('alice', 'bob');
@@ -184,7 +191,9 @@ test('chat thread requires server-created mutual interests and stops after a blo
     voiceUri: null, imageUri: null, voiceDurationMs: null,
   }));
 
-  await assertSucceeds(setDoc(doc(bobDb, 'blocks/bob/blocked/alice'), { blockedAt: Date.now() }));
+  await seedBlock('bob', 'alice');
+  await assertFails(getDoc(thread));
+  await assertFails(getDoc(doc(aliceDb, 'chats/alice_bob/messages/m1')));
   await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m2'), {
     body: 'blocked', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
@@ -207,8 +216,7 @@ test('clients cannot forge profile views', async () => {
 
 test('profile view records are visible only to viewer and viewed user', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
-    const db = context.firestore();
-    await setDoc(doc(db, 'profileViews/server_written'), {
+    await setDoc(doc(context.firestore(), 'profileViews/server_written'), {
       viewerUid: 'alice', viewedUid: 'bob', viewedAt: Date.now(),
     });
   });
@@ -234,29 +242,24 @@ test('hidden member cannot read profile photo while owner still can', async () =
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'photos/alice/private-profile.jpg');
   const bytes = new Uint8Array([8, 6, 7, 5, 3, 0, 9]);
-
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await assertSucceeds(getBytes(object));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
-
   await assertSucceeds(setDoc(doc(aliceDb, 'privacyRelations/alice/members/bob'), {
     memberUid: 'bob', profileHidden: true, updatedAt: new Date(),
   }));
-
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
   await assertSucceeds(getBytes(object));
 });
 
 test('blocked member cannot read profile media', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'photos/alice/block-test.jpg');
   const bytes = new Uint8Array([4, 2, 4, 2]);
-
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await seedBlock('alice', 'bob');
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
 });
 
@@ -265,13 +268,11 @@ test('stealth profile media is private except to an explicit interest recipient'
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'photos/alice/stealth-test.jpg');
   const bytes = new Uint8Array([1, 9, 9, 9]);
-
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
   });
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
-
   await seedInterest('alice', 'bob');
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
 });
