@@ -8,9 +8,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -47,94 +47,54 @@ private data class QuizQuestion(
 )
 
 private val QUESTIONS = listOf(
-    QuizQuestion(
-        1,
-        "Family",
-        "How involved would you like families to be in major decisions after marriage?",
-        listOf(
-            QuizOption("Very involved — important decisions should include family", 4),
-            QuizOption("Involved for major milestones, with the couple deciding", 3),
-            QuizOption("Supportive but mostly advisory", 2),
-            QuizOption("Primarily the couple's decision", 1)
-        )
-    ),
-    QuizQuestion(
-        2,
-        "Values",
-        "What role should faith, culture or personal traditions have in married life?",
-        listOf(
-            QuizOption("Central to our shared daily life", 4),
-            QuizOption("Important and regularly practiced", 3),
-            QuizOption("Meaningful on selected occasions", 2),
-            QuizOption("Personal choice; no shared practice required", 1)
-        )
-    ),
-    QuizQuestion(
-        3,
-        "Communication",
-        "When a disagreement becomes emotional, what works best for you?",
-        listOf(
-            QuizOption("Discuss it immediately and resolve it together", 4),
-            QuizOption("Pause briefly, then return to the conversation", 3),
-            QuizOption("Write or message first, then talk", 2),
-            QuizOption("Take substantial personal space before discussing", 1)
-        )
-    ),
-    QuizQuestion(
-        4,
-        "Career",
-        "How should two careers be balanced after marriage?",
-        listOf(
-            QuizOption("Both careers should receive equal planning priority", 4),
-            QuizOption("Balance careers with family needs case by case", 3),
-            QuizOption("One career may take priority during key periods", 2),
-            QuizOption("Career should remain secondary to home responsibilities", 1)
-        )
-    ),
-    QuizQuestion(
-        5,
-        "Home",
-        "Which living arrangement feels most comfortable long term?",
-        listOf(
-            QuizOption("Joint or closely connected family household", 4),
-            QuizOption("Independent home near family", 3),
-            QuizOption("Independent home in whichever city suits us", 2),
-            QuizOption("Highly flexible — relocation or living abroad is welcome", 1)
-        )
-    ),
-    QuizQuestion(
-        6,
-        "Finance",
-        "Which approach to money feels most natural in a partnership?",
-        listOf(
-            QuizOption("Mostly shared finances and joint planning", 4),
-            QuizOption("Shared household planning with individual savings", 3),
-            QuizOption("Mostly separate finances with agreed shared expenses", 2),
-            QuizOption("Strong financial independence for both partners", 1)
-        )
-    ),
-    QuizQuestion(
-        7,
-        "Lifestyle",
-        "How structured do you prefer everyday married life to be?",
-        listOf(
-            QuizOption("Predictable routines and clearly shared responsibilities", 4),
-            QuizOption("Some routines with room for spontaneity", 3),
-            QuizOption("Flexible schedules and changing plans are fine", 2),
-            QuizOption("Very independent routines work best for me", 1)
-        )
-    ),
-    QuizQuestion(
-        8,
-        "Independence",
-        "How much personal independence should each partner maintain?",
-        listOf(
-            QuizOption("Most decisions and activities should be shared", 4),
-            QuizOption("Close partnership with healthy individual space", 3),
-            QuizOption("Significant independent interests and social time", 2),
-            QuizOption("High independence with clear agreed boundaries", 1)
-        )
-    )
+    QuizQuestion(1, "Family", "How involved would you like families to be in major decisions after marriage?", listOf(
+        QuizOption("Very involved — important decisions should include family", 4),
+        QuizOption("Involved for major milestones, with the couple deciding", 3),
+        QuizOption("Supportive but mostly advisory", 2),
+        QuizOption("Primarily the couple's decision", 1)
+    )),
+    QuizQuestion(2, "Values", "What role should faith, culture or personal traditions have in married life?", listOf(
+        QuizOption("Central to our shared daily life", 4),
+        QuizOption("Important and regularly practiced", 3),
+        QuizOption("Meaningful on selected occasions", 2),
+        QuizOption("Personal choice; no shared practice required", 1)
+    )),
+    QuizQuestion(3, "Communication", "When a disagreement becomes emotional, what works best for you?", listOf(
+        QuizOption("Discuss it immediately and resolve it together", 4),
+        QuizOption("Pause briefly, then return to the conversation", 3),
+        QuizOption("Write or message first, then talk", 2),
+        QuizOption("Take substantial personal space before discussing", 1)
+    )),
+    QuizQuestion(4, "Career", "How should two careers be balanced after marriage?", listOf(
+        QuizOption("Both careers should receive equal planning priority", 4),
+        QuizOption("Balance careers with family needs case by case", 3),
+        QuizOption("One career may take priority during key periods", 2),
+        QuizOption("Career should remain secondary to home responsibilities", 1)
+    )),
+    QuizQuestion(5, "Home", "Which living arrangement feels most comfortable long term?", listOf(
+        QuizOption("Joint or closely connected family household", 4),
+        QuizOption("Independent home near family", 3),
+        QuizOption("Independent home in whichever city suits us", 2),
+        QuizOption("Highly flexible — relocation or living abroad is welcome", 1)
+    )),
+    QuizQuestion(6, "Finance", "Which approach to money feels most natural in a partnership?", listOf(
+        QuizOption("Mostly shared finances and joint planning", 4),
+        QuizOption("Shared household planning with individual savings", 3),
+        QuizOption("Mostly separate finances with agreed shared expenses", 2),
+        QuizOption("Strong financial independence for both partners", 1)
+    )),
+    QuizQuestion(7, "Lifestyle", "How structured do you prefer everyday married life to be?", listOf(
+        QuizOption("Predictable routines and clearly shared responsibilities", 4),
+        QuizOption("Some routines with room for spontaneity", 3),
+        QuizOption("Flexible schedules and changing plans are fine", 2),
+        QuizOption("Very independent routines work best for me", 1)
+    )),
+    QuizQuestion(8, "Independence", "How much personal independence should each partner maintain?", listOf(
+        QuizOption("Most decisions and activities should be shared", 4),
+        QuizOption("Close partnership with healthy individual space", 3),
+        QuizOption("Significant independent interests and social time", 2),
+        QuizOption("High independence with clear agreed boundaries", 1)
+    ))
 )
 
 private data class ReflectionResult(val title: String, val description: String)
@@ -201,9 +161,7 @@ fun CompatibilityQuizScreen(
             )
         }
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).testTag("compat_quiz_screen")
-        ) {
+        Column(Modifier.fillMaxSize().padding(padding).testTag("compat_quiz_screen")) {
             LinearProgressIndicator(
                 progress = { if (showResult) 1f else progress },
                 modifier = Modifier.fillMaxWidth()
@@ -232,12 +190,7 @@ fun CompatibilityQuizScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(44.dp)
                             )
-                            Text(
-                                result.title,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
+                            Text(result.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                             Text(
                                 result.description,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -253,7 +206,7 @@ fun CompatibilityQuizScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            "This is a self-reflection summary, not a scientific personality diagnosis or a prediction of relationship success. Matree should compare explicit preferences and real profile data separately.",
+                            "This is a self-reflection summary, not a scientific personality diagnosis or a prediction of relationship success. Matree compares explicit preferences and real profile data separately.",
                             modifier = Modifier.padding(16.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -288,28 +241,26 @@ fun CompatibilityQuizScreen(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(current.category) },
-                        leadingIcon = { Icon(Icons.Filled.Tune, contentDescription = null) }
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            current.category,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
 
-                    Text(
-                        current.question,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(current.question, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
                     current.options.forEach { option ->
                         val selected = answers[current.id] == option.weight
                         ElevatedCard(
                             onClick = {
                                 answers[current.id] = option.weight
-                                if (currentIndex < QUESTIONS.lastIndex) {
-                                    currentIndex++
-                                } else {
-                                    showResult = true
-                                }
+                                if (currentIndex < QUESTIONS.lastIndex) currentIndex++ else showResult = true
                             },
                             modifier = Modifier.fillMaxWidth().testTag("quiz_option_${current.id}_${option.weight}"),
                             shape = RoundedCornerShape(16.dp),
@@ -318,14 +269,8 @@ fun CompatibilityQuizScreen(
                                 else MaterialTheme.colorScheme.surfaceContainerLow
                             )
                         ) {
-                            Row(
-                                Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selected,
-                                    onClick = null
-                                )
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = selected, onClick = null)
                                 Spacer(Modifier.width(10.dp))
                                 Text(option.label, modifier = Modifier.weight(1f))
                             }
