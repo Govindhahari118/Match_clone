@@ -23,9 +23,11 @@ data class UserEntity(
     val rasi: String,            // e.g. "Cancer"
     val nakshatra: String,       // e.g. "Pushya"
     val isSeed: Boolean = false,
-    // ── New enrichment fields ──────────────────────────────
-    val religion: String = "Hindu",
-    val motherTongue: String = "Telugu",
+    // ── Profile enrichment fields ──────────────────────────
+    // Demographic identity must be explicitly selected during onboarding. Never default religion
+    // or mother tongue from region, seed assumptions or UI styling.
+    val religion: String = "",
+    val motherTongue: String = "",
     val education: String = "Graduate",
     val profession: String = "Software Engineer",
     val maritalStatus: String = "Never Married",
