@@ -33,6 +33,8 @@ data class NearbyProfile(
     val photoUrl: String,
     val isVerified: Boolean,
     val isPremium: Boolean,
+    /** Coarse representative retained for existing card rendering; not the computed exact distance. */
+    val distanceKm: Double,
     val distanceLabel: String
 )
 
@@ -60,7 +62,6 @@ class LocationRepository @Inject constructor(
 
     fun isLocationServiceEnabled(): Boolean = LocationManagerCompat.isLocationEnabled(locationManager)
 
-    /** Server-side status contains no coordinates and lets Stop sharing remain effective across restarts. */
     suspend fun getSharingStatus(): NearbySharingStatus = withContext(Dispatchers.IO) {
         val response = functions.getHttpsCallable("getNearbyStatus").call().await()
         @Suppress("UNCHECKED_CAST")
@@ -72,10 +73,6 @@ class LocationRepository @Inject constructor(
         )
     }
 
-    /**
-     * Gets one fresh foreground location only when Nearby is explicitly enabled or refreshed.
-     * Background tracking is intentionally not used.
-     */
     suspend fun currentLocation(): Location {
         check(hasLocationPermission()) { "Location permission is required" }
         check(isLocationServiceEnabled()) { "Turn on device location to use Nearby" }
@@ -121,7 +118,6 @@ class LocationRepository @Inject constructor(
         val data = response.data as? Map<String, Any?> ?: error("Invalid nearby response")
         val rawProfiles = data["profiles"] as? List<*> ?: emptyList<Any>()
 
-        // Keep server ordering. The client receives only a coarse label, not a sortable precise value.
         rawProfiles.mapNotNull { raw ->
             @Suppress("UNCHECKED_CAST")
             val entry = raw as? Map<String, Any?> ?: return@mapNotNull null
@@ -139,6 +135,7 @@ class LocationRepository @Inject constructor(
                 photoUrl = cached.photoUrl,
                 isVerified = cached.isVerified,
                 isPremium = cached.isPremium,
+                distanceKm = representativeDistance(distanceLabel),
                 distanceLabel = distanceLabel
             )
         }
@@ -159,6 +156,16 @@ class LocationRepository @Inject constructor(
                 )
             )
             .await()
+    }
+
+    private fun representativeDistance(label: String): Double = when (label) {
+        "Less than 1 km away" -> 0.5
+        "About 1 km away" -> 1.0
+        "About 2–5 km away" -> 2.0
+        "About 5–10 km away" -> 5.0
+        "About 10–25 km away" -> 10.0
+        "About 25–50 km away" -> 25.0
+        else -> 50.0
     }
 
     private suspend fun cacheRemoteProfile(remote: UserEntity): UserEntity {
