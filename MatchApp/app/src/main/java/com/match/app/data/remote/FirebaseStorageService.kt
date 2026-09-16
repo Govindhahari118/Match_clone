@@ -28,6 +28,11 @@ class FirebaseStorageService @Inject constructor(
         private const val MAX_CHAT_VOICE_BYTES = 12 * 1024 * 1024L
     }
 
+    /**
+     * Upload protected profile media and persist the Firebase Storage object identity, not a
+     * long-lived tokenized HTTPS download URL. Viewers must therefore pass current Storage Rules
+     * each time protected media is resolved.
+     */
     suspend fun uploadPhoto(firebaseUid: String, uri: Uri): Result<String> = runCatching {
         require(firebaseUid.isNotBlank())
         val bytes = compressToTarget(uri)
@@ -37,7 +42,7 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putBytes(bytes, metadata).await()
-        ref.downloadUrl.await().toString()
+        ref.toString()
     }
 
     suspend fun deletePhoto(urlOrPath: String): Result<Unit> = runCatching {
