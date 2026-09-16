@@ -2,7 +2,6 @@ package com.match.app.data.remote
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -26,10 +25,6 @@ class FirestoreChatService @Inject constructor() {
         }
     }
 
-    /**
-     * Account-level conversation list. Unlike Room-only peer lists this is correct on a fresh
-     * second device. Firestore rules still require the signed-in UID to be a thread participant.
-     */
     fun observeThreads(myUid: String): Flow<List<FirestoreChatThread>> = callbackFlow {
         require(myUid.isNotBlank())
         val registration = db.collection("chats")
@@ -77,6 +72,11 @@ class FirestoreChatService @Inject constructor() {
         awaitClose { reg.remove() }
     }
 
+    /**
+     * Idempotent send. A client-generated message id is stable across retry. Thread preview and
+     * message metadata are committed in the same batch, so the UI cannot observe a ghost thread
+     * whose actual message write failed.
+     */
     suspend fun sendMessage(
         clientMessageId: String,
         body: String,
@@ -89,33 +89,51 @@ class FirestoreChatService @Inject constructor() {
         require(clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}"))) { "Invalid message id" }
         require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank() && myFirebaseUid != peerFirebaseUid)
         require(body.length <= 3000) { "Message too long" }
+        require(voiceUri.isNullOrBlank() || imageUri.isNullOrBlank()) { "A message may contain only one media attachment" }
 
         val tid = threadId(myFirebaseUid, peerFirebaseUid)
-        val now = System.currentTimeMillis()
         val threadRef = db.collection("chats").document(tid)
-        val participantUids = listOf(myFirebaseUid, peerFirebaseUid).sorted()
-        val preview = when {
-            imageUri != null -> "📷 Image"
-            voiceUri != null -> "🎤 Voice message"
-            else -> body.take(120)
+        val messageRef = threadRef.collection("messages").document(clientMessageId)
+
+        // If an earlier attempt committed but the client lost the acknowledgement, treat retry as
+        // success instead of attempting to overwrite an immutable message.
+        val existing = messageRef.get().await()
+        if (existing.exists()) {
+            val sameSender = existing.getString("fromFirebaseUid") == myFirebaseUid
+            val sameRecipient = existing.getString("toFirebaseUid") == peerFirebaseUid
+            if (sameSender && sameRecipient) return
+            error("Message id collision")
         }
 
-        threadRef.set(
-            mapOf("participantUids" to participantUids, "lastMessage" to preview, "lastSentAt" to now),
-            SetOptions.merge()
-        ).await()
-
-        val data = mutableMapOf<String, Any>(
+        val now = System.currentTimeMillis()
+        val participantUids = listOf(myFirebaseUid, peerFirebaseUid).sorted()
+        val preview = when {
+            !imageUri.isNullOrBlank() -> "📷 Image"
+            !voiceUri.isNullOrBlank() -> "🎤 Voice message"
+            else -> body.take(120)
+        }
+        val message = mutableMapOf<String, Any>(
             "body" to body,
             "sentAt" to now,
             "isRead" to false,
             "fromFirebaseUid" to myFirebaseUid,
             "toFirebaseUid" to peerFirebaseUid
         )
-        if (!voiceUri.isNullOrBlank()) data["voiceUri"] = voiceUri
-        if (!imageUri.isNullOrBlank()) data["imageUri"] = imageUri
-        if (voiceDurationMs != null && voiceDurationMs > 0) data["voiceDurationMs"] = voiceDurationMs
-        threadRef.collection("messages").document(clientMessageId).set(data).await()
+        if (!voiceUri.isNullOrBlank()) message["voiceUri"] = voiceUri
+        if (!imageUri.isNullOrBlank()) message["imageUri"] = imageUri
+        if (voiceDurationMs != null && voiceDurationMs > 0) message["voiceDurationMs"] = voiceDurationMs
+
+        val batch = db.batch()
+        batch.set(
+            threadRef,
+            mapOf(
+                "participantUids" to participantUids,
+                "lastMessage" to preview,
+                "lastSentAt" to now
+            )
+        )
+        batch.set(messageRef, message)
+        batch.commit().await()
     }
 
     suspend fun markRead(myUid: String, peerUid: String) {
