@@ -93,4 +93,9 @@ object Migrations {
         db.execSQL("ALTER TABLE saved_searches ADD COLUMN minPoruthamScore INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE saved_searches ADD COLUMN hasHoroscope TEXT NOT NULL DEFAULT ''")
     }}
+    val MIGRATION_20_21 = object : Migration(20, 21) { override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE users ADD COLUMN faithTradition TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE users ADD COLUMN faithSubTradition TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE users ADD COLUMN faithInstitution TEXT NOT NULL DEFAULT ''")
+    }}
 }
