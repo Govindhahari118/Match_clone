@@ -20,18 +20,21 @@ data class UserProfile(
     val nakshatra: String,
     val hasQuestionnaire: Boolean,
     val primaryPhotoPath: String? = null,
-    val religion: String = "Hindu",
+    val religion: String = "",
     val caste: String = "",
-    val motherTongue: String = "Telugu",
-    val education: String = "Graduate",
-    val profession: String = "Software Engineer",
-    val maritalStatus: String = "Never Married",
-    val heightCm: Int = 165,
+    val motherTongue: String = "",
+    val education: String = "",
+    val profession: String = "",
+    val maritalStatus: String = "",
+    val heightCm: Int = 0,
     val isVerified: Boolean = false,
     val isPremium: Boolean = false,
     val state: String = "",
     val subCaste: String = "",
     val gothra: String = "",
+    val faithTradition: String = "",
+    val faithSubTradition: String = "",
+    val faithInstitution: String = "",
     val incomeBand: String = "",
     val diet: String = "",
     val familyType: String = "",
@@ -101,8 +104,8 @@ data class MatchResult(
     val displayScore: Int get() = (primary() * 100f).toInt()
     fun primary(): Float = when (mode) {
         MatchMode.QUESTIONNAIRE -> questionnaireScore
-        MatchMode.ASTROLOGY     -> astrologyScore
-        MatchMode.ADVANCED      -> combinedScore
+        MatchMode.ASTROLOGY -> astrologyScore
+        MatchMode.ADVANCED -> combinedScore
     }
 }
 
