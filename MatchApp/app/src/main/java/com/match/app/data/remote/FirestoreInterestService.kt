@@ -1,6 +1,5 @@
 package com.match.app.data.remote
 
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
@@ -10,7 +9,7 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Firestore service for interests and mutual matches. */
+/** Firestore read streams + trusted callable mutations for interests and mutual matches. */
 @Singleton
 class FirestoreInterestService @Inject constructor() {
 
@@ -19,45 +18,27 @@ class FirestoreInterestService @Inject constructor() {
     private val interestsCol = db.collection("interests")
     private val matchesCol = db.collection("matches")
 
+    /**
+     * Send through a callable so the authenticated server enforces privacy, plan quota and match
+     * creation. fromUid is retained in the signature for repository compatibility but is never
+     * trusted by the backend; Firebase Auth is authoritative.
+     */
     suspend fun sendInterest(fromUid: String, toUid: String, isSuperLike: Boolean = false): Boolean {
         require(fromUid.isNotBlank() && toUid.isNotBlank() && fromUid != toUid) { "Invalid interest participants" }
-        val docId = "${fromUid}_${toUid}"
-        val reverseDocId = "${toUid}_${fromUid}"
-
-        interestsCol.document(docId).set(
-            mapOf(
-                "fromUid" to fromUid,
-                "toUid" to toUid,
-                "isSuperLike" to isSuperLike,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-        ).await()
-
-        return db.runTransaction { txn ->
-            val reverseRef = interestsCol.document(reverseDocId)
-            val reverseSnap = txn.get(reverseRef)
-            if (reverseSnap.exists()) {
-                val matchId = matchDocId(fromUid, toUid)
-                val matchRef = matchesCol.document(matchId)
-                txn.set(matchRef, mapOf(
-                    "users" to listOf(fromUid, toUid).sorted(),
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "lastActivity" to FieldValue.serverTimestamp()
-                ))
-                true
-            } else {
-                false
-            }
-        }.await()
+        val result = functions.getHttpsCallable("sendInterest")
+            .call(mapOf("targetUid" to toUid, "isSuperLike" to isSuperLike))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        return payload["mutual"] as? Boolean ?: false
     }
 
-    /** Sender withdraws their own outgoing interest. */
+    /** Sender withdraws their own outgoing interest through the trusted backend. */
     suspend fun removeInterest(fromUid: String, toUid: String) {
         if (fromUid.isBlank() || toUid.isBlank()) return
-        interestsCol.document("${fromUid}_${toUid}").delete().await()
-        val matchId = matchDocId(fromUid, toUid)
-        val matchDoc = matchesCol.document(matchId).get().await()
-        if (matchDoc.exists()) matchesCol.document(matchId).delete().await()
+        functions.getHttpsCallable("withdrawInterest")
+            .call(mapOf("targetUid" to toUid))
+            .await()
     }
 
     /** Recipient declines a still-pending incoming request without blocking its sender. */
@@ -136,11 +117,6 @@ class FirestoreInterestService @Inject constructor() {
     suspend fun getReceivedInterestUids(myUid: String): Set<String> {
         val snap = interestsCol.whereEqualTo("toUid", myUid).get().await()
         return snap.documents.mapNotNull { it.getString("fromUid") }.toSet()
-    }
-
-    private fun matchDocId(uid1: String, uid2: String): String {
-        val sorted = listOf(uid1, uid2).sorted()
-        return "${sorted[0]}_${sorted[1]}"
     }
 }
 
