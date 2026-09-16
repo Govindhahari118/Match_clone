@@ -4,7 +4,6 @@ import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebas
 import { doc, setDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
-// Storage rules that read Firestore must run under the same Firebase project as the emulators.
 const projectId = 'matchapp-rules-test';
 let env;
 
@@ -64,19 +63,15 @@ test('outsider cannot upload into or read an existing chat thread', async () => 
   const malloryStorage = env.authenticatedContext('mallory').storage();
   await assertSucceeds(uploadBytes(
     ref(aliceStorage, 'chat-media/thread123/message.jpg'),
-    new Uint8Array([1, 2, 3]),
-    imageMetadata,
+    new Uint8Array([1, 2, 3]), imageMetadata,
   ));
   await assertFails(getBytes(ref(malloryStorage, 'chat-media/thread123/message.jpg')));
   await assertFails(uploadBytes(
     ref(malloryStorage, 'chat-media/thread123/forged.jpg'),
     new Uint8Array([9, 9, 9]),
-    {
-      contentType: 'image/jpeg',
-      customMetadata: {
-        senderUid: 'mallory', recipientUid: 'bob', threadId: 'thread123', kind: 'image',
-      },
-    },
+    { contentType: 'image/jpeg', customMetadata: {
+      senderUid: 'mallory', recipientUid: 'bob', threadId: 'thread123', kind: 'image',
+    } },
   ));
 });
 
@@ -85,27 +80,28 @@ test('signed-in user cannot invent a non-existent chat thread using forged metad
   await assertFails(uploadBytes(
     ref(aliceStorage, 'chat-media/fake-thread/message.jpg'),
     new Uint8Array([4, 5, 6]),
-    {
-      contentType: 'image/jpeg',
-      customMetadata: {
-        senderUid: 'alice', recipientUid: 'bob', threadId: 'fake-thread', kind: 'image',
-      },
-    },
+    { contentType: 'image/jpeg', customMetadata: {
+      senderUid: 'alice', recipientUid: 'bob', threadId: 'fake-thread', kind: 'image',
+    } },
   ));
 });
 
 test('block immediately prevents further chat media access and writes', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'chat-media/thread123/message.jpg');
   await assertSucceeds(uploadBytes(object, new Uint8Array([7, 8, 9]), imageMetadata));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
+
   await assertFails(getBytes(object));
   await assertFails(getBytes(ref(bobStorage, 'chat-media/thread123/message.jpg')));
   await assertFails(uploadBytes(
     ref(aliceStorage, 'chat-media/thread123/after-block.jpg'),
-    new Uint8Array([1]),
-    imageMetadata,
+    new Uint8Array([1]), imageMetadata,
   ));
 });
