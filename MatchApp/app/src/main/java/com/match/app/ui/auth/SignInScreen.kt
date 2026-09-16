@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -49,11 +51,14 @@ fun SignInScreen(
     var forgotEmail by remember { mutableStateOf("") }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
 
-    val googleWebClientId = remember(context) {
-        val resourceId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        if (resourceId == 0) "" else runCatching { context.getString(resourceId) }.getOrDefault("").trim()
+    // google-services.xml generates this resource. Use LocalResources so configuration changes
+    // invalidate the composable and lint can verify that we do not retain stale resource values.
+    val googleWebClientId = remember(resources, context.packageName) {
+        val resourceId = resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (resourceId == 0) "" else runCatching { resources.getString(resourceId) }.getOrDefault("").trim()
     }
 
     LaunchedEffect(state.error) {
@@ -174,6 +179,9 @@ fun SignInScreen(
                                         displayName = credential.displayName ?: "",
                                         email = credential.id
                                     )
+                                } catch (error: NoCredentialException) {
+                                    Log.i("SignIn", "No Google credential available", error)
+                                    snackbar.showSnackbar("No Google account is available. Try email/password or add a Google account.")
                                 } catch (error: GetCredentialException) {
                                     Log.i("SignIn", "Google sign-in cancelled or unavailable", error)
                                 } catch (error: Exception) {
