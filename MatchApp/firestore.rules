@@ -57,6 +57,9 @@ service cloud.firestore {
     function explicitInterestFrom(profileOwnerUid, viewerUid) {
       return exists(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid));
     }
+    function chatAfterParticipants(threadId) {
+      return getAfter(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
+    }
 
     match /users/{userId} {
       allow read: if isSignedIn() && (isOwner(userId) ||
@@ -154,7 +157,18 @@ service cloud.firestore {
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
           );
-        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids && mutualInterest(get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0], get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]) && !blockedEitherWay(get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0], get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]) && request.resource.data.fromFirebaseUid == request.auth.uid && request.resource.data.toFirebaseUid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids && request.resource.data.toFirebaseUid != request.auth.uid && request.resource.data.body is string && request.resource.data.body.size() <= 3000 && request.resource.data.sentAt is int && request.resource.data.isRead == false && request.resource.data.keys().hasOnly(['body','sentAt','isRead','fromFirebaseUid','toFirebaseUid','voiceUri','imageUri','voiceDurationMs']);
+        allow create: if isSignedIn() &&
+          chatAfterParticipants(threadId) is list &&
+          chatAfterParticipants(threadId).size() == 2 &&
+          request.auth.uid in chatAfterParticipants(threadId) &&
+          mutualInterest(chatAfterParticipants(threadId)[0], chatAfterParticipants(threadId)[1]) &&
+          !blockedEitherWay(chatAfterParticipants(threadId)[0], chatAfterParticipants(threadId)[1]) &&
+          request.resource.data.fromFirebaseUid == request.auth.uid &&
+          request.resource.data.toFirebaseUid in chatAfterParticipants(threadId) &&
+          request.resource.data.toFirebaseUid != request.auth.uid &&
+          request.resource.data.body is string && request.resource.data.body.size() <= 3000 &&
+          request.resource.data.sentAt is int && request.resource.data.isRead == false &&
+          request.resource.data.keys().hasOnly(['body','sentAt','isRead','fromFirebaseUid','toFirebaseUid','voiceUri','imageUri','voiceDurationMs']);
         allow update: if isSignedIn() && resource.data.toFirebaseUid == request.auth.uid &&
           !blockedEitherWay(resource.data.fromFirebaseUid, resource.data.toFirebaseUid) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) && request.resource.data.isRead == true;
