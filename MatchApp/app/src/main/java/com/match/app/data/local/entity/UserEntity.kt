@@ -24,14 +24,14 @@ data class UserEntity(
     val nakshatra: String,       // e.g. "Pushya"
     val isSeed: Boolean = false,
     // ── Profile enrichment fields ──────────────────────────
-    // Demographic identity must be explicitly selected during onboarding. Never default religion
-    // or mother tongue from region, seed assumptions or UI styling.
+    // Demographic/profile identity must be explicitly supplied. Never silently prefill religion,
+    // language, education, profession, relationship status or physical data as if the user said it.
     val religion: String = "",
     val motherTongue: String = "",
-    val education: String = "Graduate",
-    val profession: String = "Software Engineer",
-    val maritalStatus: String = "Never Married",
-    val heightCm: Int = 165,
+    val education: String = "",
+    val profession: String = "",
+    val maritalStatus: String = "",
+    val heightCm: Int = 0,
     val isVerified: Boolean = false,
     val isPremium: Boolean = false,
     val isShortlisted: Boolean = false,
