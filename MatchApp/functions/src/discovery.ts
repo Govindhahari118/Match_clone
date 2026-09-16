@@ -5,20 +5,21 @@ const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
 const MAX_KEYWORD_LENGTH = 64;
 
+// Only fields intentionally safe for another signed-in member may leave this endpoint. Birth
+// details, astrology inputs, income and exact activity timestamps live in private/server-owned
+// documents and must never be copied into a discovery payload.
 const PUBLIC_PROFILE_FIELDS = [
   "firebaseUid", "displayName", "username", "age", "gender", "lookingFor", "city", "bio",
-  "rasi", "nakshatra", "religion", "motherTongue", "education", "profession",
-  "maritalStatus", "heightCm", "isVerified", "isPremium", "profileViewCount",
-  "caste", "state", "subCaste", "gothra", "incomeBand", "diet", "familyType",
-  "fatherOccupation", "motherOccupation", "siblings", "smoking", "drinking",
-  "personalityType", "hobbies", "spokenLanguages", "videoUrl", "residentialStatus",
-  "hasChildren", "boostActiveUntil", "nativeState", "countryOfResidence", "visaStatus",
-  "willingToRelocate", "createdAt", "lastActiveAt", "isIncognito", "ageBucket",
-  "familyValues", "aboutFamily", "manglik", "weight", "complexion", "physicalStatus",
-  "birthPlace", "familyStatus", "educationField", "institution", "graduationYear",
-  "occupationCategory", "employer", "employerType", "citizenship", "isNRI",
-  "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl", "profileCompleteness",
-  "verificationLevel", "stealthMode", "showLastActive", "showHoroscope",
+  "religion", "motherTongue", "education", "profession", "maritalStatus", "heightCm",
+  "isVerified", "isPremium", "profileViewCount", "caste", "state", "subCaste", "gothra",
+  "diet", "familyType", "fatherOccupation", "motherOccupation", "siblings", "smoking",
+  "drinking", "personalityType", "hobbies", "spokenLanguages", "videoUrl",
+  "residentialStatus", "hasChildren", "boostActiveUntil", "nativeState", "countryOfResidence",
+  "visaStatus", "willingToRelocate", "createdAt", "isIncognito", "ageBucket", "familyValues",
+  "aboutFamily", "weight", "complexion", "physicalStatus", "familyStatus", "educationField",
+  "institution", "graduationYear", "occupationCategory", "employer", "employerType",
+  "citizenship", "isNRI", "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl",
+  "profileCompleteness", "verificationLevel", "stealthMode", "showHoroscope",
   "incomeDisclosure", "subscriptionPlan", "subscriptionExpiry", "matchScore",
 ] as const;
 
@@ -48,10 +49,6 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
   const result: Record<string, unknown> = { firebaseUid: uid };
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
-    if (field === "lastActiveAt" && data.showLastActive === false) {
-      result.lastActiveAt = 0;
-      continue;
-    }
     const value = data[field];
     if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
       result[field] = value;
@@ -64,7 +61,7 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
 
 /**
  * Privacy-safe discovery endpoint. Exact usernames are resolved through a server-only unique
- * registry, while ordinary name/profile searches are filtered during the activity-ordered scan.
+ * registry, while ordinary name/profile searches are filtered during the candidate scan.
  */
 export const discoverProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
@@ -89,8 +86,10 @@ export const discoverProfiles = functions
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
 
+    // Precise activity is intentionally not used as a client-visible sort key. Freshness is based
+    // on public profile creation order; private presence has its own permission-checked endpoint.
     let query: FirebaseFirestore.Query = db.collection("users")
-      .orderBy("lastActiveAt", "desc")
+      .orderBy("createdAt", "desc")
       .limit(SCAN_LIMIT);
 
     if (cursor) {
@@ -105,7 +104,7 @@ export const discoverProfiles = functions
     const outgoing = new Set(outgoingBlocks.docs.map((doc) => doc.id));
 
     // On the first page, exact @handle lookup can find a member even when that member is not in
-    // the current activity window. The candidate still passes every privacy/block/gender check.
+    // the current page. The candidate still passes every privacy/block/gender check.
     let exactProfile: FirebaseFirestore.DocumentSnapshot | null = null;
     if (!cursor && normalizedUsername.length >= 3 && /^[a-z0-9][a-z0-9._]{2,29}$/.test(normalizedUsername)) {
       const registry = await db.collection("usernames").doc(normalizedUsername).get();
