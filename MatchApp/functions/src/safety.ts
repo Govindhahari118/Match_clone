@@ -12,6 +12,8 @@ const REPORT_REASONS = new Set([
   "Other",
 ]);
 
+const MAX_UID_LENGTH = 128;
+
 function dayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -24,31 +26,58 @@ function pairId(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join("_");
 }
 
+function requireTargetUid(value: unknown, ownUid: string): string {
+  const targetUid = typeof value === "string" ? value.trim() : "";
+  if (!targetUid || targetUid === ownUid || targetUid.length > MAX_UID_LENGTH) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+  return targetUid;
+}
+
 /**
- * Blocking is created by the blocker in their own protected collection, but relationship cleanup
- * needs Admin authority because normal clients cannot mutate trusted interest/match state.
- * Retaining chat documents server-side preserves moderation/account records; Firestore/Storage
- * rules deny both participants access while the block exists.
+ * Create the block and remove all direct relationship state in one trusted transaction. Chat
+ * records are retained for moderation/account history; Firestore/Storage rules revoke access as
+ * soon as the block exists.
  */
-export const onMemberBlocked = functions.firestore
-  .document("blocks/{blockerUid}/blocked/{blockedUid}")
-  .onCreate(async (_snap, context) => {
-    const blockerUid = String(context.params.blockerUid || "");
-    const blockedUid = String(context.params.blockedUid || "");
-    if (!blockerUid || !blockedUid || blockerUid === blockedUid) return;
+export const blockUser = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const blockerUid = context.auth?.uid;
+  if (!blockerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const blockedUid = requireTargetUid(data?.targetUid, blockerUid);
 
-    const batch = db.batch();
-    batch.delete(db.collection("interests").doc(`${blockerUid}_${blockedUid}`));
-    batch.delete(db.collection("interests").doc(`${blockedUid}_${blockerUid}`));
-    batch.delete(db.collection("interestResponses").doc(`${blockerUid}_${blockedUid}`));
-    batch.delete(db.collection("interestResponses").doc(`${blockedUid}_${blockerUid}`));
-    batch.delete(db.collection("matches").doc(pairId(blockerUid, blockedUid)));
-    batch.delete(db.collection("shortlists").doc(blockerUid).collection("saved").doc(blockedUid));
-    batch.delete(db.collection("shortlists").doc(blockedUid).collection("saved").doc(blockerUid));
-    await batch.commit();
+  const targetRef = db.collection("users").doc(blockedUid);
+  const blockRef = db.collection("blocks").doc(blockerUid).collection("blocked").doc(blockedUid);
 
-    functions.logger.info("Blocked relationship cleanup completed", { blockerUid, blockedUid });
+  await db.runTransaction(async (tx) => {
+    const target = await tx.get(targetRef);
+    if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+
+    tx.set(blockRef, {
+      blockedUid,
+      blockedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    tx.delete(db.collection("interests").doc(`${blockerUid}_${blockedUid}`));
+    tx.delete(db.collection("interests").doc(`${blockedUid}_${blockerUid}`));
+    tx.delete(db.collection("interestResponses").doc(`${blockerUid}_${blockedUid}`));
+    tx.delete(db.collection("interestResponses").doc(`${blockedUid}_${blockerUid}`));
+    tx.delete(db.collection("matches").doc(pairId(blockerUid, blockedUid)));
+    tx.delete(db.collection("shortlists").doc(blockerUid).collection("saved").doc(blockedUid));
+    tx.delete(db.collection("shortlists").doc(blockedUid).collection("saved").doc(blockerUid));
   });
+
+  functions.logger.info("Member blocked and relationship state removed", { blockerUid, blockedUid });
+  return { success: true };
+});
+
+export const unblockUser = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const blockerUid = context.auth?.uid;
+  if (!blockerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const blockedUid = requireTargetUid(data?.targetUid, blockerUid);
+
+  await db.collection("blocks").doc(blockerUid).collection("blocked").doc(blockedUid).delete();
+  return { success: true };
+});
 
 export const submitProfileReport = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
@@ -68,8 +97,6 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
   const target = await db.collection("users").doc(targetUid).get();
   if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
 
-  // One report per reporter/target/day prevents accidental repeated taps and basic spam while
-  // still allowing a member to report new behaviour on a later date.
   const reportRef = db.collection("profileReports").doc(stableId(reporterUid, targetUid, dayKey()));
   const existing = await reportRef.get();
   if (existing.exists) return { success: true, alreadySubmitted: true };
