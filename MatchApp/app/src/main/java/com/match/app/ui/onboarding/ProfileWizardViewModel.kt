@@ -8,6 +8,7 @@ import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
+import com.match.app.domain.profile.ReligionProfileSchemas
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +30,9 @@ data class WizardState(
     val caste: String = "",
     val subCaste: String = "",
     val gothra: String = "",
+    val faithTradition: String = "",
+    val faithSubTradition: String = "",
+    val faithInstitution: String = "",
     val education: String = "",
     val educationField: String = "",
     val institution: String = "",
@@ -101,11 +105,25 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     fun update(state: WizardState) {
-        if (!state.religion.equals(_wizardState.value.religion, ignoreCase = true)) {
+        val previous = _wizardState.value
+        val religionChanged = !state.religion.equals(previous.religion, ignoreCase = true)
+        if (religionChanged) {
             _religionConfirmed.value = false
             _religionConfirmationRequired.value = false
+            _wizardState.value = state.copy(
+                caste = "",
+                subCaste = "",
+                gothra = "",
+                faithTradition = "",
+                faithSubTradition = "",
+                faithInstitution = "",
+                rasi = "",
+                nakshatra = "",
+                manglik = ""
+            )
+        } else {
+            _wizardState.value = state
         }
-        _wizardState.value = state
         _saveError.value = null
     }
 
@@ -132,9 +150,7 @@ class ProfileWizardViewModel @Inject constructor(
         _currentStep.value = (RELIGION_STEP + 1).coerceAtMost(LAST_STEP)
     }
 
-    fun cancelReligionConfirmation() {
-        _religionConfirmationRequired.value = false
-    }
+    fun cancelReligionConfirmation() { _religionConfirmationRequired.value = false }
 
     fun previousStep() {
         persistDraft()
@@ -181,14 +197,8 @@ class ProfileWizardViewModel @Inject constructor(
             val updated = current.applyWizard(state, username)
                 .copy(profileCompleteness = calculateCompleteness(state))
 
-            // Cloud is authoritative. Persist the completed local copy only after the server accepts
-            // it, so the account gate cannot open on a profile that failed to sync. Religion is
-            // confirmed here and becomes write-once in Firestore security rules.
             if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated, confirmReligion = true)
             userDao.update(updated)
-
-            // Own-profile attributes are deliberately NOT copied into partner/discovery filters.
-            // Partner preferences are a separate concept and remain entirely user-controlled.
             session.setCommunitySetupDone(true)
             onComplete()
         } catch (e: Exception) {
@@ -205,13 +215,15 @@ class ProfileWizardViewModel @Inject constructor(
         val safeDraft = if (_religionConfirmed.value) {
             draft
         } else {
-            // Selecting a religion in the UI is not confirmation. Keep canonical religion/community
-            // fields unchanged until the explicit confirmation dialog succeeds.
+            // A temporary picker selection is not canonical religion data until explicit confirmation.
             draft.copy(
                 religion = user.religion,
                 caste = user.caste,
                 subCaste = user.subCaste,
                 gothra = user.gothra,
+                faithTradition = user.faithTradition,
+                faithSubTradition = user.faithSubTradition,
+                faithInstitution = user.faithInstitution,
                 rasi = user.rasi,
                 nakshatra = user.nakshatra,
                 manglik = user.manglik
@@ -265,6 +277,7 @@ class ProfileWizardViewModel @Inject constructor(
         username = username, displayName = displayName, dateOfBirth = dateOfBirth,
         state = state, city = city, motherTongue = motherTongue, bio = bio,
         religion = religion, caste = caste, subCaste = subCaste, gothra = gothra,
+        faithTradition = faithTradition, faithSubTradition = faithSubTradition, faithInstitution = faithInstitution,
         education = education, educationField = educationField, institution = institution,
         graduationYear = graduationYear, profession = profession, occupationCategory = occupationCategory,
         employer = employer, employerType = employerType, incomeBand = incomeBand,
@@ -283,12 +296,17 @@ class ProfileWizardViewModel @Inject constructor(
     private fun UserEntity.applyWizard(s: WizardState, reservedUsername: String): UserEntity {
         val ageFromDob = runCatching { Period.between(LocalDate.parse(s.dateOfBirth.trim()), LocalDate.now()).years }.getOrNull()
         val isNri = s.countryOfResidence.isNotBlank() && !s.countryOfResidence.equals("India", ignoreCase = true)
-        val isHindu = ReligionCategory.fromReligion(s.religion) == ReligionCategory.HINDU
+        val religionCategory = ReligionCategory.fromReligion(s.religion)
+        val isHindu = religionCategory == ReligionCategory.HINDU
+        val schema = ReligionProfileSchemas.forReligion(s.religion)
         return copy(
             username = reservedUsername, displayName = s.displayName.trim(), dateOfBirth = s.dateOfBirth.trim(),
             age = ageFromDob?.takeIf { it in 18..99 } ?: age, state = s.state.trim(), city = s.city.trim(),
             motherTongue = s.motherTongue.trim(), bio = s.bio.trim().take(1000), religion = s.religion.trim(),
             caste = s.caste.trim(), subCaste = s.subCaste.trim(), gothra = if (isHindu) s.gothra.trim() else "",
+            faithTradition = if (schema.primary != null) s.faithTradition.trim().take(120) else "",
+            faithSubTradition = if (schema.secondary != null) s.faithSubTradition.trim().take(120) else "",
+            faithInstitution = if (schema.institution != null) s.faithInstitution.trim().take(160) else "",
             education = s.education.trim(), educationField = s.educationField.trim(), institution = s.institution.trim(),
             graduationYear = s.graduationYear, profession = s.profession.trim(), occupationCategory = s.occupationCategory.trim(),
             employer = s.employer.trim(), employerType = s.employerType.trim(), incomeBand = s.incomeBand.trim(),
@@ -306,8 +324,6 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     private fun calculateCompleteness(s: WizardState): Float {
-        // Completeness uses the shared profile model only. Optional religion-specific fields must not
-        // penalize people from religions where those fields do not apply.
         val checks = listOf(
             s.username.isNotBlank(), s.displayName.isNotBlank(), s.dateOfBirth.isNotBlank(),
             s.state.isNotBlank(), s.city.isNotBlank(), s.motherTongue.isNotBlank(), s.bio.isNotBlank(),
