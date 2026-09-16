@@ -16,8 +16,15 @@ data class MemberPrivacyRelation(
     val contactHidden: Boolean
 )
 
+data class ContactGrant(
+    val viewerUid: String,
+    val phoneAllowed: Boolean,
+    val whatsappAllowed: Boolean
+)
+
 enum class ContactVisibility(val wireValue: String) {
     MUTUAL_MATCHES("mutual_matches"),
+    SELECTED_PEOPLE("selected_people"),
     NOBODY("nobody");
 
     companion object {
@@ -44,13 +51,8 @@ data class ActivityPrivacy(
 )
 
 /**
- * Owner-controlled privacy settings.
- *
- * `privacyRelations/{ownerUid}/members/{viewerUid}` records one-way visibility exceptions.
- * The target member cannot list or read the owner's exception list.
- *
- * `privacySettings/{ownerUid}` stores global privacy choices that trusted backend functions
- * consult before releasing private data such as a phone number or precise activity timestamp.
+ * Owner-controlled privacy settings. Global choices and per-member exceptions/grants are separate:
+ * a hidden member never regains access merely because they have a contact grant.
  */
 @Singleton
 class FirestorePrivacyService @Inject constructor() {
@@ -64,14 +66,16 @@ class FirestorePrivacyService @Inject constructor() {
 
     private fun settings(ownerUid: String) = db.collection("privacySettings").document(ownerUid)
 
+    private fun contactGrant(ownerUid: String, viewerUid: String) =
+        db.collection("contactGrants").document(ownerUid).collection("viewers").document(viewerUid)
+
+    private fun contactGrants(ownerUid: String) =
+        db.collection("contactGrants").document(ownerUid).collection("viewers")
+
     suspend fun setProfileHidden(ownerUid: String, memberUid: String, hidden: Boolean) {
         validate(ownerUid, memberUid)
         relation(ownerUid, memberUid).set(
-            mapOf(
-                "memberUid" to memberUid,
-                "profileHidden" to hidden,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
+            mapOf("memberUid" to memberUid, "profileHidden" to hidden, "updatedAt" to FieldValue.serverTimestamp()),
             SetOptions.merge()
         ).await()
     }
@@ -79,11 +83,7 @@ class FirestorePrivacyService @Inject constructor() {
     suspend fun setContactHidden(ownerUid: String, memberUid: String, hidden: Boolean) {
         validate(ownerUid, memberUid)
         relation(ownerUid, memberUid).set(
-            mapOf(
-                "memberUid" to memberUid,
-                "contactHidden" to hidden,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
+            mapOf("memberUid" to memberUid, "contactHidden" to hidden, "updatedAt" to FieldValue.serverTimestamp()),
             SetOptions.merge()
         ).await()
     }
@@ -101,16 +101,12 @@ class FirestorePrivacyService @Inject constructor() {
     fun observeRelations(ownerUid: String): Flow<List<MemberPrivacyRelation>> = callbackFlow {
         require(ownerUid.isNotBlank()) { "Missing account identity" }
         val registration = relations(ownerUid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                close(error)
-                return@addSnapshotListener
-            }
+            if (error != null) { close(error); return@addSnapshotListener }
             val values = snapshot?.documents?.mapNotNull { doc ->
                 val uid = doc.getString("memberUid")?.takeIf { it.isNotBlank() } ?: doc.id
                 val profileHidden = doc.getBoolean("profileHidden") == true
                 val contactHidden = doc.getBoolean("contactHidden") == true
-                if (!profileHidden && !contactHidden) null
-                else MemberPrivacyRelation(uid, profileHidden, contactHidden)
+                if (!profileHidden && !contactHidden) null else MemberPrivacyRelation(uid, profileHidden, contactHidden)
             }.orEmpty()
             trySend(values)
         }
@@ -120,10 +116,7 @@ class FirestorePrivacyService @Inject constructor() {
     suspend fun setContactVisibility(ownerUid: String, visibility: ContactVisibility) {
         require(ownerUid.isNotBlank()) { "Missing account identity" }
         settings(ownerUid).set(
-            mapOf(
-                "contactVisibility" to visibility.wireValue,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
+            mapOf("contactVisibility" to visibility.wireValue, "updatedAt" to FieldValue.serverTimestamp()),
             SetOptions.merge()
         ).await()
     }
@@ -131,11 +124,40 @@ class FirestorePrivacyService @Inject constructor() {
     fun observeContactVisibility(ownerUid: String): Flow<ContactVisibility> = callbackFlow {
         require(ownerUid.isNotBlank()) { "Missing account identity" }
         val registration = settings(ownerUid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                close(error)
-                return@addSnapshotListener
-            }
+            if (error != null) { close(error); return@addSnapshotListener }
             trySend(ContactVisibility.fromWire(snapshot?.getString("contactVisibility")))
+        }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun setContactGrant(ownerUid: String, viewerUid: String, phoneAllowed: Boolean, whatsappAllowed: Boolean) {
+        validate(ownerUid, viewerUid)
+        if (!phoneAllowed && !whatsappAllowed) {
+            contactGrant(ownerUid, viewerUid).delete().await()
+            return
+        }
+        contactGrant(ownerUid, viewerUid).set(
+            mapOf(
+                "viewerUid" to viewerUid,
+                "phoneAllowed" to phoneAllowed,
+                "whatsappAllowed" to whatsappAllowed,
+                "grantedAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            SetOptions.merge()
+        ).await()
+    }
+
+    fun observeContactGrants(ownerUid: String): Flow<List<ContactGrant>> = callbackFlow {
+        require(ownerUid.isNotBlank()) { "Missing account identity" }
+        val registration = contactGrants(ownerUid).addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            trySend(snapshot?.documents?.mapNotNull { doc ->
+                val viewerUid = doc.getString("viewerUid")?.takeIf { it.isNotBlank() } ?: doc.id
+                val phone = doc.getBoolean("phoneAllowed") == true
+                val whatsapp = doc.getBoolean("whatsappAllowed") == true
+                if (!phone && !whatsapp) null else ContactGrant(viewerUid, phone, whatsapp)
+            }.orEmpty())
         }
         awaitClose { registration.remove() }
     }
@@ -151,10 +173,7 @@ class FirestorePrivacyService @Inject constructor() {
     fun observeActivityPrivacy(ownerUid: String): Flow<ActivityPrivacy> = callbackFlow {
         require(ownerUid.isNotBlank()) { "Missing account identity" }
         val registration = settings(ownerUid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                close(error)
-                return@addSnapshotListener
-            }
+            if (error != null) { close(error); return@addSnapshotListener }
             trySend(
                 ActivityPrivacy(
                     onlineVisibility = ActivityVisibility.fromWire(snapshot?.getString("onlineVisibility")),
@@ -168,10 +187,7 @@ class FirestorePrivacyService @Inject constructor() {
     private suspend fun setActivityField(ownerUid: String, field: String, visibility: ActivityVisibility) {
         require(ownerUid.isNotBlank()) { "Missing account identity" }
         settings(ownerUid).set(
-            mapOf(
-                field to visibility.wireValue,
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
+            mapOf(field to visibility.wireValue, "updatedAt" to FieldValue.serverTimestamp()),
             SetOptions.merge()
         ).await()
     }
