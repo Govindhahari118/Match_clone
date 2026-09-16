@@ -6,12 +6,12 @@ const RETURN_LIMIT = 20;
 const MAX_KEYWORD_LENGTH = 64;
 
 // Only fields intentionally safe for another signed-in member may leave this endpoint. Birth
-// details, astrology inputs, income and exact activity timestamps live in private/server-owned
-// documents and must never be copied into a discovery payload.
+// details, astrology inputs, income, precise activity and billing entitlement stay private.
 const PUBLIC_PROFILE_FIELDS = [
   "firebaseUid", "displayName", "username", "age", "gender", "lookingFor", "city", "bio",
   "religion", "motherTongue", "education", "profession", "maritalStatus", "heightCm",
   "isVerified", "isPremium", "profileViewCount", "caste", "state", "subCaste", "gothra",
+  "faithTradition", "faithSubTradition", "faithInstitution",
   "diet", "familyType", "fatherOccupation", "motherOccupation", "siblings", "smoking",
   "drinking", "personalityType", "hobbies", "spokenLanguages", "videoUrl",
   "residentialStatus", "hasChildren", "boostActiveUntil", "nativeState", "countryOfResidence",
@@ -19,8 +19,7 @@ const PUBLIC_PROFILE_FIELDS = [
   "aboutFamily", "weight", "complexion", "physicalStatus", "familyStatus", "educationField",
   "institution", "graduationYear", "occupationCategory", "employer", "employerType",
   "citizenship", "isNRI", "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl",
-  "profileCompleteness", "verificationLevel", "stealthMode", "showHoroscope",
-  "incomeDisclosure", "subscriptionPlan", "subscriptionExpiry", "matchScore",
+  "profileCompleteness", "verificationLevel", "stealthMode", "showHoroscope", "incomeDisclosure",
 ] as const;
 
 function stringValue(value: unknown): string {
@@ -86,8 +85,6 @@ export const discoverProfiles = functions
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
 
-    // Precise activity is intentionally not used as a client-visible sort key. Freshness is based
-    // on public profile creation order; private presence has its own permission-checked endpoint.
     let query: FirebaseFirestore.Query = db.collection("users")
       .orderBy("createdAt", "desc")
       .limit(SCAN_LIMIT);
@@ -103,8 +100,6 @@ export const discoverProfiles = functions
     ]);
     const outgoing = new Set(outgoingBlocks.docs.map((doc) => doc.id));
 
-    // On the first page, exact @handle lookup can find a member even when that member is not in
-    // the current page. The candidate still passes every privacy/block/gender check.
     let exactProfile: FirebaseFirestore.DocumentSnapshot | null = null;
     if (!cursor && normalizedUsername.length >= 3 && /^[a-z0-9][a-z0-9._]{2,29}$/.test(normalizedUsername)) {
       const registry = await db.collection("usernames").doc(normalizedUsername).get();
