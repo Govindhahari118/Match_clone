@@ -23,6 +23,7 @@ import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.ActivityPrivacy
 import com.match.app.data.remote.ActivityVisibility
+import com.match.app.data.remote.ContactGrant
 import com.match.app.data.remote.ContactVisibility
 import com.match.app.data.remote.FirestorePrivacyService
 import com.match.app.data.remote.FirestoreProfileService
@@ -39,7 +40,9 @@ data class PrivacyMemberUi(
     val displayName: String,
     val city: String,
     val profileHidden: Boolean,
-    val contactHidden: Boolean
+    val contactHidden: Boolean,
+    val phoneGranted: Boolean,
+    val whatsappGranted: Boolean
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -66,19 +69,27 @@ class PrivacyViewModel @Inject constructor(
     private val relations: Flow<List<MemberPrivacyRelation>> = session.firebaseUid.filterNotNull()
         .flatMapLatest(privacy::observeRelations)
 
-    val members: StateFlow<List<PrivacyMemberUi>> = combine(candidateProfiles, relations) { candidates, relationList ->
+    private val contactGrants: Flow<List<ContactGrant>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest(privacy::observeContactGrants)
+
+    val members: StateFlow<List<PrivacyMemberUi>> = combine(candidateProfiles, relations, contactGrants) { candidates, relationList, grantList ->
         val byUid = relationList.associateBy { it.memberUid }
+        val grantsByUid = grantList.associateBy { it.viewerUid }
         val candidateMap = candidates.associateBy { it.firebaseUid }
-        val allUids = (candidateMap.keys + byUid.keys).sortedBy { candidateMap[it]?.displayName?.lowercase() ?: it }
+        val allUids = (candidateMap.keys + byUid.keys + grantsByUid.keys)
+            .sortedBy { candidateMap[it]?.displayName?.lowercase() ?: it }
         allUids.map { uid ->
             val candidate = candidateMap[uid]
             val relation = byUid[uid]
+            val grant = grantsByUid[uid]
             PrivacyMemberUi(
                 uid = uid,
                 displayName = candidate?.displayName?.takeIf { it.isNotBlank() } ?: "Member",
                 city = candidate?.city.orEmpty(),
                 profileHidden = relation?.profileHidden == true,
-                contactHidden = relation?.contactHidden == true
+                contactHidden = relation?.contactHidden == true,
+                phoneGranted = grant?.phoneAllowed == true,
+                whatsappGranted = grant?.whatsappAllowed == true
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -104,6 +115,11 @@ class PrivacyViewModel @Inject constructor(
     fun setContactVisibility(value: ContactVisibility) = privacyUpdate {
         val uid = session.firebaseUid.first() ?: error("Sign in required")
         privacy.setContactVisibility(uid, value)
+    }
+
+    fun setContactGrant(member: PrivacyMemberUi, phoneAllowed: Boolean = member.phoneGranted, whatsappAllowed: Boolean = member.whatsappGranted) = privacyUpdate {
+        val uid = session.firebaseUid.first() ?: error("Sign in required")
+        privacy.setContactGrant(uid, member.uid, phoneAllowed, whatsappAllowed)
     }
 
     fun setOnlineVisibility(value: ActivityVisibility) = privacyUpdate {
@@ -181,8 +197,11 @@ fun PrivacyDashboardScreen(
         MemberVisibilityDialog(
             members = members,
             saving = saving,
+            selectedContactMode = contactVisibility == ContactVisibility.SELECTED_PEOPLE,
             onProfileHidden = vm::setProfileHidden,
             onContactHidden = vm::setContactHidden,
+            onPhoneGranted = { member, allowed -> vm.setContactGrant(member, phoneAllowed = allowed) },
+            onWhatsappGranted = { member, allowed -> vm.setContactGrant(member, whatsappAllowed = allowed) },
             onDismiss = { manageVisibility = false }
         )
     }
@@ -285,50 +304,64 @@ fun PrivacyDashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.PhoneLocked, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text("Who can reveal my contact?", fontWeight = FontWeight.SemiBold)
                             Text(
-                                "A paid member still needs a mutual match and must pass server authorization. You can additionally stop all phone reveals.",
+                                "Contact access always requires a mutual match and server authorization. Selected people lets you grant phone/WhatsApp access member by member.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = contactVisibility == ContactVisibility.MUTUAL_MATCHES,
-                            onClick = { vm.setContactVisibility(ContactVisibility.MUTUAL_MATCHES) },
-                            enabled = !saving,
-                            label = { Text("Mutual matches") }
-                        )
-                        FilterChip(
-                            selected = contactVisibility == ContactVisibility.NOBODY,
-                            onClick = { vm.setContactVisibility(ContactVisibility.NOBODY) },
-                            enabled = !saving,
-                            label = { Text("Nobody") }
-                        )
+                    ContactVisibility.entries.forEach { option ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = contactVisibility == option,
+                                onClick = { vm.setContactVisibility(option) },
+                                enabled = !saving
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                when (option) {
+                                    ContactVisibility.MUTUAL_MATCHES -> "All mutual matches"
+                                    ContactVisibility.SELECTED_PEOPLE -> "Selected people only"
+                                    ContactVisibility.NOBODY -> "Nobody"
+                                }
+                            )
+                        }
+                    }
+                    if (contactVisibility == ContactVisibility.SELECTED_PEOPLE) {
+                        FilledTonalButton(
+                            onClick = { manageVisibility = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Contacts, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Choose people & contact methods")
+                        }
                     }
                 }
             }
 
             val profileHiddenCount = members.count { it.profileHidden }
             val contactHiddenCount = members.count { it.contactHidden }
+            val selectedContactCount = members.count { it.phoneGranted || it.whatsappGranted }
             ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.PersonOff, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Hide from selected members", fontWeight = FontWeight.SemiBold)
+                            Text("Member-specific privacy", fontWeight = FontWeight.SemiBold)
                             Text(
-                                "$profileHiddenCount profile exceptions • $contactHiddenCount contact exceptions",
+                                "$profileHiddenCount profile exceptions • $contactHiddenCount contact exceptions • $selectedContactCount selected contact grants",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Text(
-                        "Like WhatsApp visibility exceptions: selected members can be excluded from seeing your matrimonial profile and/or from revealing your phone. This is one-way and is not the same as blocking.",
+                        "Selected members can be hidden from your profile/contact, or explicitly granted phone/WhatsApp access when Selected people mode is active. Blocking remains a stronger two-way interaction boundary.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -338,7 +371,7 @@ fun PrivacyDashboardScreen(
                     ) {
                         Icon(Icons.Filled.ManageAccounts, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Manage member exceptions")
+                        Text("Manage member privacy")
                     }
                 }
             }
@@ -418,15 +451,8 @@ private fun ActivityVisibilityCard(
                 }
             }
             ActivityVisibility.entries.forEach { option ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = selected == option,
-                        onClick = { onSelected(option) },
-                        enabled = enabled
-                    )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selected == option, onClick = { onSelected(option) }, enabled = enabled)
                     Spacer(Modifier.width(6.dp))
                     Text(option.label, style = MaterialTheme.typography.bodyMedium)
                 }
@@ -439,8 +465,11 @@ private fun ActivityVisibilityCard(
 private fun MemberVisibilityDialog(
     members: List<PrivacyMemberUi>,
     saving: Boolean,
+    selectedContactMode: Boolean,
     onProfileHidden: (String, Boolean) -> Unit,
     onContactHidden: (String, Boolean) -> Unit,
+    onPhoneGranted: (PrivacyMemberUi, Boolean) -> Unit,
+    onWhatsappGranted: (PrivacyMemberUi, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -451,9 +480,9 @@ private fun MemberVisibilityDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Member visibility exceptions") },
+        title = { Text("Member privacy") },
         text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 560.dp)) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it.take(60) },
@@ -493,6 +522,25 @@ private fun MemberVisibilityDialog(
                                             onCheckedChange = { onContactHidden(member.uid, it) },
                                             enabled = !saving
                                         )
+                                    }
+                                    if (selectedContactMode) {
+                                        HorizontalDivider()
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Allow phone", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                            Switch(
+                                                checked = member.phoneGranted,
+                                                onCheckedChange = { onPhoneGranted(member, it) },
+                                                enabled = !saving && !member.contactHidden && !member.profileHidden
+                                            )
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Allow WhatsApp", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                            Switch(
+                                                checked = member.whatsappGranted,
+                                                onCheckedChange = { onWhatsappGranted(member, it) },
+                                                enabled = !saving && !member.contactHidden && !member.profileHidden
+                                            )
+                                        }
                                     }
                                 }
                             }
