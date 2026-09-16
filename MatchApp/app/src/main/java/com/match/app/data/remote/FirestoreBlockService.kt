@@ -1,9 +1,8 @@
 package com.match.app.data.remote
 
-import android.util.Log
-import com.google.firebase.firestore.FieldValue
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,49 +14,33 @@ import javax.inject.Singleton
  * Firestore service for blocked users.
  *
  * Collection: `blocks/{blockerUid}/blocked/{blockedUid}`
+ * Mutations are trusted callable operations because a block also atomically removes relationship
+ * state that ordinary clients are not allowed to mutate directly.
  */
 @Singleton
 class FirestoreBlockService @Inject constructor() {
 
+    private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
     private fun blockedCol(blockerUid: String) =
         db.collection("blocks").document(blockerUid).collection("blocked")
 
-    /** Block a user and cascade-remove any interests / matches between them. */
     suspend fun block(blockerUid: String, blockedUid: String) {
         if (blockerUid.isBlank() || blockedUid.isBlank()) return
-        blockedCol(blockerUid).document(blockedUid).set(
-            mapOf(
-                "blockedUid" to blockedUid,
-                "blockedAt" to FieldValue.serverTimestamp()
-            )
-        ).await()
-
-        // Best-effort cleanup: delete both-direction interests and any match
-        try {
-            val interestsCol = db.collection("interests")
-            val matchesCol = db.collection("matches")
-
-            // Delete interest docs in both directions
-            val fwd = "${blockerUid}_${blockedUid}"
-            val rev = "${blockedUid}_${blockerUid}"
-            interestsCol.document(fwd).delete().await()
-            interestsCol.document(rev).delete().await()
-
-            // Delete match (deterministic doc ID = sorted UIDs joined by underscore)
-            val matchId = listOf(blockerUid, blockedUid).sorted().joinToString("_")
-            val matchDoc = matchesCol.document(matchId).get().await()
-            if (matchDoc.exists()) matchesCol.document(matchId).delete().await()
-        } catch (e: Exception) {
-            Log.w("FirestoreBlockService", "Cascade cleanup on block failed", e)
-        }
+        require(auth.currentUser?.uid == blockerUid) { "Block owner does not match signed-in account" }
+        functions.getHttpsCallable("blockUser")
+            .call(mapOf("targetUid" to blockedUid))
+            .await()
     }
 
-    /** Unblock a user. */
     suspend fun unblock(blockerUid: String, blockedUid: String) {
         if (blockerUid.isBlank() || blockedUid.isBlank()) return
-        blockedCol(blockerUid).document(blockedUid).delete().await()
+        require(auth.currentUser?.uid == blockerUid) { "Block owner does not match signed-in account" }
+        functions.getHttpsCallable("unblockUser")
+            .call(mapOf("targetUid" to blockedUid))
+            .await()
     }
 
     /** Check if a user is blocked. */
