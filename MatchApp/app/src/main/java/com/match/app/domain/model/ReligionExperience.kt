@@ -9,6 +9,10 @@ enum class ReligionCategory(val storageKey: String, val label: String) {
     HINDU("HINDU", "Hindu"),
     CHRISTIAN("CHRISTIAN", "Christian"),
     MUSLIM("MUSLIM", "Muslim"),
+    SIKH("SIKH", "Sikh"),
+    BUDDHIST("BUDDHIST", "Buddhist"),
+    JAIN("JAIN", "Jain"),
+    PARSI("PARSI", "Parsi / Zoroastrian"),
     OTHER("OTHER", "Other");
 
     companion object {
@@ -18,6 +22,10 @@ enum class ReligionCategory(val storageKey: String, val label: String) {
                 normalized.contains("hindu") -> HINDU
                 normalized.contains("christ") || normalized.contains("catholic") || normalized.contains("orthodox") -> CHRISTIAN
                 normalized.contains("muslim") || normalized.contains("islam") -> MUSLIM
+                normalized.contains("sikh") -> SIKH
+                normalized.contains("buddh") -> BUDDHIST
+                normalized.contains("jain") -> JAIN
+                normalized.contains("parsi") || normalized.contains("zoroastr") -> PARSI
                 else -> OTHER
             }
         }
