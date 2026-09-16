@@ -13,6 +13,8 @@ import com.match.app.data.remote.FirestoreInterestService
 import com.match.app.data.remote.FirestoreProfileService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -23,7 +25,7 @@ class SocialRepository @Inject constructor(
     private val likeDao: LikeDao,
     private val blockDao: BlockDao,
     private val userDao: UserDao,
-    private val notificationHelper: NotificationHelper,
+    @Suppress("unused") private val notificationHelper: NotificationHelper,
     private val firestoreInterest: FirestoreInterestService,
     private val firestoreBlock: FirestoreBlockService,
     private val firestoreProfile: FirestoreProfileService
@@ -55,13 +57,11 @@ class SocialRepository @Inject constructor(
             likeDao.unlike(from, to)
             false
         } else {
-            val theirProfile = userDao.findById(to)
-            val myProfile = userDao.findById(from)
             val isMutual = syncInterestToFirestore(from, to, isLike = true)
             if (!isMutual && !remoteInterestExists(from, to)) throw IllegalStateException("Interest could not be sent")
             likeDao.like(LikeEntity(fromUserId = from, toUserId = to))
-            if (isMutual || isLiked(to, from)) notificationHelper.notifyMutualMatch(theirProfile?.displayName ?: "Someone")
-            else notificationHelper.notifyInterestReceived(myProfile?.displayName ?: "Someone")
+            // Relationship notifications are produced from trusted Firebase events. Do not fabricate
+            // a local "received"/"mutual" notification before the remote mutation is authoritative.
             true
         }
     }
@@ -81,10 +81,9 @@ class SocialRepository @Inject constructor(
     fun observeIncoming(me: Long): Flow<Int> = likeDao.observeIncomingCount(me)
 
     /**
-     * Interest documents are visible to their participants even after a profile is later hidden.
-     * Therefore every list hydration performs a fresh server-authorized profile read instead of
-     * trusting an old Room row. A hide/block immediately removes that member card on the next
-     * snapshot, while a stealth sender remains visible only through the explicit-request exception.
+     * Interest documents are visible to their participants only while the relationship is not
+     * blocked. Every list hydration performs a fresh server-authorized profile read instead of
+     * trusting an old Room row.
      */
     fun observeReceivedInterestsRemote(myUid: String): Flow<List<Long>> =
         firestoreInterest.observeIncomingInterests(myUid).map { docs -> cacheAuthorizedRemoteUids(docs.map { it.fromUid }) }
@@ -107,6 +106,10 @@ class SocialRepository @Inject constructor(
     suspend fun block(me: Long, them: Long) = withContext(Dispatchers.IO) {
         syncBlockToFirestore(me, them, isBlock = true)
         blockDao.block(BlockEntity(blockerId = me, blockedId = them))
+        // Local relationship cache follows the authoritative block immediately. The backend trigger
+        // performs the same cleanup remotely for every device.
+        runCatching { likeDao.unlike(me, them) }
+        runCatching { likeDao.unlike(them, me) }
     }
 
     suspend fun unblock(me: Long, them: Long) = withContext(Dispatchers.IO) {
@@ -114,18 +117,48 @@ class SocialRepository @Inject constructor(
         blockDao.unblock(me, them)
     }
 
-    suspend fun isBlocked(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) { blockDao.isBlocked(me, them) }
-    suspend fun blockedIds(me: Long): List<Long> = withContext(Dispatchers.IO) { blockDao.blockedIds(me) }
-    fun observeBlockedIds(me: Long): Flow<List<Long>> = blockDao.observeBlockedIds(me)
+    suspend fun isBlocked(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) {
+        val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
+        val themUid = userDao.findById(them)?.firebaseUid.orEmpty()
+        if (meUid.isNotBlank() && themUid.isNotBlank()) {
+            val remote = runCatching { firestoreBlock.isBlocked(meUid, themUid) }.getOrNull()
+            if (remote != null) {
+                if (remote) blockDao.block(BlockEntity(blockerId = me, blockedId = them))
+                else blockDao.unblock(me, them)
+                return@withContext remote
+            }
+        }
+        blockDao.isBlocked(me, them)
+    }
+
+    suspend fun blockedIds(me: Long): List<Long> = withContext(Dispatchers.IO) {
+        val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
+        if (meUid.isBlank()) return@withContext blockDao.blockedIds(me)
+        val remoteUids = runCatching { firestoreBlock.getBlockedUids(meUid) }.getOrNull()
+            ?: return@withContext blockDao.blockedIds(me)
+        remoteUids.mapNotNull { uid -> userDao.findByFirebaseUid(uid)?.id }
+    }
+
+    fun observeBlockedIds(me: Long): Flow<List<Long>> = flow {
+        val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
+        if (meUid.isBlank()) {
+            emitAll(blockDao.observeBlockedIds(me))
+            return@flow
+        }
+        emitAll(
+            firestoreBlock.observeBlockedUids(meUid).map { remoteUids ->
+                remoteUids.mapNotNull { uid -> userDao.findByFirebaseUid(uid)?.id }
+            }
+        )
+    }
+
     fun observeReceivedInterests(me: Long): Flow<List<Long>> = likeDao.observeReceivedInterests(me)
     fun observeSentInterests(me: Long): Flow<List<Long>> = likeDao.observeSentInterests(me)
 
     suspend fun superLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) {
-        val myProfile = userDao.findById(from)
         val isMutual = syncInterestToFirestore(from, to, isLike = true, isSuperLike = true)
         if (!isMutual && !remoteInterestExists(from, to)) throw IllegalStateException("Super Interest could not be sent")
         if (!likeDao.isLiked(from, to)) likeDao.like(LikeEntity(fromUserId = from, toUserId = to, isSuperLike = true))
-        notificationHelper.notifyInterestReceived("⭐ ${myProfile?.displayName ?: "Someone"} sent a Super Interest!")
         isMutual
     }
 
