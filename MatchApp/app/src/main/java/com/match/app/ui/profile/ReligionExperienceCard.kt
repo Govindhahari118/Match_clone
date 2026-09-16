@@ -44,7 +44,8 @@ class ReligionExperienceViewModel @Inject constructor(
         session.setReligionLenses(effective)
     }
 
-    fun setLocked(locked: Boolean, profileReligion: String) = viewModelScope.launch {
+    /** This lock belongs only to discovery defaults; it never changes or unlocks profile religion. */
+    fun setDiscoveryLocked(locked: Boolean, profileReligion: String) = viewModelScope.launch {
         if (locked) {
             val category = ReligionCategory.fromReligion(profileReligion)
             session.setReligionExperience(preference.value.copy(selected = setOf(category), locked = true))
@@ -53,31 +54,21 @@ class ReligionExperienceViewModel @Inject constructor(
         }
     }
 
-    fun setThemeEnabled(enabled: Boolean, profileReligion: String) = viewModelScope.launch {
-        val current = preference.value
-        if (enabled && current.selected.isEmpty()) {
-            session.setReligionExperience(
-                current.copy(
-                    selected = setOf(ReligionCategory.fromReligion(profileReligion)),
-                    religionThemeEnabled = true
-                )
-            )
-        } else {
-            session.setReligionThemeEnabled(enabled)
-        }
+    /** Appearance is independent from discovery lenses and cannot mutate profile identity. */
+    fun setThemeEnabled(enabled: Boolean) = viewModelScope.launch {
+        session.setReligionThemeEnabled(enabled)
     }
 }
 
 /**
- * Profile-level religion controls. Declared religion is a profile field; discovery
- * lenses are separate preferences. Locking is explicit and reversible. Religion-
- * inspired styling is opt-in and the neutral matrimony theme remains the default.
+ * Profile-level religion experience controls. The declared religion is protected canonical profile
+ * data; discovery lenses and appearance are independent, reversible preferences.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReligionExperienceCard(
     profileReligion: String,
-    onReligionChange: (ReligionCategory) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onReligionChange: (ReligionCategory) -> Unit = {},
     vm: ReligionExperienceViewModel = hiltViewModel()
 ) {
     val preference by vm.preference.collectAsState()
@@ -94,27 +85,31 @@ fun ReligionExperienceCard(
                 Column(Modifier.weight(1f)) {
                     Text("Religion & discovery", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Text(
-                        "Choose your declared religion, then decide whether discovery should stay locked to it.",
+                        "Your confirmed religion is protected. Discovery and appearance preferences remain separate and reversible.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Icon(if (preference.locked) Icons.Filled.Lock else Icons.Filled.LockOpen, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Filled.Lock, "Confirmed religion", tint = MaterialTheme.colorScheme.primary)
             }
 
-            Text("My religion", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReligionCategory.entries.forEach { category ->
-                    FilterChip(
-                        selected = declared == category,
-                        onClick = { if (declared != category) onReligionChange(category) },
-                        label = { Text(category.label) }
-                    )
-                }
-            }
+            OutlinedTextField(
+                value = declared.label,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("My religion") },
+                trailingIcon = { Icon(Icons.Filled.Lock, "Protected profile information") },
+                supportingText = { Text("If this is incorrect, use the protected support correction process.") },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             HorizontalDivider()
             Text("Discovery communities", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                "These choices affect discovery only. They do not change your own religion.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ReligionCategory.entries.forEach { category ->
                     FilterChip(
@@ -127,34 +122,34 @@ fun ReligionExperienceCard(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(if (preference.locked) Icons.Filled.Lock else Icons.Filled.LockOpen, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Lock to my religion", fontWeight = FontWeight.SemiBold)
+                    Text("Lock discovery to my religion", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "When enabled, Home and Discover default to ${declared.label} only.",
+                        "When enabled, Home and Discover default to ${declared.label} only. This is not the profile religion lock.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = preference.locked, onCheckedChange = { vm.setLocked(it, profileReligion) })
+                Switch(checked = preference.locked, onCheckedChange = { vm.setDiscoveryLocked(it, profileReligion) })
             }
 
+            HorizontalDivider()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Palette, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Religion-inspired theme", fontWeight = FontWeight.SemiBold)
+                    Text("Follow my religion theme", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Optional visual styling for the active religion. The standard matrimony theme is the default.",
+                        "Presentation only. Turning this on or off never changes religion, matching data, privacy, prices or entitlements.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
                     checked = preference.religionThemeEnabled,
-                    onCheckedChange = { vm.setThemeEnabled(it, profileReligion) },
-                    enabled = effective.size == 1
+                    onCheckedChange = vm::setThemeEnabled
                 )
             }
         }

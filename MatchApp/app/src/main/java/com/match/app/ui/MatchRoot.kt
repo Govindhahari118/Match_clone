@@ -13,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -27,8 +26,10 @@ import androidx.navigation.compose.rememberNavController
 import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.ReligionProfileRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionExperiencePreference
+import com.match.app.domain.model.ReligionId
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -39,27 +40,23 @@ import com.match.app.ui.onboarding.ProfileWizardScreen
 import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.MatchTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 object Routes {
-    const val AUTH_GRAPH  = "auth"
-    const val SIGN_IN     = "sign_in"
-    const val SIGN_UP     = "sign_up"
-    const val ONBOARDING  = "onboarding"
-    const val MAIN_GRAPH  = "main"
+    const val AUTH_GRAPH = "auth"
+    const val SIGN_IN = "sign_in"
+    const val SIGN_UP = "sign_up"
+    const val ONBOARDING = "onboarding"
+    const val MAIN_GRAPH = "main"
 }
 
 @HiltViewModel
 class RootViewModel @Inject constructor(
     private val session: SessionStore,
     private val connectivity: ConnectivityObserver,
+    private val religionProfileRepository: ReligionProfileRepository,
     userDao: UserDao
 ) : ViewModel() {
     val userId = session.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -74,17 +71,42 @@ class RootViewModel @Inject constructor(
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    private val signedInUser = session.userId
+        .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Canonical profile religion. Discovery-lens choices never drive the visual theme. */
+    val profileReligion = signedInUser
+        .map { ReligionId.fromProfileValue(it?.religion) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Null means the authoritative Firestore confirmation state has not loaded yet. Keeping this
+     * tri-state prevents a legacy account from flashing into the wizard before its lock metadata
+     * arrives from Firestore.
+     */
+    val religionConfirmed: StateFlow<Boolean?> = signedInUser
+        .flatMapLatest { user ->
+            val uid = user?.firebaseUid.orEmpty()
+            if (uid.isBlank()) {
+                flowOf(null)
+            } else {
+                religionProfileRepository.observeConfirmed(uid)
+                    .map<Boolean, Boolean?> { it }
+                    .catch { emit(false) }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     /** Prevent auth/main route flashes while DataStore restores the existing signed-in session. */
     val sessionReady = combine(session.onboarded, session.userId) { _, _ -> true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
      * Profile completion is account-scoped and derived from the signed-in user's actual persisted
-     * profile. It intentionally does not use the old device-global communitySetupDone preference,
-     * which could be inherited by a different account on the same phone.
+     * profile. It intentionally does not use the old device-global communitySetupDone preference.
      */
-    val profileSetupComplete = session.userId
-        .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
+    val profileSetupComplete = signedInUser
         .map { it?.isRequiredProfileComplete() == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -101,7 +123,7 @@ class RootViewModel @Inject constructor(
             state.isNotBlank() &&
             city.trim().length >= 2 &&
             motherTongue.isNotBlank() &&
-            religion.isNotBlank() &&
+            ReligionId.fromProfileValue(religion) != null &&
             education.isNotBlank() &&
             profession.trim().length >= 2 &&
             heightCm in 90..250
@@ -113,6 +135,8 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val darkMode by vm.darkMode.collectAsState()
     val paletteKey by vm.palette.collectAsState()
     val religionExperience by vm.religionExperience.collectAsState()
+    val profileReligion by vm.profileReligion.collectAsState()
+    val religionConfirmed by vm.religionConfirmed.collectAsState()
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
 
@@ -121,9 +145,14 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         vm.touchActivity()
     }
 
-    val selectedReligion = religionExperience.selected.singleOrNull()
-    val effectivePalette = if (religionExperience.religionThemeEnabled && selectedReligion != null) {
-        AppPalette.forReligion(selectedReligion)
+    // Automatic religion styling follows only a confirmed canonical profile religion. Search and
+    // discovery preferences remain independent, and unconfirmed/legacy accounts stay neutral.
+    val effectivePalette = if (
+        religionExperience.religionThemeEnabled &&
+        religionConfirmed == true &&
+        profileReligion != null
+    ) {
+        AppPalette.forReligion(checkNotNull(profileReligion))
     } else {
         AppPalette.fromKey(paletteKey)
     }
@@ -157,7 +186,8 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                Icons.Filled.CloudOff, null,
+                                Icons.Filled.CloudOff,
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -173,18 +203,24 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
 
                     Box(Modifier.weight(1f)) {
                         when {
-                            !sessionReady -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
+                            !sessionReady -> FullScreenLoading()
                             !onboarded -> OnboardingScreen(onDone = {})
                             !loggedIn -> AuthNav()
-                            !profileSetupComplete -> ProfileWizardScreen(onComplete = {})
+                            religionConfirmed == null -> FullScreenLoading()
+                            !profileSetupComplete || religionConfirmed != true -> ProfileWizardScreen(onComplete = {})
                             else -> MainShell()
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FullScreenLoading() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
     }
 }
 

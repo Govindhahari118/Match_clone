@@ -1,5 +1,7 @@
 package com.match.app.domain.profile
 
+import com.match.app.domain.model.ReligionId
+
 /**
  * Shared catalog for the one-app, all-India onboarding and discovery experience.
  *
@@ -24,10 +26,8 @@ object IndiaProfileCatalog {
         "Sanskrit", "Santali", "Sindhi", "Tamil", "Telugu", "Urdu", "English", "Other"
     )
 
-    val religions = listOf(
-        "Hindu", "Muslim", "Christian", "Sikh", "Jain", "Buddhist", "Parsi / Zoroastrian",
-        "Jewish", "Spiritual / Other", "No religion", "Prefer not to say"
-    )
+    /** Display labels only. Persist [ReligionId.storageKey] in new canonical identity data. */
+    val religions = ReligionId.entries.map { it.label }
 
     val maritalStatuses = listOf(
         "Never Married", "Divorced", "Widowed", "Awaiting Divorce", "Annulled"
@@ -82,17 +82,19 @@ object IndiaProfileCatalog {
     }.distinct()
 
     /** Optional editable community shortcuts. Members can always type a community not listed. */
-    fun communitySuggestions(religion: String): List<String> = when (religion) {
-        "Hindu" -> listOf(
+    fun communitySuggestions(religion: String): List<String> = when (ReligionId.fromProfileValue(religion)) {
+        ReligionId.HINDU -> listOf(
             "Brahmin", "Reddy", "Kamma", "Kapu", "Naidu", "Velama", "Lingayat", "Vokkaliga",
             "Iyer", "Iyengar", "Nair", "Pillai", "Mudaliar", "Gounder", "Maratha", "Rajput",
             "Jat", "Yadav", "Bania / Vaishya", "Kayastha", "Other"
         )
-        "Muslim" -> listOf("Sunni", "Shia", "Other / Prefer self-description")
-        "Christian" -> listOf("Catholic", "Orthodox", "Protestant", "Pentecostal", "Other")
-        "Sikh" -> listOf("Jat Sikh", "Khatri", "Arora", "Ramgarhia", "Other")
-        "Jain" -> listOf("Digambar", "Shwetambar", "Other")
-        "Buddhist" -> listOf("Buddhist", "Other")
-        else -> listOf("Other")
+        ReligionId.MUSLIM -> listOf("Sunni", "Shia", "Other / Prefer self-description")
+        ReligionId.CHRISTIAN -> listOf("Catholic", "Orthodox", "Protestant", "Pentecostal", "Other")
+        ReligionId.SIKH -> listOf("Jat Sikh", "Khatri", "Arora", "Ramgarhia", "Other")
+        ReligionId.JAIN -> listOf("Digambar", "Shwetambar", "Other")
+        ReligionId.BUDDHIST -> listOf("Buddhist", "Other")
+        ReligionId.PARSI_ZOROASTRIAN -> listOf("Parsi / Zoroastrian", "Other")
+        ReligionId.OTHER -> listOf("Other")
+        ReligionId.PREFER_NOT_TO_SAY, null -> emptyList()
     }
 }
