@@ -24,6 +24,10 @@ enum class AppPalette(val label: String, val swatch: Color) {
     HINDU   ("Hindu",    Color(0xFFC76B00)),
     CHRISTIAN("Christian", Color(0xFF315E8A)),
     MUSLIM  ("Muslim",   Color(0xFF17705A)),
+    SIKH    ("Sikh",     Color(0xFFB77900)),
+    BUDDHIST("Buddhist", Color(0xFF8A3B12)),
+    JAIN    ("Jain",     Color(0xFFA13D4A)),
+    PARSI   ("Parsi",    Color(0xFF4B5AA7)),
     COMMUNITY("Community", Color(0xFF6D4C7D));
 
     companion object {
@@ -34,6 +38,10 @@ enum class AppPalette(val label: String, val swatch: Color) {
             ReligionCategory.HINDU -> HINDU
             ReligionCategory.CHRISTIAN -> CHRISTIAN
             ReligionCategory.MUSLIM -> MUSLIM
+            ReligionCategory.SIKH -> SIKH
+            ReligionCategory.BUDDHIST -> BUDDHIST
+            ReligionCategory.JAIN -> JAIN
+            ReligionCategory.PARSI -> PARSI
             ReligionCategory.OTHER -> COMMUNITY
         }
     }
@@ -139,6 +147,26 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         secondary = Color(0xFF78613A), secondaryContainer = Color(0xFFF2E2C2), onSecondaryContainer = Color(0xFF3D2D12),
         tertiary = Color(0xFF386A74),
         dark = dark
+    )
+    AppPalette.SIKH -> scheme(
+        primary = Color(0xFF9A6700), primaryContainer = Color(0xFFFFE7A8), onPrimaryContainer = Color(0xFF352300),
+        secondary = Color(0xFF3D5268), secondaryContainer = Color(0xFFDCE7F1), onSecondaryContainer = Color(0xFF172A3B),
+        tertiary = Color(0xFF735C00), dark = dark
+    )
+    AppPalette.BUDDHIST -> scheme(
+        primary = Color(0xFF8A3B12), primaryContainer = Color(0xFFFFDBCA), onPrimaryContainer = Color(0xFF3A1000),
+        secondary = Color(0xFF8A6D00), secondaryContainer = Color(0xFFFFEFAF), onSecondaryContainer = Color(0xFF2D2400),
+        tertiary = Color(0xFF5C6840), dark = dark
+    )
+    AppPalette.JAIN -> scheme(
+        primary = Color(0xFFA13D4A), primaryContainer = Color(0xFFFFDADD), onPrimaryContainer = Color(0xFF41000A),
+        secondary = Color(0xFF826500), secondaryContainer = Color(0xFFFFEFAE), onSecondaryContainer = Color(0xFF2A2100),
+        tertiary = Color(0xFF52664B), dark = dark
+    )
+    AppPalette.PARSI -> scheme(
+        primary = Color(0xFF4B5AA7), primaryContainer = Color(0xFFE0E3FF), onPrimaryContainer = Color(0xFF101A58),
+        secondary = Color(0xFF8A6500), secondaryContainer = Color(0xFFFFE9A9), onSecondaryContainer = Color(0xFF2D2100),
+        tertiary = Color(0xFF4C6658), dark = dark
     )
     AppPalette.COMMUNITY -> scheme(
         primary = Color(0xFF6D4C7D), primaryContainer = Color(0xFFEEDDF5), onPrimaryContainer = Color(0xFF351A42),
