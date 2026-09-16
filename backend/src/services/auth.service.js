@@ -1,198 +1,301 @@
-const prisma = require('../config/prisma'); // Import singleton
+const crypto = require('crypto');
+const prisma = require('../config/prisma');
 const { generateTokens } = require('../utils/jwt');
-const { hashPassword, comparePassword } = require('../utils/password');
+const { comparePassword } = require('../utils/password');
 const admin = require('../config/firebase');
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+function appError(message, statusCode = 400) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
+
+function otpSecret() {
+    const secret = process.env.OTP_HASH_SECRET || process.env.JWT_SECRET;
+    if (!secret) throw appError('OTP security secret is not configured', 503);
+    return secret;
+}
+
+function hashOtp(phone, otp) {
+    return crypto.createHmac('sha256', otpSecret()).update(`${phone}:${otp}`).digest('hex');
+}
+
+function safeEqualHex(a, b) {
+    const left = Buffer.from(String(a || ''), 'hex');
+    const right = Buffer.from(String(b || ''), 'hex');
+    return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
+}
+
+async function deliverOtp(phone, otp, type) {
+    if (process.env.OTP_WEBHOOK_URL) {
+        const response = await fetch(process.env.OTP_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...(process.env.OTP_WEBHOOK_TOKEN ? { authorization: `Bearer ${process.env.OTP_WEBHOOK_TOKEN}` } : {}),
+            },
+            body: JSON.stringify({ phone, otp, type }),
+        });
+        if (!response.ok) throw appError('OTP delivery provider failed', 503);
+        return { delivered: true, devOtp: null };
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+        throw appError('OTP delivery provider is not configured', 503);
+    }
+
+    // Development only. Never expose or log OTPs in production.
+    console.warn(`[DEV OTP] ${phone}: ${otp}`);
+    return { delivered: true, devOtp: otp };
+}
+
+async function latestOtpIssue(userId) {
+    return prisma.auditLog.findFirst({
+        where: { userId, action: 'otp_issued' },
+        orderBy: { createdAt: 'desc' },
+    });
+}
+
 const authService = {
-    // Request OTP for phone (signup/login)
-    async requestOtp(phone, type = 'signup') {
-        // Check if user exists or create placeholder
+    async requestOtp(phoneInput, type = 'signup') {
+        const phone = String(phoneInput || '').trim();
+        const normalizedType = type === 'login' ? 'login' : 'signup';
         let user = await prisma.user.findUnique({ where: { phone } });
 
-        // For MVP/Dev, we use a fixed OTP '123456' or generate random
-        const otp = '123456';
-        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
-
+        if (!user && normalizedType === 'login') throw appError('User not found. Please sign up.', 404);
         if (!user) {
-            if (type === 'login') {
-                throw new Error('User not found. Please sign up.');
-            }
-            // Create temporary user record
             user = await prisma.user.create({
-                data: {
-                    phone,
-                    isVerified: false,
-                    verificationCode: otp,
-                    // We can store expiry if we add a field, or rely on created_at logic
-                }
-            });
-        } else {
-            // Update existing user
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { verificationCode: otp }
+                data: { phone, isVerified: false, isActive: true },
             });
         }
+        if (user.isBanned) throw appError('Account access is restricted', 403);
 
-        return {
-            otpId: user.id, // Using user ID as reference for simplicity
-            message: `OTP sent to ${phone}`,
-            expiresIn: 600
-        };
+        const previous = await latestOtpIssue(user.id);
+        if (previous && Date.now() - new Date(previous.createdAt).getTime() < OTP_RESEND_MS) {
+            const remaining = Math.ceil((OTP_RESEND_MS - (Date.now() - new Date(previous.createdAt).getTime())) / 1000);
+            throw appError(`Please wait ${remaining}s before requesting another OTP`, 429);
+        }
+
+        const otp = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+        const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+        const verificationCode = hashOtp(phone, otp);
+
+        await prisma.$transaction([
+            prisma.user.update({ where: { id: user.id }, data: { verificationCode } }),
+            prisma.auditLog.create({
+                data: {
+                    userId: user.id,
+                    action: 'otp_issued',
+                    resourceType: 'auth',
+                    resourceId: user.id,
+                    changes: { type: normalizedType, expiresAt: expiresAt.toISOString() },
+                },
+            }),
+        ]);
+
+        try {
+            const delivery = await deliverOtp(phone, otp, normalizedType);
+            return {
+                otpId: user.id,
+                message: `OTP sent to ${phone}`,
+                expiresIn: Math.floor(OTP_TTL_MS / 1000),
+                resendAfter: Math.floor(OTP_RESEND_MS / 1000),
+                devOtp: delivery.devOtp,
+            };
+        } catch (error) {
+            await prisma.$transaction([
+                prisma.user.update({ where: { id: user.id }, data: { verificationCode: null } }),
+                prisma.auditLog.create({
+                    data: {
+                        userId: user.id,
+                        action: 'otp_delivery_failed',
+                        resourceType: 'auth',
+                        resourceId: user.id,
+                    },
+                }),
+            ]);
+            throw error;
+        }
     },
 
-    // Verify OTP
-    async verifyOtp(phone, otp) {
+    async verifyOtp(phoneInput, otpInput) {
+        const phone = String(phoneInput || '').trim();
+        const otp = String(otpInput || '').trim();
         const user = await prisma.user.findUnique({ where: { phone } });
+        if (!user) throw appError('User not found', 404);
+        if (!user.verificationCode) throw appError('No active OTP request. Request a new OTP.', 400);
+        if (user.isBanned) throw appError('Account access is restricted', 403);
 
-        if (!user) {
-            throw new Error('User not found');
+        const issue = await latestOtpIssue(user.id);
+        const expiresAt = issue?.changes?.expiresAt ? new Date(issue.changes.expiresAt) : null;
+        if (!issue || !expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
+            await prisma.user.update({ where: { id: user.id }, data: { verificationCode: null } });
+            throw appError('OTP expired. Request a new OTP.', 400);
         }
 
-        // In production, check expiry
-        if (user.verificationCode !== otp) {
-            throw new Error('Invalid OTP');
-        }
-
-        // Mark verified
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                isVerified: true,
-                verificationCode: null, // Clear OTP
-                lastLogin: new Date()
-            }
+        const failedAttempts = await prisma.auditLog.count({
+            where: {
+                userId: user.id,
+                action: 'otp_verification_failed',
+                createdAt: { gte: issue.createdAt },
+            },
         });
+        if (failedAttempts >= OTP_MAX_ATTEMPTS) {
+            await prisma.user.update({ where: { id: user.id }, data: { verificationCode: null } });
+            throw appError('Too many incorrect attempts. Request a new OTP.', 429);
+        }
 
-        // Check if new user (no profile details)
+        const candidateHash = hashOtp(phone, otp);
+        if (!safeEqualHex(user.verificationCode, candidateHash)) {
+            await prisma.auditLog.create({
+                data: {
+                    userId: user.id,
+                    action: 'otp_verification_failed',
+                    resourceType: 'auth',
+                    resourceId: user.id,
+                },
+            });
+            throw appError('Invalid OTP', 400);
+        }
+
+        const now = new Date();
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: user.id },
+                data: { isVerified: true, verificationCode: null, lastLogin: now, lastActiveAt: now },
+            }),
+            prisma.verification.upsert({
+                where: { userId_type: { userId: user.id, type: 'phone' } },
+                update: { status: 'verified', verifiedAt: now, rejectionReason: null },
+                create: { userId: user.id, type: 'phone', status: 'verified', verifiedAt: now },
+            }),
+            prisma.auditLog.create({
+                data: { userId: user.id, action: 'otp_verified', resourceType: 'auth', resourceId: user.id },
+            }),
+        ]);
+
         const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
-        const isNewUser = !profile;
-
-        // Generate tokens
         const tokens = generateTokens(user.id, user.role);
-
         return {
             user: {
                 id: user.id,
                 phone: user.phone,
-                isNewUser,
-                profileCompletion: profile ? profile.completionPercentage : 0
+                isNewUser: !profile,
+                profileCompletion: profile?.completionPercentage || 0,
             },
             ...tokens,
-            userId: user.id // Returning user_id at top level for convenience
+            userId: user.id,
         };
     },
 
-    // Email Login
     async loginEmail(email, password) {
         const user = await prisma.user.findUnique({ where: { email } });
-
-        if (!user || !user.passwordHash) {
-            throw new Error('Invalid credentials');
+        if (!user || !user.passwordHash || !(await comparePassword(password, user.passwordHash))) {
+            throw appError('Invalid credentials', 401);
         }
+        if (user.isBanned) throw appError('Account access is restricted', 403);
 
-        const isMatch = await comparePassword(password, user.passwordHash);
-        if (!isMatch) {
-            throw new Error('Invalid credentials');
-        }
-
-        // Update last login
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { lastLogin: new Date() }
-        });
-
+        const now = new Date();
+        await prisma.user.update({ where: { id: user.id }, data: { lastLogin: now, lastActiveAt: now } });
         const tokens = generateTokens(user.id, user.role);
-        return {
-            user: {
-                id: user.id,
-                email: user.email,
-                role: user.role
-            },
-            ...tokens
-        };
+        return { user: { id: user.id, email: user.email, role: user.role }, ...tokens };
     },
 
-    // Firebase Login (Mobile & Social)
     async loginWithFirebase(idToken) {
         try {
-            // 1. Verify Token
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            const { uid, email, phone_number, name, picture } = decodedToken;
+            const decoded = await admin.auth().verifyIdToken(idToken);
+            const { uid, email, email_verified, phone_number, name, picture } = decoded;
+            const identityCandidates = [{ socialId: uid }];
+            if (email) identityCandidates.push({ email });
+            if (phone_number) identityCandidates.push({ phone: phone_number });
 
-            // 2. Check if user exists by socialId (uid) or email/phone
-            let user = await prisma.user.findFirst({
-                where: {
-                    OR: [
-                        { socialId: uid },
-                        { email: email || undefined }, // undefined to avoid matching nulls
-                        { phone: phone_number || undefined }
-                    ]
-                }
-            });
-
+            let user = await prisma.user.findFirst({ where: { OR: identityCandidates } });
             if (!user) {
-                // 3. Create New User
-                const newUser = await prisma.user.create({
+                user = await prisma.user.create({
                     data: {
                         socialId: uid,
+                        socialProvider: 'firebase',
                         email: email || null,
                         phone: phone_number || null,
-                        isVerified: !!email, // Email verified by Google usually
+                        isVerified: Boolean(email_verified || phone_number),
                         isActive: true,
                         role: 'user',
-                        profile: {
-                            create: {
-                                firstName: name ? name.split(' ')[0] : 'User',
-                                lastName: name ? name.split(' ').slice(1).join(' ') : '',
-                            }
-                        }
-                    }
+                        lastLogin: new Date(),
+                        lastActiveAt: new Date(),
+                    },
                 });
-
-                // Add photo if provided
                 if (picture) {
                     await prisma.photo.create({
                         data: {
-                            userId: newUser.id,
+                            userId: user.id,
                             photoUrl: picture,
-                            isPrimary: true
-                        }
+                            thumbnailUrl: picture,
+                            isPrimary: false,
+                            moderationStatus: 'review_required',
+                            verificationStatus: 'pending',
+                        },
                     });
                 }
-                user = newUser;
+                if (name) {
+                    await prisma.auditLog.create({
+                        data: {
+                            userId: user.id,
+                            action: 'social_profile_hint',
+                            resourceType: 'auth',
+                            resourceId: user.id,
+                            changes: { suggestedName: name },
+                        },
+                    });
+                }
             } else {
-                // 4. Link Social ID if missing
-                if (!user.socialId) {
-                    user = await prisma.user.update({
-                        where: { id: user.id },
-                        data: { socialId: uid }
-                    });
-                }
+                if (user.isBanned) throw appError('Account access is restricted', 403);
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { socialId: user.socialId || uid, socialProvider: user.socialProvider || 'firebase', lastLogin: new Date(), lastActiveAt: new Date() },
+                });
             }
 
-            // 5. Generate JWT
+            const verificationWrites = [];
+            const now = new Date();
+            if (email && email_verified) {
+                verificationWrites.push(prisma.verification.upsert({
+                    where: { userId_type: { userId: user.id, type: 'email' } },
+                    update: { status: 'verified', verifiedAt: now },
+                    create: { userId: user.id, type: 'email', status: 'verified', verifiedAt: now },
+                }));
+            }
+            if (phone_number) {
+                verificationWrites.push(prisma.verification.upsert({
+                    where: { userId_type: { userId: user.id, type: 'phone' } },
+                    update: { status: 'verified', verifiedAt: now },
+                    create: { userId: user.id, type: 'phone', status: 'verified', verifiedAt: now },
+                }));
+            }
+            if (verificationWrites.length) await prisma.$transaction(verificationWrites);
+
             const tokens = generateTokens(user.id, user.role);
-
-            // Check profile completion
             const profile = await prisma.profile.findUnique({ where: { userId: user.id } });
-
             return {
                 user: {
                     id: user.id,
                     email: user.email,
                     phone: user.phone,
                     role: user.role,
-                    profileCompletion: profile ? profile.completionPercentage : 0
+                    isNewUser: !profile,
+                    profileCompletion: profile?.completionPercentage || 0,
                 },
-                ...tokens
+                ...tokens,
             };
-
         } catch (error) {
-            console.error("Firebase Login Error:", error);
-            throw new Error('Invalid Firebase Token');
+            console.error('Firebase Login Error:', error);
+            if (error.statusCode) throw error;
+            throw appError('Invalid Firebase token', 401);
         }
-    }
+    },
 };
 
 module.exports = authService;
