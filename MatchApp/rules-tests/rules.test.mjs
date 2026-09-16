@@ -6,6 +6,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  deleteDoc,
   doc,
   getDoc,
   setDoc,
@@ -46,6 +47,14 @@ beforeEach(async () => {
   });
 });
 
+async function seedInterest(fromUid, toUid) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `interests/${fromUid}_${toUid}`), {
+      fromUid, toUid, isSuperLike: false, createdAt: new Date(),
+    });
+  });
+}
+
 test('unauthenticated users cannot read profiles', async () => {
   const db = env.unauthenticatedContext().firestore();
   await assertFails(getDoc(doc(db, 'users/alice')));
@@ -65,13 +74,10 @@ test('request recipient can inspect stealth sender profile before accepting', as
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
   });
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
 
   await assertFails(getDoc(doc(bobDb, 'users/alice')));
-  await assertSucceeds(setDoc(doc(aliceDb, 'interests/alice_bob'), {
-    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
-  }));
+  await seedInterest('alice', 'bob');
   await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
 });
 
@@ -104,28 +110,39 @@ test('clients cannot grant themselves premium or verification', async () => {
   await assertFails(updateDoc(doc(db, 'users/alice'), { verificationLevel: 5 }));
 });
 
-test('blocking prevents new interests in either direction', async () => {
+test('profile deletion must go through the server account-erasure workflow', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(deleteDoc(doc(db, 'users/alice')));
+  await assertSucceeds(getDoc(doc(db, 'users/alice')));
+});
+
+test('clients cannot create or delete interest and match authority documents directly', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
   await assertFails(setDoc(doc(aliceDb, 'interests/alice_bob'), {
     fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
   }));
-  const bobDb = env.authenticatedContext('bob').firestore();
-  await assertFails(setDoc(doc(bobDb, 'interests/bob_alice'), {
-    fromUid: 'bob', toUid: 'alice', isSuperLike: false, createdAt: new Date(),
+  await seedInterest('alice', 'bob');
+  await assertFails(deleteDoc(doc(aliceDb, 'interests/alice_bob')));
+  await assertFails(setDoc(doc(aliceDb, 'matches/alice_bob'), {
+    users: ['alice', 'bob'], createdAt: new Date(), lastActivity: new Date(),
   }));
 });
 
-test('profile hiding denies that member profile read and new interest', async () => {
+test('blocking relationship remains owner-controlled and private', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await assertSucceeds(getDoc(doc(aliceDb, 'blocks/alice/blocked/bob')));
+  await assertFails(getDoc(doc(bobDb, 'blocks/alice/blocked/bob')));
+});
+
+test('profile hiding denies that member profile read', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
   await assertSucceeds(setDoc(doc(aliceDb, 'privacyRelations/alice/members/bob'), {
     memberUid: 'bob', profileHidden: true, updatedAt: new Date(),
   }));
   await assertFails(getDoc(doc(bobDb, 'users/alice')));
-  await assertFails(setDoc(doc(bobDb, 'interests/bob_alice'), {
-    fromUid: 'bob', toUid: 'alice', isSuperLike: false, createdAt: new Date(),
-  }));
   await assertSucceeds(getDoc(doc(aliceDb, 'privacyRelations/alice/members/bob')));
   await assertFails(getDoc(doc(bobDb, 'privacyRelations/alice/members/bob')));
 });
@@ -151,19 +168,15 @@ test('only owner can configure global contact visibility', async () => {
   await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
 });
 
-test('chat thread requires mutual interest and stops after a block', async () => {
+test('chat thread requires server-created mutual interests and stops after a block', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
   const thread = doc(aliceDb, 'chats/alice_bob');
 
-  await assertSucceeds(setDoc(doc(aliceDb, 'interests/alice_bob'), {
-    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
-  }));
+  await seedInterest('alice', 'bob');
   await assertFails(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
 
-  await assertSucceeds(setDoc(doc(bobDb, 'interests/bob_alice'), {
-    fromUid: 'bob', toUid: 'alice', isSuperLike: false, createdAt: new Date(),
-  }));
+  await seedInterest('bob', 'alice');
   await assertSucceeds(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
   await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m1'), {
     body: 'hello', sentAt: Date.now(), isRead: false,
@@ -248,7 +261,6 @@ test('blocked member cannot read profile media', async () => {
 });
 
 test('stealth profile media is private except to an explicit interest recipient', async () => {
-  const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const object = ref(aliceStorage, 'photos/alice/stealth-test.jpg');
@@ -260,9 +272,7 @@ test('stealth profile media is private except to an explicit interest recipient'
   });
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
 
-  await assertSucceeds(setDoc(doc(aliceDb, 'interests/alice_bob'), {
-    fromUid: 'alice', toUid: 'bob', isSuperLike: false, createdAt: new Date(),
-  }));
+  await seedInterest('alice', 'bob');
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/stealth-test.jpg')));
 });
 
