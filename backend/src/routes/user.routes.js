@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 router.get('/profile', userController.getProfile);
 router.put('/profile', userController.updateProfile);
+router.delete('/profile', userController.deleteMatrimonyProfile);
 
 router.get('/profile/preferences', preferenceController.getPreferences);
 router.put('/profile/preferences', preferenceController.savePreferences);
