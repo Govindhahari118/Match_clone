@@ -4,8 +4,24 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
     function hasNoPrivateProfileFields() { return !('email' in request.resource.data) && !('phoneNumber' in request.resource.data) && !('fcmToken' in request.resource.data) && !('dateOfBirth' in request.resource.data); }
-    function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
-    function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt']); }
+    function validReligionValue(data) {
+      return !('religion' in data) || data.religion == '' ||
+        (data.religion is string && data.religion in [
+          'Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain',
+          'Parsi / Zoroastrian', 'Other', 'Prefer not to say'
+        ]);
+    }
+    function noClientReligionAuthorityOnCreate() {
+      return !('religionId' in request.resource.data) &&
+             !('religionLocked' in request.resource.data) &&
+             !('religionConfirmedAt' in request.resource.data);
+    }
+    function religionImmutableOnceSet() {
+      return !(('religion' in resource.data) && resource.data.religion is string && resource.data.religion.size() > 0) ||
+             !request.resource.data.diff(resource.data).affectedKeys().hasAny(['religion']);
+    }
+    function safeUserCreate() { return hasNoPrivateProfileFields() && validReligionValue(request.resource.data) && noClientReligionAuthorityOnCreate() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
+    function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt','religionId','religionLocked','religionConfirmedAt']); }
     function blockedEitherWay(viewerUid, targetUid) {
       return exists(/databases/$(database)/documents/blocks/$(viewerUid)/blocked/$(targetUid)) ||
              exists(/databases/$(database)/documents/blocks/$(targetUid)/blocked/$(viewerUid));
@@ -31,7 +47,7 @@ service cloud.firestore {
          !profileHiddenFrom(userId, request.auth.uid) &&
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
       allow create: if isOwner(userId) && safeUserCreate();
-      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged();
+      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionValue(request.resource.data) && religionImmutableOnceSet();
       allow delete: if isOwner(userId);
     }
     match /userPrivate/{userId} {
@@ -72,8 +88,6 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // Saved-search mutations are trusted callable operations. Clients can observe only their own
-    // items; Firebase Admin writes enforce the quota and canonical filter schema transactionally.
     match /savedSearches/{ownerUid}/items/{searchId} {
       allow read: if isOwner(ownerUid);
       allow create, update, delete: if false;
