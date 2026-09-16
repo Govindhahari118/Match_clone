@@ -17,6 +17,7 @@ data class CompatScoreState(
     val totalPct: Int = 0,
     val coveragePct: Int = 0,
     val astrologyApplicable: Boolean = false,
+    val astrologyAvailable: Boolean = false,
     val astrology: Int = 0,
     val religionCaste: Int = 0,
     val educationCareer: Int = 0,
@@ -44,11 +45,15 @@ class CompatibilityDeepDiveViewModel @Inject constructor(
             val candidate = userDao.findById(candidateId)
             if (me != null && candidate != null) {
                 val bd = MatchScoreEngine.compute(me, candidate)
+                val astrologyAvailable = bd.astrologyApplicable &&
+                    me.rasi.isNotBlank() && candidate.rasi.isNotBlank() &&
+                    me.nakshatra.isNotBlank() && candidate.nakshatra.isNotBlank()
                 _state.value = CompatScoreState(
                     isLoading = false,
                     totalPct = (bd.total * 100).toInt().coerceIn(0, 100),
                     coveragePct = (bd.coverage * 100).toInt().coerceIn(0, 100),
                     astrologyApplicable = bd.astrologyApplicable,
+                    astrologyAvailable = astrologyAvailable,
                     astrology = (bd.astrology * 100).toInt().coerceIn(0, 100),
                     religionCaste = (bd.religionCaste * 100).toInt().coerceIn(0, 100),
                     educationCareer = (bd.educationCareer * 100).toInt().coerceIn(0, 100),
