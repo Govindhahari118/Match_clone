@@ -59,12 +59,12 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
-      // Raw KYC material is never client-readable. The owner can upload/replace only their own
-      // protected review object and must stamp authenticated ownership for backend validation.
+      // Raw KYC material is never client-readable. Existing clients may still upload their own
+      // protected object; only the new backend callable can convert a metadata-bound object into a
+      // PENDING verification state.
       allow read: if false;
       allow create, update: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
-        request.resource.metadata.ownerUid == uid &&
         (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
       allow delete: if false;
     }
