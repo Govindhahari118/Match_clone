@@ -37,7 +37,9 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putBytes(bytes, metadata).await()
-        ref.downloadUrl.await().toString()
+        // Persist the authenticated object reference rather than minting a long-lived download
+        // token. Rendering resolves gs:// through Firebase Storage so current privacy rules apply.
+        ref.toString()
     }
 
     suspend fun deletePhoto(urlOrPath: String): Result<Unit> = runCatching {
