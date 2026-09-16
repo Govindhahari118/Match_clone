@@ -21,6 +21,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.remote.ActivityPrivacy
+import com.match.app.data.remote.ActivityVisibility
 import com.match.app.data.remote.ContactVisibility
 import com.match.app.data.remote.FirestorePrivacyService
 import com.match.app.data.remote.FirestoreProfileService
@@ -85,6 +87,10 @@ class PrivacyViewModel @Inject constructor(
         .flatMapLatest(privacy::observeContactVisibility)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ContactVisibility.MUTUAL_MATCHES)
 
+    val activityPrivacy: StateFlow<ActivityPrivacy> = session.firebaseUid.filterNotNull()
+        .flatMapLatest(privacy::observeActivityPrivacy)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityPrivacy())
+
     private val _saving = MutableStateFlow(false)
     val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
@@ -92,13 +98,22 @@ class PrivacyViewModel @Inject constructor(
     val error: StateFlow<String?> = _error.asStateFlow()
 
     fun setIncognito(value: Boolean) = viewModelScope.launch { session.setIncognitoMode(value) }
-    fun setLastActiveVisible(value: Boolean) = updateUser { it.copy(showLastActive = value) }
     fun setHoroscopeVisible(value: Boolean) = updateUser { it.copy(showHoroscope = value) }
     fun setIncomeDisclosure(value: String) = updateUser { it.copy(incomeDisclosure = value) }
 
     fun setContactVisibility(value: ContactVisibility) = privacyUpdate {
         val uid = session.firebaseUid.first() ?: error("Sign in required")
         privacy.setContactVisibility(uid, value)
+    }
+
+    fun setOnlineVisibility(value: ActivityVisibility) = privacyUpdate {
+        val uid = session.firebaseUid.first() ?: error("Sign in required")
+        privacy.setOnlineVisibility(uid, value)
+    }
+
+    fun setLastActiveVisibility(value: ActivityVisibility) = privacyUpdate {
+        val uid = session.firebaseUid.first() ?: error("Sign in required")
+        privacy.setLastActiveVisibility(uid, value)
     }
 
     fun setProfileHidden(memberUid: String, hidden: Boolean) = privacyUpdate {
@@ -149,6 +164,7 @@ fun PrivacyDashboardScreen(
     val user by vm.user.collectAsState()
     val members by vm.members.collectAsState()
     val contactVisibility by vm.contactVisibility.collectAsState()
+    val activityPrivacy by vm.activityPrivacy.collectAsState()
     val saving by vm.saving.collectAsState()
     val error by vm.error.collectAsState()
     val snackbar = remember { SnackbarHostState() }
@@ -196,7 +212,7 @@ fun PrivacyDashboardScreen(
                     Column {
                         Text("Your privacy choices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            "Visibility is enforced in profile reads, discovery, Nearby and private contact reveal.",
+                            "Visibility is enforced by server rules and permission-checked functions across profiles, activity, discovery, Nearby and contact reveal.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -213,19 +229,28 @@ fun PrivacyDashboardScreen(
                 onCheckedChange = vm::setIncognito
             )
 
-            PrivacyToggleCard(
+            ActivityVisibilityCard(
+                icon = Icons.Filled.Circle,
+                title = "Online status",
+                subtitle = "Choose who can see whether you are currently active. Precise activity timestamps stay server-only.",
+                selected = activityPrivacy.onlineVisibility,
+                enabled = !saving,
+                onSelected = vm::setOnlineVisibility
+            )
+
+            ActivityVisibilityCard(
                 icon = Icons.Filled.Schedule,
-                title = "Show last active",
-                subtitle = "Controls whether your last-active time is published in your discoverable profile data.",
-                checked = user?.showLastActive ?: true,
-                enabled = user != null && !saving,
-                onCheckedChange = vm::setLastActiveVisible
+                title = "Last active",
+                subtitle = "Choose who can see when you were last active. This is checked against your relationship before any timestamp is released.",
+                selected = activityPrivacy.lastActiveVisibility,
+                enabled = !saving,
+                onSelected = vm::setLastActiveVisibility
             )
 
             PrivacyToggleCard(
                 icon = Icons.Filled.AutoAwesome,
                 title = "Show horoscope details",
-                subtitle = "Controls whether Rasi, Nakshatra and related astrology fields are shown to members who can view your profile.",
+                subtitle = "Controls whether applicable horoscope details may be shared through the protected compatibility flow.",
                 checked = user?.showHoroscope ?: true,
                 enabled = user != null && !saving,
                 onCheckedChange = vm::setHoroscopeVisible
@@ -238,7 +263,7 @@ fun PrivacyDashboardScreen(
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text("Income visibility", fontWeight = FontWeight.SemiBold)
-                            Text("Choose how your income band appears to other members.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Choose whether your income band is shown through permitted profile views.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     val current = user?.incomeDisclosure ?: "range"
@@ -263,7 +288,7 @@ fun PrivacyDashboardScreen(
                         Column {
                             Text("Who can reveal my contact?", fontWeight = FontWeight.SemiBold)
                             Text(
-                                "A paid member still needs a mutual match. You can additionally stop all phone reveals.",
+                                "A paid member still needs a mutual match and must pass server authorization. You can additionally stop all phone reveals.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -326,7 +351,7 @@ fun PrivacyDashboardScreen(
                         Text("Profile photos", fontWeight = FontWeight.SemiBold)
                     }
                     Text(
-                        "Profile photos follow profile visibility. A member excluded from your profile cannot fetch the profile document through the app.",
+                        "Profile photos follow profile visibility. A member excluded from your profile cannot fetch protected profile media through the app.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -341,7 +366,7 @@ fun PrivacyDashboardScreen(
                         Text("Block & report", fontWeight = FontWeight.SemiBold)
                     }
                     Text(
-                        "Use Block when you want to stop interaction entirely. Privacy exceptions only control what that member can see.",
+                        "Blocking closes profile, interest, match and chat access. Privacy exceptions only control what that member can see.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -369,6 +394,43 @@ fun PrivacyDashboardScreen(
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActivityVisibilityCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    selected: ActivityVisibility,
+    enabled: Boolean,
+    onSelected: (ActivityVisibility) -> Unit
+) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            ActivityVisibility.entries.forEach { option ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selected == option,
+                        onClick = { onSelected(option) },
+                        enabled = enabled
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
     }
 }
