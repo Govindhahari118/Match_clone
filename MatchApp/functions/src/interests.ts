@@ -153,7 +153,10 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   });
 });
 
-/** Sender withdraws only their own outgoing interest; an existing mutual match is ended atomically. */
+/**
+ * Withdraw only a still-pending outgoing interest. Mutual relationships must use an explicit
+ * unmatch/block policy; a pending-interest toggle must never silently destroy an accepted match.
+ */
 export const withdrawInterest = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const senderUid = context.auth?.uid;
@@ -162,16 +165,26 @@ export const withdrawInterest = functions.https.onCall(async (data, context) => 
   if (targetUid === senderUid) throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
 
   const outgoingRef = db.collection("interests").doc(`${senderUid}_${targetUid}`);
+  const reverseRef = db.collection("interests").doc(`${targetUid}_${senderUid}`);
   const matchRef = db.collection("matches").doc(matchId(senderUid, targetUid));
 
   await db.runTransaction(async (tx) => {
-    const outgoing = await tx.get(outgoingRef);
+    const [outgoing, reverse, match] = await Promise.all([
+      tx.get(outgoingRef),
+      tx.get(reverseRef),
+      tx.get(matchRef),
+    ]);
     if (!outgoing.exists) return;
     if (outgoing.data()?.fromUid !== senderUid || outgoing.data()?.toUid !== targetUid) {
       throw new functions.https.HttpsError("permission-denied", "Interest does not belong to this account");
     }
+    if (reverse.exists || match.exists) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "A mutual match cannot be withdrawn as a pending interest"
+      );
+    }
     tx.delete(outgoingRef);
-    tx.delete(matchRef);
   });
 
   return { success: true };
