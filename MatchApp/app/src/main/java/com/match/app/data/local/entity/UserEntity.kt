@@ -16,15 +16,13 @@ data class UserEntity(
     val passwordHash: String,
     val displayName: String,
     val age: Int,
-    val gender: String,          // MALE / FEMALE / OTHER
-    val lookingFor: String,      // MALE / FEMALE / ANY
+    val gender: String,
+    val lookingFor: String,
     val city: String,
     val bio: String,
-    val rasi: String,            // e.g. "Cancer"
-    val nakshatra: String,       // e.g. "Pushya"
+    val rasi: String,
+    val nakshatra: String,
     val isSeed: Boolean = false,
-    // Profile enrichment fields. New real-user profiles intentionally start unset;
-    // onboarding must collect explicit values rather than fabricating demographics.
     val religion: String = "",
     val motherTongue: String = "",
     val education: String = "",
@@ -37,9 +35,12 @@ data class UserEntity(
     val profileViewCount: Int = 0,
     val caste: String = "",
     val state: String = "",
-    // Phase-1 additions
     val subCaste: String = "",
     val gothra: String = "",
+    /** Generic religion-aware fields. Labels/options come from ReligionProfileSchemas. */
+    val faithTradition: String = "",
+    val faithSubTradition: String = "",
+    val faithInstitution: String = "",
     val incomeBand: String = "",
     val diet: String = "",
     val familyType: String = "",
@@ -54,68 +55,46 @@ data class UserEntity(
     val videoUrl: String = "",
     val residentialStatus: String = "",
     val hasChildren: Boolean = false,
-    // Boost feature
     val boostActiveUntil: Long = 0L,
-    // Sprint 5: Family origin filter
     val nativeState: String = "",
-    // Sprint 6: NRI filters
     val countryOfResidence: String = "",
     val visaStatus: String = "",
     val willingToRelocate: Boolean = false,
-    // Sprint 6: Recently joined badge
     val createdAt: Long = System.currentTimeMillis(),
-    // Sprint 7: Activity status
     val lastActiveAt: Long = 0L,
-    // Sprint 7: Incognito browse mode
     val isIncognito: Boolean = false,
-    // Sprint 7: Contact reveal
     val phoneNumber: String = "",
-    // Sprint 9: Discovery 2.0
     val ageBucket: String = "",
-    // Sprint 10: Family & astrology completeness
     val familyValues: String = "",
     val aboutFamily: String = "",
     val manglik: String = "",
-    // Physical details
     val dateOfBirth: String = "",
     val weight: Float = 0f,
     val complexion: String = "",
     val physicalStatus: String = "",
-    // Kundali essentials
     val birthTime: String = "",
     val birthPlace: String = "",
-    // Family economic status
     val familyStatus: String = "",
-    // Education detail
     val educationField: String = "",
     val institution: String = "",
     val graduationYear: Int = 0,
-    // Occupation detail
     val occupationCategory: String = "",
     val employer: String = "",
     val employerType: String = "",
-    // Citizenship & NRI
     val citizenship: String = "",
     val isNRI: Boolean = false,
-    // Lifestyle detail
     val fitnessActivities: String = "",
-    // Platform identity
     val matrimonyId: String = "",
     val photoUrl: String = "",
     val voiceBioUrl: String = "",
-    // Profile quality
     val profileCompleteness: Float = 0f,
     val verificationLevel: Int = 0,
-    // Privacy settings
     val stealthMode: Boolean = false,
     val showLastActive: Boolean = true,
     val showHoroscope: Boolean = true,
     val incomeDisclosure: String = "range",
-    // Subscription
     val subscriptionPlan: String = "FREE",
     val subscriptionExpiry: Long = 0L,
-    // Match scoring
     val matchScore: Float = 0f,
-    /** Unique public handle reserved by the backend, e.g. avinash_21. */
     val username: String = ""
 )
