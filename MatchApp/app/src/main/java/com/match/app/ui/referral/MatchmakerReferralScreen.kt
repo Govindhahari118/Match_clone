@@ -1,5 +1,6 @@
 package com.match.app.ui.referral
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.runtime.Composable
@@ -16,13 +17,13 @@ fun MatchmakerReferralScreen(
         MatreeUnavailableFeature(
             modifier = Modifier.padding(padding),
             title = "Referral rewards are not active yet",
-            description = "The previous prototype generated local referral codes, cash rewards and a leaderboard without trusted attribution or payout records. Those simulations are removed from production UI.",
+            description = "The previous prototype generated local referral codes, rewards and a leaderboard without trusted attribution records. Those simulations are removed from production UI.",
             icon = Icons.Filled.CardGiftcard,
             requirements = listOf(
                 "Issue unique referral identifiers from the backend and prevent self-referral or duplicate attribution.",
-                "Define the qualifying event, reward amount, expiry, tax treatment and anti-abuse rules.",
+                "Define the qualifying event, reward amount, expiry and anti-abuse rules.",
                 "Record referral attribution and reward status on trusted server data.",
-                "Integrate a compliant payout or credit mechanism before displaying earned money.",
+                "Connect rewards to an auditable server-side fulfillment mechanism.",
                 "Show leaderboards only when based on real, privacy-reviewed program data."
             ),
             onHelp = onOpenHelp
