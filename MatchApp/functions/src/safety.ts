@@ -20,6 +20,36 @@ function stableId(...parts: string[]): string {
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
+function pairId(uidA: string, uidB: string): string {
+  return [uidA, uidB].sort().join("_");
+}
+
+/**
+ * Blocking is created by the blocker in their own protected collection, but relationship cleanup
+ * needs Admin authority because normal clients cannot mutate trusted interest/match state.
+ * Retaining chat documents server-side preserves moderation/account records; Firestore/Storage
+ * rules deny both participants access while the block exists.
+ */
+export const onMemberBlocked = functions.firestore
+  .document("blocks/{blockerUid}/blocked/{blockedUid}")
+  .onCreate(async (_snap, context) => {
+    const blockerUid = String(context.params.blockerUid || "");
+    const blockedUid = String(context.params.blockedUid || "");
+    if (!blockerUid || !blockedUid || blockerUid === blockedUid) return;
+
+    const batch = db.batch();
+    batch.delete(db.collection("interests").doc(`${blockerUid}_${blockedUid}`));
+    batch.delete(db.collection("interests").doc(`${blockedUid}_${blockerUid}`));
+    batch.delete(db.collection("interestResponses").doc(`${blockerUid}_${blockedUid}`));
+    batch.delete(db.collection("interestResponses").doc(`${blockedUid}_${blockerUid}`));
+    batch.delete(db.collection("matches").doc(pairId(blockerUid, blockedUid)));
+    batch.delete(db.collection("shortlists").doc(blockerUid).collection("saved").doc(blockedUid));
+    batch.delete(db.collection("shortlists").doc(blockedUid).collection("saved").doc(blockerUid));
+    await batch.commit();
+
+    functions.logger.info("Blocked relationship cleanup completed", { blockerUid, blockedUid });
+  });
+
 export const submitProfileReport = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const reporterUid = context.auth?.uid;
