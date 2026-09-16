@@ -4,6 +4,28 @@ const exposureService = require('./exposure.service');
 const trustService = require('./trust.service');
 
 const incomeBands = ['below_5L', '5-10L', '10-25L', '25-50L', '50L+'];
+const PUBLIC_USER_SELECT = {
+    id: true,
+    isVerified: true,
+    lastActiveAt: true,
+    lastLogin: true,
+    searchStatus: true,
+    profile: {
+        select: {
+            firstName: true,
+            lastName: true,
+            dateOfBirth: true,
+            city: true,
+            profession: true,
+            role: true,
+        },
+    },
+    photos: {
+        where: { isPrimary: true, moderationStatus: 'approved' },
+        take: 1,
+        select: { photoUrl: true, thumbnailUrl: true },
+    },
+};
 
 function appError(message, statusCode = 400) {
     const error = new Error(message);
@@ -18,7 +40,13 @@ async function assertInteractionTarget(senderId, receiverId) {
         where: { id: receiverId },
         select: { id: true, isActive: true, isBanned: true, deletedAt: true, searchStatus: true },
     });
-    if (!receiver || !receiver.isActive || receiver.isBanned || receiver.deletedAt) {
+    if (
+        !receiver ||
+        !receiver.isActive ||
+        receiver.isBanned ||
+        receiver.deletedAt ||
+        !['active', 'low_activity'].includes(receiver.searchStatus)
+    ) {
         throw appError('Profile is unavailable', 404);
     }
     return receiver;
@@ -75,9 +103,7 @@ const interactionService = {
             exposureService.setInteractionState(senderId, receiverId, result.isMatch ? 'connected' : 'interest_sent'),
             trustService.recordActivity(senderId),
         ]);
-        if (result.isMatch) {
-            await exposureService.setInteractionState(receiverId, senderId, 'connected');
-        }
+        if (result.isMatch) await exposureService.setInteractionState(receiverId, senderId, 'connected');
         return result;
     },
 
@@ -118,42 +144,34 @@ const interactionService = {
             where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
             select: { blockerId: true, blockedUserId: true },
         });
-        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+        const blockedIds = new Set(
+            blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId)
+        );
 
         if (type === 'received') {
             const likes = await prisma.like.findMany({
                 where: { receiverId: userId, status: 'sent' },
                 orderBy: { createdAt: 'desc' },
-                include: {
-                    sender: {
-                        select: { id: true, isVerified: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true, role: true } },
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1, select: { photoUrl: true, thumbnailUrl: true } },
-                        },
-                    },
-                },
+                include: { sender: { select: PUBLIC_USER_SELECT } },
             });
-            return likes.filter((like) => !blockedIds.has(like.senderId)).map((like) => _formatLikeUser(like.sender, like.createdAt));
+            return likes
+                .filter((like) => !blockedIds.has(like.senderId))
+                .map((like) => _formatLikeUser(like.sender, like.createdAt));
         }
 
         if (type === 'sent') {
             const likes = await prisma.like.findMany({
                 where: { senderId: userId },
                 orderBy: { createdAt: 'desc' },
-                include: {
-                    receiver: {
-                        select: { id: true, isVerified: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true, role: true } },
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1, select: { photoUrl: true, thumbnailUrl: true } },
-                        },
-                    },
-                },
+                include: { receiver: { select: PUBLIC_USER_SELECT } },
             });
             return likes
                 .filter((like) => !blockedIds.has(like.receiverId))
-                .map((like) => ({ ..._formatLikeUser(like.receiver, like.createdAt), status: like.status, sentAt: _timeAgo(like.createdAt) }));
+                .map((like) => ({
+                    ..._formatLikeUser(like.receiver, like.createdAt),
+                    status: like.status,
+                    sentAt: _timeAgo(like.createdAt),
+                }));
         }
 
         if (type === 'mutual') {
@@ -161,20 +179,8 @@ const interactionService = {
                 where: { OR: [{ userAId: userId }, { userBId: userId }], isActive: true },
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    userA: {
-                        select: { id: true, isVerified: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true, role: true } },
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1, select: { photoUrl: true, thumbnailUrl: true } },
-                        },
-                    },
-                    userB: {
-                        select: { id: true, isVerified: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true, role: true } },
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1, select: { photoUrl: true, thumbnailUrl: true } },
-                        },
-                    },
+                    userA: { select: PUBLIC_USER_SELECT },
+                    userB: { select: PUBLIC_USER_SELECT },
                 },
             });
             return matches
@@ -230,7 +236,6 @@ const interactionService = {
         const reasons = [];
         let earned = 0;
         let possible = 0;
-
         if (myPrefs) {
             const targetAge = _age(targetProfile.dateOfBirth);
             possible += 25;
@@ -238,7 +243,6 @@ const interactionService = {
                 earned += 25;
                 reasons.push('Age preference matches');
             }
-
             if (myPrefs.preferredLocations?.length) {
                 possible += 20;
                 if (myPrefs.preferredLocations.some((value) => value === targetProfile.city || value === targetProfile.state)) {
@@ -246,7 +250,6 @@ const interactionService = {
                     reasons.push('Location preference matches');
                 }
             }
-
             if (!myPrefs.religionOpen && myPrefs.preferredReligions?.length) {
                 possible += 20;
                 if (myPrefs.preferredReligions.includes(targetProfile.religion)) {
@@ -258,7 +261,6 @@ const interactionService = {
                 earned += 10;
                 reasons.push('Religion preference aligns');
             }
-
             if (myPrefs.minIncomeBand && targetProfile.incomeBand) {
                 possible += 15;
                 const minIndex = incomeBands.indexOf(myPrefs.minIncomeBand);
@@ -275,7 +277,6 @@ const interactionService = {
             earned += 20;
             reasons.push('Same city');
         }
-
         const score = possible > 0 ? Math.round((earned / possible) * 100) : null;
         const strength = score === null ? 'unknown' : score >= 75 ? 'strong' : score >= 50 ? 'good' : 'partial';
         return { score, strength, reasons: Array.from(new Set(reasons)).slice(0, 4) };
@@ -306,22 +307,16 @@ const interactionService = {
                 orderBy: { createdAt: 'desc' },
                 take: limit * 2,
                 distinct: ['userId'],
-                include: {
-                    user: {
-                        select: { id: true, isVerified: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true, role: true } },
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1, select: { photoUrl: true, thumbnailUrl: true } },
-                        },
-                    },
-                },
+                include: { user: { select: PUBLIC_USER_SELECT } },
             }),
             prisma.userBlock.findMany({
                 where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
                 select: { blockerId: true, blockedUserId: true },
             }),
         ]);
-        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+        const blockedIds = new Set(
+            blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId)
+        );
         return views
             .filter((view) => view.user && !blockedIds.has(view.user.id))
             .slice(0, limit)
