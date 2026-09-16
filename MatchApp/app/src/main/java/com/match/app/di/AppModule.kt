@@ -22,9 +22,7 @@ object AppModule {
         val builder = Room.databaseBuilder(ctx, MatchDatabase::class.java, "match.db").addMigrations(
             Migrations.MIGRATION_13_14, Migrations.MIGRATION_14_15, Migrations.MIGRATION_15_16,
             Migrations.MIGRATION_16_17, Migrations.MIGRATION_17_18, Migrations.MIGRATION_18_19,
-            Migrations.MIGRATION_19_20)
-        // Never destructively migrate production data. Debug builds may opt into a clean reset so
-        // local schema work does not block developer iteration, using Room's explicit modern API.
+            Migrations.MIGRATION_19_20, Migrations.MIGRATION_20_21)
         if (BuildConfig.DEBUG) builder.fallbackToDestructiveMigration(dropAllTables = true)
         return builder.build()
     }
