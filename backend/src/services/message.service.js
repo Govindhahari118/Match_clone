@@ -3,6 +3,18 @@ const safetyService = require('./safety.service');
 const trustService = require('./trust.service');
 const privacyService = require('./privacy.service');
 
+const CONNECTED_USER_SELECT = {
+    id: true,
+    lastActiveAt: true,
+    lastLogin: true,
+    searchStatus: true,
+    profile: true,
+    photos: {
+        where: { isPrimary: true, moderationStatus: 'approved' },
+        take: 1,
+    },
+};
+
 function appError(message, statusCode = 400) {
     const error = new Error(message);
     error.statusCode = statusCode;
@@ -82,11 +94,7 @@ const messageService = {
         if (!match) return { updated: 0 };
         const now = new Date();
         const result = await prisma.message.updateMany({
-            where: {
-                matchId: match.id,
-                senderId: { not: readerId },
-                isRead: false,
-            },
+            where: { matchId: match.id, senderId: { not: readerId }, isRead: false },
             data: { isRead: true, status: 'read', readAt: now, deliveredAt: now },
         });
         await trustService.recordActivity(readerId);
@@ -108,20 +116,8 @@ const messageService = {
             prisma.match.findMany({
                 where: { OR: [{ userAId: userId }, { userBId: userId }], isActive: true },
                 include: {
-                    userA: {
-                        select: { id: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: true,
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1 },
-                        },
-                    },
-                    userB: {
-                        select: { id: true, lastActiveAt: true, lastLogin: true, searchStatus: true },
-                        include: {
-                            profile: true,
-                            photos: { where: { isPrimary: true, moderationStatus: 'approved' }, take: 1 },
-                        },
-                    },
+                    userA: { select: CONNECTED_USER_SELECT },
+                    userB: { select: CONNECTED_USER_SELECT },
                 },
                 orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
             }),
@@ -131,7 +127,9 @@ const messageService = {
             }),
         ]);
 
-        const blockedIds = new Set(blocks.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+        const blockedIds = new Set(
+            blocks.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId)
+        );
         return matches
             .map((match) => {
                 const other = match.userAId === userId ? match.userB : match.userA;
