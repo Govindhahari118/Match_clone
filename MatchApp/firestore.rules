@@ -50,9 +50,6 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)) &&
              get(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.get('profileHidden', false) == true;
     }
-    function profileVisibleBetween(uidA, uidB) {
-      return !profileHiddenFrom(uidA, uidB) && !profileHiddenFrom(uidB, uidA);
-    }
     function mutualInterest(uidA, uidB) {
       return exists(/databases/$(database)/documents/interests/$(uidA + '_' + uidB)) &&
              exists(/databases/$(database)/documents/interests/$(uidB + '_' + uidA));
@@ -91,11 +88,22 @@ service cloud.firestore {
       allow read: if isOwner(ownerUid);
       allow create, update: if isOwner(ownerUid) &&
         request.resource.data.keys().hasOnly(['contactVisibility','onlineVisibility','lastActiveVisibility','updatedAt']) &&
-        (!('contactVisibility' in request.resource.data) || request.resource.data.contactVisibility in ['mutual_matches','nobody']) &&
+        (!('contactVisibility' in request.resource.data) || request.resource.data.contactVisibility in ['mutual_matches','selected_people','nobody']) &&
         (!('onlineVisibility' in request.resource.data) || request.resource.data.onlineVisibility in ['everyone','interests','mutual','nobody']) &&
         (!('lastActiveVisibility' in request.resource.data) || request.resource.data.lastActiveVisibility in ['everyone','interests','mutual','nobody']);
       allow delete: if isOwner(ownerUid);
     }
+    match /contactGrants/{ownerUid}/viewers/{viewerUid} {
+      allow read: if isOwner(ownerUid);
+      allow create, update: if isOwner(ownerUid) && ownerUid != viewerUid &&
+        request.resource.data.viewerUid == viewerUid &&
+        request.resource.data.keys().hasOnly(['viewerUid','phoneAllowed','whatsappAllowed','grantedAt','updatedAt']) &&
+        request.resource.data.phoneAllowed is bool &&
+        request.resource.data.whatsappAllowed is bool &&
+        (request.resource.data.phoneAllowed == true || request.resource.data.whatsappAllowed == true);
+      allow delete: if isOwner(ownerUid);
+    }
+    match /contactGrants/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
     match /presencePrivate/{uid} { allow read, write: if false; }
 
     match /interests/{interestId} {
