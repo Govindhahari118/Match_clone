@@ -3,7 +3,9 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 
 const GEOHASH_ALPHABET = "0123456789bcdefghjkmnpqrstuvwxyz";
-const LOCATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Nearby represents current proximity, not a historical location. A user must refresh at least
+// once per day to remain eligible, and Stop sharing still removes the point immediately.
+const LOCATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_RESULTS = 50;
 const MAX_CELL_DOCS = 250;
 const DELETE_BATCH_SIZE = 300;
@@ -68,11 +70,6 @@ function encodeGeohash(latitude: number, longitude: number, precision: number): 
   return hash;
 }
 
-/**
- * Precision 2 covers enormous regions and can silently truncate a dense cell at MAX_CELL_DOCS.
- * Keep broad 11-100 km searches at precision 3 so the 3x3 neighborhood remains bounded while
- * avoiding the severe false-negative behaviour of a single huge precision-2 bucket.
- */
 function geohashPrecision(radiusKm: number): number {
   if (radiusKm <= 10) return 4;
   return 3;
@@ -107,6 +104,17 @@ function distanceKm(a: Coordinates, b: Coordinates): number {
   return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/** Coarse client-facing proximity. Exact/decimal distance never leaves trusted server code. */
+function distanceBucket(km: number): string {
+  if (km < 1) return "Less than 1 km away";
+  if (km < 2) return "About 1 km away";
+  if (km < 5) return "About 2–5 km away";
+  if (km < 10) return "About 5–10 km away";
+  if (km < 25) return "About 10–25 km away";
+  if (km < 50) return "About 25–50 km away";
+  return "50+ km away";
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.toUpperCase() : "";
 }
@@ -120,6 +128,17 @@ function mutuallyCompatible(viewer: FirebaseFirestore.DocumentData, candidate: F
     (candidateLookingFor === "ANY" || candidateLookingFor === viewerGender);
 }
 
+function locationExpiresAt(data: FirebaseFirestore.DocumentData): number {
+  const explicit = Number(data.expiresAtMillis || 0);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const updated = Number(data.updatedAtMillis || 0);
+  return Number.isFinite(updated) && updated > 0 ? updated + LOCATION_MAX_AGE_MS : 0;
+}
+
+function freshSharingLocation(data: FirebaseFirestore.DocumentData, now = Date.now()): boolean {
+  return data.sharingEnabled !== false && locationExpiresAt(data) > now;
+}
+
 /** Read sharing state without exposing coordinates to the client. */
 export const getNearbyStatus = functions.https.onCall(async (_data, context) => {
   requireAppCheck(context);
@@ -128,15 +147,18 @@ export const getNearbyStatus = functions.https.onCall(async (_data, context) => 
 
   const ref = db.collection("userLocations").doc(uid);
   const snap = await ref.get();
-  if (!snap.exists) return { sharing: false, updatedAtMillis: 0 };
+  if (!snap.exists) return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
 
-  const updatedAtMillis = Number(snap.data()?.updatedAtMillis || 0);
-  if (!Number.isFinite(updatedAtMillis) || updatedAtMillis < Date.now() - LOCATION_MAX_AGE_MS) {
-    // Expired coordinates are removed immediately as well as by the scheduled sweeper.
+  const data = snap.data() || {};
+  if (!freshSharingLocation(data)) {
     await ref.delete();
-    return { sharing: false, updatedAtMillis: 0 };
+    return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
   }
-  return { sharing: true, updatedAtMillis };
+  return {
+    sharing: true,
+    updatedAtMillis: Number(data.updatedAtMillis || 0),
+    expiresAtMillis: locationExpiresAt(data),
+  };
 });
 
 export const updateMyLocation = functions.https.onCall(async (data, context) => {
@@ -149,13 +171,16 @@ export const updateMyLocation = functions.https.onCall(async (data, context) => 
   if (!profile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
 
   const now = Date.now();
+  const expiresAtMillis = now + LOCATION_MAX_AGE_MS;
   await db.collection("userLocations").doc(uid).set({
     ...location,
     geohash: encodeGeohash(location.latitude, location.longitude, 8),
+    sharingEnabled: true,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAtMillis: now,
+    expiresAtMillis,
   });
-  return { success: true, sharing: true, updatedAtMillis: now };
+  return { success: true, sharing: true, updatedAtMillis: now, expiresAtMillis };
 });
 
 export const clearMyLocation = functions.https.onCall(async (_data, context) => {
@@ -183,9 +208,8 @@ export const nearbyProfiles = functions
     if (!viewerProfile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
     if (!viewerLocation.exists) throw new functions.https.HttpsError("failed-precondition", "Enable Nearby first");
 
-    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     const viewerLocationData = viewerLocation.data() || {};
-    if (Number(viewerLocationData.updatedAtMillis || 0) < cutoff) {
+    if (!freshSharingLocation(viewerLocationData)) {
       await viewerLocation.ref.delete();
       throw new functions.https.HttpsError("failed-precondition", "Nearby sharing expired. Enable it again to continue.");
     }
@@ -206,8 +230,9 @@ export const nearbyProfiles = functions
     }
 
     const outgoing = new Set(outgoingBlocks.docs.map((doc) => doc.id));
+    const now = Date.now();
     const distanceEntries = [...candidateLocations.entries()]
-      .filter(([candidateUid, value]) => candidateUid !== uid && !outgoing.has(candidateUid) && Number(value.updatedAtMillis || 0) >= cutoff)
+      .filter(([candidateUid, value]) => candidateUid !== uid && !outgoing.has(candidateUid) && freshSharingLocation(value, now))
       .map(([candidateUid, value]) => {
         const latitude = Number(value.latitude);
         const longitude = Number(value.longitude);
@@ -227,49 +252,56 @@ export const nearbyProfiles = functions
     const hiddenFromViewerRefs = distanceEntries.map((entry) =>
       db.collection("privacyRelations").doc(entry.uid).collection("members").doc(uid)
     );
-    const [reverseBlocks, profiles, privacyRelations] = await Promise.all([
+    const viewerHiddenRefs = distanceEntries.map((entry) =>
+      db.collection("privacyRelations").doc(uid).collection("members").doc(entry.uid)
+    );
+    const [reverseBlocks, profiles, privacyRelations, viewerPrivacyRelations] = await Promise.all([
       db.getAll(...reverseRefs),
       db.getAll(...profileRefs),
       db.getAll(...hiddenFromViewerRefs),
+      db.getAll(...viewerHiddenRefs),
     ]);
 
     const viewer = viewerProfile.data() || {};
-    const result: Array<{ uid: string; distanceKm: number }> = [];
+    const result: Array<{ uid: string; distanceBucket: string }> = [];
     for (let i = 0; i < distanceEntries.length && result.length < MAX_RESULTS; i += 1) {
       if (reverseBlocks[i].exists || !profiles[i].exists) continue;
       if (privacyRelations[i].exists && privacyRelations[i].data()?.profileHidden === true) continue;
+      if (viewerPrivacyRelations[i].exists && viewerPrivacyRelations[i].data()?.profileHidden === true) continue;
       const candidate = profiles[i].data() || {};
       if (candidate.stealthMode === true || !mutuallyCompatible(viewer, candidate)) continue;
       result.push({
         uid: distanceEntries[i].uid,
-        distanceKm: Math.round(distanceEntries[i].distanceKm * 10) / 10,
+        distanceBucket: distanceBucket(distanceEntries[i].distanceKm),
       });
     }
     return { profiles: result };
   });
 
-/** Daily privacy sweeper: exact coordinates older than the documented 30-day retention are deleted. */
+/** Delete stale exact coordinates frequently; eligibility is also checked synchronously on reads. */
 export const cleanupStaleLocations = functions.pubsub
-  .schedule("every 24 hours")
+  .schedule("every 1 hours")
   .onRun(async () => {
-    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
+    const now = Date.now();
+    const legacyCutoff = now - LOCATION_MAX_AGE_MS;
     let removed = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const stale = await db.collection("userLocations")
-        .where("updatedAtMillis", "<", cutoff)
-        .limit(DELETE_BATCH_SIZE)
-        .get();
-      if (stale.empty) {
-        hasMore = false;
-        continue;
+
+    async function remove(query: FirebaseFirestore.Query): Promise<void> {
+      let hasMore = true;
+      while (hasMore) {
+        const stale = await query.limit(DELETE_BATCH_SIZE).get();
+        if (stale.empty) return;
+        const batch = db.batch();
+        stale.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+        removed += stale.size;
+        hasMore = stale.size === DELETE_BATCH_SIZE;
       }
-      const batch = db.batch();
-      stale.docs.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
-      removed += stale.size;
-      hasMore = stale.size === DELETE_BATCH_SIZE;
     }
+
+    await remove(db.collection("userLocations").where("expiresAtMillis", "<", now));
+    // Migration compatibility for pre-expiry-marker documents.
+    await remove(db.collection("userLocations").where("updatedAtMillis", "<", legacyCutoff));
     functions.logger.info("Stale Nearby locations removed", { removed });
     return null;
   });
