@@ -62,7 +62,9 @@ service cloud.firestore {
     // Relationship mutations are trusted callable operations. Clients can read only their own
     // relationship state; a modified APK cannot bypass quotas, privacy checks, or match creation.
     match /interests/{interestId} {
-      allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow read: if isSignedIn() &&
+        (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid) &&
+        !blockedEitherWay(resource.data.fromUid, resource.data.toUid);
       allow create, update, delete: if false;
     }
     match /matches/{matchId} {
@@ -71,7 +73,9 @@ service cloud.firestore {
     }
     match /interestUsage/{usageId} { allow read, write: if false; }
     match /interestResponses/{responseId} {
-      allow read: if isSignedIn() && (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid);
+      allow read: if isSignedIn() &&
+        (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid) &&
+        !blockedEitherWay(resource.data.senderUid, resource.data.recipientUid);
       allow create, update, delete: if false;
     }
 
