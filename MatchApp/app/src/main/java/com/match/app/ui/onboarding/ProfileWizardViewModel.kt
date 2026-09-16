@@ -5,11 +5,17 @@ import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.repo.ReligionProfileRepository
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.ReligionId
+import com.match.app.domain.profile.IndiaProfileCatalog
+import com.match.app.domain.profile.ReligionFieldKey
+import com.match.app.domain.profile.ReligionFieldRegistry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -75,7 +81,8 @@ class ProfileWizardViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
-    private val usernameRepository: UsernameRepository
+    private val usernameRepository: UsernameRepository,
+    private val religionProfileRepository: ReligionProfileRepository
 ) : ViewModel() {
 
     private val _currentStep = MutableStateFlow(0)
@@ -86,17 +93,24 @@ class ProfileWizardViewModel @Inject constructor(
     val saving = _saving.asStateFlow()
     private val _saveError = MutableStateFlow<String?>(null)
     val saveError = _saveError.asStateFlow()
+    private val _religionLocked = MutableStateFlow(false)
+    val religionLocked = _religionLocked.asStateFlow()
 
     init {
         viewModelScope.launch {
             val uid = session.userId.first() ?: return@launch
             val user = userDao.findById(uid) ?: return@launch
             _wizardState.value = user.toWizardState()
+            if (user.firebaseUid.isNotBlank()) {
+                religionProfileRepository.observeConfirmed(user.firebaseUid)
+                    .catch { emit(false) }
+                    .collect { _religionLocked.value = it }
+            }
         }
     }
 
     fun update(state: WizardState) {
-        _wizardState.value = state
+        _wizardState.value = sanitizeForReligion(state)
         _saveError.value = null
     }
 
@@ -138,7 +152,9 @@ class ProfileWizardViewModel @Inject constructor(
         try {
             val localId = session.userId.first() ?: error("You are not signed in.")
             val current = userDao.findById(localId) ?: error("Your local profile could not be loaded.")
-            val state = _wizardState.value
+            val selectedReligion = ReligionId.fromProfileValue(_wizardState.value.religion)
+                ?: error("Choose your religion before completing your profile.")
+            val state = sanitizeForReligion(_wizardState.value.copy(religion = selectedReligion.label))
             val desiredUsername = usernameRepository.normalize(state.username)
             val username = if (!current.username.equals(desiredUsername, ignoreCase = true)) {
                 usernameRepository.reserve(desiredUsername).getOrThrow()
@@ -146,9 +162,13 @@ class ProfileWizardViewModel @Inject constructor(
             val updated = current.applyWizard(state, username)
                 .copy(profileCompleteness = calculateCompleteness(state))
 
-            // Cloud is authoritative. Persist the completed local copy only after the server accepts
-            // it, so the account gate cannot open on a profile that failed to sync.
-            if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated)
+            // Religion is confirmed atomically by the trusted backend. The subsequent profile merge
+            // carries the same value but cannot alter it because Firestore rules make religion and
+            // lock metadata server-controlled.
+            if (updated.firebaseUid.isNotBlank()) {
+                religionProfileRepository.confirm(selectedReligion.label)
+                firestoreProfile.pushProfile(updated)
+            }
             userDao.update(updated)
 
             // First discovery defaults are explicit choices, never demographic inference. Caste and
@@ -158,11 +178,11 @@ class ProfileWizardViewModel @Inject constructor(
                 currentFilter.copy(
                     state = state.state,
                     motherTongue = state.motherTongue,
-                    religion = state.religion
+                    religion = selectedReligion.label
                 )
             )
             // Kept only for backwards compatibility with older installs. Root navigation now derives
-            // completion from the signed-in account's actual profile fields instead of this device flag.
+            // completion from the signed-in account's actual profile fields and server confirmation.
             session.setCommunitySetupDone(true)
             onComplete()
         } catch (e: Exception) {
@@ -175,14 +195,14 @@ class ProfileWizardViewModel @Inject constructor(
     private fun persistDraft() = viewModelScope.launch {
         val uid = session.userId.first() ?: return@launch
         val user = userDao.findById(uid) ?: return@launch
-        userDao.update(user.applyWizard(_wizardState.value, user.username))
+        userDao.update(user.applyWizard(sanitizeForReligion(_wizardState.value), user.username))
     }
 
     private fun validateStep(step: Int): String? {
         val s = _wizardState.value
         return when (step) {
             0 -> validateRequiredIdentityAndLocation()
-            1 -> if (s.religion.isBlank()) "Select your religion or choose Prefer not to say." else null
+            1 -> if (s.religion !in IndiaProfileCatalog.religions) "Select your religion or choose Prefer not to say." else null
             2 -> if (s.education.isBlank() || s.profession.isBlank()) "Add your education and occupation." else null
             3 -> if (s.heightCm !in 90..250) "Enter a valid height in centimetres." else null
             else -> null
@@ -207,7 +227,7 @@ class ProfileWizardViewModel @Inject constructor(
     private fun validateCompleteProfile(): String? {
         validateRequiredIdentityAndLocation()?.let { return it }
         val s = _wizardState.value
-        if (s.religion.isBlank()) return "Select your religion or choose Prefer not to say."
+        if (s.religion !in IndiaProfileCatalog.religions) return "Select your religion or choose Prefer not to say."
         if (s.education.isBlank()) return "Add your highest education."
         if (s.profession.trim().length < 2) return "Add your occupation or profession."
         if (s.heightCm !in 90..250) return "Enter a valid height in centimetres."
@@ -234,37 +254,59 @@ class ProfileWizardViewModel @Inject constructor(
     )
 
     private fun UserEntity.applyWizard(s: WizardState, reservedUsername: String): UserEntity {
-        val ageFromDob = runCatching { Period.between(LocalDate.parse(s.dateOfBirth.trim()), LocalDate.now()).years }.getOrNull()
-        val isNri = s.countryOfResidence.isNotBlank() && !s.countryOfResidence.equals("India", ignoreCase = true)
+        val clean = sanitizeForReligion(s)
+        val ageFromDob = runCatching { Period.between(LocalDate.parse(clean.dateOfBirth.trim()), LocalDate.now()).years }.getOrNull()
+        val isNri = clean.countryOfResidence.isNotBlank() && !clean.countryOfResidence.equals("India", ignoreCase = true)
         return copy(
-            username = reservedUsername, displayName = s.displayName.trim(), dateOfBirth = s.dateOfBirth.trim(),
-            age = ageFromDob?.takeIf { it in 18..99 } ?: age, state = s.state.trim(), city = s.city.trim(),
-            motherTongue = s.motherTongue.trim(), bio = s.bio.trim().take(1000), religion = s.religion.trim(),
-            caste = s.caste.trim(), subCaste = s.subCaste.trim(), gothra = s.gothra.trim(),
-            education = s.education.trim(), educationField = s.educationField.trim(), institution = s.institution.trim(),
-            graduationYear = s.graduationYear, profession = s.profession.trim(), occupationCategory = s.occupationCategory.trim(),
-            employer = s.employer.trim(), employerType = s.employerType.trim(), incomeBand = s.incomeBand.trim(),
-            heightCm = s.heightCm, weight = s.weight, complexion = s.complexion.trim(), physicalStatus = s.physicalStatus.trim(),
-            maritalStatus = s.maritalStatus.trim(), hasChildren = s.hasChildren, nativeState = s.nativeState.trim(),
-            familyType = s.familyType.trim(), familyStatus = s.familyStatus.trim(), fatherOccupation = s.fatherOccupation.trim(),
-            motherOccupation = s.motherOccupation.trim(), siblings = s.siblings.coerceAtLeast(0), familyValues = s.familyValues.trim(),
-            aboutFamily = s.aboutFamily.trim().take(1000), diet = s.diet.trim(), smoking = s.smoking.trim(), drinking = s.drinking.trim(),
-            hobbies = s.hobbies.trim(), spokenLanguages = s.spokenLanguages.trim(), personalityType = s.personalityType.trim(),
-            fitnessActivities = s.fitnessActivities.trim(), countryOfResidence = s.countryOfResidence.trim(), citizenship = s.citizenship.trim(),
-            residentialStatus = s.residentialStatus.trim(), visaStatus = s.visaStatus.trim(), willingToRelocate = s.willingToRelocate,
-            isNRI = isNri, rasi = s.rasi.trim(), nakshatra = s.nakshatra.trim(), manglik = s.manglik.trim(),
-            birthTime = s.birthTime.trim(), birthPlace = s.birthPlace.trim()
+            username = reservedUsername, displayName = clean.displayName.trim(), dateOfBirth = clean.dateOfBirth.trim(),
+            age = ageFromDob?.takeIf { it in 18..99 } ?: age, state = clean.state.trim(), city = clean.city.trim(),
+            motherTongue = clean.motherTongue.trim(), bio = clean.bio.trim().take(1000), religion = clean.religion.trim(),
+            caste = clean.caste.trim(), subCaste = clean.subCaste.trim(), gothra = clean.gothra.trim(),
+            education = clean.education.trim(), educationField = clean.educationField.trim(), institution = clean.institution.trim(),
+            graduationYear = clean.graduationYear, profession = clean.profession.trim(), occupationCategory = clean.occupationCategory.trim(),
+            employer = clean.employer.trim(), employerType = clean.employerType.trim(), incomeBand = clean.incomeBand.trim(),
+            heightCm = clean.heightCm, weight = clean.weight, complexion = clean.complexion.trim(), physicalStatus = clean.physicalStatus.trim(),
+            maritalStatus = clean.maritalStatus.trim(), hasChildren = clean.hasChildren, nativeState = clean.nativeState.trim(),
+            familyType = clean.familyType.trim(), familyStatus = clean.familyStatus.trim(), fatherOccupation = clean.fatherOccupation.trim(),
+            motherOccupation = clean.motherOccupation.trim(), siblings = clean.siblings.coerceAtLeast(0), familyValues = clean.familyValues.trim(),
+            aboutFamily = clean.aboutFamily.trim().take(1000), diet = clean.diet.trim(), smoking = clean.smoking.trim(), drinking = clean.drinking.trim(),
+            hobbies = clean.hobbies.trim(), spokenLanguages = clean.spokenLanguages.trim(), personalityType = clean.personalityType.trim(),
+            fitnessActivities = clean.fitnessActivities.trim(), countryOfResidence = clean.countryOfResidence.trim(), citizenship = clean.citizenship.trim(),
+            residentialStatus = clean.residentialStatus.trim(), visaStatus = clean.visaStatus.trim(), willingToRelocate = clean.willingToRelocate,
+            isNRI = isNri, rasi = clean.rasi.trim(), nakshatra = clean.nakshatra.trim(), manglik = clean.manglik.trim(),
+            birthTime = clean.birthTime.trim(), birthPlace = clean.birthPlace.trim()
+        )
+    }
+
+    private fun sanitizeForReligion(s: WizardState): WizardState {
+        val religion = ReligionId.fromProfileValue(s.religion) ?: return s.copy(
+            caste = "", subCaste = "", gothra = "", rasi = "", nakshatra = "", manglik = "",
+            birthTime = "", birthPlace = ""
+        )
+        val schema = ReligionFieldRegistry.schemaFor(religion)
+        return s.copy(
+            religion = religion.label,
+            caste = if (schema.supports(ReligionFieldKey.COMMUNITY)) s.caste else "",
+            subCaste = if (schema.supports(ReligionFieldKey.SUB_COMMUNITY)) s.subCaste else "",
+            gothra = if (schema.supports(ReligionFieldKey.GOTHRA)) s.gothra else "",
+            rasi = if (schema.supports(ReligionFieldKey.RASHI)) s.rasi else "",
+            nakshatra = if (schema.supports(ReligionFieldKey.NAKSHATRA)) s.nakshatra else "",
+            manglik = if (schema.supports(ReligionFieldKey.MANGLIK)) s.manglik else "",
+            birthTime = if (schema.supports(ReligionFieldKey.BIRTH_TIME)) s.birthTime else "",
+            birthPlace = if (schema.supports(ReligionFieldKey.BIRTH_PLACE)) s.birthPlace else ""
         )
     }
 
     private fun calculateCompleteness(s: WizardState): Float {
+        // Religion-specific fields are optional and deliberately excluded from this denominator so
+        // a member is never penalized for fields that do not apply to their religion/community.
         val checks = listOf(
             s.username.isNotBlank(), s.displayName.isNotBlank(), s.dateOfBirth.isNotBlank(),
             s.state.isNotBlank(), s.city.isNotBlank(), s.motherTongue.isNotBlank(), s.bio.isNotBlank(),
-            s.religion.isNotBlank(), s.caste.isNotBlank(), s.education.isNotBlank(), s.profession.isNotBlank(),
-            s.heightCm > 0, s.maritalStatus.isNotBlank(), s.familyType.isNotBlank(), s.familyValues.isNotBlank(),
-            s.diet.isNotBlank(), s.countryOfResidence.isNotBlank(), s.rasi.isNotBlank(), s.nakshatra.isNotBlank(),
-            s.birthPlace.isNotBlank(), s.incomeBand.isNotBlank(), s.employer.isNotBlank(), s.aboutFamily.isNotBlank(),
+            s.religion.isNotBlank(), s.education.isNotBlank(), s.profession.isNotBlank(),
+            s.heightCm > 0, s.maritalStatus.isNotBlank(), s.familyType.isNotBlank(),
+            s.familyValues.isNotBlank(), s.diet.isNotBlank(), s.countryOfResidence.isNotBlank(),
+            s.incomeBand.isNotBlank(), s.employer.isNotBlank(), s.aboutFamily.isNotBlank(),
             s.spokenLanguages.isNotBlank()
         )
         return checks.count { it }.toFloat() / checks.size.toFloat()
