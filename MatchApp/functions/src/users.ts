@@ -1,16 +1,18 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
-import { db, generateMatrimonyId, getFcmToken, messaging, requireAppCheck } from "./shared";
+import { db, getFcmToken, messaging, requireAppCheck, reserveMatrimonyId } from "./shared";
 
 export const onUserCreate = functions.firestore
   .document("users/{uid}")
   .onCreate(async (snap, context) => {
     const uid = context.params.uid;
-    const matrimonyId = generateMatrimonyId();
+
+    // Reserve the public Matrimony ID on the server. The registry transaction is idempotent if
+    // this at-least-once trigger is retried and guarantees a candidate cannot belong to two users.
+    await reserveMatrimonyId(uid);
 
     await snap.ref.update({
-      matrimonyId,
       profileCompleteness: 0.1,
       verificationLevel: 1,
       subscriptionPlan: "FREE",
@@ -177,6 +179,7 @@ export const deleteUserAccount = functions
 
       await deleteCollection(`savedSearches/${uid}/items`);
       await deleteQuery(db.collection("usernames").where("uid", "==", uid));
+      await deleteQuery(db.collection("matrimonyIds").where("uid", "==", uid));
       await deleteCollection(`shortlists/${uid}/saved`);
       await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
       await deleteCollection(`blocks/${uid}/blocked`);
