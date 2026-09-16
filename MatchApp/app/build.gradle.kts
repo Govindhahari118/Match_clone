@@ -132,7 +132,7 @@ dependencies {
     implementation(libs.firebase.config)
     implementation(libs.firebase.functions)
     implementation(libs.firebase.appcheck.playintegrity)
-    // AppEntry references the debug provider behind BuildConfig.DEBUG; keep it on the\n    // compile classpath so release compilation resolves the type. Release installs Play Integrity.\n    implementation(libs.firebase.appcheck.debug)
+    debugImplementation(libs.firebase.appcheck.debug)
 
     implementation(libs.google.play.services.auth)
     implementation(libs.androidx.credentials)
