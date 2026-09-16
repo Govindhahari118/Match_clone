@@ -19,7 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,7 +46,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.abs
 
-private data class SwipeCandidate(val profile: UserProfile, val compatibility: Int)
+data class SwipeCandidate(val profile: UserProfile, val compatibility: Int)
 
 data class SwipeDiscoveryUiState(
     val loading: Boolean = true,
@@ -95,13 +94,12 @@ class SwipeDiscoveryViewModel @Inject constructor(
         _ui.update { it.copy(actionInFlight = true, error = null) }
         runCatching {
             val me = session.userId.first() ?: error("You are not signed in.")
-            val mutual = if (superInterest) {
+            if (superInterest) {
                 social.superLike(me, profile.id)
             } else {
                 social.like(me, profile.id)
                 social.isMutualMatch(me, profile.id)
             }
-            mutual
         }.onSuccess { mutual ->
             _ui.update { current ->
                 current.copy(
@@ -296,7 +294,6 @@ private fun DiscoveryCard(
     val scope = rememberCoroutineScope()
     val threshold = 220f
     val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
 
     ElevatedCard(
         onClick = onOpen,
@@ -339,9 +336,7 @@ private fun DiscoveryCard(
         shape = RoundedCornerShape(24.dp)
     ) {
         Column(Modifier.fillMaxWidth()) {
-            Box(
-                Modifier.fillMaxWidth().weight(1f).heightIn(min = 320.dp)
-            ) {
+            Box(Modifier.fillMaxWidth().weight(1f).heightIn(min = 320.dp)) {
                 val photo = candidate.profile.primaryPhotoPath.orEmpty().ifBlank { candidate.profile.photoUrl }
                 if (photo.isNotBlank()) {
                     AsyncImage(
