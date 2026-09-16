@@ -53,19 +53,24 @@ private fun immediateLegacyModel(source: String): Any? = when {
 suspend fun resolveSecureMediaModel(context: Context, source: String?): Any? {
     val normalized = source?.trim().orEmpty()
     if (normalized.isBlank()) return null
+    if (!normalized.startsWith("gs://", ignoreCase = true)) return immediateLegacyModel(normalized)
+    return resolveProtectedMediaFile(context, normalized)
+}
 
-    if (!normalized.startsWith("gs://", ignoreCase = true)) {
-        return immediateLegacyModel(normalized)
-    }
-
+/**
+ * Resolve one protected `gs://` object to a private app-cache file through the authenticated
+ * Firebase Storage SDK. A metadata request is deliberately made on every resolve so a newly
+ * applied block/hide/privacy rule invalidates an older cached copy instead of leaking it.
+ */
+suspend fun resolveProtectedMediaFile(context: Context, gsUrl: String): File? {
+    require(gsUrl.startsWith("gs://", ignoreCase = true)) { "Expected Firebase Storage gs:// reference" }
     return withContext(Dispatchers.IO) {
-        val storageRef = FirebaseStorage.getInstance().getReferenceFromUrl(normalized)
-        val cacheDir = File(context.cacheDir, "protected_media").apply { mkdirs() }
-        val cacheFile = File(cacheDir, sha256(normalized))
+        val storageRef = FirebaseStorage.getInstance().getReferenceFromUrl(gsUrl)
+        val cacheDir = File(context.applicationContext.cacheDir, "protected_media").apply { mkdirs() }
+        val extension = storageRef.name.substringAfterLast('.', "bin").take(8)
+        val cacheFile = File(cacheDir, "${sha256(gsUrl)}.$extension")
 
         try {
-            // Re-authorize even when bytes are cached so a later block/hide/privacy change takes
-            // effect immediately instead of leaking a previously authorized cached object.
             storageRef.metadata.await()
             if (!cacheFile.exists() || cacheFile.length() == 0L) {
                 val temporary = File(cacheDir, "${cacheFile.name}.part")
