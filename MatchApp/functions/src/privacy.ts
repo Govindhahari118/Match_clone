@@ -8,8 +8,14 @@ const CONTACT_LIMITS: Record<string, number> = {
   PLATINUM_12M: 300,
 };
 
+const CONTACT_TYPES = new Set(["phone", "whatsapp"]);
+
 function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("privacyRelations").doc(ownerUid).collection("members").doc(memberUid);
+}
+
+function grantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("contactGrants").doc(ownerUid).collection("viewers").doc(viewerUid);
 }
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
@@ -25,8 +31,8 @@ async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
 }
 
 /**
- * Return a matched member's phone only when the requester is entitled AND the target member's
- * current privacy choices permit it. This replaces the older payment-only contact reveal export.
+ * Return a matched member's phone/WhatsApp number only when the requester is entitled AND the
+ * target member's current global/per-person privacy choices permit that exact contact type.
  */
 export const consumeContactReveal = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
@@ -34,17 +40,22 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
   const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+  const contactType = typeof data?.contactType === "string" ? data.contactType.trim().toLowerCase() : "phone";
   if (!targetUid || targetUid === uid || targetUid.length > 128) {
     throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
   }
+  if (!CONTACT_TYPES.has(contactType)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid contact type");
+  }
 
   const matchId = [uid, targetUid].sort().join("_");
-  const [outgoingBlock, incomingBlock, requesterRelation, targetRelation, targetSettings] = await Promise.all([
+  const [outgoingBlock, incomingBlock, requesterRelation, targetRelation, targetSettings, contactGrant] = await Promise.all([
     db.collection("blocks").doc(uid).collection("blocked").doc(targetUid).get(),
     db.collection("blocks").doc(targetUid).collection("blocked").doc(uid).get(),
     relationRef(uid, targetUid).get(),
     relationRef(targetUid, uid).get(),
     db.collection("privacySettings").doc(targetUid).get(),
+    grantRef(targetUid, uid).get(),
   ]);
 
   if (outgoingBlock.exists || incomingBlock.exists) {
@@ -56,8 +67,19 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   if (targetRelation.data()?.contactHidden === true) {
     throw new functions.https.HttpsError("permission-denied", "This member has hidden their contact from you");
   }
-  if (targetSettings.data()?.contactVisibility === "nobody") {
+
+  const visibility = String(targetSettings.data()?.contactVisibility || "mutual_matches");
+  if (visibility === "nobody") {
     throw new functions.https.HttpsError("permission-denied", "This member is not sharing contact details");
+  }
+  if (visibility === "selected_people") {
+    const grant = contactGrant.data() || {};
+    const allowed = contactType === "whatsapp" ? grant.whatsappAllowed === true : grant.phoneAllowed === true;
+    if (!contactGrant.exists || !allowed) {
+      throw new functions.https.HttpsError("permission-denied", "This member has not shared this contact method with you");
+    }
+  } else if (visibility !== "mutual_matches") {
+    throw new functions.https.HttpsError("permission-denied", "This member's contact privacy setting is unavailable");
   }
 
   const userRef = db.collection("users").doc(uid);
@@ -93,7 +115,7 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
       : [];
 
     if (existingTargets.includes(targetUid)) {
-      return { phoneNumber, contactsUsed: existingTargets.length, contactsLimit: contactLimit };
+      return { phoneNumber, contactType, contactsUsed: existingTargets.length, contactsLimit: contactLimit };
     }
     if (existingTargets.length >= contactLimit) {
       throw new functions.https.HttpsError("resource-exhausted", "Contact reveal limit reached for this membership");
@@ -108,11 +130,11 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: false });
 
-    return { phoneNumber, contactsUsed: nextTargets.length, contactsLimit: contactLimit };
+    return { phoneNumber, contactType, contactsUsed: nextTargets.length, contactsLimit: contactLimit };
   });
 });
 
-/** Remove owner settings and all references to a deleted account from other users' exception lists. */
+/** Remove owner settings/grants and references to a deleted account from other users' privacy lists. */
 export const cleanupPrivacyOnUserDelete = functions.firestore
   .document("users/{uid}")
   .onDelete(async (_snap, context) => {
@@ -120,7 +142,12 @@ export const cleanupPrivacyOnUserDelete = functions.firestore
     await Promise.all([
       deleteQuery(db.collection("privacyRelations").doc(uid).collection("members")),
       deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid)),
+      deleteQuery(db.collection("contactGrants").doc(uid).collection("viewers")),
+      deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid)),
       db.collection("privacySettings").doc(uid).delete(),
     ]);
-    await db.collection("privacyRelations").doc(uid).delete().catch(() => undefined);
+    await Promise.all([
+      db.collection("privacyRelations").doc(uid).delete().catch(() => undefined),
+      db.collection("contactGrants").doc(uid).delete().catch(() => undefined),
+    ]);
   });
