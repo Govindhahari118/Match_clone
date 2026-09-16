@@ -14,13 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.match.app.domain.model.ReligionId
 import com.match.app.domain.profile.IndiaProfileCatalog
+import com.match.app.domain.profile.ReligionFieldKey
+import com.match.app.domain.profile.ReligionFieldRegistry
 import com.match.app.ui.i18n.t
 
 /** One shared 8-step profile flow for members across India and abroad. */
@@ -33,7 +35,10 @@ fun ProfileWizardScreen(
     val step by vm.currentStep.collectAsState()
     val saving by vm.saving.collectAsState()
     val error by vm.saveError.collectAsState()
+    val wizard by vm.wizardState.collectAsState()
+    val religionLocked by vm.religionLocked.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+    var confirmReligion by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) {
         error?.let {
@@ -61,7 +66,7 @@ fun ProfileWizardScreen(
             LinearProgressIndicator(
                 progress = { (step + 1) / 8f },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = Color(0xFF8B1A1A)
+                color = MaterialTheme.colorScheme.primary
             )
 
             Box(
@@ -78,7 +83,7 @@ fun ProfileWizardScreen(
                         4 -> StepFamily(vm)
                         5 -> StepLifestyle(vm)
                         6 -> StepResidence(vm)
-                        else -> StepAstrology(vm)
+                        else -> StepReligionSpecific(vm)
                     }
                 }
             }
@@ -94,10 +99,15 @@ fun ProfileWizardScreen(
                 }
                 if (step < 7) {
                     Button(
-                        onClick = vm::nextStep,
+                        onClick = {
+                            if (step == 1 && !religionLocked && wizard.religion.isNotBlank()) {
+                                confirmReligion = true
+                            } else {
+                                vm.nextStep()
+                            }
+                        },
                         enabled = !saving,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A1A))
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(t("next", "Next"))
                         Spacer(Modifier.width(4.dp))
@@ -107,17 +117,45 @@ fun ProfileWizardScreen(
                     Button(
                         onClick = { vm.finish(onComplete) },
                         enabled = !saving,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A1A))
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (saving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
-                        else Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+                        if (saving) {
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+                        }
                         Spacer(Modifier.width(8.dp))
                         Text(if (saving) "Saving…" else t("complete_profile", "Complete Profile"), fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
+    }
+
+    if (confirmReligion) {
+        AlertDialog(
+            onDismissRequest = { confirmReligion = false },
+            icon = { Icon(Icons.Filled.Lock, null) },
+            title = { Text("Confirm your religion") },
+            text = {
+                Text(
+                    "You selected ${wizard.religion}. This becomes protected matrimonial-profile information when profile creation completes. Review it now; later corrections use the support process."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    confirmReligion = false
+                    vm.nextStep()
+                }) { Text("Confirm and continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReligion = false }) { Text("Review") }
+            }
+        )
     }
 }
 
@@ -197,14 +235,68 @@ private fun StepIdentityLocation(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepCommunity(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
+    val religionLocked by vm.religionLocked.collectAsState()
+    val religionId = ReligionId.fromProfileValue(s.religion)
+    val schema = religionId?.let(ReligionFieldRegistry::schemaFor)
+    val communitySuggestions = IndiaProfileCatalog.communitySuggestions(s.religion)
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionHeader("Religion & community", "Choose what describes you. Nothing here is inferred from your state, language, surname or location.")
-        ChoiceField("Religion", s.religion, IndiaProfileCatalog.religions, { vm.update(s.copy(religion = it, caste = "", subCaste = "")) }, required = true)
-        Text("Common community choices", style = MaterialTheme.typography.labelLarge)
-        SuggestionChips(IndiaProfileCatalog.communitySuggestions(s.religion), s.caste) { vm.update(s.copy(caste = if (it == "Other") "" else it)) }
-        OutlinedTextField(s.caste, { vm.update(s.copy(caste = it.take(80))) }, label = { Text("Community / caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.subCaste, { vm.update(s.copy(subCaste = it.take(80))) }, label = { Text("Sub-community / sub-caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.gothra, { vm.update(s.copy(gothra = it.take(80))) }, label = { Text("Gothra / clan (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+
+        if (religionLocked) {
+            OutlinedTextField(
+                value = s.religion,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Religion") },
+                trailingIcon = { Icon(Icons.Filled.Lock, "Religion confirmed") },
+                supportingText = { Text("Confirmed profile information. Contact support if this was entered incorrectly.") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            ChoiceField(
+                "Religion",
+                s.religion,
+                IndiaProfileCatalog.religions,
+                {
+                    vm.update(
+                        s.copy(
+                            religion = it,
+                            caste = "",
+                            subCaste = "",
+                            gothra = "",
+                            rasi = "",
+                            nakshatra = "",
+                            manglik = "",
+                            birthTime = "",
+                            birthPlace = ""
+                        )
+                    )
+                },
+                required = true
+            )
+        }
+
+        if (schema?.supports(ReligionFieldKey.COMMUNITY) == true) {
+            if (communitySuggestions.isNotEmpty()) {
+                Text("Common community choices", style = MaterialTheme.typography.labelLarge)
+                SuggestionChips(communitySuggestions, s.caste) {
+                    vm.update(s.copy(caste = if (it == "Other") "" else it))
+                }
+            }
+            OutlinedTextField(s.caste, { vm.update(s.copy(caste = it.take(80))) }, label = { Text("Community / caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(s.subCaste, { vm.update(s.copy(subCaste = it.take(80))) }, label = { Text("Sub-community / sub-caste (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (schema?.supports(ReligionFieldKey.GOTHRA) == true) {
+            OutlinedTextField(s.gothra, { vm.update(s.copy(gothra = it.take(80))) }, label = { Text("Gothra / clan (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (religionId == ReligionId.PREFER_NOT_TO_SAY) {
+            Text(
+                "No religion-specific profile fields are required for this choice.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -293,20 +385,52 @@ private fun StepResidence(vm: ProfileWizardViewModel) {
 }
 
 @Composable
-private fun StepAstrology(vm: ProfileWizardViewModel) {
+private fun StepReligionSpecific(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
+    val religionId = ReligionId.fromProfileValue(s.religion)
+    val schema = religionId?.let(ReligionFieldRegistry::schemaFor)
+    val hasKundaliFields = schema?.supports(ReligionFieldKey.RASHI) == true ||
+        schema?.supports(ReligionFieldKey.NAKSHATRA) == true ||
+        schema?.supports(ReligionFieldKey.MANGLIK) == true
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader("Astrology / Kundali", "Optional. Used only where relevant to your selected experience and privacy settings.")
-        OutlinedTextField(s.rasi, { vm.update(s.copy(rasi = it.take(80))) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.nakshatra, { vm.update(s.copy(nakshatra = it.take(80))) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.manglik, { vm.update(s.copy(manglik = it.take(40))) }, label = { Text("Manglik (if applicable)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.birthTime, { vm.update(s.copy(birthTime = it.take(5))) }, label = { Text("Birth time (HH:MM, 24h)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.birthPlace, { vm.update(s.copy(birthPlace = it.take(100))) }, label = { Text("Birth place") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        SectionHeader(
+            if (hasKundaliFields) "Birth & Kundali" else "Compatibility details",
+            if (hasKundaliFields) {
+                "Optional. These fields appear only where they apply to your selected religion and privacy settings."
+            } else {
+                "No Hindu-only astrology fields are shown for your selected religion."
+            }
+        )
+
+        if (schema?.supports(ReligionFieldKey.RASHI) == true) {
+            OutlinedTextField(s.rasi, { vm.update(s.copy(rasi = it.take(80))) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (schema?.supports(ReligionFieldKey.NAKSHATRA) == true) {
+            OutlinedTextField(s.nakshatra, { vm.update(s.copy(nakshatra = it.take(80))) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (schema?.supports(ReligionFieldKey.MANGLIK) == true) {
+            OutlinedTextField(s.manglik, { vm.update(s.copy(manglik = it.take(40))) }, label = { Text("Manglik status (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (schema?.supports(ReligionFieldKey.BIRTH_TIME) == true) {
+            OutlinedTextField(s.birthTime, { vm.update(s.copy(birthTime = it.take(5))) }, label = { Text("Birth time (HH:MM, 24h)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+        if (schema?.supports(ReligionFieldKey.BIRTH_PLACE) == true) {
+            OutlinedTextField(s.birthPlace, { vm.update(s.copy(birthPlace = it.take(100))) }, label = { Text("Birth place") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+
         Card(shape = RoundedCornerShape(14.dp)) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.PrivacyTip, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
-                Text("Exact birth details stay private. Public Kundali compatibility uses only data allowed by your horoscope privacy choice.", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (hasKundaliFields) {
+                        "Exact birth details stay private. Compatibility uses only data allowed by your privacy choice."
+                    } else {
+                        "Religion-specific fields are optional. Matree does not infer religious practice from your name, location or language."
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
