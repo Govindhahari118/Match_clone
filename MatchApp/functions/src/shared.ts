@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
+import * as crypto from "crypto";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -41,11 +42,71 @@ export async function getFcmToken(uid: string): Promise<string | undefined> {
   return legacy;
 }
 
-export function generateMatrimonyId(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let id = "TLG-";
-  for (let i = 0; i < 5; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
+const MATRIMONY_ID_ATTEMPTS = 12;
+
+function newMatrimonyIdCandidate(): string {
+  // 64 random bits yields a compact nationwide-neutral public identifier while Firestore
+  // reservation below provides authoritative uniqueness even if a random collision occurs.
+  return `MAT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`;
+}
+
+/**
+ * Reserve a stable public Matrimony ID for one Firebase UID.
+ *
+ * `matrimonyIdAssignments/{uid}` makes trigger retries idempotent; `matrimonyIds/{id}` is the
+ * global uniqueness registry. Transactions read both documents before writing, so concurrent
+ * account creation cannot assign the same public ID or create two assignments for one UID.
+ */
+export async function reserveMatrimonyId(uid: string): Promise<string> {
+  if (!uid || uid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid account identity");
   }
-  return id;
+
+  const assignmentRef = db.collection("matrimonyIdAssignments").doc(uid);
+  for (let attempt = 0; attempt < MATRIMONY_ID_ATTEMPTS; attempt += 1) {
+    const candidate = newMatrimonyIdCandidate();
+    const registryRef = db.collection("matrimonyIds").doc(candidate);
+
+    const reserved = await db.runTransaction(async (tx) => {
+      const [assignment, registry] = await Promise.all([
+        tx.get(assignmentRef),
+        tx.get(registryRef),
+      ]);
+
+      const existing = assignment.data()?.matrimonyId;
+      if (assignment.exists && typeof existing === "string" && existing.startsWith("MAT-")) {
+        return existing;
+      }
+      if (registry.exists) return null;
+
+      const createdAt = admin.firestore.FieldValue.serverTimestamp();
+      tx.set(registryRef, { uid, createdAt }, { merge: false });
+      tx.set(assignmentRef, { uid, matrimonyId: candidate, createdAt }, { merge: false });
+      return candidate;
+    });
+
+    if (reserved) return reserved;
+  }
+
+  functions.logger.error("Unable to reserve Matrimony ID after collision retries", { uid });
+  throw new functions.https.HttpsError("resource-exhausted", "Unable to allocate profile ID");
+}
+
+/** Release the server-only uniqueness reservation as part of restartable account deletion. */
+export async function releaseMatrimonyId(uid: string): Promise<void> {
+  const assignmentRef = db.collection("matrimonyIdAssignments").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const assignment = await tx.get(assignmentRef);
+    if (!assignment.exists) return;
+
+    const matrimonyId = assignment.data()?.matrimonyId;
+    if (typeof matrimonyId === "string" && matrimonyId.startsWith("MAT-")) {
+      const registryRef = db.collection("matrimonyIds").doc(matrimonyId);
+      const registry = await tx.get(registryRef);
+      if (registry.exists && registry.data()?.uid === uid) {
+        tx.delete(registryRef);
+      }
+    }
+    tx.delete(assignmentRef);
+  });
 }
