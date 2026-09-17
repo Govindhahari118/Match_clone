@@ -2,7 +2,6 @@ package com.match.app.data.remote
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,7 +24,7 @@ class FirestoreShortlistService @Inject constructor() {
 
     /** Save a profile to shortlist. */
     suspend fun save(ownerUid: String, targetUid: String) {
-        if (ownerUid.isBlank() || targetUid.isBlank()) return
+        requireValidPair(ownerUid, targetUid)
         savedCol(ownerUid).document(targetUid).set(
             mapOf(
                 "targetUid" to targetUid,
@@ -36,25 +35,47 @@ class FirestoreShortlistService @Inject constructor() {
 
     /** Remove a profile from shortlist. */
     suspend fun remove(ownerUid: String, targetUid: String) {
-        if (ownerUid.isBlank() || targetUid.isBlank()) return
+        requireValidPair(ownerUid, targetUid)
         savedCol(ownerUid).document(targetUid).delete().await()
     }
 
     /** Check if a profile is shortlisted. */
     suspend fun isSaved(ownerUid: String, targetUid: String): Boolean {
-        if (ownerUid.isBlank() || targetUid.isBlank()) return false
+        requireValidPair(ownerUid, targetUid)
         return savedCol(ownerUid).document(targetUid).get().await().exists()
     }
 
-    /** Toggle shortlist status. Returns true if now saved. */
+    /**
+     * Atomically toggles shortlist state and returns the committed state.
+     *
+     * The previous read-then-write implementation could lose a toggle when two signed-in devices
+     * acted on the same profile at nearly the same time. Firestore transactions retry when the
+     * document changes, so each completed caller observes and mutates one serializable state.
+     */
     suspend fun toggle(ownerUid: String, targetUid: String): Boolean {
-        val wasSaved = isSaved(ownerUid, targetUid)
-        if (wasSaved) remove(ownerUid, targetUid) else save(ownerUid, targetUid)
-        return !wasSaved
+        requireValidPair(ownerUid, targetUid)
+        val ref = savedCol(ownerUid).document(targetUid)
+        return db.runTransaction { transaction ->
+            val current = transaction.get(ref)
+            if (current.exists()) {
+                transaction.delete(ref)
+                false
+            } else {
+                transaction.set(
+                    ref,
+                    mapOf(
+                        "targetUid" to targetUid,
+                        "savedAt" to FieldValue.serverTimestamp()
+                    )
+                )
+                true
+            }
+        }.await()
     }
 
     /** Observe all shortlisted UIDs for a user in real-time. */
     fun observeSavedUids(ownerUid: String): Flow<List<String>> = callbackFlow {
+        require(ownerUid.isNotBlank()) { "ownerUid is required" }
         val reg = savedCol(ownerUid)
             .orderBy("savedAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
@@ -67,7 +88,14 @@ class FirestoreShortlistService @Inject constructor() {
 
     /** Get all shortlisted UIDs (one-shot). */
     suspend fun getSavedUids(ownerUid: String): List<String> {
+        require(ownerUid.isNotBlank()) { "ownerUid is required" }
         val snap = savedCol(ownerUid).get().await()
         return snap.documents.mapNotNull { it.getString("targetUid") }
+    }
+
+    private fun requireValidPair(ownerUid: String, targetUid: String) {
+        require(ownerUid.isNotBlank()) { "ownerUid is required" }
+        require(targetUid.isNotBlank()) { "targetUid is required" }
+        require(ownerUid != targetUid) { "A profile cannot shortlist itself" }
     }
 }
