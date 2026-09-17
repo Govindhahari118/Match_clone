@@ -107,14 +107,23 @@ io.on('connection', (socket) => {
       const { receiverId, content, clientMessageId } = data;
       const message = await messageService.saveMessage(authenticatedUserId, receiverId, content, clientMessageId);
       io.to(receiverId).emit('receive_message', message);
-      await messageService.markDelivered(message.id);
-      const delivered = { ...message, status: 'delivered' };
-      socket.emit('message_sent', delivered);
-      if (typeof acknowledge === 'function') acknowledge({ ok: true, message: delivered });
+      socket.emit('message_sent', message);
+      if (typeof acknowledge === 'function') acknowledge({ ok: true, message });
     } catch (error) {
       const payload = { ok: false, error: error.statusCode && error.statusCode < 500 ? error.message : 'Unable to send message' };
       if (typeof acknowledge === 'function') acknowledge(payload);
       else socket.emit('message_failed', payload);
+    }
+  });
+
+  socket.on('message_delivered', async (data = {}, acknowledge) => {
+    try {
+      const receipt = await messageService.markDelivered(data.messageId, authenticatedUserId);
+      io.to(receipt.senderId).emit('message_status', receipt);
+      if (typeof acknowledge === 'function') acknowledge({ ok: true, receipt });
+    } catch (error) {
+      const payload = { ok: false, error: error.statusCode && error.statusCode < 500 ? error.message : 'Unable to acknowledge message' };
+      if (typeof acknowledge === 'function') acknowledge(payload);
     }
   });
 });
