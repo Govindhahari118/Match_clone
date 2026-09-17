@@ -39,6 +39,14 @@ function email(value: unknown): string {
   return result;
 }
 
+function indianMobile(value: unknown): string {
+  const result = text(value, "phone", 10);
+  if (!/^[6-9][0-9]{9}$/.test(result)) {
+    throw new functions.https.HttpsError("invalid-argument", "Enter a valid 10-digit Indian mobile number");
+  }
+  return result;
+}
+
 function choice(value: unknown, field: string, allowed: Set<string>): string {
   const result = text(value, field, 80);
   if (!allowed.has(result)) {
@@ -69,6 +77,11 @@ async function assertRelationshipAvailable(uid: string, targetUid: string): Prom
   }
 }
 
+async function assertMutualMatch(uid: string, targetUid: string, message: string): Promise<void> {
+  const match = await db.collection("matches").doc(pairId(uid, targetUid)).get();
+  if (!match.exists) throw new functions.https.HttpsError("failed-precondition", message);
+}
+
 export const registerForEvent = functions.https.onCall(async (data, context) => {
   const uid = authUid(context);
   const eventId = text(data?.eventId, "event id", 128);
@@ -84,6 +97,11 @@ export const registerForEvent = functions.https.onCall(async (data, context) => 
     const dateMillis = Number(event.data()?.dateMillis || 0);
     if (Number.isFinite(dateMillis) && dateMillis > 0 && dateMillis < Date.now()) {
       throw new functions.https.HttpsError("failed-precondition", "Registration for this event has closed");
+    }
+    const capacity = Number(event.data()?.capacity || 0);
+    const attendees = Number(event.data()?.attendees || 0);
+    if (Number.isFinite(capacity) && capacity > 0 && attendees >= capacity) {
+      throw new functions.https.HttpsError("resource-exhausted", "This event is full");
     }
     tx.set(registrationRef, {
       uid,
@@ -119,14 +137,19 @@ export const recordReferral = functions.https.onCall(async (data, context) => {
   if (ownEmail && ownEmail === referredEmail) {
     throw new functions.https.HttpsError("invalid-argument", "You cannot refer your own account");
   }
-  const ref = db.collection("referrals").doc();
+  const normalizedHash = Buffer.from(referredEmail).toString("base64url");
+  const ref = db.collection("referrals").doc(`${uid}_${normalizedHash}`);
+  const existing = await ref.get();
+  if (existing.exists) {
+    return { success: true, referralId: ref.id, alreadyReferred: true };
+  }
   await ref.set({
     referrerUid: uid,
     referredEmail,
     status: "pending",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  return { success: true, referralId: ref.id };
+  return { success: true, referralId: ref.id, alreadyReferred: false };
 });
 
 /** A callback lead: selected RM package is a preference, not an entitlement or payment grant. */
@@ -134,35 +157,62 @@ export const requestRelationshipManager = functions.https.onCall(async (data, co
   const uid = authUid(context);
   const user = await db.collection("users").doc(uid).get();
   if (!user.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
-  const ref = db.collection("rmRequests").doc();
-  await ref.set({
-    uid,
-    name: text(data?.name, "name", 100),
-    phone: text(data?.phone, "phone", 20),
-    preferences: text(data?.preferences, "preferences", 2000, false),
-    plan: choice(data?.plan, "relationship manager package", RM_PLANS),
-    status: "pending",
-    assignedRM: null,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  const ref = db.collection("rmRequests").doc(uid);
+  const name = text(data?.name, "name", 100);
+  const phone = indianMobile(data?.phone);
+  const preferences = text(data?.preferences, "preferences", 2000, false);
+  const plan = choice(data?.plan, "relationship manager package", RM_PLANS);
+
+  const response = await db.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    const status = String(current.data()?.status || "");
+    if (current.exists && status !== "closed" && status !== "cancelled") {
+      return { requestId: ref.id, alreadyRequested: true, status };
+    }
+    tx.set(ref, {
+      uid,
+      name,
+      phone,
+      preferences,
+      plan,
+      status: "pending",
+      assignedRM: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    return { requestId: ref.id, alreadyRequested: false, status: "pending" };
   });
-  return { success: true, requestId: ref.id };
+  return { success: true, ...response };
 });
 
 /** Package selection records a service request only; it does not assert payment or verification. */
 export const requestBackgroundCheck = functions.https.onCall(async (data, context) => {
   const uid = authUid(context);
   const targetUid = text(data?.targetUid, "target profile", 128);
-  const packageName = choice(data?.plan, "background check package", BACKGROUND_CHECK_PACKAGES);
+  const selectedPackage = choice(data?.plan, "background check package", BACKGROUND_CHECK_PACKAGES);
   await assertRelationshipAvailable(uid, targetUid);
-  const ref = db.collection("backgroundChecks").doc();
-  await ref.set({
-    requestedBy: uid,
-    targetUid,
-    plan: packageName,
-    status: "submitted",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  await assertMutualMatch(uid, targetUid, "Background-check requests require a mutual match");
+  const target = await db.collection("users").doc(targetUid).get();
+  const targetProfileId = String(target.data()?.matrimonyId || "");
+  const ref = db.collection("backgroundChecks").doc(`${uid}_${targetUid}`);
+  const response = await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    const status = String(existing.data()?.status || "");
+    if (existing.exists && status !== "cancelled") {
+      return { requestId: ref.id, alreadyRequested: true, status: status || "submitted" };
+    }
+    tx.set(ref, {
+      requestedBy: uid,
+      targetUid,
+      targetProfileId,
+      plan: selectedPackage,
+      status: "submitted",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    return { requestId: ref.id, alreadyRequested: false, status: "submitted" };
   });
-  return { success: true, requestId: ref.id };
+  return { success: true, ...response };
 });
 
 export const requestSecureCall = functions.https.onCall(async (data, context) => {
@@ -174,10 +224,7 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
   }
   const scheduledAt = text(data?.scheduledAt, "scheduled time", 100, false);
   await assertRelationshipAvailable(uid, targetUid);
-  const match = await db.collection("matches").doc(pairId(uid, targetUid)).get();
-  if (!match.exists) {
-    throw new functions.https.HttpsError("failed-precondition", "Secure calls require a mutual match");
-  }
+  await assertMutualMatch(uid, targetUid, "Secure calls require a mutual match");
   const ref = db.collection("callRequests").doc();
   await ref.set({
     fromUid: uid,

@@ -38,45 +38,78 @@ class AssistedViewModel @Inject constructor(
 
     private fun loadLeadInfo() = viewModelScope.launch {
         val uid = session.firebaseUid.firstOrNull() ?: return@launch
-        val request = featureService.getRMRequest(uid)
-        if (request != null) {
-            _ui.update { it.copy(
-                leadName = request["name"] as? String ?: "",
-                leadPhone = request["phone"] as? String ?: "",
-                selectedPlan = request["plan"] as? String ?: "FREE",
-                submitted = true
-            ) }
-        }
+        runCatching { featureService.getRMRequest(uid) }
+            .onSuccess { request ->
+                if (request != null) {
+                    _ui.update {
+                        it.copy(
+                            leadName = request["name"] as? String ?: "",
+                            leadPhone = request["phone"] as? String ?: "",
+                            leadPreference = request["preferences"] as? String ?: "",
+                            selectedPlan = request["plan"] as? String ?: "Gold RM",
+                            submitted = true,
+                            error = null
+                        )
+                    }
+                }
+            }
+            .onFailure {
+                _ui.update { state ->
+                    state.copy(error = "Unable to load your assisted-service request.")
+                }
+            }
     }
 
-    fun onNameChange(name: String) = _ui.update { it.copy(leadName = name.take(100)) }
-    fun onPhoneChange(phone: String) = _ui.update { it.copy(leadPhone = phone.filter { ch -> ch.isDigit() }.take(15)) }
-    fun onPreferenceChange(pref: String) = _ui.update { it.copy(leadPreference = pref.take(2000)) }
-    fun onPlanSelect(plan: String) = _ui.update { it.copy(selectedPlan = plan) }
+    fun onNameChange(name: String) = _ui.update {
+        it.copy(leadName = name.take(100), error = null)
+    }
+
+    fun onPhoneChange(phone: String) = _ui.update {
+        it.copy(leadPhone = phone.filter(Char::isDigit).take(10), error = null)
+    }
+
+    fun onPreferenceChange(preference: String) = _ui.update {
+        it.copy(leadPreference = preference.take(2000), error = null)
+    }
+
+    fun onPlanSelect(plan: String) = _ui.update {
+        it.copy(selectedPlan = plan, error = null)
+    }
 
     fun submitRequest() = viewModelScope.launch {
-        val uid = session.firebaseUid.firstOrNull() ?: return@launch
-        val name = _ui.value.leadName.trim()
-        val phone = _ui.value.leadPhone.trim()
-        if (name.length < 2 || phone.length < 7) {
-            _ui.update { it.copy(error = "Enter a valid name and phone number before submitting.") }
+        val uid = session.firebaseUid.firstOrNull()
+        if (uid.isNullOrBlank()) {
+            _ui.update { it.copy(error = "Sign in before requesting assisted matchmaking.") }
             return@launch
         }
-        _ui.update { it.copy(loading = true, error = null) }
+        val state = _ui.value
+        if (state.leadName.trim().length < 2) {
+            _ui.update { it.copy(error = "Enter your full name.") }
+            return@launch
+        }
+        if (state.leadPhone.length != 10) {
+            _ui.update { it.copy(error = "Enter a valid 10-digit mobile number.") }
+            return@launch
+        }
 
-        try {
+        _ui.update { it.copy(loading = true, error = null) }
+        runCatching {
             featureService.requestRM(
                 uid = uid,
-                plan = _ui.value.selectedPlan,
-                preferences = _ui.value.leadPreference.trim(),
-                name = name,
-                phone = phone
+                plan = state.selectedPlan,
+                preferences = state.leadPreference.trim(),
+                name = state.leadName.trim(),
+                phone = state.leadPhone
             )
+        }.onSuccess {
             _ui.update { it.copy(loading = false, submitted = true) }
-        } catch (e: Exception) {
-            _ui.update { it.copy(loading = false, error = "Failed to submit request. Please try again.") }
+        }.onFailure {
+            _ui.update {
+                it.copy(
+                    loading = false,
+                    error = "Unable to submit the request. Check your connection and try again."
+                )
+            }
         }
     }
-
-    fun resetSubmission() = _ui.update { it.copy(submitted = false) }
 }

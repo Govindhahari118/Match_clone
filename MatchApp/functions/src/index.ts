@@ -22,4 +22,6 @@ export * from "./presence";
 export * from "./identity";
 export * from "./savedSearches";
 export * from "./features";
+export * from "./analytics";
+export * from "./backgroundChecks";
 export * from "./profilePrivacyMigration";
