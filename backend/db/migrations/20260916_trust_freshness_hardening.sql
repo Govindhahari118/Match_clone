@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS "ContactRequest" (
   "targetId" UUID NOT NULL,
   "status" TEXT NOT NULL DEFAULT 'pending',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "ContactRequest_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "ContactRequest_targetId_fkey" FOREIGN KEY ("targetId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "ContactRequest_not_self" CHECK ("requesterId" <> "targetId")
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS "PhotoAccessRequest" (
   "targetId" UUID NOT NULL,
   "status" TEXT NOT NULL DEFAULT 'pending',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "PhotoAccessRequest_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "PhotoAccessRequest_targetId_fkey" FOREIGN KEY ("targetId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "PhotoAccessRequest_not_self" CHECK ("requesterId" <> "targetId")
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS "SupportTicket" (
   "resolvedAt" TIMESTAMP(3),
   "closedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SupportTicket_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 CREATE INDEX IF NOT EXISTS "SupportTicket_userId_status_idx" ON "SupportTicket"("userId", "status");
