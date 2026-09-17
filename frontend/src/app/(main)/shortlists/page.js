@@ -103,7 +103,7 @@ export default function ShortlistsPage() {
   const shortlistStats = useMemo(() => ({
     total: list.length,
     verified: list.filter((item) => item.isVerified).length,
-    active: list.filter((item) => ["active_today", "active_this_week", "active_recently"].includes(item.activity?.key)).length,
+    active: list.filter((item) => ["active_today", "active_this_week", "active_recently"].includes(item.activity?.code)).length,
   }), [list]);
 
   const handleRemove = async (userId) => {
