@@ -44,6 +44,7 @@ class FirestoreProfileService @Inject constructor(
             "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
             "manglik", "birthTime", "birthPlace", "incomeBand"
         )
+        private val LEGACY_PUBLIC_PRIVACY_FIELDS = setOf("isIncognito", "showLastActive")
     }
 
     suspend fun pushProfile(entity: UserEntity, confirmReligion: Boolean = false) {
@@ -63,6 +64,10 @@ class FirestoreProfileService @Inject constructor(
             put("birthPlace", FieldValue.delete())
             put("incomeBand", FieldValue.delete())
             put("lastActiveAt", FieldValue.delete())
+            // These old preferences are replaced by device-local/session state and owner-only
+            // privacySettings. Delete any legacy copies whenever the owner next syncs a profile.
+            put("isIncognito", FieldValue.delete())
+            put("showLastActive", FieldValue.delete())
         }
 
         if (confirmReligion) {
@@ -113,6 +118,7 @@ class FirestoreProfileService @Inject constructor(
         require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's profile" }
         require(fields.keys.none { it in SERVER_OWNED_FIELDS }) { "Server-owned field update rejected" }
         require(fields.keys.none { it in PROTECTED_PROFILE_FIELDS }) { "Protected profile field update rejected" }
+        require(fields.keys.none { it in LEGACY_PUBLIC_PRIVACY_FIELDS }) { "Legacy public privacy field update rejected" }
 
         val privateUpdates = fields.filterKeys { it in PRIVATE_FIELDS }
         val publicUpdates = fields.filterKeys { it !in PRIVATE_FIELDS }
@@ -279,7 +285,6 @@ class FirestoreProfileService @Inject constructor(
         "willingToRelocate" to e.willingToRelocate,
         "createdAt" to e.createdAt,
         "ageBucket" to ageBucketFor(e.age),
-        "isIncognito" to e.isIncognito,
         "familyValues" to e.familyValues,
         "aboutFamily" to e.aboutFamily,
         "weight" to e.weight,
@@ -298,8 +303,8 @@ class FirestoreProfileService @Inject constructor(
         "photoUrl" to e.photoUrl,
         "voiceBioUrl" to e.voiceBioUrl,
         "profileCompleteness" to e.profileCompleteness,
+        // stealthMode remains public because Firestore/Storage rules must be able to enforce it.
         "stealthMode" to e.stealthMode,
-        "showLastActive" to e.showLastActive,
         "showHoroscope" to e.showHoroscope,
         "incomeDisclosure" to e.incomeDisclosure,
         "matchScore" to e.matchScore,
@@ -364,7 +369,8 @@ class FirestoreProfileService @Inject constructor(
         createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
         lastActiveAt = (data["lastActiveAt"] as? Number)?.toLong() ?: 0L,
         phoneNumber = data["phoneNumber"] as? String ?: "",
-        isIncognito = data["isIncognito"] as? Boolean ?: false,
+        // Incognito is a device-local browsing preference, not remote profile data.
+        isIncognito = false,
         ageBucket = data["ageBucket"] as? String ?: "",
         familyValues = data["familyValues"] as? String ?: "",
         aboutFamily = data["aboutFamily"] as? String ?: "",
@@ -391,7 +397,8 @@ class FirestoreProfileService @Inject constructor(
         profileCompleteness = (data["profileCompleteness"] as? Number)?.toFloat() ?: 0f,
         verificationLevel = (data["verificationLevel"] as? Number)?.toInt() ?: 0,
         stealthMode = data["stealthMode"] as? Boolean ?: false,
-        showLastActive = data["showLastActive"] as? Boolean ?: true,
+        // Activity visibility is resolved through privacySettings/getMemberPresence.
+        showLastActive = true,
         showHoroscope = data["showHoroscope"] as? Boolean ?: true,
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
