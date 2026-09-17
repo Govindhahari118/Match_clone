@@ -7,13 +7,14 @@ import api from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import LoginPromptModal from "../../../components/LoginPromptModal";
 
+const PROFILE_PLACEHOLDER = "/profile-placeholder.svg";
 const DEMO_CONVERSATIONS = [
   {
     userId: "preview-profile",
     name: "Preview Profile",
-    photo: "https://randomuser.me/api/portraits/women/44.jpg",
-    role: "Professional",
-    city: "India",
+    photo: PROFILE_PLACEHOLDER,
+    role: "Guest preview",
+    city: "",
     lastMessage: "Guest preview only — login to access real conversations.",
     updatedAt: Date.now(),
     unread: 0,
@@ -30,6 +31,7 @@ const DEMO_MESSAGES = {
     },
   ],
 };
+const STATUS_RANK = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
 
 function formatTime(value) {
   const date = new Date(value);
@@ -49,6 +51,23 @@ function upsertMessage(list, incoming) {
   const next = [...list];
   next[index] = { ...next[index], ...incoming };
   return next;
+}
+
+function applyReceipt(list, receipt = {}) {
+  const ids = new Set(receipt.messageIds || (receipt.messageId ? [receipt.messageId] : []));
+  if (!ids.size || !receipt.status) return list;
+  return list.map((message) => {
+    if (!ids.has(message.id)) return message;
+    const currentRank = STATUS_RANK[message.status] ?? 0;
+    const nextRank = STATUS_RANK[receipt.status] ?? 0;
+    if (nextRank < currentRank) return message;
+    return {
+      ...message,
+      status: receipt.status,
+      deliveredAt: receipt.deliveredAt || message.deliveredAt,
+      readAt: receipt.readAt || message.readAt,
+    };
+  });
 }
 
 export default function ChatPage() {
@@ -109,7 +128,13 @@ export default function ChatPage() {
           return;
         }
         const response = await api.get(`/chat/${selectedId}`);
-        setMessages(Array.isArray(response.data) ? response.data : []);
+        const loaded = Array.isArray(response.data) ? response.data : [];
+        setMessages(loaded);
+        if (socket?.connected) {
+          loaded
+            .filter((message) => message.senderId !== myUserId && message.status === "sent" && message.id)
+            .forEach((message) => socket.emit("message_delivered", { messageId: message.id }));
+        }
         await api.post(`/chat/${selectedId}/read`).catch(() => {});
         setConversations((prev) => prev.map((item) => item.userId === selectedId ? { ...item, unread: 0 } : item));
       } catch {
@@ -120,7 +145,7 @@ export default function ChatPage() {
       }
     };
     loadMessages();
-  }, [selectedId, user]);
+  }, [selectedId, user, socket, myUserId]);
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,6 +154,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!socket) return undefined;
     const onReceiveMessage = (message) => {
+      if (message?.id) socket.emit("message_delivered", { messageId: message.id });
       const peerId = message.senderId === myUserId ? selectedId : message.senderId;
       if (!peerId) return;
       setConversations((prev) => prev.map((item) => item.userId === peerId ? {
@@ -138,16 +164,19 @@ export default function ChatPage() {
         unread: peerId === selectedId ? 0 : (item.unread || 0) + 1,
       } : item));
       if (peerId === selectedId) {
-        setMessages((prev) => upsertMessage(prev, message));
+        setMessages((prev) => upsertMessage(prev, { ...message, status: message.status || "sent" }));
         api.post(`/chat/${selectedId}/read`).catch(() => {});
       }
     };
     const onMessageSent = (message) => setMessages((prev) => upsertMessage(prev, message));
+    const onMessageStatus = (receipt) => setMessages((prev) => applyReceipt(prev, receipt));
     socket.on("receive_message", onReceiveMessage);
     socket.on("message_sent", onMessageSent);
+    socket.on("message_status", onMessageStatus);
     return () => {
       socket.off("receive_message", onReceiveMessage);
       socket.off("message_sent", onMessageSent);
+      socket.off("message_status", onMessageStatus);
     };
   }, [socket, myUserId, selectedId]);
 
@@ -231,7 +260,7 @@ export default function ChatPage() {
               const active = conversation.userId === selectedId;
               return (
                 <button key={conversation.userId} type="button" onClick={() => setSelectedId(conversation.userId)} style={{ width: "100%", textAlign: "left", borderRadius: 14, border: active ? "1px solid rgba(240,107,78,0.4)" : "1px solid rgba(23,33,59,0.08)", background: active ? "rgba(240,107,78,0.12)" : "#fff", padding: "0.55rem", cursor: "pointer", display: "grid", gridTemplateColumns: "48px minmax(0,1fr)", gap: "0.52rem" }}>
-                  <Image src={conversation.photo || "https://randomuser.me/api/portraits/lego/1.jpg"} alt={`${conversation.name} photo`} width={48} height={48} sizes="48px" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover" }} />
+                  <Image src={conversation.photo || PROFILE_PLACEHOLDER} alt={conversation.photo ? `${conversation.name} photo` : "Profile photo unavailable"} width={48} height={48} sizes="48px" style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover" }} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "0.4rem" }}>
                       <strong style={{ fontSize: "0.88rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conversation.name}</strong>
@@ -251,7 +280,7 @@ export default function ChatPage() {
           ) : (
             <>
               <header style={{ display: "flex", alignItems: "center", gap: "0.6rem", paddingBottom: "0.58rem", borderBottom: "1px solid var(--line)" }}>
-                <Image src={selectedConversation.photo || "https://randomuser.me/api/portraits/lego/1.jpg"} alt={`${selectedConversation.name} photo`} width={46} height={46} sizes="46px" style={{ borderRadius: 12, objectFit: "cover" }} />
+                <Image src={selectedConversation.photo || PROFILE_PLACEHOLDER} alt={selectedConversation.photo ? `${selectedConversation.name} photo` : "Profile photo unavailable"} width={46} height={46} sizes="46px" style={{ borderRadius: 12, objectFit: "cover" }} />
                 <div>
                   <strong>{selectedConversation.name}</strong>
                   <p style={{ margin: "0.2rem 0 0", fontSize: "0.78rem", color: "var(--ink-muted)" }}>{selectedConversation.activity?.label || selectedConversation.city || "Connected"}{selectedConversation.managedBy && ` · Managed by ${selectedConversation.managedBy}`}</p>
