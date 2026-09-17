@@ -82,3 +82,84 @@ export const migrateLegacyPrivateProfileFields = functions.pubsub
     });
     return null;
   });
+
+/**
+ * Removes obsolete browsing/activity preferences from public profile documents.
+ *
+ * `isIncognito` is a device-local browsing choice and must never be discoverable from another
+ * member's public profile. `showLastActive` has been replaced by owner-only `privacySettings`.
+ * When migrating the old boolean we preserve the user's intent only if they have not already
+ * chosen a value in the new privacy dashboard. The transaction prevents the migration from
+ * overwriting a concurrent modern preference change.
+ */
+export const migrateLegacyPublicVisibilityFields = functions.pubsub
+  .schedule("45 3 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("publicVisibilityFieldsV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    let migratedProfiles = 0;
+    for (const pageDoc of page.docs) {
+      const changed = await db.runTransaction(async (tx) => {
+        const userRef = pageDoc.ref;
+        const settingsRef = db.collection("privacySettings").doc(pageDoc.id);
+        const [userSnap, settingsSnap] = await Promise.all([
+          tx.get(userRef),
+          tx.get(settingsRef),
+        ]);
+        if (!userSnap.exists) return false;
+
+        const user = userSnap.data() || {};
+        const hasIncognito = user.isIncognito !== undefined;
+        const hasLegacyLastActive = user.showLastActive !== undefined;
+        if (!hasIncognito && !hasLegacyLastActive) return false;
+
+        if (hasLegacyLastActive && settingsSnap.data()?.lastActiveVisibility === undefined) {
+          tx.set(settingsRef, {
+            // The old switch was global: false meant nobody; true meant visible to members.
+            lastActiveVisibility: user.showLastActive === false ? "nobody" : "everyone",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+
+        const deletes: Record<string, FirebaseFirestore.FieldValue> = {};
+        if (hasIncognito) deletes.isIncognito = admin.firestore.FieldValue.delete();
+        if (hasLegacyLastActive) deletes.showLastActive = admin.firestore.FieldValue.delete();
+        tx.update(userRef, deletes);
+        return true;
+      });
+      if (changed) migratedProfiles += 1;
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    await stateRef.set({
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migrated: admin.firestore.FieldValue.increment(migratedProfiles),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    functions.logger.info("Legacy public visibility migration page completed", {
+      scanned: page.size,
+      migrated: migratedProfiles,
+      cursor: lastId,
+    });
+    return null;
+  });
