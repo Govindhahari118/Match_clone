@@ -33,6 +33,18 @@ async function findActiveMatch(user1Id, user2Id) {
     });
 }
 
+async function getMessageForReceipt(messageId) {
+    return prisma.message.findUnique({
+        where: { id: messageId },
+        select: {
+            id: true,
+            senderId: true,
+            status: true,
+            match: { select: { userAId: true, userBId: true, isActive: true } },
+        },
+    });
+}
+
 const messageService = {
     async areUsersMatched(user1Id, user2Id) {
         if (await safetyService.isBlocked(user1Id, user2Id)) return false;
@@ -81,24 +93,42 @@ const messageService = {
         return message;
     },
 
-    async markDelivered(messageId) {
-        return prisma.message.updateMany({
-            where: { id: messageId, status: 'sent' },
-            data: { status: 'delivered', deliveredAt: new Date() },
+    async markDelivered(messageId, recipientId) {
+        const message = await getMessageForReceipt(messageId);
+        if (!message) throw appError('Message not found', 404);
+        if (!message.match?.isActive) throw appError('Conversation is no longer active', 409);
+        if (message.senderId === recipientId) throw appError('Sender cannot acknowledge own delivery', 403);
+        if (![message.match.userAId, message.match.userBId].includes(recipientId)) {
+            throw appError('Not allowed to acknowledge this message', 403);
+        }
+
+        const now = new Date();
+        await prisma.message.updateMany({
+            where: { id: messageId, status: { in: ['sent', 'queued'] } },
+            data: { status: 'delivered', deliveredAt: now },
         });
+        return { messageId, senderId: message.senderId, status: 'delivered', deliveredAt: now };
     },
 
     async markRead(readerId, otherUserId) {
         await safetyService.ensureNotBlocked(readerId, otherUserId);
         const match = await findActiveMatch(readerId, otherUserId);
-        if (!match) return { updated: 0 };
+        if (!match) return { updated: 0, messageIds: [], senderId: otherUserId };
+
+        const unread = await prisma.message.findMany({
+            where: { matchId: match.id, senderId: otherUserId, isRead: false },
+            select: { id: true },
+        });
+        if (!unread.length) return { updated: 0, messageIds: [], senderId: otherUserId };
+
+        const messageIds = unread.map((item) => item.id);
         const now = new Date();
         const result = await prisma.message.updateMany({
-            where: { matchId: match.id, senderId: { not: readerId }, isRead: false },
+            where: { id: { in: messageIds }, isRead: false },
             data: { isRead: true, status: 'read', readAt: now, deliveredAt: now },
         });
         await trustService.recordActivity(readerId);
-        return { updated: result.count };
+        return { updated: result.count, messageIds, senderId: otherUserId, status: 'read', readAt: now };
     },
 
     async getMessages(user1Id, user2Id) {
@@ -139,6 +169,7 @@ const messageService = {
                     userId: other.id,
                     name: [other.profile?.firstName, other.profile?.lastName].filter(Boolean).join(' ') || 'Member',
                     photo: photo?.thumbnailUrl || photo?.photoUrl || null,
+                    photoState: photo ? 'available' : 'unavailable',
                     matchId: match.id,
                     lastMessageAt: match.lastMessageAt,
                     activity: trustService.activityBucket(other),
