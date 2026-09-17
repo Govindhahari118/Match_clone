@@ -6,6 +6,8 @@ const authMiddleware = require('../middleware/auth.middleware');
 router.use(authMiddleware);
 
 router.get('/plans', paymentController.getPlans);
+router.get('/history', paymentController.getHistory);
+router.get('/status/:orderId', paymentController.getStatus);
 router.post('/create-order', paymentController.createOrder);
 router.post('/verify', paymentController.verifyPayment);
 

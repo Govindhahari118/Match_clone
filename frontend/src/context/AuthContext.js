@@ -15,7 +15,6 @@ function notifyAuthChange() {
 
 function readStoredUser() {
   if (typeof window === "undefined") return null;
-
   try {
     const token = localStorage.getItem("accessToken");
     const storedUser = localStorage.getItem("user");
@@ -28,32 +27,18 @@ function readStoredUser() {
 
 function subscribeAuth(listener) {
   authListeners.add(listener);
-
   const onStorage = (event) => {
-    if (event.key === "user" || event.key === "accessToken" || event.key === "refreshToken") {
-      listener();
-    }
+    if (event.key === "user" || event.key === "accessToken" || event.key === "refreshToken") listener();
   };
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", onStorage);
-  }
-
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
   return () => {
     authListeners.delete(listener);
-    if (typeof window !== "undefined") {
-      window.removeEventListener("storage", onStorage);
-    }
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
   };
 }
 
-function getAuthSnapshot() {
-  return readStoredUser();
-}
-
-function getAuthServerSnapshot() {
-  return null;
-}
+function getAuthSnapshot() { return readStoredUser(); }
+function getAuthServerSnapshot() { return null; }
 
 export const AuthProvider = ({ children }) => {
   const user = useSyncExternalStore(subscribeAuth, getAuthSnapshot, getAuthServerSnapshot);
@@ -61,22 +46,24 @@ export const AuthProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user || typeof window === "undefined") return undefined;
+    const token = localStorage.getItem("accessToken");
+    if (!token) return undefined;
 
-    const newSocket = io(SOCKET_URL);
+    const newSocket = io(SOCKET_URL, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+    });
 
     newSocket.on("connect", () => {
+      // Server derives the room from the verified JWT. The id argument is kept only for legacy compatibility.
       newSocket.emit("join_room", user.id);
       setSocket(newSocket);
     });
-
-    newSocket.on("new_match", () => {
-      toast.success("You have a new match. Start chatting now.");
-    });
-
-    newSocket.on("new_like", () => {
-      toast.info("Someone is interested in you. Check matches.");
-    });
+    newSocket.on("connect_error", () => setSocket(null));
+    newSocket.on("new_match", () => toast.success("You have a new match. Start chatting now."));
+    newSocket.on("new_like", () => toast.info("Someone is interested in you. Check matches."));
 
     return () => {
       newSocket.disconnect();
@@ -87,18 +74,13 @@ export const AuthProvider = ({ children }) => {
   const login = async (userDetails, accessToken, refreshToken) => {
     localStorage.setItem("user", JSON.stringify(userDetails));
     localStorage.setItem("accessToken", accessToken);
-    if (refreshToken) {
-      localStorage.setItem("refreshToken", refreshToken);
-    }
+    if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
     notifyAuthChange();
   };
 
   const logout = () => {
-    if (socket) {
-      socket.disconnect();
-      setSocket(null);
-    }
-
+    if (socket) socket.disconnect();
+    setSocket(null);
     localStorage.removeItem("user");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
@@ -114,6 +96,4 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);

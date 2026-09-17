@@ -9,7 +9,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "seed": "node prisma/seed-pg.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check:syntax": "find src scripts -type f -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "check:trust": "node scripts/trust-regression-check.js",
+    "test": "npm run check:syntax && npm run check:trust"
   },
   "keywords": [],
   "author": "",

@@ -1,212 +1,151 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "react-toastify";
+import api from "../../../services/api";
 
 const FAQS = [
-    {
-        category: "Getting Started",
-        icon: "🚀",
-        items: [
-            { q: "How do I create a profile?", a: "Click 'Create Free Profile', fill in your basic details, upload a photo, and complete your preferences. The whole process takes under 5 minutes." },
-            { q: "Is registration really free?", a: "Yes, creating a profile and browsing are free. Premium features like viewing contact numbers and video calling require a subscription." },
-            { q: "How do I verify my profile?", a: "Go to Profile → Verification, upload a government-issued ID (Aadhaar, PAN, Passport). Verification usually completes within 24 hours." },
-        ],
-    },
-    {
-        category: "Matching & Search",
-        icon: "💖",
-        items: [
-            { q: "How does AI matching work?", a: "Our AI analyses 50+ data points including personality traits, values, lifestyle choices, and preferences to compute a compatibility percentage for each profile." },
-            { q: "How do I send an interest?", a: "Click 'Send Interest' on any profile card. If they accept, you'll both be able to chat and view contact info." },
-            { q: "What is a mutual match?", a: "A mutual match happens when both users have accepted each other's interest. Mutual matches can chat freely and view contact numbers." },
-        ],
-    },
-    {
-        category: "Premium Plans",
-        icon: "👑",
-        items: [
-            { q: "What's included in premium plans?", a: "Premium includes contact number access, priority search placement, AI compatibility reports, and for Platinum a dedicated relationship manager." },
-            { q: "Can I get a refund?", a: "Yes, we offer a 7-day money-back guarantee on all plans. Contact support within 7 days of purchase for a full refund." },
-            { q: "How do I upgrade my plan?", a: "Go to Pricing in the navigation or your profile menu, choose a plan, and complete the payment via Razorpay, UPI, or card." },
-        ],
-    },
-    {
-        category: "Privacy & Safety",
-        icon: "🔒",
-        items: [
-            { q: "Who can see my phone number?", a: "Your phone number is hidden by default. It's only visible to users you've mutually matched with on premium plans." },
-            { q: "How do I report someone?", a: "On any profile, tap the '⋮' menu and select 'Report Profile'. Our safety team reviews all reports within 24 hours." },
-            { q: "Is my data safe?", a: "We use bank-grade SSL encryption and never sell personal data to third parties. Your privacy is our top priority." },
-        ],
-    },
+  ["What does Identity Verified mean?", "It means the supported identity verification process was completed. It does not guarantee compatibility, conduct or marriage outcome."],
+  ["Why do I see Active this week instead of an exact time?", "Activity is shown as a privacy-friendly freshness bucket unless the member has chosen to share exact last-seen information."],
+  ["Can premium members see my phone number automatically?", "No. Paid membership does not override your contact privacy. Contact details require the configured consent flow."],
+  ["Why did a profile stop appearing?", "The member may have paused, found a match, become stale, been removed from discovery, blocked you, or no longer satisfy your must-match preferences."],
+  ["Will the app relax my mandatory filters?", "No. Preferences marked Must match are enforced before ranking. If no profiles match, you choose whether to relax a criterion."],
+  ["What happens when I block someone?", "Blocking removes discovery, active matching, messaging and pending contact/photo-access paths between the two profiles."],
+  ["What does Resolved mean on a support ticket?", "Support believes the issue has been addressed. The ticket becomes Closed only after you confirm the resolution."],
 ];
 
-const CATEGORIES = [
-    { title: "Getting Started", icon: "🚀", color: "#e11d48", bg: "#fff1f2", href: "#getting-started" },
-    { title: "Matching & AI", icon: "🤖", color: "#8b5cf6", bg: "#faf5ff", href: "#matching" },
-    { title: "Premium Plans", icon: "👑", color: "#d97706", bg: "#fffbeb", href: "#premium" },
-    { title: "Privacy & Safety", icon: "🔒", color: "#0ea5e9", bg: "#f0f9ff", href: "#privacy" },
-    { title: "Technical Issues", icon: "🔧", color: "#10b981", bg: "#f0fdf4", href: "#tech" },
-    { title: "Billing", icon: "💳", color: "#f97316", bg: "#fff7ed", href: "#billing" },
-];
+function humanize(value) {
+  return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 export default function HelpPage() {
-    const [search, setSearch] = useState("");
-    const [openFaq, setOpenFaq] = useState(null);
-    const [activeCategory, setActiveCategory] = useState(null);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ category: "technical", subject: "", description: "", priority: "normal" });
+  const [search, setSearch] = useState("");
+  const [openFaq, setOpenFaq] = useState(null);
 
-    const filteredFaqs = FAQS.map(section => ({
-        ...section,
-        items: section.items.filter(
-            item =>
-                item.q.toLowerCase().includes(search.toLowerCase()) ||
-                item.a.toLowerCase().includes(search.toLowerCase())
-        ),
-    })).filter(section => section.items.length > 0 && (!activeCategory || section.category === activeCategory));
+  const loadTickets = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get("/support");
+      setTickets(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      toast.error(error?.response?.data?.error || "Support tickets could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <div>
-            {/* Hero */}
-            <div style={{
-                background: "linear-gradient(135deg, #1a0533, #4a0070, #8b0037)",
-                borderRadius: 28, padding: "3rem 2rem", marginBottom: "2rem",
-                textAlign: "center", position: "relative", overflow: "hidden",
-            }}>
-                <div style={{ position: "absolute", top: -40, left: -40, width: 200, height: 200, background: "rgba(139,92,246,0.15)", borderRadius: "50%", filter: "blur(40px)" }}></div>
-                <div style={{ position: "absolute", bottom: -40, right: -40, width: 200, height: 200, background: "rgba(225,29,72,0.15)", borderRadius: "50%", filter: "blur(40px)" }}></div>
-                <div style={{ position: "relative" }}>
-                    <div style={{ fontSize: 48, marginBottom: "1rem" }}>💬</div>
-                    <h1 style={{ fontSize: 28, fontWeight: 900, color: "white", marginBottom: 8 }}>How can we help you?</h1>
-                    <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 14, marginBottom: "1.75rem" }}>Search our knowledge base or browse categories below</p>
-                    <div style={{ maxWidth: 500, margin: "0 auto", position: "relative" }}>
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Search for help... e.g. 'how to verify profile'"
-                            style={{
-                                width: "100%", padding: "14px 20px 14px 50px",
-                                borderRadius: 16, border: "none",
-                                background: "rgba(255,255,255,0.95)",
-                                fontSize: 14, outline: "none", fontFamily: "inherit",
-                                boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
-                            }}
-                        />
-                        <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 18 }}>🔍</span>
-                    </div>
-                </div>
-            </div>
+  useEffect(() => { loadTickets(); }, []);
 
-            {/* Quick Categories */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.875rem", marginBottom: "2rem" }}>
-                {CATEGORIES.map(cat => (
-                    <button
-                        key={cat.title}
-                        onClick={() => setActiveCategory(activeCategory === cat.title ? null : cat.title)}
-                        style={{
-                            display: "flex", flexDirection: "column", gap: 10,
-                            padding: "1.25rem", borderRadius: 18, textAlign: "left",
-                            background: activeCategory === cat.title ? cat.color : cat.bg,
-                            border: `1.5px solid ${cat.color}22`,
-                            cursor: "pointer",
-                            transform: activeCategory === cat.title ? "scale(1.02)" : "scale(1)",
-                            boxShadow: activeCategory === cat.title ? `0 8px 24px ${cat.color}33` : "none",
-                            transition: "all 0.2s",
-                        }}
-                    >
-                        <span style={{ fontSize: 28 }}>{cat.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: activeCategory === cat.title ? "white" : cat.color }}>{cat.title}</span>
-                    </button>
-                ))}
-            </div>
+  const filteredFaqs = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return FAQS;
+    return FAQS.filter(([question, answer]) => `${question} ${answer}`.toLowerCase().includes(query));
+  }, [search]);
 
-            {/* FAQ Section */}
-            <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                    <h2 style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>Frequently Asked Questions</h2>
-                    {(activeCategory || search) && (
-                        <button onClick={() => { setActiveCategory(null); setSearch(""); }} style={{ fontSize: 12, fontWeight: 700, color: "#e11d48", background: "none", border: "none", cursor: "pointer" }}>
-                            Clear Filter ✕
-                        </button>
-                    )}
-                </div>
+  const createTicket = async (event) => {
+    event.preventDefault();
+    if (!form.subject.trim() || !form.description.trim()) {
+      toast.error("Subject and description are required.");
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.post("/support", form);
+      setForm({ category: "technical", subject: "", description: "", priority: "normal" });
+      await loadTickets();
+      toast.success("Support ticket created. Its status and history will remain visible here.");
+    } catch (error) {
+      toast.error(error?.response?.data?.error || "Ticket could not be created.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
-                {filteredFaqs.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "4rem", background: "white", borderRadius: 20, border: "1.5px solid #f1f5f9" }}>
-                        <div style={{ fontSize: 48, marginBottom: "1rem" }}>🤔</div>
-                        <h3 style={{ fontWeight: 800, color: "#111827", marginBottom: 8 }}>No results found</h3>
-                        <p style={{ color: "#64748b", fontSize: 14 }}>Try different keywords or contact support below</p>
-                    </div>
-                ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                        {filteredFaqs.map((section) => (
-                            <div key={section.category} style={{ background: "white", borderRadius: 20, border: "1.5px solid #f1f5f9", overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.04)" }}>
-                                <div style={{ padding: "14px 20px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", gap: 8 }}>
-                                    <span style={{ fontSize: 20 }}>{section.icon}</span>
-                                    <h3 style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{section.category}</h3>
-                                    <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, background: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: 99 }}>{section.items.length} articles</span>
-                                </div>
-                                {section.items.map((item, idx) => {
-                                    const key = `${section.category}-${idx}`;
-                                    const isOpen = openFaq === key;
-                                    return (
-                                        <div key={idx} style={{ borderBottom: idx < section.items.length - 1 ? "1px solid #f8fafc" : "none" }}>
-                                            <button
-                                                onClick={() => setOpenFaq(isOpen ? null : key)}
-                                                style={{
-                                                    width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                    padding: "14px 20px", background: isOpen ? "#fafafa" : "none", border: "none",
-                                                    cursor: "pointer", textAlign: "left", gap: 12,
-                                                    transition: "background 0.2s",
-                                                }}
-                                            >
-                                                <span style={{ fontSize: 14, fontWeight: 700, color: isOpen ? "#e11d48" : "#1e293b" }}>{item.q}</span>
-                                                <span style={{
-                                                    width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                                                    background: isOpen ? "#fce7f3" : "#f1f5f9", color: isOpen ? "#e11d48" : "#64748b",
-                                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                                    fontSize: 16, fontWeight: 700, transition: "all 0.2s",
-                                                    transform: isOpen ? "rotate(45deg)" : "rotate(0)",
-                                                }}>+</span>
-                                            </button>
-                                            {isOpen && (
-                                                <div style={{ padding: "0 20px 16px", animation: "fadeIn 0.2s ease" }}>
-                                                    <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.7 }}>{item.a}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+  const confirmResolution = async (ticketId, accepted) => {
+    try {
+      await api.post(`/support/${ticketId}/confirm-resolution`, { accepted });
+      await loadTickets();
+      toast.success(accepted ? "Ticket closed after your confirmation." : "Ticket reopened for further work.");
+    } catch (error) {
+      toast.error(error?.response?.data?.error || "Ticket status could not be updated.");
+    }
+  };
 
-            {/* Contact Support */}
-            <div style={{ marginTop: "2rem" }}>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: "#111827", marginBottom: "1rem" }}>Still need help?</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1rem" }}>
-                    {[
-                        { icon: "💬", title: "Live Chat", desc: "Chat with us in real-time", action: "Start Chat →", color: "#10b981", bg: "#f0fdf4", border: "#86efac" },
-                        { icon: "📧", title: "Email Us", desc: "support@matrimonyconnect.com", action: "Send Email →", color: "#0ea5e9", bg: "#f0f9ff", border: "#7dd3fc" },
-                        { icon: "📞", title: "Call Us", desc: "Mon–Sat 9AM–8PM IST", action: "1800-XXX-XXXX", color: "#8b5cf6", bg: "#faf5ff", border: "#c4b5fd" },
-                        { icon: "🎫", title: "Raise Ticket", desc: "We respond within 24 hours", action: "Open Ticket →", color: "#f97316", bg: "#fff7ed", border: "#fdba74" },
-                    ].map(card => (
-                        <div key={card.title}
-                            style={{ background: card.bg, border: `1.5px solid ${card.border}`, borderRadius: 20, padding: "1.5rem", cursor: "pointer", transition: "all 0.2s" }}
-                            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = `0 8px 24px ${card.border}99`; }}
-                            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-                        >
-                            <div style={{ fontSize: 36, marginBottom: 10 }}>{card.icon}</div>
-                            <h3 style={{ fontWeight: 800, fontSize: 15, color: "#111827", marginBottom: 4 }}>{card.title}</h3>
-                            <p style={{ fontSize: 12, color: "#64748b", marginBottom: "1rem" }}>{card.desc}</p>
-                            <span style={{ fontSize: 13, fontWeight: 800, color: card.color }}>{card.action}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
+  return (
+    <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: "1rem" }}>
+      <header className="panel" style={{ padding: "1.1rem" }}>
+        <p className="section-label" style={{ marginBottom: "0.2rem" }}>Help & accountability</p>
+        <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "1.9rem" }}>Support you can track</h1>
+        <p style={{ margin: "0.4rem 0 0", color: "var(--ink-muted)", lineHeight: 1.55 }}>No fake hotline, invented SLA, or demo “ticket created” state. Every ticket below is backed by a real server record and status timeline.</p>
+      </header>
+
+      <section className="panel" style={{ padding: "1rem" }}>
+        <h2 style={{ marginTop: 0 }}>Knowledge base</h2>
+        <input className="form-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search verification, privacy, matching, blocking…" />
+        <div style={{ display: "grid", gap: "0.45rem", marginTop: "0.7rem" }}>
+          {filteredFaqs.map(([question, answer], index) => (
+            <button key={question} type="button" className="panel" onClick={() => setOpenFaq(openFaq === index ? null : index)} style={{ padding: "0.7rem", textAlign: "left", cursor: "pointer" }}>
+              <strong>{question}</strong>
+              {openFaq === index && <p style={{ margin: "0.4rem 0 0", color: "var(--ink-muted)", lineHeight: 1.5 }}>{answer}</p>}
+            </button>
+          ))}
+          {filteredFaqs.length === 0 && <p style={{ color: "var(--ink-muted)" }}>No article matched. Raise a ticket below.</p>}
         </div>
-    );
+      </section>
+
+      <section className="panel" style={{ padding: "1rem" }}>
+        <h2 style={{ marginTop: 0 }}>Raise a support ticket</h2>
+        <form onSubmit={createTicket} style={{ display: "grid", gap: "0.65rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "0.6rem" }}>
+            <label>Category<select className="form-input" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}><option value="technical">Technical issue</option><option value="payment">Payment</option><option value="verification">Verification</option><option value="safety">Safety / report</option><option value="privacy">Privacy</option><option value="account">Account</option><option value="other">Other</option></select></label>
+            <label>Priority<select className="form-input" value={form.priority} onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))}><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+          </div>
+          <label>Subject<input className="form-input" maxLength={180} value={form.subject} onChange={(e) => setForm((p) => ({ ...p, subject: e.target.value }))} /></label>
+          <label>Describe the issue<textarea className="form-input" rows={5} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} /></label>
+          <button className="button button-primary" type="submit" disabled={creating}>{creating ? "Creating…" : "Create ticket"}</button>
+        </form>
+      </section>
+
+      <section className="panel" style={{ padding: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", alignItems: "center" }}>
+          <h2 style={{ margin: 0 }}>My tickets</h2>
+          <button type="button" className="button button-secondary" onClick={loadTickets}>Refresh</button>
+        </div>
+        <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.75rem" }}>
+          {loading ? <p>Loading tickets…</p> : tickets.length === 0 ? <p style={{ color: "var(--ink-muted)" }}>No tickets yet.</p> : tickets.map((ticket) => (
+            <article key={ticket.id} className="panel" style={{ padding: "0.75rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", flexWrap: "wrap" }}>
+                <div>
+                  <strong>{ticket.subject}</strong>
+                  <p style={{ margin: "0.2rem 0 0", color: "var(--ink-muted)", fontSize: "0.78rem" }}>{humanize(ticket.category)} · Priority {humanize(ticket.priority)} · Ticket {ticket.id.slice(0, 8)}</p>
+                </div>
+                <span className="chip chip-support">{humanize(ticket.status)}</span>
+              </div>
+              <p style={{ margin: "0.55rem 0", lineHeight: 1.5 }}>{ticket.description}</p>
+              <p style={{ margin: 0, color: "var(--ink-muted)", fontSize: "0.75rem" }}>Assigned: {ticket.assignedTeam || "Waiting for assignment"} · Last update: {new Date(ticket.updatedAt).toLocaleString()}</p>
+              {ticket.resolution && <div className="panel" style={{ marginTop: "0.6rem", padding: "0.6rem" }}><strong>Support resolution</strong><p style={{ margin: "0.25rem 0 0" }}>{ticket.resolution}</p></div>}
+              {ticket.status === "resolved" && (
+                <div style={{ display: "flex", gap: "0.45rem", marginTop: "0.65rem", flexWrap: "wrap" }}>
+                  <button className="button button-primary" type="button" onClick={() => confirmResolution(ticket.id, true)}>Issue resolved — close</button>
+                  <button className="button button-secondary" type="button" onClick={() => confirmResolution(ticket.id, false)}>Not resolved — reopen</button>
+                </div>
+              )}
+              {ticket.events?.length > 0 && (
+                <details style={{ marginTop: "0.6rem" }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 700 }}>Ticket history ({ticket.events.length})</summary>
+                  <div style={{ display: "grid", gap: "0.35rem", marginTop: "0.45rem" }}>
+                    {ticket.events.map((event) => <div key={event.id} style={{ fontSize: "0.76rem", color: "var(--ink-muted)" }}>{new Date(event.createdAt).toLocaleString()} · {humanize(event.eventType)}{event.message ? ` · ${event.message}` : ""}</div>)}
+                  </div>
+                </details>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
 }

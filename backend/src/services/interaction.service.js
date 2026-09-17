@@ -1,94 +1,188 @@
 const prisma = require('../config/prisma');
+const safetyService = require('./safety.service');
+const exposureService = require('./exposure.service');
+const trustService = require('./trust.service');
 
 const incomeBands = ['below_5L', '5-10L', '10-25L', '25-50L', '50L+'];
+const PUBLIC_USER_SELECT = {
+    id: true,
+    isVerified: true,
+    lastActiveAt: true,
+    lastLogin: true,
+    searchStatus: true,
+    profile: {
+        select: {
+            firstName: true,
+            lastName: true,
+            dateOfBirth: true,
+            city: true,
+            profession: true,
+            role: true,
+        },
+    },
+    photos: {
+        where: { isPrimary: true, moderationStatus: 'approved' },
+        take: 1,
+        select: { photoUrl: true, thumbnailUrl: true },
+    },
+};
+
+function appError(message, statusCode = 400) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
+
+async function assertInteractionTarget(senderId, receiverId) {
+    if (!receiverId || senderId === receiverId) throw appError('Invalid profile interaction');
+    await safetyService.ensureNotBlocked(senderId, receiverId);
+    const receiver = await prisma.user.findUnique({
+        where: { id: receiverId },
+        select: { id: true, isActive: true, isBanned: true, deletedAt: true, searchStatus: true },
+    });
+    if (!receiver || !receiver.isActive || receiver.isBanned || receiver.deletedAt || !['active', 'low_activity'].includes(receiver.searchStatus)) {
+        throw appError('Profile is unavailable', 404);
+    }
+    return receiver;
+}
 
 const interactionService = {
-    // ── Like / Interest ──────────────────────────────────────────────────────
     async likeUser(senderId, receiverId) {
-        const incomingLike = await prisma.like.findFirst({
-            where: { senderId: receiverId, receiverId: senderId }
+        await assertInteractionTarget(senderId, receiverId);
+
+        const result = await prisma.$transaction(async (tx) => {
+            const [outgoingLike, incomingLike, existingMatch] = await Promise.all([
+                tx.like.findUnique({ where: { senderId_receiverId: { senderId, receiverId } } }),
+                tx.like.findUnique({ where: { senderId_receiverId: { senderId: receiverId, receiverId: senderId } } }),
+                tx.match.findFirst({
+                    where: {
+                        OR: [
+                            { userAId: senderId, userBId: receiverId },
+                            { userAId: receiverId, userBId: senderId },
+                        ],
+                    },
+                }),
+            ]);
+
+            if (existingMatch?.isActive || outgoingLike?.status === 'accepted' || incomingLike?.status === 'accepted') {
+                if (existingMatch && !existingMatch.isActive) {
+                    await tx.match.update({ where: { id: existingMatch.id }, data: { isActive: true } });
+                }
+                await tx.like.updateMany({
+                    where: {
+                        OR: [
+                            { senderId, receiverId },
+                            { senderId: receiverId, receiverId: senderId },
+                        ],
+                    },
+                    data: { status: 'accepted' },
+                });
+                return {
+                    status: 'accepted',
+                    isMatch: true,
+                    matchId: existingMatch?.id || null,
+                    event: 'unchanged',
+                };
+            }
+
+            if (incomingLike?.status === 'sent') {
+                const savedOutgoing = await tx.like.upsert({
+                    where: { senderId_receiverId: { senderId, receiverId } },
+                    update: { status: 'accepted' },
+                    create: { senderId, receiverId, status: 'accepted' },
+                });
+                const matchRecord = existingMatch
+                    ? await tx.match.update({ where: { id: existingMatch.id }, data: { isActive: true } })
+                    : await tx.match.create({ data: { userAId: senderId, userBId: receiverId } });
+                await tx.like.update({ where: { id: incomingLike.id }, data: { status: 'accepted' } });
+                return {
+                    status: savedOutgoing.status,
+                    isMatch: true,
+                    matchId: matchRecord.id,
+                    event: 'matched',
+                };
+            }
+
+            if (outgoingLike?.status === 'sent') {
+                return { status: 'sent', isMatch: false, matchId: null, event: 'unchanged' };
+            }
+
+            await tx.like.upsert({
+                where: { senderId_receiverId: { senderId, receiverId } },
+                update: { status: 'sent' },
+                create: { senderId, receiverId, status: 'sent' },
+            });
+            return { status: 'sent', isMatch: false, matchId: null, event: 'interest_sent' };
         });
 
-        await prisma.like.upsert({
-            where: { senderId_receiverId: { senderId, receiverId } },
-            update: { status: 'sent' },
-            create: { senderId, receiverId, status: 'sent' }
-        });
-
-        let isMatch = false;
-        let matchRecord = null;
-
-        if (incomingLike) {
-            isMatch = true;
-            const existing = await prisma.match.findFirst({
-                where: { OR: [{ userAId: senderId, userBId: receiverId }, { userAId: receiverId, userBId: senderId }] }
-            });
-            matchRecord = existing || await prisma.match.create({ data: { userAId: senderId, userBId: receiverId } });
-            // Update both like statuses to "accepted"
-            await prisma.like.updateMany({
-                where: { OR: [{ senderId, receiverId }, { senderId: receiverId, receiverId: senderId }] },
-                data: { status: 'accepted' }
-            });
-        }
-
-        return { status: 'liked', isMatch, matchId: matchRecord?.id };
+        await Promise.all([
+            exposureService.setInteractionState(senderId, receiverId, result.isMatch ? 'connected' : 'interest_sent'),
+            trustService.recordActivity(senderId),
+        ]);
+        if (result.isMatch) await exposureService.setInteractionState(receiverId, senderId, 'connected');
+        return result;
     },
 
-    // ── Reject / Decline ─────────────────────────────────────────────────────
     async rejectUser(senderId, receiverId) {
-        // Upsert so repeated passes don't create duplicates
+        await assertInteractionTarget(senderId, receiverId);
         await prisma.like.upsert({
             where: { senderId_receiverId: { senderId, receiverId } },
             update: { status: 'rejected' },
-            create: { senderId, receiverId, status: 'rejected' }
+            create: { senderId, receiverId, status: 'rejected' },
         });
+        await Promise.all([
+            exposureService.setInteractionState(senderId, receiverId, 'hidden'),
+            trustService.recordActivity(senderId),
+        ]);
         return { status: 'rejected' };
     },
 
-    // ── Decline (receiver declines incoming interest) ─────────────────────────
     async declineInterest(receiverId, senderId) {
-        await prisma.like.upsert({
-            where: { senderId_receiverId: { senderId, receiverId } },
-            update: { status: 'rejected' },
-            create: { senderId, receiverId, status: 'rejected' }
+        await safetyService.ensureNotBlocked(receiverId, senderId);
+        await prisma.like.updateMany({
+            where: { senderId, receiverId, status: 'sent' },
+            data: { status: 'rejected' },
         });
+        await trustService.recordActivity(receiverId);
         return { status: 'declined' };
     },
 
-    // ── Get Interests ─────────────────────────────────────────────────────────
+    async withdrawInterest(senderId, receiverId) {
+        const result = await prisma.like.updateMany({
+            where: { senderId, receiverId, status: 'sent' },
+            data: { status: 'withdrawn' },
+        });
+        await trustService.recordActivity(senderId);
+        return { status: result.count > 0 ? 'withdrawn' : 'unchanged' };
+    },
+
     async getInterests(userId, type) {
+        const blockedRows = await prisma.userBlock.findMany({
+            where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
+            select: { blockerId: true, blockedUserId: true },
+        });
+        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+
         if (type === 'received') {
             const likes = await prisma.like.findMany({
-                where: { receiverId: userId, status: { notIn: ['rejected', 'accepted'] } },
+                where: { receiverId: userId, status: 'sent' },
                 orderBy: { createdAt: 'desc' },
-                include: {
-                    sender: {
-                        select: { id: true, isVerified: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true } },
-                            photos: { where: { isPrimary: true }, take: 1, select: { photoUrl: true, thumbnailUrl: true } }
-                        }
-                    }
-                }
+                include: { sender: { select: PUBLIC_USER_SELECT } },
             });
-            return likes.map(l => _formatLikeUser(l.sender, l.createdAt));
+            return likes.filter((like) => !blockedIds.has(like.senderId)).map((like) => _formatLikeUser(like.sender, like.createdAt));
         }
 
         if (type === 'sent') {
             const likes = await prisma.like.findMany({
                 where: { senderId: userId },
                 orderBy: { createdAt: 'desc' },
-                include: {
-                    receiver: {
-                        select: { id: true, isVerified: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true } },
-                            photos: { where: { isPrimary: true }, take: 1, select: { photoUrl: true, thumbnailUrl: true } }
-                        }
-                    }
-                }
+                include: { receiver: { select: PUBLIC_USER_SELECT } },
             });
-            return likes.map(l => ({ ..._formatLikeUser(l.receiver, l.createdAt), status: l.status, sentAt: _timeAgo(l.createdAt) }));
+            return likes.filter((like) => !blockedIds.has(like.receiverId)).map((like) => ({
+                ..._formatLikeUser(like.receiver, like.createdAt),
+                status: like.status,
+                sentAt: _timeAgo(like.createdAt),
+            }));
         }
 
         if (type === 'mutual') {
@@ -96,123 +190,161 @@ const interactionService = {
                 where: { OR: [{ userAId: userId }, { userBId: userId }], isActive: true },
                 orderBy: { createdAt: 'desc' },
                 include: {
-                    userA: {
-                        select: { id: true, isVerified: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true } },
-                            photos: { where: { isPrimary: true }, take: 1, select: { photoUrl: true, thumbnailUrl: true } }
-                        }
-                    },
-                    userB: {
-                        select: { id: true, isVerified: true },
-                        include: {
-                            profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true } },
-                            photos: { where: { isPrimary: true }, take: 1, select: { photoUrl: true, thumbnailUrl: true } }
-                        }
-                    }
-                }
+                    userA: { select: PUBLIC_USER_SELECT },
+                    userB: { select: PUBLIC_USER_SELECT },
+                },
             });
-            return matches.map(m => {
-                const other = m.userAId === userId ? m.userB : m.userA;
-                return { ..._formatLikeUser(other, m.createdAt), matchedAt: _timeAgo(m.createdAt) };
-            });
+            return matches.map((match) => {
+                const other = match.userAId === userId ? match.userB : match.userA;
+                if (blockedIds.has(other.id)) return null;
+                return { ..._formatLikeUser(other, match.createdAt), matchedAt: _timeAgo(match.createdAt) };
+            }).filter(Boolean);
         }
-
         return [];
     },
 
-    // ── Report / Block ────────────────────────────────────────────────────────
     async reportUser(reporterId, reportedUserId, reportType, description) {
-        const report = await prisma.report.create({
-            data: { reporterId, reportedUserId, reportType, description: description || null }
-        });
-        return { success: true, reportId: report.id };
+        await assertInteractionTarget(reporterId, reportedUserId);
+        const report = await safetyService.createReport({ reporterId, reportedUserId, reportType, description });
+        return { success: true, reportId: report.id, status: report.status, severity: report.severity };
     },
 
-    // ── Compatibility Score ───────────────────────────────────────────────────
-    async getCompatibilityScore(userId, targetProfileId) {
-        const [myPrefs, myProfile, target] = await Promise.all([
+    async blockUser(userId, targetId, reason) { return safetyService.blockUser(userId, targetId, reason); },
+    async unblockUser(userId, targetId) { return safetyService.unblockUser(userId, targetId); },
+    async requestContact(userId, targetId) { return safetyService.requestContact(userId, targetId); },
+    async respondContact(userId, requestId, action) { return safetyService.respondContactRequest(userId, requestId, action); },
+    async requestPhotoAccess(userId, targetId) { return safetyService.requestPhotoAccess(userId, targetId); },
+    async respondPhotoAccess(userId, requestId, action) { return safetyService.respondPhotoAccess(userId, requestId, action); },
+
+    async getCompatibilitySummary(userId, targetUserId) {
+        const [myPrefs, myProfile, targetProfile] = await Promise.all([
             prisma.partnerPreference.findUnique({ where: { userId } }),
             prisma.profile.findUnique({ where: { userId } }),
-            prisma.profile.findFirst({ where: { id: targetProfileId } })
+            prisma.profile.findUnique({ where: { userId: targetUserId } }),
         ]);
-        if (!target || !myProfile) return 60; // default fallback
+        if (!myProfile || !targetProfile) return { score: null, strength: 'unknown', reasons: [] };
 
-        let score = 50;
-        if (!myPrefs) return score;
-
-        // Age match
-        const age = new Date().getFullYear() - new Date(target.dateOfBirth).getFullYear();
-        if (age >= myPrefs.minAge && age <= myPrefs.maxAge) score += 15;
-
-        // Religion match
-        if (myPrefs.preferredReligions?.length > 0 && myPrefs.preferredReligions.includes(target.religion)) score += 10;
-        if (myPrefs.religionOpen) score += 5;
-
-        // Income match
-        if (myPrefs.minIncomeBand && target.incomeBand) {
-            const minIdx = incomeBands.indexOf(myPrefs.minIncomeBand);
-            const targetIdx = incomeBands.indexOf(target.incomeBand);
-            if (targetIdx >= minIdx) score += 10;
+        const reasons = [];
+        let earned = 0;
+        let possible = 0;
+        if (myPrefs) {
+            const targetAge = _age(targetProfile.dateOfBirth);
+            possible += 25;
+            if (targetAge !== null && targetAge >= myPrefs.minAge && targetAge <= myPrefs.maxAge) {
+                earned += 25;
+                reasons.push('Age preference matches');
+            }
+            if (myPrefs.preferredLocations?.length) {
+                possible += 20;
+                if (myPrefs.preferredLocations.some((value) => value === targetProfile.city || value === targetProfile.state)) {
+                    earned += 20;
+                    reasons.push('Location preference matches');
+                }
+            }
+            if (!myPrefs.religionOpen && myPrefs.preferredReligions?.length) {
+                possible += 20;
+                if (myPrefs.preferredReligions.includes(targetProfile.religion)) {
+                    earned += 20;
+                    reasons.push('Religion preference matches');
+                }
+            } else if (myPrefs.preferredReligions?.length && myPrefs.preferredReligions.includes(targetProfile.religion)) {
+                possible += 10;
+                earned += 10;
+                reasons.push('Religion preference aligns');
+            }
+            if (myPrefs.minIncomeBand && targetProfile.incomeBand) {
+                possible += 15;
+                const minIndex = incomeBands.indexOf(myPrefs.minIncomeBand);
+                const targetIndex = incomeBands.indexOf(targetProfile.incomeBand);
+                if (minIndex >= 0 && targetIndex >= minIndex) {
+                    earned += 15;
+                    reasons.push('Income preference matches');
+                }
+            }
         }
 
-        // Location match
-        if (myPrefs.preferredLocations?.length > 0 && myPrefs.preferredLocations.some(l => l === target.city || l === target.state)) score += 10;
-
-        return Math.min(score, 99);
+        possible += 20;
+        if (myProfile.city && targetProfile.city && myProfile.city.toLowerCase() === targetProfile.city.toLowerCase()) {
+            earned += 20;
+            reasons.push('Same city');
+        }
+        const score = possible > 0 ? Math.round((earned / possible) * 100) : null;
+        const strength = score === null ? 'unknown' : score >= 75 ? 'strong' : score >= 50 ? 'good' : 'partial';
+        return { score, strength, reasons: Array.from(new Set(reasons)).slice(0, 4) };
     },
 
-    // ── Profile Views ─────────────────────────────────────────────────────────
+    async getCompatibilityScore(userId, targetProfileId) {
+        const target = await prisma.profile.findUnique({ where: { id: targetProfileId }, select: { userId: true } });
+        if (!target) return null;
+        return (await this.getCompatibilitySummary(userId, target.userId)).score;
+    },
+
     async recordProfileView(viewerId, viewedUserId) {
-        // We store in AuditLog as a cheap lightweight solution without a new migration
-        await prisma.auditLog.create({
-            data: { userId: viewerId, action: 'profile_view', resourceType: 'profile', resourceId: viewedUserId }
-        });
+        if (!viewerId || !viewedUserId || viewerId === viewedUserId) return;
+        await safetyService.ensureNotBlocked(viewerId, viewedUserId);
+        await Promise.all([
+            prisma.auditLog.create({
+                data: { userId: viewerId, action: 'profile_view', resourceType: 'profile', resourceId: viewedUserId },
+            }),
+            exposureService.recordExposure(viewerId, viewedUserId, 'seen'),
+            trustService.recordActivity(viewerId),
+        ]);
     },
 
     async getProfileViewers(userId, limit = 20) {
-        const views = await prisma.auditLog.findMany({
-            where: { action: 'profile_view', resourceId: userId },
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-            distinct: ['userId'],
-            include: {
-                user: {
-                    select: { id: true, isVerified: true },
-                    include: {
-                        profile: { select: { firstName: true, lastName: true, dateOfBirth: true, city: true, profession: true } },
-                        photos: { where: { isPrimary: true }, take: 1, select: { photoUrl: true, thumbnailUrl: true } }
-                    }
-                }
-            }
-        });
-        return views.filter(v => v.user).map(v => _formatLikeUser(v.user, v.createdAt));
-    }
+        const [views, blockedRows] = await Promise.all([
+            prisma.auditLog.findMany({
+                where: { action: 'profile_view', resourceId: userId },
+                orderBy: { createdAt: 'desc' },
+                take: limit * 2,
+                distinct: ['userId'],
+                include: { user: { select: PUBLIC_USER_SELECT } },
+            }),
+            prisma.userBlock.findMany({
+                where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
+                select: { blockerId: true, blockedUserId: true },
+            }),
+        ]);
+        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+        return views.filter((view) => view.user && !blockedIds.has(view.user.id)).slice(0, limit).map((view) => _formatLikeUser(view.user, view.createdAt));
+    },
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+function _age(dateOfBirth) {
+    if (!dateOfBirth) return null;
+    const now = new Date();
+    const dob = new Date(dateOfBirth);
+    let age = now.getFullYear() - dob.getFullYear();
+    const monthDelta = now.getMonth() - dob.getMonth();
+    if (monthDelta < 0 || (monthDelta === 0 && now.getDate() < dob.getDate())) age -= 1;
+    return age;
+}
+
 function _formatLikeUser(user, date) {
-    const p = user.profile;
-    const age = p?.dateOfBirth ? new Date().getFullYear() - new Date(p.dateOfBirth).getFullYear() : null;
+    const profile = user.profile;
     return {
-        id: user.id, userId: user.id,
-        firstName: p?.firstName || 'Unknown',
-        age,
-        city: p?.city || '',
-        profession: p?.profession || '',
+        id: user.id,
+        userId: user.id,
+        firstName: profile?.firstName || 'Unknown',
+        age: _age(profile?.dateOfBirth),
+        city: profile?.city || '',
+        profession: profile?.profession || '',
+        managedBy: profile?.role || 'self',
         photo: user.photos?.[0]?.thumbnailUrl || user.photos?.[0]?.photoUrl || null,
         isVerified: user.isVerified,
-        receivedAt: _timeAgo(date)
+        activity: trustService.activityBucket(user),
+        searchStatus: user.searchStatus,
+        receivedAt: _timeAgo(date),
     };
 }
 
 function _timeAgo(date) {
     const diff = Date.now() - new Date(date).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 60) return `${m || 1}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 60) return `${minutes || 1}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
 }
 
 module.exports = interactionService;

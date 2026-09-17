@@ -8,50 +8,65 @@ datasource db {
 }
 
 model User {
-  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  phone             String?     @unique
-  email             String?     @unique
-  passwordHash      String?
-  isVerified        Boolean     @default(false)
-  verificationCode  String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  lastLogin         DateTime?
-  isActive          Boolean     @default(true)
-  isBanned          Boolean     @default(false)
-  banReason         String?
-  banExpiresAt      DateTime?
-  role              String      @default("user") // "user", "admin"
-  
+  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone               String?     @unique
+  email               String?     @unique
+  passwordHash        String?
+  isVerified          Boolean     @default(false)
+  verificationCode    String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  lastLogin           DateTime?
+  lastActiveAt        DateTime?
+  statusReconfirmedAt DateTime?
+  searchStatus        String      @default("active") // active | low_activity | paused | found_match | married | closed
+  profileVersion      Int         @default(1)
+  deletedAt           DateTime?
+  isActive            Boolean     @default(true)
+  isBanned            Boolean     @default(false)
+  banReason           String?
+  banExpiresAt        DateTime?
+  role                String      @default("user") // user | admin
+
   // Identity Verification
-  identityStatus    String      @default("unverified") // "unverified", "pending", "verified", "rejected"
+  identityStatus    String      @default("unverified") // unverified | pending | verified | rejected
   identityDocUrl    String?
 
   // Social Login
-  socialProvider    String?     // "google", "apple", "facebook"
-  socialId          String?     // Unique ID from provider
+  socialProvider    String?
+  socialId          String?
 
   // Relations
-  profile           Profile?
-  partnerPreference PartnerPreference?
-  photos            Photo[]
-  verifications     Verification[]
-  subscriptions     Subscription[]
-  payments          Payment[]
-  likesSent         Like[]      @relation("sender")
-  likesReceived     Like[]      @relation("receiver")
-  matches           Match[]     @relation("userA")
-  matchesAsUserB    Match[]     @relation("userB")
-  messages          Message[]
-  reports           Report[]    @relation("reporter")
-  reportsReceived   Report[]    @relation("reported")
-  shortlists        Shortlist[] @relation("shortlister")
-  shortlistedBy     Shortlist[] @relation("shortlisted")
-  savedSearches     SavedSearch[]
-  reviewsWritten    Review[]    @relation("reviewer")
-  reviewsReceived   Review[]    @relation("reviewedUser")
-  adminUser         AdminUser?
-  auditLogs         AuditLog[]
+  profile                 Profile?
+  partnerPreference       PartnerPreference?
+  photos                  Photo[]
+  verifications           Verification[]
+  subscriptions           Subscription[]
+  payments                Payment[]
+  likesSent               Like[]              @relation("sender")
+  likesReceived           Like[]              @relation("receiver")
+  matches                 Match[]             @relation("userA")
+  matchesAsUserB          Match[]             @relation("userB")
+  messages                Message[]
+  reports                 Report[]            @relation("reporter")
+  reportsReceived         Report[]            @relation("reported")
+  shortlists              Shortlist[]         @relation("shortlister")
+  shortlistedBy           Shortlist[]         @relation("shortlisted")
+  savedSearches           SavedSearch[]
+  reviewsWritten          Review[]            @relation("reviewer")
+  reviewsReceived         Review[]            @relation("reviewedUser")
+  adminUser               AdminUser?
+  auditLogs               AuditLog[]
+  blocksInitiated         UserBlock[]         @relation("blocker")
+  blocksReceived          UserBlock[]         @relation("blocked")
+  exposuresGiven          ProfileExposure[]   @relation("exposureViewer")
+  exposuresReceived       ProfileExposure[]   @relation("exposureCandidate")
+  contactRequestsSent     ContactRequest[]    @relation("contactRequester")
+  contactRequestsReceived ContactRequest[]    @relation("contactTarget")
+  photoAccessSent         PhotoAccessRequest[] @relation("photoAccessRequester")
+  photoAccessReceived     PhotoAccessRequest[] @relation("photoAccessTarget")
+  supportTickets          SupportTicket[]
+  riskSignals             RiskSignal[]
 
   @@index([email])
   @@index([phone])
@@ -59,6 +74,8 @@ model User {
   @@index([isActive])
   @@index([isBanned])
   @@index([socialId])
+  @@index([searchStatus])
+  @@index([lastActiveAt])
 }
 
 model Shortlist {
@@ -80,9 +97,9 @@ model Profile {
   firstName             String
   lastName              String?
   dateOfBirth           DateTime    @db.Date
-  gender                String      // "male", "female", "other"
+  gender                String
   heightCm              Int?
-  maritalStatus         String      // "never_married", "divorced", "widowed", "annulled"
+  maritalStatus         String
   bio                   String?     @db.Text
   religion              String?
   caste                 String?
@@ -91,26 +108,25 @@ model Profile {
   country               String      @default("India")
   state                 String?
   city                  String?
-  educationLevel        String?     // "high_school", "bachelors", "masters", "phd"
+  educationLevel        String?
   educationField        String?
   profession            String?
   company               String?
-  incomeBand            String?     // "below_5L", "5-10L", "10-25L", "25-50L", "50L+"
-  foodHabit             String?     // "vegetarian", "non_vegetarian", "vegan"
+  incomeBand            String?
+  foodHabit             String?
   drinks                String?
   smokes                String?
   hobbies               String[]    @default([])
-  religiousness         String?     // "orthodox", "moderate", "liberal"
+  religiousness         String?
   completionPercentage  Int         @default(0)
-  role                  String      @default("self") // "self", "parent", "relative"
-  intent                String      @default("flexible") // "within_1yr", "flexible", "exploring"
-  
-  // Video Profile
+  role                  String      @default("self") // self | parent | sibling | guardian | relative
+  managerRelationship   String?
+  intent                String      @default("flexible")
+
   videoUrl              String?
   videoThumbnail        String?
 
-  // Horoscope / Kundli
-  birthTime             String?     // "HH:MM"
+  birthTime             String?
   birthPlace            String?
   gothra                String?
   zodiacSign            String?
@@ -141,6 +157,7 @@ model PartnerPreference {
   minEducation          String?
   minIncomeBand         String?
   foodHabitPreferences  String[]    @default([])
+  hardFields            String[]    @default([]) // fields the user marked "must match"
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
 
@@ -150,27 +167,33 @@ model PartnerPreference {
 }
 
 model Photo {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String      @db.Uuid
-  photoUrl      String
-  thumbnailUrl  String?
-  isPrimary     Boolean     @default(false)
-  uploadedAt    DateTime    @default(now())
-  width         Int?
-  height        Int?
-  fileSizeKb    Int?
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String      @db.Uuid
+  photoUrl           String
+  thumbnailUrl       String?
+  isPrimary          Boolean     @default(false)
+  uploadedAt         DateTime    @default(now())
+  width              Int?
+  height             Int?
+  fileSizeKb         Int?
+  verificationStatus String      @default("not_started") // not_started | pending | verified | rejected
+  moderationStatus   String      @default("approved") // processing | approved | review_required | rejected | failed
+  rejectionReason    String?
+  verifiedAt         DateTime?
 
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, isPrimary])
+  @@index([verificationStatus])
+  @@index([moderationStatus])
 }
 
 model Verification {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId          String      @db.Uuid
-  type            String      // "phone", "email", "id", "linkedin"
-  status          String      @default("not_started") // "not_started", "pending", "verified", "rejected"
+  type            String      // phone | email | photo | selfie | id | employment | education
+  status          String      @default("not_started")
   documentUrl     String?
   rejectionReason String?
   verifiedAt      DateTime?
@@ -189,7 +212,7 @@ model Like {
   id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   senderId    String      @db.Uuid
   receiverId  String      @db.Uuid
-  status      String      @default("sent") // "sent", "accepted", "rejected", "blocked"
+  status      String      @default("sent") // sent | accepted | rejected | withdrawn | expired | blocked
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -223,35 +246,42 @@ model Match {
 }
 
 model Message {
-  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  matchId   String      @db.Uuid
-  senderId  String      @db.Uuid
-  content   String      @db.Text
-  isRead    Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId         String      @db.Uuid
+  senderId        String      @db.Uuid
+  content         String      @db.Text
+  clientMessageId String?     @unique
+  status          String      @default("sent") // queued | sent | delivered | read | failed
+  isRead          Boolean     @default(false)
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  match     Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  match           Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender          User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([matchId, createdAt(sort: Desc)])
   @@index([senderId])
   @@index([isRead])
+  @@index([status])
 }
 
 model Subscription {
-  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String      @db.Uuid
-  plan      String      // "free", "standard", "till_marriage"
-  status    String      @default("active") // "active", "inactive", "cancelled"
-  startedAt DateTime    @default(now())
-  expiresAt DateTime?
-  autoRenew Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String      @db.Uuid
+  plan          String
+  planVersion   Int         @default(1)
+  status        String      @default("active") // pending | active | grace | expired | cancelled | refunded
+  startedAt     DateTime    @default(now())
+  expiresAt     DateTime?
+  autoRenew     Boolean     @default(false)
+  renewalStatus String      @default("none") // none | enabled | cancelled | pending
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payments  Payment[]
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments      Payment[]
 
   @@index([userId])
   @@index([status])
@@ -265,10 +295,13 @@ model Payment {
   subscriptionId      String?       @db.Uuid
   amountInr           Decimal       @db.Decimal(10, 2)
   plan                String
-  status              String        @default("pending") // "pending", "completed", "failed", "refunded"
+  status              String        @default("pending") // pending | completed | failed | refunded | partially_refunded
+  gateway             String        @default("razorpay")
+  idempotencyKey      String?       @unique
   razorpayOrderId     String?       @unique
   razorpayPaymentId   String?       @unique
   razorpaySignature   String?
+  failureReason       String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -298,10 +331,12 @@ model Report {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   reporterId      String      @db.Uuid
   reportedUserId  String      @db.Uuid
-  reportType      String      // "inappropriate", "fake_profile", "harassment", "scam", "other"
+  reportType      String
   description     String?     @db.Text
-  status          String      @default("open") // "open", "reviewing", "resolved", "dismissed"
+  status          String      @default("open") // open | reviewing | resolved | dismissed | escalated
+  severity        String      @default("normal") // normal | high | critical
   adminNotes      String?     @db.Text
+  resolvedAt      DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -310,14 +345,133 @@ model Report {
 
   @@index([status])
   @@index([reportedUserId])
+  @@index([severity])
   @@index([createdAt(sort: Desc)])
+}
+
+model UserBlock {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blockerId     String   @db.Uuid
+  blockedUserId String   @db.Uuid
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  blocker       User     @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUser   User     @relation("blocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedUserId])
+  @@index([blockerId])
+  @@index([blockedUserId])
+}
+
+model ProfileExposure {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewerId         String   @db.Uuid
+  candidateId      String   @db.Uuid
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  impressionCount  Int      @default(1)
+  interactionState String   @default("seen") // seen | skipped | hidden | shortlisted | interest_sent | connected
+  cooldownUntil    DateTime?
+
+  viewer           User     @relation("exposureViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  candidate        User     @relation("exposureCandidate", fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, candidateId])
+  @@index([viewerId, interactionState])
+  @@index([viewerId, cooldownUntil])
+}
+
+model ContactRequest {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requesterId String   @db.Uuid
+  targetId    String   @db.Uuid
+  status      String   @default("pending") // pending | approved | declined | withdrawn
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User     @relation("contactRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target      User     @relation("contactTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, targetId])
+  @@index([targetId, status])
+}
+
+model PhotoAccessRequest {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requesterId String   @db.Uuid
+  targetId    String   @db.Uuid
+  status      String   @default("pending") // pending | approved | declined | withdrawn
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User     @relation("photoAccessRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target      User     @relation("photoAccessTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, targetId])
+  @@index([targetId, status])
+}
+
+model SupportTicket {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @db.Uuid
+  category     String
+  subject      String
+  description  String   @db.Text
+  priority     String   @default("normal") // low | normal | high | critical
+  status       String   @default("open") // open | assigned | in_progress | waiting_user | resolved | closed | escalated
+  assignedTeam String?
+  resolution   String?  @db.Text
+  resolvedAt   DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events       SupportEvent[]
+
+  @@index([userId, status])
+  @@index([priority, status])
+  @@index([createdAt(sort: Desc)])
+}
+
+model SupportEvent {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId   String        @db.Uuid
+  actorType  String        // user | support | system
+  actorId    String?
+  eventType  String        // created | assigned | comment | status_changed | resolved | closed | reopened
+  message    String?       @db.Text
+  metadata   Json?
+  createdAt  DateTime      @default(now())
+
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+}
+
+model RiskSignal {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  signalType  String
+  severity    String   @default("low")
+  source      String
+  metadata    Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([signalType])
+  @@index([severity])
 }
 
 model Review {
   id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   reviewerId      String      @db.Uuid
   reviewedUserId  String      @db.Uuid
-  rating          Int         
+  rating          Int
   comment         String?     @db.Text
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -325,7 +479,7 @@ model Review {
   reviewer        User        @relation("reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
   reviewedUser    User        @relation("reviewedUser", fields: [reviewedUserId], references: [id], onDelete: Cascade)
 
-  @@unique([reviewerId, reviewedUserId]) // One review per pair
+  @@unique([reviewerId, reviewedUserId])
   @@index([reviewedUserId])
   @@index([rating])
 }
@@ -335,7 +489,7 @@ model AdminUser {
   userId        String      @unique @db.Uuid
   email         String      @unique
   passwordHash  String
-  role          String      @default("admin") // "admin", "moderator", "support"
+  role          String      @default("admin")
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -348,7 +502,7 @@ model AdminUser {
 model AuditLog {
   id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId        String?     @db.Uuid
-  action        String      // "user_created", "profile_updated", "payment_completed", etc.
+  action        String
   resourceType  String?
   resourceId    String?
   changes       Json?
