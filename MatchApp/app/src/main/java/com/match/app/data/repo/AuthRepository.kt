@@ -407,6 +407,9 @@ class AuthRepository @Inject constructor(
         state = state,
         subCaste = subCaste,
         gothra = gothra,
+        faithTradition = faithTradition,
+        faithSubTradition = faithSubTradition,
+        faithInstitution = faithInstitution,
         incomeBand = incomeBand,
         diet = diet,
         familyType = familyType,
@@ -460,7 +463,8 @@ class AuthRepository @Inject constructor(
         incomeDisclosure = incomeDisclosure,
         subscriptionPlan = subscriptionPlan,
         subscriptionExpiry = subscriptionExpiry,
-        matchScore = matchScore
+        matchScore = matchScore,
+        username = username
     )
 
     private suspend fun registerFcmToken(firebaseUid: String) {
