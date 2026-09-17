@@ -40,13 +40,7 @@ async function assertInteractionTarget(senderId, receiverId) {
         where: { id: receiverId },
         select: { id: true, isActive: true, isBanned: true, deletedAt: true, searchStatus: true },
     });
-    if (
-        !receiver ||
-        !receiver.isActive ||
-        receiver.isBanned ||
-        receiver.deletedAt ||
-        !['active', 'low_activity'].includes(receiver.searchStatus)
-    ) {
+    if (!receiver || !receiver.isActive || receiver.isBanned || receiver.deletedAt || !['active', 'low_activity'].includes(receiver.searchStatus)) {
         throw appError('Profile is unavailable', 404);
     }
     return receiver;
@@ -57,30 +51,23 @@ const interactionService = {
         await assertInteractionTarget(senderId, receiverId);
 
         const result = await prisma.$transaction(async (tx) => {
-            const incomingLike = await tx.like.findFirst({
-                where: { senderId: receiverId, receiverId: senderId, status: 'sent' },
-            });
-
-            await tx.like.upsert({
-                where: { senderId_receiverId: { senderId, receiverId } },
-                update: { status: incomingLike ? 'accepted' : 'sent' },
-                create: { senderId, receiverId, status: incomingLike ? 'accepted' : 'sent' },
-            });
-
-            let matchRecord = null;
-            if (incomingLike) {
-                const existing = await tx.match.findFirst({
+            const [outgoingLike, incomingLike, existingMatch] = await Promise.all([
+                tx.like.findUnique({ where: { senderId_receiverId: { senderId, receiverId } } }),
+                tx.like.findUnique({ where: { senderId_receiverId: { senderId: receiverId, receiverId: senderId } } }),
+                tx.match.findFirst({
                     where: {
                         OR: [
                             { userAId: senderId, userBId: receiverId },
                             { userAId: receiverId, userBId: senderId },
                         ],
                     },
-                });
-                matchRecord = existing
-                    ? await tx.match.update({ where: { id: existing.id }, data: { isActive: true } })
-                    : await tx.match.create({ data: { userAId: senderId, userBId: receiverId } });
+                }),
+            ]);
 
+            if (existingMatch?.isActive || outgoingLike?.status === 'accepted' || incomingLike?.status === 'accepted') {
+                if (existingMatch && !existingMatch.isActive) {
+                    await tx.match.update({ where: { id: existingMatch.id }, data: { isActive: true } });
+                }
                 await tx.like.updateMany({
                     where: {
                         OR: [
@@ -90,13 +77,42 @@ const interactionService = {
                     },
                     data: { status: 'accepted' },
                 });
+                return {
+                    status: 'accepted',
+                    isMatch: true,
+                    matchId: existingMatch?.id || null,
+                    event: 'unchanged',
+                };
             }
 
-            return {
-                status: incomingLike ? 'accepted' : 'sent',
-                isMatch: Boolean(matchRecord),
-                matchId: matchRecord?.id || null,
-            };
+            if (incomingLike?.status === 'sent') {
+                const savedOutgoing = await tx.like.upsert({
+                    where: { senderId_receiverId: { senderId, receiverId } },
+                    update: { status: 'accepted' },
+                    create: { senderId, receiverId, status: 'accepted' },
+                });
+                const matchRecord = existingMatch
+                    ? await tx.match.update({ where: { id: existingMatch.id }, data: { isActive: true } })
+                    : await tx.match.create({ data: { userAId: senderId, userBId: receiverId } });
+                await tx.like.update({ where: { id: incomingLike.id }, data: { status: 'accepted' } });
+                return {
+                    status: savedOutgoing.status,
+                    isMatch: true,
+                    matchId: matchRecord.id,
+                    event: 'matched',
+                };
+            }
+
+            if (outgoingLike?.status === 'sent') {
+                return { status: 'sent', isMatch: false, matchId: null, event: 'unchanged' };
+            }
+
+            await tx.like.upsert({
+                where: { senderId_receiverId: { senderId, receiverId } },
+                update: { status: 'sent' },
+                create: { senderId, receiverId, status: 'sent' },
+            });
+            return { status: 'sent', isMatch: false, matchId: null, event: 'interest_sent' };
         });
 
         await Promise.all([
@@ -132,11 +148,12 @@ const interactionService = {
     },
 
     async withdrawInterest(senderId, receiverId) {
-        await prisma.like.updateMany({
+        const result = await prisma.like.updateMany({
             where: { senderId, receiverId, status: 'sent' },
             data: { status: 'withdrawn' },
         });
-        return { status: 'withdrawn' };
+        await trustService.recordActivity(senderId);
+        return { status: result.count > 0 ? 'withdrawn' : 'unchanged' };
     },
 
     async getInterests(userId, type) {
@@ -144,9 +161,7 @@ const interactionService = {
             where: { OR: [{ blockerId: userId }, { blockedUserId: userId }] },
             select: { blockerId: true, blockedUserId: true },
         });
-        const blockedIds = new Set(
-            blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId)
-        );
+        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
 
         if (type === 'received') {
             const likes = await prisma.like.findMany({
@@ -154,9 +169,7 @@ const interactionService = {
                 orderBy: { createdAt: 'desc' },
                 include: { sender: { select: PUBLIC_USER_SELECT } },
             });
-            return likes
-                .filter((like) => !blockedIds.has(like.senderId))
-                .map((like) => _formatLikeUser(like.sender, like.createdAt));
+            return likes.filter((like) => !blockedIds.has(like.senderId)).map((like) => _formatLikeUser(like.sender, like.createdAt));
         }
 
         if (type === 'sent') {
@@ -165,13 +178,11 @@ const interactionService = {
                 orderBy: { createdAt: 'desc' },
                 include: { receiver: { select: PUBLIC_USER_SELECT } },
             });
-            return likes
-                .filter((like) => !blockedIds.has(like.receiverId))
-                .map((like) => ({
-                    ..._formatLikeUser(like.receiver, like.createdAt),
-                    status: like.status,
-                    sentAt: _timeAgo(like.createdAt),
-                }));
+            return likes.filter((like) => !blockedIds.has(like.receiverId)).map((like) => ({
+                ..._formatLikeUser(like.receiver, like.createdAt),
+                status: like.status,
+                sentAt: _timeAgo(like.createdAt),
+            }));
         }
 
         if (type === 'mutual') {
@@ -183,15 +194,12 @@ const interactionService = {
                     userB: { select: PUBLIC_USER_SELECT },
                 },
             });
-            return matches
-                .map((match) => {
-                    const other = match.userAId === userId ? match.userB : match.userA;
-                    if (blockedIds.has(other.id)) return null;
-                    return { ..._formatLikeUser(other, match.createdAt), matchedAt: _timeAgo(match.createdAt) };
-                })
-                .filter(Boolean);
+            return matches.map((match) => {
+                const other = match.userAId === userId ? match.userB : match.userA;
+                if (blockedIds.has(other.id)) return null;
+                return { ..._formatLikeUser(other, match.createdAt), matchedAt: _timeAgo(match.createdAt) };
+            }).filter(Boolean);
         }
-
         return [];
     },
 
@@ -201,29 +209,12 @@ const interactionService = {
         return { success: true, reportId: report.id, status: report.status, severity: report.severity };
     },
 
-    async blockUser(userId, targetId, reason) {
-        return safetyService.blockUser(userId, targetId, reason);
-    },
-
-    async unblockUser(userId, targetId) {
-        return safetyService.unblockUser(userId, targetId);
-    },
-
-    async requestContact(userId, targetId) {
-        return safetyService.requestContact(userId, targetId);
-    },
-
-    async respondContact(userId, requestId, action) {
-        return safetyService.respondContactRequest(userId, requestId, action);
-    },
-
-    async requestPhotoAccess(userId, targetId) {
-        return safetyService.requestPhotoAccess(userId, targetId);
-    },
-
-    async respondPhotoAccess(userId, requestId, action) {
-        return safetyService.respondPhotoAccess(userId, requestId, action);
-    },
+    async blockUser(userId, targetId, reason) { return safetyService.blockUser(userId, targetId, reason); },
+    async unblockUser(userId, targetId) { return safetyService.unblockUser(userId, targetId); },
+    async requestContact(userId, targetId) { return safetyService.requestContact(userId, targetId); },
+    async respondContact(userId, requestId, action) { return safetyService.respondContactRequest(userId, requestId, action); },
+    async requestPhotoAccess(userId, targetId) { return safetyService.requestPhotoAccess(userId, targetId); },
+    async respondPhotoAccess(userId, requestId, action) { return safetyService.respondPhotoAccess(userId, requestId, action); },
 
     async getCompatibilitySummary(userId, targetUserId) {
         const [myPrefs, myProfile, targetProfile] = await Promise.all([
@@ -314,13 +305,8 @@ const interactionService = {
                 select: { blockerId: true, blockedUserId: true },
             }),
         ]);
-        const blockedIds = new Set(
-            blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId)
-        );
-        return views
-            .filter((view) => view.user && !blockedIds.has(view.user.id))
-            .slice(0, limit)
-            .map((view) => _formatLikeUser(view.user, view.createdAt));
+        const blockedIds = new Set(blockedRows.map((row) => row.blockerId === userId ? row.blockedUserId : row.blockerId));
+        return views.filter((view) => view.user && !blockedIds.has(view.user.id)).slice(0, limit).map((view) => _formatLikeUser(view.user, view.createdAt));
     },
 };
 
