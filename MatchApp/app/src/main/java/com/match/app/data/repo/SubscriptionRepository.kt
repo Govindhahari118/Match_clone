@@ -20,15 +20,20 @@ class SubscriptionRepository @Inject constructor(
     private val session: SessionStore
 ) {
     data class CheckoutOrder(val id: String, val planId: String, val amount: Int, val currency: String)
-    data class PlayEntitlement(val planId: String, val premiumUntil: Long, val consumptionPending: Boolean)
+    data class PlayEntitlement(
+        val entitlementType: String,
+        val entitlementId: String,
+        val expiresAt: Long,
+        val consumptionPending: Boolean
+    )
     data class RevealedContact(val phoneNumber: String, val contactsUsed: Int, val contactsLimit: Int)
 
     private val db = FirebaseFirestore.getInstance()
     private val functions = FirebaseFunctions.getInstance()
 
     /**
-     * Play-distributed Android builds use this path. The backend validates the opaque token with
-     * the Google Play Developer API and owns the product-to-plan mapping, duration and entitlement.
+     * The backend validates the opaque token with Google Play and owns all product-to-entitlement
+     * mapping. Android never chooses membership duration, boost duration, price or expiry.
      */
     suspend fun verifyGooglePlayPurchase(productId: String, purchaseToken: String): Result<PlayEntitlement> = runCatching {
         require(productId.isNotBlank() && purchaseToken.isNotBlank())
@@ -36,14 +41,28 @@ class SubscriptionRepository @Inject constructor(
             .call(mapOf("productId" to productId, "purchaseToken" to purchaseToken)).await()
         @Suppress("UNCHECKED_CAST")
         val data = result.data as? Map<String, Any?> ?: error("Invalid Play verification response")
-        val success = data["success"] as? Boolean ?: false
-        if (!success) error("Play purchase was not activated")
+        if (data["success"] as? Boolean != true) error("Play purchase was not activated")
+
+        val entitlementType = data["entitlementType"] as? String ?: "MEMBERSHIP"
+        val entitlementId = data["entitlementId"] as? String
+            ?: data["planId"] as? String
+            ?: error("Missing entitlement id")
+        val expiresAt = (data["expiresAt"] as? Number)?.toLong()
+            ?: (data["premiumUntil"] as? Number)?.toLong()
+            ?: (data["boostUntil"] as? Number)?.toLong()
+            ?: error("Missing entitlement expiry")
+
         val entitlement = PlayEntitlement(
-            planId = data["planId"] as? String ?: error("Missing plan id"),
-            premiumUntil = (data["premiumUntil"] as? Number)?.toLong() ?: error("Missing entitlement expiry"),
+            entitlementType = entitlementType,
+            entitlementId = entitlementId,
+            expiresAt = expiresAt,
             consumptionPending = data["consumptionPending"] as? Boolean ?: false
         )
-        syncPremiumStatusFromServer()
+        if (entitlementType == "BOOST") {
+            syncBoostStatusFromServer()
+        } else {
+            syncPremiumStatusFromServer()
+        }
         entitlement
     }
 
@@ -82,9 +101,16 @@ class SubscriptionRepository @Inject constructor(
 
     fun observePremiumStatus(): Flow<Boolean> = callbackFlow {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid == null) { trySend(false); close(); return@callbackFlow }
+        if (uid == null) {
+            trySend(false)
+            close()
+            return@callbackFlow
+        }
         val reg = db.collection("users").document(uid).addSnapshotListener { snap, err ->
-            if (err != null) { trySend(false); return@addSnapshotListener }
+            if (err != null) {
+                trySend(false)
+                return@addSnapshotListener
+            }
             val expiry = snap?.getTimestamp("premiumUntil")?.toDate()?.time
                 ?: snap?.getLong("subscriptionExpiry") ?: 0L
             trySend((snap?.getBoolean("isPremium") == true) && expiry > System.currentTimeMillis())
@@ -109,11 +135,17 @@ class SubscriptionRepository @Inject constructor(
         if (localId != null) {
             val user = userDao.findById(localId)
             if (user != null) {
-                userDao.update(user.copy(
-                    isPremium = active,
-                    subscriptionPlan = if (active) (doc.getString("subscriptionPlan") ?: "FREE") else "FREE",
-                    subscriptionExpiry = if (active) expiry else 0L
-                ))
+                userDao.update(
+                    user.copy(
+                        isPremium = active,
+                        subscriptionPlan = if (active) {
+                            doc.getString("subscriptionPlan") ?: "FREE"
+                        } else {
+                            "FREE"
+                        },
+                        subscriptionExpiry = if (active) expiry else 0L
+                    )
+                )
             }
         }
         return active
@@ -125,7 +157,32 @@ class SubscriptionRepository @Inject constructor(
             val doc = db.collection("users").document(uid).get().await()
             doc.getTimestamp("premiumUntil")?.toDate()?.time
                 ?: doc.getLong("subscriptionExpiry") ?: 0L
-        } catch (_: Exception) { 0L }
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * Reads the authenticated account's boost from a trusted callable. The backing subscriptions
+     * document is intentionally inaccessible to clients and is also the source used for ranking.
+     */
+    suspend fun getBoostExpiry(): Long = try {
+        syncBoostStatusFromServer()
+    } catch (e: Exception) {
+        Log.w("SubscriptionRepo", "Failed to refresh boost status", e)
+        0L
+    }
+
+    private suspend fun syncBoostStatusFromServer(): Long {
+        val result = functions.getHttpsCallable("getMyBoostStatus").call().await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid boost status response")
+        val boostUntil = (data["boostUntil"] as? Number)?.toLong() ?: 0L
+        val localId = session.userId.first()
+        if (localId != null) {
+            userDao.updateBoostExpiry(localId, boostUntil)
+        }
+        return boostUntil
     }
 
     /** Contact reveal is a privileged server action; no client-side counter mutation. */

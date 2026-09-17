@@ -78,12 +78,18 @@ export const registerForEvent = functions.https.onCall(async (data, context) => 
   return db.runTransaction(async (tx) => {
     const [event, existing] = await Promise.all([tx.get(eventRef), tx.get(registrationRef)]);
     if (!event.exists) throw new functions.https.HttpsError("not-found", "Event not found");
-    if (existing.exists) return { success: true, registrationId: registrationRef.id, alreadyRegistered: true };
+    if (existing.exists) {
+      return { success: true, registrationId: registrationRef.id, alreadyRegistered: true };
+    }
     const dateMillis = Number(event.data()?.dateMillis || 0);
     if (Number.isFinite(dateMillis) && dateMillis > 0 && dateMillis < Date.now()) {
       throw new functions.https.HttpsError("failed-precondition", "Registration for this event has closed");
     }
-    tx.set(registrationRef, { uid, eventId, registeredAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.set(registrationRef, {
+      uid,
+      eventId,
+      registeredAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     tx.update(eventRef, { attendees: admin.firestore.FieldValue.increment(1) });
     return { success: true, registrationId: registrationRef.id, alreadyRegistered: false };
   });
@@ -163,11 +169,15 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
   const uid = authUid(context);
   const targetUid = text(data?.targetUid, "target profile", 128);
   const type = text(data?.type, "call type", 32).toLowerCase();
-  if (!CALL_TYPES.has(type)) throw new functions.https.HttpsError("invalid-argument", "Unsupported call type");
+  if (!CALL_TYPES.has(type)) {
+    throw new functions.https.HttpsError("invalid-argument", "Unsupported call type");
+  }
   const scheduledAt = text(data?.scheduledAt, "scheduled time", 100, false);
   await assertRelationshipAvailable(uid, targetUid);
   const match = await db.collection("matches").doc(pairId(uid, targetUid)).get();
-  if (!match.exists) throw new functions.https.HttpsError("failed-precondition", "Secure calls require a mutual match");
+  if (!match.exists) {
+    throw new functions.https.HttpsError("failed-precondition", "Secure calls require a mutual match");
+  }
   const ref = db.collection("callRequests").doc();
   await ref.set({
     fromUid: uid,
@@ -189,7 +199,9 @@ export const respondToSecureCall = functions.https.onCall(async (data, context) 
     const request = await tx.get(ref);
     if (!request.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
     const current = request.data() || {};
-    if (current.toUid !== uid) throw new functions.https.HttpsError("permission-denied", "Only the recipient can respond");
+    if (current.toUid !== uid) {
+      throw new functions.https.HttpsError("permission-denied", "Only the recipient can respond");
+    }
     if (current.status !== "requested") {
       throw new functions.https.HttpsError("failed-precondition", "Call request has already been handled");
     }
@@ -260,33 +272,61 @@ export const claimDailyReward = functions.https.onCall(async (_data, context) =>
       lastClaimed: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    return { success: true, alreadyClaimed: false, coins, streak, rewardCoins, lastClaimedDay: today };
+    return {
+      success: true,
+      alreadyClaimed: false,
+      coins,
+      streak,
+      rewardCoins,
+      lastClaimedDay: today,
+    };
   });
 });
 
+/**
+ * Reward redemption uses the same private boost entitlement source as Google Play. A public user
+ * profile field can therefore never manufacture ranking priority.
+ */
 export const redeemReward = functions.https.onCall(async (data, context) => {
   const uid = authUid(context);
   const rewardId = text(data?.rewardId, "reward", 64);
-  if (rewardId !== "boost") throw new functions.https.HttpsError("invalid-argument", "Reward is not available");
+  if (rewardId !== "boost") {
+    throw new functions.https.HttpsError("invalid-argument", "Reward is not available");
+  }
   const cost = 100;
   const durationMs = 60 * 60 * 1000;
   const rewardRef = db.collection("rewards").doc(uid);
   const userRef = db.collection("users").doc(uid);
+  const subscriptionRef = db.collection("subscriptions").doc(uid);
   const redemptionRef = rewardRef.collection("redemptions").doc();
+
   return db.runTransaction(async (tx) => {
-    const [reward, user] = await Promise.all([tx.get(rewardRef), tx.get(userRef)]);
-    if (!user.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    const [reward, user, subscription] = await Promise.all([
+      tx.get(rewardRef),
+      tx.get(userRef),
+      tx.get(subscriptionRef),
+    ]);
+    if (!user.exists) {
+      throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    }
     const coins = Number(reward.data()?.coins || 0);
-    if (coins < cost) throw new functions.https.HttpsError("failed-precondition", "Insufficient coins");
-    const currentBoost = Number(user.data()?.boostActiveUntil || 0);
-    const boostUntil = Math.max(Date.now(), Number.isFinite(currentBoost) ? currentBoost : 0) + durationMs;
-    tx.set(rewardRef, { coins: coins - cost, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    tx.update(userRef, { boostActiveUntil: boostUntil, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    if (coins < cost) {
+      throw new functions.https.HttpsError("failed-precondition", "Insufficient coins");
+    }
+    const currentBoost = Number(subscription.data()?.boostUntil || 0);
+    const boostUntil = Math.max(
+      Date.now(),
+      Number.isFinite(currentBoost) ? currentBoost : 0
+    ) + durationMs;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    tx.set(rewardRef, { coins: coins - cost, updatedAt: now }, { merge: true });
+    tx.set(subscriptionRef, { boostUntil, boostUpdatedAt: now }, { merge: true });
     tx.set(redemptionRef, {
       rewardId,
       cost,
       boostUntil,
-      redeemedAt: admin.firestore.FieldValue.serverTimestamp(),
+      redeemedAt: now,
     });
     return { success: true, coins: coins - cost, boostUntil };
   });

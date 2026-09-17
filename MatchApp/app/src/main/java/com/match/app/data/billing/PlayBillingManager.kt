@@ -31,11 +31,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Single process-wide Play Billing connection for the Play-distributed app.
- *
- * Billing is intentionally only a purchase transport. Entitlements are never granted here;
- * every PURCHASED token is verified by the authenticated Firebase backend against the Google
- * Play Developer API before local premium state is refreshed.
+ * Single process-wide Play Billing connection for all Play-distributed digital entitlements.
+ * Billing is only a purchase transport: every PURCHASED token is verified by the authenticated
+ * Firebase backend before membership or boost state is granted.
  */
 @Singleton
 class PlayBillingManager @Inject constructor(
@@ -53,10 +51,16 @@ class PlayBillingManager @Inject constructor(
 
     sealed interface Event {
         data class Activated(val planId: String, val premiumUntil: Long) : Event
+        data class BoostActivated(val boostId: String, val boostUntil: Long) : Event
         data class Pending(val productId: String) : Event
         data object Cancelled : Event
         data class Error(val message: String) : Event
     }
+
+    private data class CatalogEntry(
+        val entitlementId: String,
+        val boost: Boolean
+    )
 
     private data class Purchasable(
         val offer: Offer,
@@ -68,11 +72,27 @@ class PlayBillingManager @Inject constructor(
         const val SILVER_PRODUCT_ID = "match_silver_3m"
         const val GOLD_PRODUCT_ID = "match_gold_6m"
         const val PLATINUM_PRODUCT_ID = "match_platinum_12m"
+        const val BOOST_3H_PRODUCT_ID = "match_boost_3h"
+        const val BOOST_24H_PRODUCT_ID = "match_boost_24h"
+        const val BOOST_7D_PRODUCT_ID = "match_boost_7d"
 
-        private val PRODUCT_TO_PLAN = mapOf(
-            SILVER_PRODUCT_ID to "SILVER_3M",
-            GOLD_PRODUCT_ID to "GOLD_6M",
-            PLATINUM_PRODUCT_ID to "PLATINUM_12M"
+        const val BOOST_3H_ID = "BOOST_3H"
+        const val BOOST_24H_ID = "BOOST_24H"
+        const val BOOST_7D_ID = "BOOST_7D"
+
+        private val PRODUCT_CATALOG = mapOf(
+            SILVER_PRODUCT_ID to CatalogEntry("SILVER_3M", false),
+            GOLD_PRODUCT_ID to CatalogEntry("GOLD_6M", false),
+            PLATINUM_PRODUCT_ID to CatalogEntry("PLATINUM_12M", false),
+            BOOST_3H_PRODUCT_ID to CatalogEntry(BOOST_3H_ID, true),
+            BOOST_24H_PRODUCT_ID to CatalogEntry(BOOST_24H_ID, true),
+            BOOST_7D_PRODUCT_ID to CatalogEntry(BOOST_7D_ID, true)
+        )
+
+        private val BOOST_PRODUCT_IDS = setOf(
+            BOOST_3H_PRODUCT_ID,
+            BOOST_24H_PRODUCT_ID,
+            BOOST_7D_PRODUCT_ID
         )
     }
 
@@ -130,8 +150,6 @@ class PlayBillingManager @Inject constructor(
     override fun onBillingServiceDisconnected() {
         connecting = false
         _ready.value = false
-        // enableAutoServiceReconnection() handles later API calls. connect() is also invoked from
-        // Activity.onResume so a foreground session proactively restores catalogue/recovery state.
     }
 
     fun refresh() {
@@ -143,8 +161,10 @@ class PlayBillingManager @Inject constructor(
         recoverPurchases()
     }
 
+    fun isBoostProduct(productId: String): Boolean = productId in BOOST_PRODUCT_IDS
+
     private fun queryProducts() {
-        val products = PRODUCT_TO_PLAN.keys.map { productId ->
+        val products = PRODUCT_CATALOG.keys.map { productId ->
             QueryProductDetailsParams.Product.newBuilder()
                 .setProductId(productId)
                 .setProductType(BillingClient.ProductType.INAPP)
@@ -156,22 +176,22 @@ class PlayBillingManager @Inject constructor(
 
         billingClient.queryProductDetailsAsync(params) { result, detailsResult ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                _events.tryEmit(Event.Error(billingMessage(result, "Unable to load membership prices")))
+                _events.tryEmit(Event.Error(billingMessage(result, "Unable to load Google Play prices")))
                 return@queryProductDetailsAsync
             }
 
             val next = linkedMapOf<String, Purchasable>()
             detailsResult.productDetailsList.forEach { details ->
-                val planId = PRODUCT_TO_PLAN[details.productId] ?: return@forEach
+                val catalog = PRODUCT_CATALOG[details.productId] ?: return@forEach
                 val offerDetails = details.oneTimePurchaseOfferDetailsList?.firstOrNull() ?: return@forEach
                 val offer = Offer(
-                    planId = planId,
+                    planId = catalog.entitlementId,
                     productId = details.productId,
                     formattedPrice = offerDetails.formattedPrice,
                     priceCurrencyCode = offerDetails.priceCurrencyCode,
                     priceAmountMicros = offerDetails.priceAmountMicros
                 )
-                next[planId] = Purchasable(offer, details, offerDetails.offerToken)
+                next[catalog.entitlementId] = Purchasable(offer, details, offerDetails.offerToken)
             }
             purchasables.clear()
             purchasables.putAll(next)
@@ -182,12 +202,18 @@ class PlayBillingManager @Inject constructor(
     fun launchPurchase(activity: Activity, planId: String): BillingResult {
         if (!billingClient.isReady) {
             connect()
-            return errorResult(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED, "Google Play billing is reconnecting")
+            return errorResult(
+                BillingClient.BillingResponseCode.SERVICE_DISCONNECTED,
+                "Google Play billing is reconnecting"
+            )
         }
         val uid = auth.currentUser?.uid
             ?: return errorResult(BillingClient.BillingResponseCode.ERROR, "Sign in before purchasing")
         val selected = purchasables[planId]
-            ?: return errorResult(BillingClient.BillingResponseCode.ITEM_UNAVAILABLE, "Membership is not available from Google Play")
+            ?: return errorResult(
+                BillingClient.BillingResponseCode.ITEM_UNAVAILABLE,
+                "This item is not available from Google Play"
+            )
 
         val productParamsBuilder = BillingFlowParams.ProductDetailsParams.newBuilder()
             .setProductDetails(selected.productDetails)
@@ -230,31 +256,52 @@ class PlayBillingManager @Inject constructor(
 
     private fun processPurchase(purchase: Purchase) {
         val productId = purchase.products.singleOrNull()
-        val planId = productId?.let(PRODUCT_TO_PLAN::get)
-        if (productId == null || planId == null) {
-            _events.tryEmit(Event.Error("Google Play returned an unknown membership product."))
+        val catalog = productId?.let(PRODUCT_CATALOG::get)
+        if (productId == null || catalog == null) {
+            _events.tryEmit(Event.Error("Google Play returned an unknown app product."))
             return
         }
 
         when (purchase.purchaseState) {
             Purchase.PurchaseState.PENDING -> _events.tryEmit(Event.Pending(productId))
-            Purchase.PurchaseState.PURCHASED -> verifyPurchasedToken(productId, planId, purchase.purchaseToken)
+            Purchase.PurchaseState.PURCHASED -> verifyPurchasedToken(
+                productId,
+                catalog.entitlementId,
+                purchase.purchaseToken
+            )
             else -> Unit
         }
     }
 
-    private fun verifyPurchasedToken(productId: String, planId: String, purchaseToken: String) {
+    private fun verifyPurchasedToken(productId: String, entitlementId: String, purchaseToken: String) {
         if (!inFlightTokens.add(purchaseToken)) return
         scope.launch {
             try {
-                val result = subscriptionRepository.verifyGooglePlayPurchase(productId, purchaseToken).getOrThrow()
-                _events.emit(Event.Activated(result.planId.ifBlank { planId }, result.premiumUntil))
-                // The server consumes the one-time product after the entitlement transaction.
-                // Refreshing lets Play remove the consumed item and catches a server-side consume
-                // retry if the first consume call was temporarily unavailable.
+                val result = subscriptionRepository
+                    .verifyGooglePlayPurchase(productId, purchaseToken)
+                    .getOrThrow()
+                if (result.entitlementType == "BOOST") {
+                    _events.emit(
+                        Event.BoostActivated(
+                            result.entitlementId.ifBlank { entitlementId },
+                            result.expiresAt
+                        )
+                    )
+                } else {
+                    _events.emit(
+                        Event.Activated(
+                            result.entitlementId.ifBlank { entitlementId },
+                            result.expiresAt
+                        )
+                    )
+                }
                 refresh()
             } catch (_: Exception) {
-                _events.emit(Event.Error("Purchase verification is pending. Do not pay again; reopen the app to retry securely."))
+                _events.emit(
+                    Event.Error(
+                        "Purchase verification is pending. Do not pay again; reopen the app to retry securely."
+                    )
+                )
             } finally {
                 inFlightTokens.remove(purchaseToken)
             }

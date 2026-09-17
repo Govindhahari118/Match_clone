@@ -92,8 +92,13 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
     LaunchedEffect(vm) {
         vm.events.collect { event ->
             when (event) {
-                is PlayBillingManager.Event.Activated -> snackbarHostState.showSnackbar("${event.planId.replace('_', ' ')} membership activated.")
-                is PlayBillingManager.Event.Pending -> snackbarHostState.showSnackbar("Payment is pending in Google Play. Access starts only after payment completes.")
+                is PlayBillingManager.Event.Activated -> snackbarHostState.showSnackbar(
+                    "${event.planId.replace('_', ' ')} membership activated."
+                )
+                is PlayBillingManager.Event.BoostActivated -> Unit
+                is PlayBillingManager.Event.Pending -> snackbarHostState.showSnackbar(
+                    "Payment is pending in Google Play. Access starts only after payment completes."
+                )
                 PlayBillingManager.Event.Cancelled -> snackbarHostState.showSnackbar("Purchase cancelled.")
                 is PlayBillingManager.Event.Error -> snackbarHostState.showSnackbar(event.message)
             }
@@ -106,9 +111,15 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
         topBar = {
             TopAppBar(
                 title = { Text(t("membership_plans", "Membership Plans")) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                },
                 actions = {
-                    IconButton(onClick = vm::refresh) { Icon(Icons.Filled.Refresh, "Refresh Google Play prices") }
+                    IconButton(onClick = vm::refresh) {
+                        Icon(Icons.Filled.Refresh, "Refresh Google Play prices")
+                    }
                 }
             )
         },
@@ -159,19 +170,42 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                             Icon(plan.icon, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(plan.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                Text(plan.tagline, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    plan.name,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    plan.tagline,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            if (isCurrent) AssistChip(onClick = {}, enabled = false, label = { Text("Current") })
+                            if (isCurrent) {
+                                AssistChip(onClick = {}, enabled = false, label = { Text("Current") })
+                            }
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text(price, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            price,
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Text(plan.period, style = MaterialTheme.typography.labelMedium)
                         Text(plan.contacts, style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider(Modifier.padding(vertical = 12.dp))
                         plan.features.forEach { feature ->
-                            Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp), tint = Color(0xFF2E7D32))
+                            Row(
+                                Modifier.padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    null,
+                                    Modifier.size(16.dp),
+                                    tint = Color(0xFF2E7D32)
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Text(feature, style = MaterialTheme.typography.bodySmall)
                             }
@@ -182,13 +216,15 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                             enabled = !isFree && !isCurrent && offer != null && activity != null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(when {
-                                isCurrent -> "Current membership"
-                                isFree -> "Free plan"
-                                offer == null && ready -> "Not available in Google Play"
-                                offer == null -> "Loading Google Play…"
-                                else -> plan.cta
-                            })
+                            Text(
+                                when {
+                                    isCurrent -> "Current membership"
+                                    isFree -> "Free plan"
+                                    offer == null && ready -> "Not available in Google Play"
+                                    offer == null -> "Loading Google Play…"
+                                    else -> plan.cta
+                                }
+                            )
                         }
                     }
                 }
@@ -208,19 +244,26 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
         AlertDialog(
             onDismissRequest = { pendingPlan = null },
             title = { Text("Confirm ${plan.name}") },
-            text = { Text("Continue to Google Play to purchase ${plan.name} for ${offer?.formattedPrice ?: "the price shown by Google Play"}?") },
+            text = {
+                Text(
+                    "Continue to Google Play to purchase ${plan.name} for ${offer?.formattedPrice ?: "the price shown by Google Play"}?"
+                )
+            },
             confirmButton = {
                 Button(onClick = {
                     pendingPlan = null
                     val host = activity ?: return@Button
                     val code = vm.purchase(host, plan.id)
                     if (code != BillingClient.BillingResponseCode.OK) {
-                        // Detailed failures are also delivered by PlayBillingManager.events.
                         vm.refresh()
                     }
-                }) { Text("Continue to Google Play") }
+                }) {
+                    Text("Continue to Google Play")
+                }
             },
-            dismissButton = { TextButton(onClick = { pendingPlan = null }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { pendingPlan = null }) { Text("Cancel") }
+            }
         )
     }
 }

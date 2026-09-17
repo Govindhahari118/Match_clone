@@ -1,3 +1,4 @@
+import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 
@@ -14,12 +15,12 @@ const PUBLIC_PROFILE_FIELDS = [
   "faithTradition", "faithSubTradition", "faithInstitution",
   "diet", "familyType", "fatherOccupation", "motherOccupation", "siblings", "smoking",
   "drinking", "personalityType", "hobbies", "spokenLanguages", "videoUrl",
-  "residentialStatus", "hasChildren", "boostActiveUntil", "nativeState", "countryOfResidence",
-  "visaStatus", "willingToRelocate", "createdAt", "isIncognito", "ageBucket", "familyValues",
-  "aboutFamily", "weight", "complexion", "physicalStatus", "familyStatus", "educationField",
-  "institution", "graduationYear", "occupationCategory", "employer", "employerType",
-  "citizenship", "isNRI", "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl",
-  "profileCompleteness", "verificationLevel", "stealthMode", "showHoroscope", "incomeDisclosure",
+  "residentialStatus", "hasChildren", "nativeState", "countryOfResidence", "visaStatus",
+  "willingToRelocate", "createdAt", "isIncognito", "ageBucket", "familyValues", "aboutFamily",
+  "weight", "complexion", "physicalStatus", "familyStatus", "educationField", "institution",
+  "graduationYear", "occupationCategory", "employer", "employerType", "citizenship", "isNRI",
+  "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl", "profileCompleteness",
+  "verificationLevel", "stealthMode", "showHoroscope", "incomeDisclosure",
 ] as const;
 
 function stringValue(value: unknown): string {
@@ -58,9 +59,17 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
   return result;
 }
 
+function createdAtMillis(data: FirebaseFirestore.DocumentData): number {
+  const value = data.createdAt;
+  if (value instanceof admin.firestore.Timestamp) return value.toMillis();
+  const numeric = Number(value || 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 /**
  * Privacy-safe discovery endpoint. Exact usernames are resolved through a server-only unique
- * registry, while ordinary name/profile searches are filtered during the candidate scan.
+ * registry. Boost affects ordering only after ordinary eligibility/privacy filtering and is read
+ * from the private server-owned subscription document, never from a public profile field.
  */
 export const discoverProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
@@ -80,7 +89,9 @@ export const discoverProfiles = functions
     const normalizedUsername = keyword.replace(/^@+/, "");
 
     const viewerDoc = await db.collection("users").doc(viewerUid).get();
-    if (!viewerDoc.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    if (!viewerDoc.exists) {
+      throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    }
     const viewer = viewerDoc.data() || {};
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
@@ -125,22 +136,39 @@ export const discoverProfiles = functions
     const hiddenFromViewerRefs = candidates.map((doc) =>
       db.collection("privacyRelations").doc(doc.id).collection("members").doc(viewerUid)
     );
-    const [reverseDocs, privacyDocs] = await Promise.all([
+    const subscriptionRefs = candidates.map((doc) => db.collection("subscriptions").doc(doc.id));
+    const [reverseDocs, privacyDocs, subscriptionDocs] = await Promise.all([
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
+      subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
     ]);
 
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
+    const boostUntilByUid = new Map<string, number>();
     reverseDocs.forEach((doc, index) => {
       if (doc.exists) reverseBlocked.add(candidates[index].id);
     });
     privacyDocs.forEach((doc, index) => {
       if (doc.exists && doc.data()?.profileHidden === true) hiddenFromViewer.add(candidates[index].id);
     });
+    subscriptionDocs.forEach((doc, index) => {
+      const raw = Number(doc.data()?.boostUntil || 0);
+      boostUntilByUid.set(candidates[index].id, Number.isFinite(raw) ? raw : 0);
+    });
+
+    const now = Date.now();
+    const rankedCandidates = keyword
+      ? candidates
+      : candidates.slice().sort((left, right) => {
+        const leftBoosted = (boostUntilByUid.get(left.id) || 0) > now ? 1 : 0;
+        const rightBoosted = (boostUntilByUid.get(right.id) || 0) > now ? 1 : 0;
+        if (leftBoosted !== rightBoosted) return rightBoosted - leftBoosted;
+        return createdAtMillis(right.data() || {}) - createdAtMillis(left.data() || {});
+      });
 
     const profiles: Record<string, unknown>[] = [];
-    for (const doc of candidates) {
+    for (const doc of rankedCandidates) {
       if (profiles.length >= RETURN_LIMIT) break;
       if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
       const candidate = doc.data() || {};
@@ -159,6 +187,8 @@ export const discoverProfiles = functions
       profiles.push(publicProfile(doc.id, candidate));
     }
 
-    const nextCursor = scan.docs.length === SCAN_LIMIT ? scan.docs[scan.docs.length - 1].id : null;
+    const nextCursor = scan.docs.length === SCAN_LIMIT
+      ? scan.docs[scan.docs.length - 1].id
+      : null;
     return { profiles, nextCursor };
   });
