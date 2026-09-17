@@ -1,5 +1,5 @@
 -- Matrimony trust/freshness hardening (additive, backward-compatible)
--- Safe to apply after the current initial schema.
+-- Apply to a database managed by the current Prisma schema.
 
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastActiveAt" TIMESTAMP(3);
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "statusReconfirmedAt" TIMESTAMP(3);
@@ -31,8 +31,8 @@ ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "failureReason" TEXT;
 ALTER TABLE "Report" ADD COLUMN IF NOT EXISTS "severity" TEXT NOT NULL DEFAULT 'normal';
 ALTER TABLE "Report" ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMP(3);
 
-CREATE UNIQUE INDEX IF NOT EXISTS "Message_clientMessageId_key" ON "Message"("clientMessageId") WHERE "clientMessageId" IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS "Payment_idempotencyKey_key" ON "Payment"("idempotencyKey") WHERE "idempotencyKey" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "Message_clientMessageId_key" ON "Message"("clientMessageId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Payment_idempotencyKey_key" ON "Payment"("idempotencyKey");
 CREATE INDEX IF NOT EXISTS "User_searchStatus_idx" ON "User"("searchStatus");
 CREATE INDEX IF NOT EXISTS "User_lastActiveAt_idx" ON "User"("lastActiveAt");
 CREATE INDEX IF NOT EXISTS "Photo_verificationStatus_idx" ON "Photo"("verificationStatus");
