@@ -13,16 +13,21 @@ jobs:
       run:
         working-directory: ./backend
     steps:
-    - uses: actions/checkout@v3
-    - name: Use Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20.x'
-    - name: Install Dependencies
-      run: npm ci
-    - name: Generate Prisma Client
-      run: npx prisma generate
-    # - run: npm test
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Run backend regression checks
+        run: npm test
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -30,12 +35,70 @@ jobs:
       run:
         working-directory: ./frontend
     steps:
-    - uses: actions/checkout@v3
-    - name: Use Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20.x'
-    - name: Install Dependencies
-      run: npm ci
-    - name: Build Next.js App
-      run: npm run build
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build Next.js app
+        run: npm run build
+
+  migration-drift-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: matrimony_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d matrimony_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/matrimony_ci
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Create database from main Prisma schema
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git show origin/main:backend/prisma/schema.prisma > /tmp/main-schema.prisma
+          npx prisma db push --schema /tmp/main-schema.prisma --skip-generate
+      - name: Apply hardening SQL migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/20260916_trust_freshness_hardening.sql
+      - name: Assert migration matches target Prisma schema
+        shell: bash
+        run: |
+          set +e
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "Database migration drift detected. The SQL migration does not fully match prisma/schema.prisma."
+            exit 1
+          fi
+          exit "$code"
