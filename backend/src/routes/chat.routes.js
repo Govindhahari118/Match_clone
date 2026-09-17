@@ -24,8 +24,7 @@ router.post('/send', async (req, res) => {
         const message = await messageService.saveMessage(req.user.sub, receiverId, content, clientMessageId);
         const io = req.app.get('io');
         io.to(receiverId).emit('receive_message', message);
-        await messageService.markDelivered(message.id);
-        return res.status(201).json({ ...message, status: 'delivered' });
+        return res.status(201).json(message);
     } catch (error) {
         return sendError(res, error);
     }
@@ -33,7 +32,15 @@ router.post('/send', async (req, res) => {
 
 router.post('/:userId/read', async (req, res) => {
     try {
-        return res.json(await messageService.markRead(req.user.sub, req.params.userId));
+        const receipt = await messageService.markRead(req.user.sub, req.params.userId);
+        if (receipt.updated > 0) {
+            req.app.get('io').to(req.params.userId).emit('message_status', {
+                messageIds: receipt.messageIds,
+                status: 'read',
+                readAt: receipt.readAt,
+            });
+        }
+        return res.json(receipt);
     } catch (error) {
         return sendError(res, error);
     }
