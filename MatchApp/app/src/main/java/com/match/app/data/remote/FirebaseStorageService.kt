@@ -24,10 +24,16 @@ class FirebaseStorageService @Inject constructor(
     companion object {
         private const val MAX_PHOTO_BYTES = 500 * 1024L
         private const val MAX_DIMENSION = 1024
+        private const val MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024L
         private const val MAX_CHAT_IMAGE_BYTES = 8 * 1024 * 1024L
         private const val MAX_CHAT_VOICE_BYTES = 12 * 1024 * 1024L
     }
 
+    /**
+     * Upload protected profile media and persist the Firebase Storage object identity, not a
+     * long-lived tokenized HTTPS download URL. Viewers must therefore pass current Storage Rules
+     * each time protected media is resolved.
+     */
     suspend fun uploadPhoto(firebaseUid: String, uri: Uri): Result<String> = runCatching {
         require(firebaseUid.isNotBlank())
         val bytes = compressToTarget(uri)
@@ -37,10 +43,31 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putBytes(bytes, metadata).await()
-        ref.downloadUrl.await().toString()
+        ref.toString()
     }
 
-    suspend fun deletePhoto(urlOrPath: String): Result<Unit> = runCatching {
+    suspend fun uploadProfileVideo(firebaseUid: String, uri: Uri): Result<String> = runCatching {
+        require(firebaseUid.isNotBlank())
+        val descriptorLength = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (descriptorLength > 0) {
+            require(descriptorLength <= MAX_PROFILE_VIDEO_BYTES) { "Video must be 50 MB or smaller" }
+        }
+        val contentType = context.contentResolver.getType(uri)
+            ?.takeIf { it.startsWith("video/") }
+            ?: "video/mp4"
+        val ref = storage.reference.child("videos/$firebaseUid/profile_video.mp4")
+        val metadata = StorageMetadata.Builder()
+            .setContentType(contentType)
+            .setCustomMetadata("ownerUid", firebaseUid)
+            .build()
+        ref.putFile(uri, metadata).await()
+        ref.toString()
+    }
+
+    suspend fun deletePhoto(urlOrPath: String): Result<Unit> = deleteProtectedMedia(urlOrPath)
+
+    suspend fun deleteProtectedMedia(urlOrPath: String): Result<Unit> = runCatching {
+        require(urlOrPath.isNotBlank())
         referenceFor(urlOrPath).delete().await()
     }
 
