@@ -62,7 +62,7 @@ private val PAGES = listOf(
         icon = Icons.Filled.Groups,
         title = "Community Matching",
         body = "Search across supported Indian religions, communities, languages and locations using the preferences that matter to you.",
-        bullets = listOf("Religion & caste filters", "Mother tongue preferences", "Regional match discovery"),
+        bullets = listOf("Religion & community filters where applicable", "Mother tongue preferences", "Regional match discovery"),
         iconTint = Color(0xFF7B1FA2),
         bgColor = Color(0xFFF3E5F5),
         tag = "ob_community"
@@ -77,13 +77,13 @@ private val PAGES = listOf(
         tag = "ob_quiz"
     ),
     OnboardPage(
-        icon = Icons.Filled.AutoAwesome,
-        title = "Astrology Compatibility",
-        body = "Rasi, Nakshatra and Gana — ancient wisdom meets modern matching for a deeper connection.",
-        bullets = listOf("Kundli compatibility report", "Rasi & Nakshatra matching", "Gana compatibility"),
-        iconTint = Color(0xFFFF8F00),
-        bgColor = Color(0xFFFFF8E1),
-        tag = "ob_astro"
+        icon = Icons.Filled.Tune,
+        title = "Your Preferences, Your Control",
+        body = "Set mandatory criteria separately from preferences so discovery can respect what truly matters to you.",
+        bullets = listOf("Mandatory filters stay strict", "Preferences influence ordering", "No silent filter relaxation"),
+        iconTint = Color(0xFF00695C),
+        bgColor = Color(0xFFE0F2F1),
+        tag = "ob_preferences"
     ),
     OnboardPage(
         icon = Icons.Filled.VerifiedUser,
