@@ -134,12 +134,10 @@ service cloud.firestore {
     match /shortlists/{ownerUid} { allow read: if isOwner(ownerUid); }
     match /blocks/{blockerUid}/blocked/{blockedUid} {
       allow read: if isOwner(blockerUid);
-      allow create, update: if isOwner(blockerUid) && blockerUid != blockedUid &&
-        request.resource.data.keys().hasOnly(['blockedUid','blockedAt']) &&
-        request.resource.data.get('blockedUid', blockedUid) == blockedUid;
-      allow delete: if isOwner(blockerUid);
+      // Block/unblock also revokes trusted relationship state, so mutations are callable-only.
+      allow write: if false;
     }
-    match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); }
+    match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); allow write: if false; }
 
     match /chats/{threadId} {
       allow read: if isSignedIn() &&
