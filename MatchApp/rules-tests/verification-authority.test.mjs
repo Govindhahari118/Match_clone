@@ -70,3 +70,24 @@ test('another member cannot upload into owner verification path', async () => {
     { contentType: 'image/jpeg' },
   ));
 });
+
+
+test('client cannot forge granular verification signals', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(alice, 'verifications/alice'), {
+    phoneStatus: 'VERIFIED',
+    identityStatus: 'VERIFIED',
+  }));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'verifications/alice'), {
+      phoneStatus: 'VERIFIED',
+      identityStatus: 'NOT_STARTED',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(alice, 'verifications/alice')));
+  await assertFails(updateDoc(doc(alice, 'verifications/alice'), {
+    identityStatus: 'VERIFIED',
+  }));
+});
