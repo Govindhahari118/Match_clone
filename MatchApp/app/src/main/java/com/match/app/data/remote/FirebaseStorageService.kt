@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
@@ -153,12 +154,39 @@ class FirebaseStorageService @Inject constructor(
         path
     }
 
-    private fun referenceFor(urlOrPath: String) =
-        if (urlOrPath.startsWith("https://") || urlOrPath.startsWith("gs://")) {
-            storage.getReferenceFromUrl(urlOrPath)
-        } else {
-            storage.reference.child(urlOrPath.trimStart('/'))
+    private fun referenceFor(urlOrPath: String): com.google.firebase.storage.StorageReference {
+        val value = urlOrPath.trim()
+        if (value.startsWith("gs://", ignoreCase = true)) {
+            return storage.getReferenceFromUrl(value)
         }
+        if (!value.startsWith("https://", ignoreCase = true)) {
+            return storage.reference.child(value.trimStart('/'))
+        }
+
+        val uri = Uri.parse(value)
+        val host = uri.host?.lowercase().orEmpty()
+        if (host == "firebasestorage.googleapis.com") {
+            val segments = uri.pathSegments
+            val bucketIndex = segments.indexOf("b")
+            val objectIndex = segments.indexOf("o")
+            if (bucketIndex >= 0 && bucketIndex + 1 < segments.size &&
+                objectIndex >= 0 && objectIndex + 1 < segments.size
+            ) {
+                val bucket = segments[bucketIndex + 1]
+                val encodedObject = segments.subList(objectIndex + 1, segments.size).joinToString("/")
+                val objectPath = URLDecoder.decode(encodedObject, Charsets.UTF_8.name())
+                return FirebaseStorage.getInstance("gs://" + bucket).reference.child(objectPath)
+            }
+        }
+        if (host == "storage.googleapis.com") {
+            val segments = uri.pathSegments
+            require(segments.size >= 2) { "Malformed Firebase Storage URL" }
+            val bucket = segments.first()
+            val objectPath = segments.drop(1).joinToString("/")
+            return FirebaseStorage.getInstance("gs://" + bucket).reference.child(objectPath)
+        }
+        return storage.getReferenceFromUrl(value)
+    }
 
     private fun sourceUri(value: String): Uri {
         val parsed = Uri.parse(value)
