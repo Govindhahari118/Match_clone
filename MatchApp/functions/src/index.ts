@@ -4,6 +4,7 @@
  */
 
 export * from "./users";
+export * from "./religionProfile";
 export * from "./notifications";
 export {
   createRazorpayOrder,
