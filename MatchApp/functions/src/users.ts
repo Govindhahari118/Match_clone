@@ -273,6 +273,47 @@ export const deleteUserAccount = functions
     }
   });
 
+export const setMatrimonyPaused = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const paused = data?.paused === true;
+  const userRef = db.collection("users").doc(uid);
+
+  const status = await db.runTransaction(async (tx) => {
+    const user = await tx.get(userRef);
+    if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+    const current = String(user.data()?.accountStatus || "ACTIVE");
+    if (current === "DELETING" || current === "DELETED") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Account deletion is already in progress"
+      );
+    }
+
+    const next = paused ? "PAUSED" : "ACTIVE";
+    tx.set(userRef, {
+      accountStatus: next,
+      searchStatus: paused ? "PAUSED" : "ACTIVE",
+      pausedAt: paused ? admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return next;
+  });
+
+  return { accountStatus: status, paused: status === "PAUSED" };
+});
+
+export const getMyAccountLifecycle = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const user = await db.collection("users").doc(uid).get();
+  if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+  const status = String(user.data()?.accountStatus || "ACTIVE");
+  return { accountStatus: status, paused: status === "PAUSED" };
+});
+
 export const recordProfileView = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const viewerUid = context.auth?.uid;
