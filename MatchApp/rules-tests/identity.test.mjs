@@ -73,3 +73,23 @@ test('clients cannot grant boost entitlement directly', async () => {
     boostActiveUntil: Date.now() + 86_400_000,
   }));
 });
+
+
+test('client cannot forge account lifecycle status', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(db, 'users/alice'), { accountStatus: 'ACTIVE' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { accountStatus: 'DELETING' }));
+});
+
+test('deleting account is immediately hidden from peers but remains readable by owner', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      accountStatus: 'DELETING',
+      stealthMode: true,
+    });
+  });
+  const ownerDb = env.authenticatedContext('alice').firestore();
+  const peerDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(getDoc(doc(ownerDb, 'users/alice')));
+  await assertFails(getDoc(doc(peerDb, 'users/alice')));
+});
