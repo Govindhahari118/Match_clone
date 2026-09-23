@@ -53,8 +53,11 @@ service cloud.firestore {
         'isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan',
         'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
-        'lastActiveAt','boostActiveUntil','religion','religionId','religionLocked','religionConfirmedAt'
+        'lastActiveAt','boostActiveUntil','accountStatus','religion','religionId','religionLocked','religionConfirmedAt'
       ]);
+    }
+    function peerReadableAccount(data) {
+      return !('accountStatus' in data) || data.accountStatus == 'ACTIVE';
     }
     function blockedEitherWay(viewerUid, targetUid) {
       return exists(/databases/$(database)/documents/blocks/$(viewerUid)/blocked/$(targetUid)) ||
@@ -77,7 +80,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn() && (isOwner(userId) ||
-        (!blockedEitherWay(request.auth.uid, userId) &&
+        (peerReadableAccount(resource.data) &&
+         !blockedEitherWay(request.auth.uid, userId) &&
          !profileHiddenFrom(userId, request.auth.uid) &&
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
       allow create: if isOwner(userId) && safeUserCreate();
