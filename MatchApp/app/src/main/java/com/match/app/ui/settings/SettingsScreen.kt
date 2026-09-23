@@ -80,6 +80,17 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
+    private val _profilePaused = MutableStateFlow(false)
+    val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
+    private val _lifecycleBusy = MutableStateFlow(false)
+    val lifecycleBusy: StateFlow<Boolean> = _lifecycleBusy.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _profilePaused.value = authRepo.getMatrimonyPaused()
+        }
+    }
+
     fun useAutomaticTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.AUTOMATIC) }
     fun useNeutralTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.NEUTRAL) }
     fun useManualTheme(value: AppPalette) = viewModelScope.launch {
@@ -106,6 +117,23 @@ class SettingsViewModel @Inject constructor(
 
     fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
+
+    fun setProfilePaused(paused: Boolean) = viewModelScope.launch {
+        if (_lifecycleBusy.value) return@launch
+        _lifecycleBusy.value = true
+        val result = authRepo.setMatrimonyPaused(paused)
+        result.onSuccess { actual ->
+            _profilePaused.value = actual
+            _searchMessage.value = if (actual) {
+                "Matrimony profile paused. You are hidden from new discovery."
+            } else {
+                "Matrimony profile resumed. Current privacy and eligibility rules apply."
+            }
+        }.onFailure {
+            _searchMessage.value = it.message ?: "Could not update matrimony visibility."
+        }
+        _lifecycleBusy.value = false
+    }
 
     fun deleteAccount() = viewModelScope.launch {
         val id = session.userId.first()
@@ -143,6 +171,8 @@ fun SettingsScreen(
     val currentFilter by vm.currentFilter.collectAsState()
     val savedSearches by vm.savedSearches.collectAsState()
     val searchMessage by vm.searchMessage.collectAsState()
+    val profilePaused by vm.profilePaused.collectAsState()
+    val lifecycleBusy by vm.lifecycleBusy.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
@@ -339,7 +369,37 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            Text("Account deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Matrimony visibility", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                if (profilePaused) {
+                    "Your profile is paused and excluded from new discovery. Messages, shortlist, preferences and account history are preserved."
+                } else {
+                    "Pause your matrimony profile without deleting your account. You can resume later."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { vm.setProfilePaused(!profilePaused) },
+                enabled = !lifecycleBusy && accountState !is SettingsViewModel.AccountState.Deleting,
+                modifier = Modifier.fillMaxWidth().testTag("settings_pause_profile")
+            ) {
+                if (lifecycleBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(if (profilePaused) Icons.Filled.PlayArrow else Icons.Filled.PauseCircle, null)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        lifecycleBusy -> "Updating…"
+                        profilePaused -> "Resume matrimony profile"
+                        else -> "Pause matrimony profile"
+                    }
+                )
+            }
+
+            Text("Permanent deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Permanently delete your account and start the authenticated server cleanup flow. This action cannot be undone.",
                 style = MaterialTheme.typography.bodySmall,
