@@ -1,13 +1,20 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
-import { db, generateMatrimonyId, getFcmToken, messaging, requireAppCheck } from "./shared";
+import {
+  db,
+  getFcmToken,
+  messaging,
+  releaseMatrimonyId,
+  requireAppCheck,
+  reserveMatrimonyId,
+} from "./shared";
 
 export const onUserCreate = functions.firestore
   .document("users/{uid}")
   .onCreate(async (snap, context) => {
     const uid = context.params.uid;
-    const matrimonyId = generateMatrimonyId();
+    const matrimonyId = await reserveMatrimonyId(uid);
 
     await snap.ref.update({
       matrimonyId,
@@ -229,6 +236,7 @@ export const deleteUserAccount = functions
         await batch.commit();
       }
 
+      await releaseMatrimonyId(uid);
       await admin.auth().deleteUser(uid);
 
       await requestRef.set({
