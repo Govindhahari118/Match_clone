@@ -277,15 +277,16 @@ class AuthRepository @Inject constructor(
 
     suspend fun getViewCount(userId: Long): Int = userDao.findById(userId)?.profileViewCount ?: 0
 
+    /**
+     * Legacy API retained only for source compatibility.
+     * Boost activation must come from PlayBillingManager -> verifyGooglePlayPurchase -> server
+     * entitlement. Calling this path must never create a local-only or client-authored boost.
+     */
+    @Deprecated("Boost activation is server-authoritative through Google Play verification")
     suspend fun activateBoost(userId: Long, durationMs: Long = 24 * 60 * 60 * 1000L) {
-        val u = userDao.findById(userId) ?: return
-        val boostUntil = System.currentTimeMillis() + durationMs
-        userDao.updateBoostExpiry(userId, boostUntil)
-        if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("boostActiveUntil" to boostUntil)) } catch (ex: Exception) {
-                Log.w("AuthRepository", "Boost cloud sync failed", ex)
-            }
-        }
+        throw IllegalStateException(
+            "Boost cannot be activated locally. Use the verified Google Play purchase flow."
+        )
     }
 
     suspend fun isBoostActive(userId: Long): Boolean {
