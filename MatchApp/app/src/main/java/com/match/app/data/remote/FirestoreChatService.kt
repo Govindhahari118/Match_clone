@@ -1,5 +1,6 @@
 package com.match.app.data.remote
 
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
@@ -64,6 +65,8 @@ class FirestoreChatService @Inject constructor() {
                         imageUri = doc.getString("imageUri"),
                         voiceDurationMs = doc.getLong("voiceDurationMs"),
                         sentAt = doc.getLong("sentAt") ?: 0L,
+                        deliveredAt = doc.getTimestamp("deliveredAt")?.toDate()?.time,
+                        readAt = doc.getTimestamp("readAt")?.toDate()?.time,
                         isRead = doc.getBoolean("isRead") ?: false
                     )
                 } ?: emptyList()
@@ -136,6 +139,22 @@ class FirestoreChatService @Inject constructor() {
         batch.commit().await()
     }
 
+    /** Recipient-side receipt acknowledgement. Server persistence alone is only SENT. */
+    suspend fun acknowledgeDelivered(myUid: String, peerUid: String, messageIds: Collection<String>) {
+        if (messageIds.isEmpty()) return
+        val tid = threadId(myUid, peerUid)
+        val batch = db.batch()
+        messageIds.distinct().take(200).forEach { messageId ->
+            require(messageId.matches(Regex("[A-Za-z0-9_-]{16,128}"))) { "Invalid message id" }
+            batch.update(
+                db.collection("chats").document(tid).collection("messages").document(messageId),
+                "deliveredAt",
+                FieldValue.serverTimestamp()
+            )
+        }
+        batch.commit().await()
+    }
+
     suspend fun markRead(myUid: String, peerUid: String) {
         val tid = threadId(myUid, peerUid)
         val unread = db.collection("chats").document(tid).collection("messages")
@@ -144,7 +163,16 @@ class FirestoreChatService @Inject constructor() {
             .get().await()
         if (unread.isEmpty) return
         val batch = db.batch()
-        unread.documents.forEach { batch.update(it.reference, "isRead", true) }
+        unread.documents.forEach { doc ->
+            val updates = mutableMapOf<String, Any>(
+                "isRead" to true,
+                "readAt" to FieldValue.serverTimestamp()
+            )
+            if (doc.getTimestamp("deliveredAt") == null) {
+                updates["deliveredAt"] = FieldValue.serverTimestamp()
+            }
+            batch.update(doc.reference, updates)
+        }
         batch.commit().await()
     }
 
@@ -175,5 +203,7 @@ data class FirestoreMessage(
     val imageUri: String? = null,
     val voiceDurationMs: Long? = null,
     val sentAt: Long = 0L,
+    val deliveredAt: Long? = null,
+    val readAt: Long? = null,
     val isRead: Boolean = false
 )
