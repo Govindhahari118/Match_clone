@@ -12,6 +12,10 @@ interface MessageDao {
     @Query("UPDATE messages SET readAt = :now WHERE toUserId = :me AND fromUserId = :peer AND readAt IS NULL")
     suspend fun markRead(me: Long, peer: Long, now: Long = System.currentTimeMillis())
     @Query("UPDATE messages SET status = :status WHERE id = :id") suspend fun updateStatus(id: Long, status: String)
+    @Query("UPDATE messages SET status = :status, readAt = CASE WHEN :readAt > 0 THEN :readAt ELSE readAt END WHERE clientMessageId = :clientMessageId AND clientMessageId != ''")
+    suspend fun updateRemoteStatus(clientMessageId: String, status: String, readAt: Long = 0L)
+    @Query("SELECT COUNT(*) FROM messages WHERE clientMessageId = :clientMessageId AND clientMessageId != ''")
+    suspend fun countByClientMessageId(clientMessageId: String): Int
     @Query("SELECT COUNT(*) FROM messages WHERE toUserId = :me AND readAt IS NULL") fun observeUnread(me: Long): Flow<Int>
     @Query("SELECT DISTINCT CASE WHEN fromUserId = :me THEN toUserId ELSE fromUserId END AS peerId FROM messages WHERE fromUserId = :me OR toUserId = :me")
     fun observeConversationPeerIds(me: Long): Flow<List<Long>>
