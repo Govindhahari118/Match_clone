@@ -53,7 +53,7 @@ service cloud.firestore {
         'isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan',
         'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
-        'lastActiveAt','religion','religionId','religionLocked','religionConfirmedAt'
+        'lastActiveAt','boostActiveUntil','religion','religionId','religionLocked','religionConfirmedAt'
       ]);
     }
     function blockedEitherWay(viewerUid, targetUid) {
