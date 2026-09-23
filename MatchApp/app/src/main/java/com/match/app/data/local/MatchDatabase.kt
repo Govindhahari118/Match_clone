@@ -10,7 +10,7 @@ import com.match.app.data.local.entity.*
         LikeEntity::class, BlockEntity::class, ShortlistEntity::class, NotificationEntity::class,
         ProfileViewEntity::class, SavedSearchEntity::class, PendingMessageEntity::class, NoteEntity::class],
     version = 22,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class MatchDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
