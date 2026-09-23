@@ -112,10 +112,26 @@ class FirebaseStorageService @Inject constructor(
             .joinToString("") { "%02x".format(it) }
         val dir = File(context.filesDir, "chat_media").apply { mkdirs() }
         val file = File(dir, "$digest.$ext")
-        if (!file.exists() || file.length() == 0L) {
-            storage.reference.child(storagePath).getFile(file).await()
+        val ref = storage.reference.child(storagePath)
+
+        try {
+            // Re-evaluate current participant/block authorization before reusing private bytes.
+            ref.metadata.await()
+            if (!file.exists() || file.length() == 0L) {
+                val temporary = File(dir, file.name + ".part")
+                runCatching { temporary.delete() }
+                ref.getFile(temporary).await()
+                if (file.exists()) file.delete()
+                if (!temporary.renameTo(file)) {
+                    temporary.copyTo(file, overwrite = true)
+                    temporary.delete()
+                }
+            }
+            file.absolutePath
+        } catch (error: Exception) {
+            runCatching { file.delete() }
+            throw error
         }
-        file.absolutePath
     }
 
     private suspend fun uploadChatMedia(
