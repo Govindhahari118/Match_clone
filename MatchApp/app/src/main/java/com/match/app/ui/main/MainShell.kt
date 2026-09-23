@@ -183,7 +183,7 @@ private fun AppDrawer(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("MatrimonyConnect", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Matree", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close menu") }
@@ -262,12 +262,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
             topBar = {
                 if (showBottomBar) {
                     val pageTitle = when (currentRoute) {
-                        MainRoutes.HOME -> "MatrimonyConnect"
+                        MainRoutes.HOME -> "Matree"
                         MainRoutes.MATCHES -> "Discover"
                         MainRoutes.INTERESTS -> "Interests"
                         MainRoutes.CHAT_LIST -> "Messages"
                         MainRoutes.PROFILE -> "My Profile"
-                        else -> "MatrimonyConnect"
+                        else -> "Matree"
                     }
                     TopAppBar(
                         title = { Text(pageTitle, fontWeight = FontWeight.Bold) },
