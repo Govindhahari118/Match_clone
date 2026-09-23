@@ -38,7 +38,7 @@ class FirestoreProfileService @Inject constructor(
             "username", "usernameNormalized", "lastActiveAt"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
-            "religion", "religionLocked", "religionConfirmedAt"
+            "religion", "religionId", "religionLocked", "religionConfirmedAt"
         )
         private val PRIVATE_FIELDS = setOf(
             "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
@@ -47,7 +47,7 @@ class FirestoreProfileService @Inject constructor(
         private val LEGACY_PUBLIC_PRIVACY_FIELDS = setOf("isIncognito", "showLastActive")
     }
 
-    suspend fun pushProfile(entity: UserEntity, confirmReligion: Boolean = false) {
+    suspend fun pushProfile(entity: UserEntity) {
         if (entity.firebaseUid.isBlank()) return
         val uid = entity.firebaseUid
         require(auth.currentUser?.uid == uid) { "Cannot update another user's profile" }
@@ -70,20 +70,6 @@ class FirestoreProfileService @Inject constructor(
             put("showLastActive", FieldValue.delete())
         }
 
-        if (confirmReligion) {
-            require(entity.religion.isNotBlank()) { "Religion must be selected before confirmation" }
-            val current = usersCol.document(uid).get().await()
-            val alreadyLocked = current.getBoolean("religionLocked") == true
-            if (alreadyLocked) {
-                val canonicalReligion = current.getString("religion").orEmpty()
-                require(canonicalReligion.equals(entity.religion, ignoreCase = true)) {
-                    "Religion is already confirmed and cannot be changed from the app"
-                }
-            } else {
-                publicData["religionLocked"] = true
-                publicData["religionConfirmedAt"] = System.currentTimeMillis()
-            }
-        }
 
         val batch = db.batch()
         batch.set(usersCol.document(uid), publicData, SetOptions.merge())
