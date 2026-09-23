@@ -318,23 +318,16 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     HomeLauncherScreen(
                         onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
                         onGoQuiz = { nav.navigate(MainRoutes.QUIZ) },
-                        onGoStories = {},
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoRegions = { nav.navigate(MainRoutes.MATCHES) },
-                        onGoCircles = {},
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
                         onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
-                        onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
-                        onGoFamily = { nav.navigate(MainRoutes.PROFILE) },
-                        onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
-                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) },
-                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) }
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
