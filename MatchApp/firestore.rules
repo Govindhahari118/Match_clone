@@ -187,7 +187,7 @@ service cloud.firestore {
     match /callRequests/{callId} { allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid); allow write: if false; }
     match /profileAnalytics/{uid} { allow read: if isOwner(uid); allow write: if false; match /weekly/{weekId} { allow read: if isOwner(uid); allow write: if false; } }
     match /communities/{communityId} { allow read: if isSignedIn(); allow write: if false; match /members/{memberId} { allow read: if isSignedIn(); allow write: if false; } }
-    match /verifications/{uid} { allow read: if isOwner(uid); allow create: if isOwner(uid); allow update, delete: if false; }
+    match /verifications/{uid} { allow read: if isOwner(uid); allow write: if false; }
     match /verificationRequests/{uid} {
       allow read: if isOwner(uid);
       // Pending/verified/rejected state is written only by trusted Functions/admin review. Clients
