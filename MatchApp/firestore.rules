@@ -15,32 +15,46 @@ service cloud.firestore {
              !('birthPlace' in request.resource.data) &&
              !('incomeBand' in request.resource.data);
     }
-    function safeUserCreate() { return hasNoPrivateProfileFields() && (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) && (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) && (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') && (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) && (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') && (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) && !('premiumPlan' in request.resource.data) && !('premiumUntil' in request.resource.data) && !('paymentId' in request.resource.data) && !('username' in request.resource.data) && !('usernameNormalized' in request.resource.data) && !('lastActiveAt' in request.resource.data); }
-    function userServerFieldsUnchanged() { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan','subscriptionExpiry','premiumPlan','premiumUntil','paymentId','contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized','lastActiveAt']); }
-    function validReligionCreate() {
-      let locked = request.resource.data.get('religionLocked', false);
-      return (!locked && !('religionConfirmedAt' in request.resource.data)) ||
-        (locked == true &&
-         request.resource.data.get('religion', '') is string &&
-         request.resource.data.get('religion', '').size() > 0 &&
-         request.resource.data.get('religionConfirmedAt', 0) is int &&
-         request.resource.data.get('religionConfirmedAt', 0) > 0);
+    function validReligionValue(data) {
+      return !('religion' in data) || data.religion == '' ||
+        (data.religion is string && data.religion in [
+          'Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain',
+          'Parsi / Zoroastrian', 'Other', 'Prefer not to say'
+        ]);
     }
-    function validReligionUpdate() {
-      let wasLocked = resource.data.get('religionLocked', false);
-      let willBeLocked = request.resource.data.get('religionLocked', false);
-      return wasLocked == true
-        ? willBeLocked == true &&
-          request.resource.data.get('religion', '') == resource.data.get('religion', '') &&
-          request.resource.data.get('religionConfirmedAt', 0) == resource.data.get('religionConfirmedAt', 0)
-        : (
-          (!willBeLocked && !('religionConfirmedAt' in request.resource.data)) ||
-          (willBeLocked == true &&
-           request.resource.data.get('religion', '') is string &&
-           request.resource.data.get('religion', '').size() > 0 &&
-           request.resource.data.get('religionConfirmedAt', 0) is int &&
-           request.resource.data.get('religionConfirmedAt', 0) > 0)
-        );
+    function unconfirmedReligionOnCreate() {
+      return !('religion' in request.resource.data) || request.resource.data.religion == '';
+    }
+    function noClientReligionAuthorityOnCreate() {
+      return !('religionId' in request.resource.data) &&
+             !('religionLocked' in request.resource.data) &&
+             !('religionConfirmedAt' in request.resource.data);
+    }
+    function safeUserCreate() {
+      return hasNoPrivateProfileFields() &&
+             validReligionValue(request.resource.data) &&
+             unconfirmedReligionOnCreate() &&
+             noClientReligionAuthorityOnCreate() &&
+             (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) &&
+             (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) &&
+             (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') &&
+             (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) &&
+             (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') &&
+             (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) &&
+             !('premiumPlan' in request.resource.data) &&
+             !('premiumUntil' in request.resource.data) &&
+             !('paymentId' in request.resource.data) &&
+             !('username' in request.resource.data) &&
+             !('usernameNormalized' in request.resource.data) &&
+             !('lastActiveAt' in request.resource.data);
+    }
+    function userServerFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan',
+        'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
+        'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
+        'lastActiveAt','religion','religionId','religionLocked','religionConfirmedAt'
+      ]);
     }
     function blockedEitherWay(viewerUid, targetUid) {
       return exists(/databases/$(database)/documents/blocks/$(viewerUid)/blocked/$(targetUid)) ||
@@ -66,8 +80,8 @@ service cloud.firestore {
         (!blockedEitherWay(request.auth.uid, userId) &&
          !profileHiddenFrom(userId, request.auth.uid) &&
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
-      allow create: if isOwner(userId) && safeUserCreate() && validReligionCreate();
-      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionUpdate();
+      allow create: if isOwner(userId) && safeUserCreate();
+      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionValue(request.resource.data);
       allow delete: if false;
     }
     match /userPrivate/{userId} {
