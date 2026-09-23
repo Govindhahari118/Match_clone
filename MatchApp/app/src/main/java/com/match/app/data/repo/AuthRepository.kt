@@ -298,6 +298,31 @@ class AuthRepository @Inject constructor(
 
     suspend fun getFirebaseUid(userId: Long): String = userDao.findById(userId)?.firebaseUid ?: ""
 
+    suspend fun getMatrimonyPaused(): Boolean {
+        return try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+                .getHttpsCallable("getMyAccountLifecycle")
+                .call()
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?>
+            data?.get("paused") as? Boolean ?: false
+        } catch (e: Exception) {
+            Log.w("AuthRepository", "Unable to load matrimony lifecycle", e)
+            false
+        }
+    }
+
+    suspend fun setMatrimonyPaused(paused: Boolean): Result<Boolean> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("setMatrimonyPaused")
+            .call(mapOf("paused" to paused))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid lifecycle response")
+        data["paused"] as? Boolean ?: error("Missing lifecycle state")
+    }
+
     /**
      * Permanently erases the account through the restartable trusted backend cleanup.
      * Local Room state is wiped only after the server confirms remote erasure, so messages,
