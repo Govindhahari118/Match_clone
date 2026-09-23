@@ -12,9 +12,9 @@ import kotlinx.coroutines.tasks.await
  *
  * Per-document block and stealth visibility cannot safely be implemented by querying the
  * Firestore `users` collection directly because security rules are not query filters. The
- * backend derives viewer identity from Firebase Auth, excludes either-direction blocks and
- * stealth profiles, and returns only public profile fields. Remaining search filters are
- * presentation filters applied to that already-authorized result set.
+ * backend derives viewer identity from Firebase Auth, excludes either-direction blocks,
+ * lifecycle/privacy-ineligible profiles and applies the complete filter contract before returning
+ * only public profile fields. Client checks are defensive UI consistency checks, never authority.
  */
 class FirestorePagingSource(
     private val myUid: String,
@@ -37,10 +37,53 @@ class FirestorePagingSource(
     override suspend fun load(params: LoadParams<String>): LoadResult<String, UserEntity> = try {
         val payload = mutableMapOf<String, Any>(
             "ageMin" to filter.ageMin,
-            "ageMax" to filter.ageMax
+            "ageMax" to filter.ageMax,
+            "withPhotoOnly" to filter.withPhotoOnly,
+            "verifiedOnly" to filter.verifiedOnly,
+            "premiumOnly" to filter.premiumOnly,
+            "nriOnly" to filter.nriOnly,
+            "willingToRelocate" to filter.willingToRelocate,
+            "verifiedLevel" to filter.verifiedLevel,
+            "recentlyJoinedDays" to filter.recentlyJoinedDays,
+            "lastActiveWithinDays" to filter.lastActiveWithinDays
         )
+        fun putText(key: String, value: String) {
+            value.trim().takeIf { it.isNotBlank() }?.let { payload[key] = it.take(100) }
+        }
         params.key?.takeIf { it.isNotBlank() }?.let { payload["cursor"] = it }
-        filter.keyword.trim().takeIf { it.isNotBlank() }?.let { payload["keyword"] = it.take(64) }
+        putText("keyword", filter.keyword.take(64))
+        putText("city", filter.city)
+        putText("state", filter.state)
+        putText("religion", filter.religion)
+        putText("caste", filter.caste)
+        putText("subCaste", filter.subCaste)
+        putText("motherTongue", filter.motherTongue)
+        putText("maritalStatus", filter.maritalStatus)
+        putText("incomeMin", filter.incomeMin)
+        putText("incomeMax", filter.incomeMax)
+        putText("educationLevel", filter.educationLevel)
+        putText("educationField", filter.educationField)
+        putText("occupationCategory", filter.occupationCategory)
+        putText("employerType", filter.employerType)
+        putText("diet", filter.diet)
+        putText("residentialStatus", filter.residentialStatus)
+        putText("hasChildren", filter.hasChildren)
+        putText("hasChildrenFilter", filter.hasChildrenFilter)
+        putText("gothra", filter.gothra)
+        putText("nativeState", filter.nativeState)
+        putText("countryOfResidence", filter.countryOfResidence)
+        putText("nriStatus", filter.nriStatus)
+        putText("smoking", filter.smoking)
+        putText("drinking", filter.drinking)
+        putText("familyType", filter.familyType)
+        putText("familyStatus", filter.familyStatus)
+        putText("physicalStatus", filter.physicalStatus)
+        putText("citizenship", filter.citizenship)
+        putText("rasi", filter.rasi)
+        putText("nakshatra", filter.nakshatra)
+        putText("manglik", filter.manglik)
+        putText("hobbies", filter.hobbies)
+        putText("hasHoroscope", filter.hasHoroscope)
 
         val response = functions.getHttpsCallable("discoverProfiles")
             .call(payload)
@@ -80,15 +123,11 @@ class FirestorePagingSource(
             if (!matchesText(filter.nativeState, entity.nativeState)) return@mapNotNull null
             if (!matchesText(filter.countryOfResidence, entity.countryOfResidence)) return@mapNotNull null
             if (!matchesText(filter.citizenship, entity.citizenship)) return@mapNotNull null
-            if (!matchesText(filter.gothra, entity.gothra)) return@mapNotNull null
             if (!matchesText(filter.smoking, entity.smoking)) return@mapNotNull null
             if (!matchesText(filter.drinking, entity.drinking)) return@mapNotNull null
             if (!matchesText(filter.familyType, entity.familyType)) return@mapNotNull null
             if (!matchesText(filter.familyStatus, entity.familyStatus)) return@mapNotNull null
             if (!matchesText(filter.physicalStatus, entity.physicalStatus)) return@mapNotNull null
-            if (!matchesText(filter.rasi, entity.rasi)) return@mapNotNull null
-            if (!matchesText(filter.nakshatra, entity.nakshatra)) return@mapNotNull null
-            if (!matchesText(filter.manglik, entity.manglik)) return@mapNotNull null
             if (filter.hobbies.isNotBlank() && !entity.hobbies.contains(filter.hobbies, true)) return@mapNotNull null
             if (filter.keyword.isNotBlank()) {
                 val keyword = filter.keyword.trim().removePrefix("@").lowercase()
@@ -121,11 +160,6 @@ class FirestorePagingSource(
             }
             if (filter.willingToRelocate && !entity.willingToRelocate) return@mapNotNull null
             if (filter.recentlyJoinedDays > 0 && entity.createdAt < now - filter.recentlyJoinedDays * DAY_MS) return@mapNotNull null
-            if (filter.lastActiveWithinDays > 0 && entity.lastActiveAt < now - filter.lastActiveWithinDays * DAY_MS) return@mapNotNull null
-            when (filter.hasHoroscope.lowercase()) {
-                "yes" -> if (entity.rasi.isBlank() || entity.nakshatra.isBlank()) return@mapNotNull null
-                "no" -> if (entity.rasi.isNotBlank() || entity.nakshatra.isNotBlank()) return@mapNotNull null
-            }
             entity
         }
 
