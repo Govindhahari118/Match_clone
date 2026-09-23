@@ -93,3 +93,16 @@ test('deleting account is immediately hidden from peers but remains readable by 
   await assertSucceeds(getDoc(doc(ownerDb, 'users/alice')));
   await assertFails(getDoc(doc(peerDb, 'users/alice')));
 });
+
+
+test('paused account is hidden from peers but remains readable by owner', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      accountStatus: 'PAUSED',
+    });
+  });
+  const ownerDb = env.authenticatedContext('alice').firestore();
+  const peerDb = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(getDoc(doc(ownerDb, 'users/alice')));
+  await assertFails(getDoc(doc(peerDb, 'users/alice')));
+});
