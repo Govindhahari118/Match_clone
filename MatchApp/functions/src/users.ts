@@ -162,10 +162,26 @@ export const deleteUserAccount = functions
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
+    const authTimeSeconds = Number(context.auth?.token?.auth_time || 0);
+    const authAgeMs = Date.now() - authTimeSeconds * 1000;
+    if (!Number.isFinite(authAgeMs) || authTimeSeconds <= 0 || authAgeMs > 5 * 60 * 1000) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Recent authentication required before permanent account deletion"
+      );
+    }
+
     const requestRef = db.collection("deletionRequests").doc(uid);
     await requestRef.set({
       status: "PROCESSING",
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    const userRef = db.collection("users").doc(uid);
+    await userRef.set({
+      accountStatus: "DELETING",
+      stealthMode: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
