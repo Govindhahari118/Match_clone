@@ -107,6 +107,12 @@ service cloud.firestore {
       allow delete: if isOwner(ownerUid);
     }
     match /contactGrants/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
+    match /contactRequests/{requestId} {
+      allow read: if isSignedIn() &&
+        (resource.data.requesterUid == request.auth.uid || resource.data.targetUid == request.auth.uid) &&
+        !blockedEitherWay(resource.data.requesterUid, resource.data.targetUid);
+      allow write: if false;
+    }
     match /presencePrivate/{uid} { allow read, write: if false; }
 
     match /interests/{interestId} {
