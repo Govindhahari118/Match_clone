@@ -203,7 +203,7 @@ fun SettingsScreen(
                         if (user?.isVerified == true) Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
                     }
                     user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
-                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { user?.id?.let { id -> "M$id" } ?: "" }.orEmpty())
+                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { "Being assigned" }.orEmpty())
                 }
             }
 
