@@ -65,3 +65,11 @@ test('clients cannot read or forge Matrimony ID reservation registries', async (
     uid: 'alice', createdAt: Date.now(),
   }));
 });
+
+
+test('clients cannot grant boost entitlement directly', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    boostActiveUntil: Date.now() + 86_400_000,
+  }));
+});
