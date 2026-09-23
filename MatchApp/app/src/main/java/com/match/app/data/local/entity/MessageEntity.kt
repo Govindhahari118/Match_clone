@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "messages",
-    indices = [Index(value = ["fromUserId", "toUserId"]), Index("toUserId")]
+    indices = [Index(value = ["fromUserId", "toUserId"]), Index("toUserId"), Index("clientMessageId")]
 )
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
