@@ -172,6 +172,8 @@ export const discoverProfiles = functions
       if (profiles.length >= RETURN_LIMIT) break;
       if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
       const candidate = doc.data() || {};
+      const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
+      if (accountStatus !== "ACTIVE") continue;
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
