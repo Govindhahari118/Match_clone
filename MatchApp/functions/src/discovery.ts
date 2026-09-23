@@ -91,7 +91,10 @@ function matchesServerFilters(
   if (filterBoolean(data, "willingToRelocate") && candidate.willingToRelocate !== true) return false;
 
   const hobbies = filterString(data, "hobbies");
-  if (hobbies && !normalizedSearchValue(candidate.hobbies).includes(hobbies.toLocaleLowerCase("en-IN"))) {
+  const candidateHobbies = Array.isArray(candidate.hobbies)
+    ? candidate.hobbies.filter((item: unknown) => typeof item === "string").join(" ")
+    : stringValue(candidate.hobbies);
+  if (hobbies && !candidateHobbies.toLocaleLowerCase("en-IN").includes(hobbies.toLocaleLowerCase("en-IN"))) {
     return false;
   }
 
@@ -158,7 +161,9 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
     const value = data[field];
-    if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+    if (value instanceof admin.firestore.Timestamp) {
+      result[field] = value.toMillis();
+    } else if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
       result[field] = value;
     } else if (Array.isArray(value)) {
       result[field] = value.filter((item) => typeof item === "string");
