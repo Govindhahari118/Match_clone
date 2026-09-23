@@ -46,7 +46,7 @@ class ChatRepository @Inject constructor(
         if (trimmed.isEmpty() || trimmed.length > MAX_PLAINTEXT_LENGTH) return@withContext
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val encrypted = ChatCrypto.encrypt(trimmed) ?: trimmed
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "TEXT", trimmed, "", 0)
     }
 
@@ -54,14 +54,14 @@ class ChatRepository @Inject constructor(
         require(durationMs in 500..5 * 60 * 1000L) { "Invalid voice duration" }
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(voiceUri, clientId, "m4a")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Voice message", voiceUri = persisted, voiceDurationMs = durationMs, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Voice message", voiceUri = persisted, voiceDurationMs = durationMs, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "VOICE", "Voice message", persisted, durationMs)
     }
 
     suspend fun sendImage(me: Long, peer: Long, imageUri: String) = withContext(Dispatchers.IO) {
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(imageUri, clientId, "jpg")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Image", imageUri = persisted, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Image", imageUri = persisted, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "IMAGE", "Image", persisted, 0)
     }
 
@@ -132,14 +132,36 @@ class ChatRepository @Inject constructor(
         if (myUid.isBlank() || peerUid.isBlank()) return@withContext
         runCatching {
             firestoreChat.observeThread(myUid, peerUid).collect { remoteMessages ->
+                val deliveryAcks = mutableListOf<String>()
                 remoteMessages.forEach { remote ->
+                    if (remote.fromFirebaseUid == myUid && remote.toFirebaseUid == peerUid) {
+                        val status = when {
+                            remote.readAt != null || remote.isRead -> "read"
+                            remote.deliveredAt != null -> "delivered"
+                            else -> "sent"
+                        }
+                        dao.updateRemoteStatus(remote.id, status, remote.readAt ?: 0L)
+                        return@forEach
+                    }
+
                     if (remote.fromFirebaseUid != peerUid || remote.toFirebaseUid != myUid) return@forEach
-                    if (dao.countBySentAt(peer, me, remote.sentAt) > 0) return@forEach
+                    if (remote.deliveredAt == null) deliveryAcks += remote.id
+
+                    val incomingStatus = if (remote.readAt != null || remote.isRead) "read" else "delivered"
+                    if (dao.countByClientMessageId(remote.id) > 0) {
+                        dao.updateRemoteStatus(remote.id, incomingStatus, remote.readAt ?: 0L)
+                        return@forEach
+                    }
+
                     val voiceLocal = remote.voiceUri?.let { storage.downloadChatMedia(it).getOrNull() }
                     val imageLocal = remote.imageUri?.let { storage.downloadChatMedia(it).getOrNull() }
                     if (remote.voiceUri != null && voiceLocal == null) return@forEach
                     if (remote.imageUri != null && imageLocal == null) return@forEach
-                    val localBody = if (remote.voiceUri == null && remote.imageUri == null) ChatCrypto.encrypt(remote.body) ?: remote.body else remote.body
+                    val localBody = if (remote.voiceUri == null && remote.imageUri == null) {
+                        ChatCrypto.encrypt(remote.body) ?: remote.body
+                    } else {
+                        remote.body
+                    }
                     dao.insert(
                         MessageEntity(
                             fromUserId = peer,
@@ -149,10 +171,14 @@ class ChatRepository @Inject constructor(
                             imageUri = imageLocal,
                             voiceDurationMs = remote.voiceDurationMs,
                             sentAt = remote.sentAt,
-                            readAt = if (remote.isRead) System.currentTimeMillis() else null,
-                            status = if (remote.isRead) "read" else "delivered"
+                            readAt = remote.readAt,
+                            clientMessageId = remote.id,
+                            status = incomingStatus
                         )
                     )
+                }
+                if (deliveryAcks.isNotEmpty()) {
+                    runCatching { firestoreChat.acknowledgeDelivered(myUid, peerUid, deliveryAcks) }
                 }
             }
         }
