@@ -81,7 +81,6 @@ class MatchingRepository @Inject constructor(
             val blockedIds = social.blockedIds(seekerId).toSet()
             val qMap = qDao.all().associateBy { it.userId }
             val seekerProfile = seekerEntity.toProfile(qMap)
-            val now = System.currentTimeMillis()
 
             userDao.allExcluding(seekerId)
                 .asSequence()
@@ -115,9 +114,6 @@ class MatchingRepository @Inject constructor(
                 .filter { filter.familyStatus.isBlank() || it.familyStatus.equals(filter.familyStatus, true) }
                 .filter { filter.physicalStatus.isBlank() || it.physicalStatus.equals(filter.physicalStatus, true) }
                 .filter { filter.citizenship.isBlank() || it.citizenship.equals(filter.citizenship, true) }
-                .filter { filter.nakshatra.isBlank() || it.nakshatra.equals(filter.nakshatra, true) }
-                .filter { filter.rasi.isBlank() || it.rasi.equals(filter.rasi, true) }
-                .filter { filter.manglik.isBlank() || it.manglik.equals(filter.manglik, true) }
                 .filter { filter.hobbies.isBlank() || it.hobbies.contains(filter.hobbies, true) }
                 .filter {
                     val keyword = filter.keyword.trim().removePrefix("@")
@@ -151,16 +147,6 @@ class MatchingRepository @Inject constructor(
                     }
                 }
                 .filter { !filter.willingToRelocate || it.willingToRelocate }
-                .filter { filter.incomeMin.isBlank() || it.incomeBand.contains(filter.incomeMin, true) }
-                .filter { filter.recentlyJoinedDays <= 0 || (now - it.createdAt) <= filter.recentlyJoinedDays * DAY_MS }
-                .filter { filter.lastActiveWithinDays <= 0 || (now - it.lastActiveAt) <= filter.lastActiveWithinDays * DAY_MS }
-                .filter {
-                    when (filter.hasHoroscope.lowercase()) {
-                        "yes" -> it.rasi.isNotBlank() && it.nakshatra.isNotBlank()
-                        "no" -> it.rasi.isBlank() && it.nakshatra.isBlank()
-                        else -> true
-                    }
-                }
                 .map { candidate ->
                     val candidateProfile = candidate.toProfile(qMap)
                     val qScore = if (seekerProfile.selfVector != null && seekerProfile.partnerVector != null) {
