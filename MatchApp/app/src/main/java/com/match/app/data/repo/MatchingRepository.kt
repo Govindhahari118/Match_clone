@@ -68,6 +68,9 @@ class MatchingRepository @Inject constructor(
     suspend fun myCity(userId: Long): String = userDao.findById(userId)?.city ?: ""
     suspend fun myState(userId: Long): String = userDao.findById(userId)?.state ?: ""
 
+    suspend fun astrologyApplicable(userId: Long): Boolean =
+        ReligionCategory.fromReligion(userDao.findById(userId)?.religion.orEmpty()) == ReligionCategory.HINDU
+
     suspend fun recommendations(
         seekerId: Long,
         mode: MatchMode,
