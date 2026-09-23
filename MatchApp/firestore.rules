@@ -169,7 +169,11 @@ service cloud.firestore {
           request.resource.data.keys().hasOnly(['body','sentAt','isRead','fromFirebaseUid','toFirebaseUid','voiceUri','imageUri','voiceDurationMs']);
         allow update: if isSignedIn() && resource.data.toFirebaseUid == request.auth.uid &&
           !blockedEitherWay(resource.data.fromFirebaseUid, resource.data.toFirebaseUid) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']) && request.resource.data.isRead == true;
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead','deliveredAt','readAt']) &&
+          (request.resource.data.isRead == resource.data.isRead ||
+            (resource.data.isRead == false && request.resource.data.isRead == true)) &&
+          (!('deliveredAt' in request.resource.data) || request.resource.data.deliveredAt is timestamp) &&
+          (!('readAt' in request.resource.data) || request.resource.data.readAt is timestamp);
         allow delete: if false;
       }
     }
