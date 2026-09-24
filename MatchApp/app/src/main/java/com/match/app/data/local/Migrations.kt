@@ -98,4 +98,8 @@ object Migrations {
         db.execSQL("ALTER TABLE users ADD COLUMN faithSubTradition TEXT NOT NULL DEFAULT ''")
         db.execSQL("ALTER TABLE users ADD COLUMN faithInstitution TEXT NOT NULL DEFAULT ''")
     }}
+    val MIGRATION_21_22 = object : Migration(21, 22) { override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE messages ADD COLUMN clientMessageId TEXT NOT NULL DEFAULT ''")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_messages_clientMessageId ON messages(clientMessageId)")
+    }}
 }

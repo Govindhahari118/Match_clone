@@ -39,6 +39,15 @@ async function seedRelationship() {
   });
 }
 
+async function seedBlock(blockerUid = 'alice', blockedUid = 'bob') {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `blocks/${blockerUid}/blocked/${blockedUid}`), {
+      blockedUid,
+      blockedAt: Date.now(),
+    });
+  });
+}
+
 test('relationship and chat are readable before block', async () => {
   await seedRelationship();
   const alice = env.authenticatedContext('alice').firestore();
@@ -51,10 +60,7 @@ test('relationship and chat are readable before block', async () => {
 test('block immediately closes interest match and chat reads both ways', async () => {
   await seedRelationship();
   const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(setDoc(doc(alice, 'blocks/alice/blocked/bob'), {
-    blockedUid: 'bob',
-    blockedAt: Date.now(),
-  }));
+  await seedBlock();
 
   const bob = env.authenticatedContext('bob').firestore();
   for (const db of [alice, bob]) {
@@ -65,8 +71,11 @@ test('block immediately closes interest match and chat reads both ways', async (
   }
 });
 
-test('member cannot create another account block or self-block', async () => {
+test('block mutations are callable-only and cannot be forged by clients', async () => {
   const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(alice, 'blocks/alice/blocked/bob'), {
+    blockedUid: 'bob', blockedAt: Date.now(),
+  }));
   await assertFails(setDoc(doc(alice, 'blocks/bob/blocked/carol'), {
     blockedUid: 'carol', blockedAt: Date.now(),
   }));

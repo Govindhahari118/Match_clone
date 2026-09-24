@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
+import * as crypto from "crypto";
 import { db, requireAppCheck } from "./shared";
 
 const RM_PLANS = new Set(["Silver RM", "Gold RM", "Platinum RM"]);
@@ -115,18 +116,40 @@ export const registerForEvent = functions.https.onCall(async (data, context) => 
 
 export const bookCounselling = functions.https.onCall(async (data, context) => {
   const uid = authUid(context);
-  const ref = db.collection("counsellingBookings").doc();
+  const counsellor = text(data?.counsellor, "counsellor", 100);
+  const sessionType = text(data?.sessionType, "session type", 80);
+  const mode = text(data?.mode, "session mode", 40);
+  const date = text(data?.date, "date", 40);
+  const time = text(data?.time, "time", 40);
+
+  // This endpoint records a request. Provider/operations confirmation is a separate authority.
+  // Derive a stable key so a network retry cannot create duplicate service requests.
+  const requestKey = crypto.createHash("sha256")
+    .update([uid, counsellor, sessionType, mode, date, time].join("\n"))
+    .digest("hex")
+    .slice(0, 32);
+  const ref = db.collection("counsellingBookings").doc(`${uid}_${requestKey}`);
+  const existing = await ref.get();
+  if (existing.exists) {
+    return {
+      success: true,
+      bookingId: ref.id,
+      status: String(existing.data()?.status || "requested"),
+      alreadyRequested: true,
+    };
+  }
+
   await ref.set({
     uid,
-    counsellor: text(data?.counsellor, "counsellor", 100),
-    sessionType: text(data?.sessionType, "session type", 80),
-    mode: text(data?.mode, "session mode", 40),
-    date: text(data?.date, "date", 40),
-    time: text(data?.time, "time", 40),
-    status: "confirmed",
+    counsellor,
+    sessionType,
+    mode,
+    date,
+    time,
+    status: "requested",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  return { success: true, bookingId: ref.id };
+  return { success: true, bookingId: ref.id, status: "requested", alreadyRequested: false };
 });
 
 export const recordReferral = functions.https.onCall(async (data, context) => {
@@ -137,15 +160,27 @@ export const recordReferral = functions.https.onCall(async (data, context) => {
   if (ownEmail && ownEmail === referredEmail) {
     throw new functions.https.HttpsError("invalid-argument", "You cannot refer your own account");
   }
-  const normalizedHash = Buffer.from(referredEmail).toString("base64url");
-  const ref = db.collection("referrals").doc(`${uid}_${normalizedHash}`);
+
+  const pepper = String(functions.config().security?.referral_hash_pepper || "");
+  if (pepper.length < 16) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Referral service is not configured for production"
+    );
+  }
+
+  // Never put a reversible email encoding or raw referred email into the referral ledger.
+  const referredEmailHash = crypto.createHmac("sha256", pepper)
+    .update(referredEmail)
+    .digest("hex");
+  const ref = db.collection("referrals").doc(`${uid}_${referredEmailHash}`);
   const existing = await ref.get();
   if (existing.exists) {
     return { success: true, referralId: ref.id, alreadyReferred: true };
   }
   await ref.set({
     referrerUid: uid,
-    referredEmail,
+    referredEmailHash,
     status: "pending",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });

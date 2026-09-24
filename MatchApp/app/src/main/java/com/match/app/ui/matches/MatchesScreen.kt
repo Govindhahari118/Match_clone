@@ -53,7 +53,8 @@ data class MatchesUi(
     val filter: MatchFilter = MatchFilter(),
     val savedSearches: List<SavedSearchPreset> = emptyList(),
     val error: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val astrologyApplicable: Boolean = false
 )
 
 enum class DiscoverySort(val label: String) {
@@ -91,9 +92,26 @@ class MatchesViewModel @Inject constructor(
     }
 
     private suspend fun load(uid: Long, mode: MatchMode, filter: MatchFilter) {
-        _ui.update { it.copy(loading = true, mode = mode, filter = filter, error = null) }
+        val astrologyApplicable = matching.astrologyApplicable(uid)
+        val effectiveMode = if (!astrologyApplicable && mode == MatchMode.ASTROLOGY) MatchMode.ADVANCED else mode
+        val effectiveFilter = if (astrologyApplicable) filter else filter.copy(
+            rasi = "",
+            nakshatra = "",
+            manglik = "",
+            hasHoroscope = "",
+            minPoruthamScore = 0
+        )
+        _ui.update {
+            it.copy(
+                loading = true,
+                mode = effectiveMode,
+                filter = effectiveFilter,
+                error = null,
+                astrologyApplicable = astrologyApplicable
+            )
+        }
         runCatching {
-            val items = matching.recommendations(uid, mode, filter)
+            val items = matching.recommendations(uid, effectiveMode, effectiveFilter)
             val liked = items.map { it.user.id }.filter { social.isLiked(uid, it) }.toSet()
             val saved = items.map { it.user.id }.filter { shortlist.isSaved(uid, it) }.toSet()
             Triple(items, liked, saved)
@@ -248,7 +266,7 @@ fun MatchesScreen(
 
             ActiveFilterSummary(ui.filter, activeCount, onClear = vm::clearFilters)
 
-            ModeRow(ui.mode, vm::setMode)
+            ModeRow(ui.mode, ui.astrologyApplicable, vm::setMode)
 
             when {
                 ui.loading -> ShimmerList()
@@ -294,6 +312,7 @@ fun MatchesScreen(
     if (showFilters) {
         AllIndiaFilterSheet(
             current = ui.filter,
+            astrologyApplicable = ui.astrologyApplicable,
             onApply = { vm.setFilter(it); showFilters = false },
             onDismiss = { showFilters = false }
         )
@@ -408,14 +427,20 @@ private fun ActiveFilterSummary(filter: MatchFilter, count: Int, onClear: () -> 
 }
 
 @Composable
-private fun ModeRow(selected: MatchMode, onSelect: (MatchMode) -> Unit) {
+private fun ModeRow(
+    selected: MatchMode,
+    astrologyApplicable: Boolean,
+    onSelect: (MatchMode) -> Unit
+) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item { FilterChip(selected == MatchMode.ADVANCED, { onSelect(MatchMode.ADVANCED) }, { Text("Balanced") }) }
         item { FilterChip(selected == MatchMode.QUESTIONNAIRE, { onSelect(MatchMode.QUESTIONNAIRE) }, { Text("Values") }) }
-        item { FilterChip(selected == MatchMode.ASTROLOGY, { onSelect(MatchMode.ASTROLOGY) }, { Text("Astrology") }) }
+        if (astrologyApplicable) {
+            item { FilterChip(selected == MatchMode.ASTROLOGY, { onSelect(MatchMode.ASTROLOGY) }, { Text("Astrology") }) }
+        }
     }
 }
 
@@ -472,9 +497,9 @@ private fun DiscoveryCard(
                     contentPadding = PaddingValues(horizontal = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (p.education.isNotBlank()) item { AssistChip(onClick = {}, label = { Text(p.education) }) }
-                    if (p.maritalStatus.isNotBlank()) item { AssistChip(onClick = {}, label = { Text(p.maritalStatus) }) }
-                    if (p.heightCm > 0) item { AssistChip(onClick = {}, label = { Text("${p.heightCm} cm") }) }
+                    if (p.education.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.education) }) }
+                    if (p.maritalStatus.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.maritalStatus) }) }
+                    if (p.heightCm > 0) item { AssistChip(onClick = {}, enabled = false, label = { Text("${p.heightCm} cm") }) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -517,7 +542,12 @@ private fun SaveSearchDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AllIndiaFilterSheet(current: MatchFilter, onApply: (MatchFilter) -> Unit, onDismiss: () -> Unit) {
+private fun AllIndiaFilterSheet(
+    current: MatchFilter,
+    astrologyApplicable: Boolean,
+    onApply: (MatchFilter) -> Unit,
+    onDismiss: () -> Unit
+) {
     var f by remember { mutableStateOf(current) }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scroll = rememberScrollState()
@@ -593,11 +623,13 @@ private fun AllIndiaFilterSheet(current: MatchFilter, onApply: (MatchFilter) -> 
                     OptionDropdown("Physical status", f.physicalStatus, listOf("Any") + IndiaProfileCatalog.physicalStatuses) { f = f.copy(physicalStatus = anyToBlank(it)) }
                 }
 
-                FilterBlock("Astrology / Kundali") {
-                    OptionDropdown("Horoscope", f.hasHoroscope.ifBlank { "Any" }, listOf("Any", "Yes", "No")) { f = f.copy(hasHoroscope = anyToBlank(it)) }
-                    OutlinedTextField(f.rasi, { f = f.copy(rasi = it.take(60)) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.nakshatra, { f = f.copy(nakshatra = it.take(60)) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OptionDropdown("Manglik", f.manglik.ifBlank { "Any" }, listOf("Any", "Yes", "No", "Partial (Anshik)", "Don't know")) { f = f.copy(manglik = anyToBlank(it)) }
+                if (astrologyApplicable) {
+                    FilterBlock("Astrology / Kundali") {
+                        OptionDropdown("Horoscope", f.hasHoroscope.ifBlank { "Any" }, listOf("Any", "Yes", "No")) { f = f.copy(hasHoroscope = anyToBlank(it)) }
+                        OutlinedTextField(f.rasi, { f = f.copy(rasi = it.take(60)) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(f.nakshatra, { f = f.copy(nakshatra = it.take(60)) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OptionDropdown("Manglik", f.manglik.ifBlank { "Any" }, listOf("Any", "Yes", "No", "Partial (Anshik)", "Don't know")) { f = f.copy(manglik = anyToBlank(it)) }
+                    }
                 }
             }
             Spacer(Modifier.height(14.dp))

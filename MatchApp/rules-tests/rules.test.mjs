@@ -128,10 +128,17 @@ test('clients cannot create or delete interest and match authority documents dir
   }));
 });
 
-test('blocking relationship remains owner-controlled and private', async () => {
+test('block documents are private and server-authoritative', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await assertFails(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), {
+    blockedUid: 'bob', blockedAt: Date.now(),
+  }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
   await assertSucceeds(getDoc(doc(aliceDb, 'blocks/alice/blocked/bob')));
   await assertFails(getDoc(doc(bobDb, 'blocks/alice/blocked/bob')));
 });
@@ -184,7 +191,11 @@ test('chat thread requires server-created mutual interests and stops after a blo
     voiceUri: null, imageUri: null, voiceDurationMs: null,
   }));
 
-  await assertSucceeds(setDoc(doc(bobDb, 'blocks/bob/blocked/alice'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
+      blockedUid: 'alice', blockedAt: Date.now(),
+    });
+  });
   await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m2'), {
     body: 'blocked', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
@@ -256,7 +267,11 @@ test('blocked member cannot read profile media', async () => {
 
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
 });
 

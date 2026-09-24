@@ -209,10 +209,27 @@ class SessionStore(private val context: Context) {
     suspend fun setUser(id: Long) = context.dataStore.edit { it[KEY_USER_ID] = id }
     suspend fun setFirebaseUid(uid: String) = context.dataStore.edit { it[KEY_FIREBASE_UID] = uid }
     suspend fun setSubscriptionPlan(plan: String) = context.dataStore.edit { it[KEY_SUB_PLAN] = plan }
-    suspend fun clear() = context.dataStore.edit {
-        it.remove(KEY_USER_ID)
-        it.remove(KEY_FIREBASE_UID)
-        // Keep onboarding and harmless UI preferences for returning users.
+    /**
+     * Clears all account-scoped local state during sign-out/account switch.
+     *
+     * Only device-scoped presentation/diagnostic preferences are preserved. Filters, onboarding,
+     * subscription state, religion lenses/theme choice, consent, incognito and account progress
+     * must never bleed from one signed-in member to another.
+     */
+    suspend fun clear() = context.dataStore.edit { prefs ->
+        val uiLanguage = prefs[KEY_UI_LANG]
+        val displayMode = prefs[KEY_DISPLAY_MODE]
+        val legacyDarkMode = prefs[KEY_DARK]
+        val biometricLock = prefs[KEY_BIOMETRIC]
+        val apiBaseUrl = prefs[KEY_API_BASE]
+
+        prefs.clear()
+
+        uiLanguage?.let { prefs[KEY_UI_LANG] = it }
+        displayMode?.let { prefs[KEY_DISPLAY_MODE] = it }
+        legacyDarkMode?.let { prefs[KEY_DARK] = it }
+        biometricLock?.let { prefs[KEY_BIOMETRIC] = it }
+        apiBaseUrl?.let { prefs[KEY_API_BASE] = it }
     }
     suspend fun setMode(m: MatchMode) = context.dataStore.edit {
         it[KEY_MODE] = when (m) { MatchMode.QUESTIONNAIRE -> 0L; MatchMode.ASTROLOGY -> 1L; MatchMode.ADVANCED -> 2L }

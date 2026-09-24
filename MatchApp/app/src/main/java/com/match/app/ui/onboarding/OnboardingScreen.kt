@@ -51,9 +51,9 @@ private data class OnboardPage(
 private val PAGES = listOf(
     OnboardPage(
         icon = Icons.Filled.Favorite,
-        title = "Welcome to Match",
-        body = "India's most trusted matrimony app. Discover people who truly fit your life, values and dreams.",
-        bullets = listOf("50,000+ happy couples", "10 Lakh+ verified profiles", "200+ communities"),
+        title = "Welcome to Matree",
+        body = "Build a genuine matrimony profile, set your preferences and discover eligible people with clear privacy controls.",
+        bullets = listOf("Real profile and activity states", "Granular verification signals", "Privacy and safety controls"),
         iconTint = Color(0xFFE91E63),
         bgColor = Color(0xFFFCE4EC),
         tag = "ob_welcome"
@@ -61,8 +61,8 @@ private val PAGES = listOf(
     OnboardPage(
         icon = Icons.Filled.Groups,
         title = "Community Matching",
-        body = "Search across 200+ Indian communities — Hindu, Muslim, Christian, Sikh, Jain and more.",
-        bullets = listOf("Religion & caste filters", "Mother tongue preferences", "Regional match discovery"),
+        body = "Search across supported Indian religions, communities, languages and locations using the preferences that matter to you.",
+        bullets = listOf("Religion & community filters where applicable", "Mother tongue preferences", "Regional match discovery"),
         iconTint = Color(0xFF7B1FA2),
         bgColor = Color(0xFFF3E5F5),
         tag = "ob_community"
@@ -77,19 +77,19 @@ private val PAGES = listOf(
         tag = "ob_quiz"
     ),
     OnboardPage(
-        icon = Icons.Filled.AutoAwesome,
-        title = "Astrology Compatibility",
-        body = "Rasi, Nakshatra and Gana — ancient wisdom meets modern matching for a deeper connection.",
-        bullets = listOf("Kundli compatibility report", "Rasi & Nakshatra matching", "Gana compatibility"),
-        iconTint = Color(0xFFFF8F00),
-        bgColor = Color(0xFFFFF8E1),
-        tag = "ob_astro"
+        icon = Icons.Filled.Tune,
+        title = "Your Preferences, Your Control",
+        body = "Set mandatory criteria separately from preferences so discovery can respect what truly matters to you.",
+        bullets = listOf("Mandatory filters stay strict", "Preferences influence ordering", "No silent filter relaxation"),
+        iconTint = Color(0xFF00695C),
+        bgColor = Color(0xFFE0F2F1),
+        tag = "ob_preferences"
     ),
     OnboardPage(
         icon = Icons.Filled.VerifiedUser,
         title = "Safe & Trusted",
-        body = "Every profile is manually reviewed. Your privacy is our priority — 100% secure matchmaking.",
-        bullets = listOf("100% mobile-verified profiles", "Govt ID verification available", "Screenshot protection"),
+        body = "Use verification signals, block/report controls and privacy settings to make informed decisions while connecting.",
+        bullets = listOf("Verification status shown separately", "Identity verification where completed", "Block, report and privacy controls"),
         iconTint = Color(0xFF2E7D32),
         bgColor = Color(0xFFE8F5E9),
         tag = "ob_trust"
@@ -242,32 +242,12 @@ fun OnboardingScreen(onDone: () -> Unit, vm: OnboardingViewModel = hiltViewModel
 private data class LangOption(val code: String, val nativeName: String, val flag: String)
 
 private val ONBOARD_LANGUAGES = listOf(
-    LangOption("en", "English", "🇺🇸"),
+    LangOption("en", "English", "🇮🇳"),
     LangOption("hi", "हिन्दी", "🇮🇳"),
     LangOption("te", "తెలుగు", "🇮🇳"),
     LangOption("ta", "தமிழ்", "🇮🇳"),
     LangOption("kn", "ಕನ್ನಡ", "🇮🇳"),
     LangOption("mr", "मराठी", "🇮🇳"),
-    LangOption("bn", "বাংলা", "🇮🇳"),
-    LangOption("gu", "ગુજરાતી", "🇮🇳"),
-    LangOption("ml", "മലയാളം", "🇮🇳"),
-    LangOption("pa", "ਪੰਜਾਬੀ", "🇮🇳"),
-    LangOption("ur", "اردو", "🇵🇰"),
-    LangOption("ar", "العربية", "🇸🇦"),
-    LangOption("zh", "中文", "🇨🇳"),
-    LangOption("ja", "日本語", "🇯🇵"),
-    LangOption("ko", "한국어", "🇰🇷"),
-    LangOption("de", "Deutsch", "🇩🇪"),
-    LangOption("fr", "Français", "🇫🇷"),
-    LangOption("es", "Español", "🇪🇸"),
-    LangOption("pt", "Português", "🇧🇷"),
-    LangOption("ru", "Русский", "🇷🇺"),
-    LangOption("it", "Italiano", "🇮🇹"),
-    LangOption("id", "Indonesia", "🇮🇩"),
-    LangOption("tr", "Türkçe", "🇹🇷"),
-    LangOption("vi", "Tiếng Việt", "🇻🇳"),
-    LangOption("th", "ภาษาไทย", "🇹🇭"),
-    LangOption("sw", "Kiswahili", "🇰🇪"),
 )
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)

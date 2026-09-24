@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.repo.ReligionProfileRepository
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
@@ -80,7 +81,8 @@ class ProfileWizardViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
-    private val usernameRepository: UsernameRepository
+    private val usernameRepository: UsernameRepository,
+    private val religionProfileRepository: ReligionProfileRepository
 ) : ViewModel() {
 
     private val _currentStep = MutableStateFlow(0)
@@ -197,7 +199,10 @@ class ProfileWizardViewModel @Inject constructor(
             val updated = current.applyWizard(state, username)
                 .copy(profileCompleteness = calculateCompleteness(state))
 
-            if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated, confirmReligion = true)
+            if (updated.firebaseUid.isNotBlank()) {
+                religionProfileRepository.confirm(state.religion)
+                firestoreProfile.pushProfile(updated)
+            }
             userDao.update(updated)
             session.setCommunitySetupDone(true)
             onComplete()

@@ -9,6 +9,7 @@ const CONTACT_LIMITS: Record<string, number> = {
 };
 
 const CONTACT_TYPES = new Set(["phone", "whatsapp"]);
+const CONTACT_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("privacyRelations").doc(ownerUid).collection("members").doc(memberUid);
@@ -16,6 +17,10 @@ function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.Doc
 
 function grantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("contactGrants").doc(ownerUid).collection("viewers").doc(viewerUid);
+}
+
+function contactRequestRef(requesterUid: string, targetUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("contactRequests").doc(`${requesterUid}_${targetUid}`);
 }
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
@@ -68,7 +73,7 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     throw new functions.https.HttpsError("permission-denied", "This member has hidden their contact from you");
   }
 
-  const visibility = String(targetSettings.data()?.contactVisibility || "mutual_matches");
+  const visibility = String(targetSettings.data()?.contactVisibility || "selected_people");
   if (visibility === "nobody") {
     throw new functions.https.HttpsError("permission-denied", "This member is not sharing contact details");
   }
@@ -131,6 +136,160 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     }, { merge: false });
 
     return { phoneNumber, contactType, contactsUsed: nextTargets.length, contactsLimit: contactLimit };
+  });
+});
+
+/**
+ * Request explicit contact sharing. This is separate from paid entitlement: a member may approve
+ * the request before the requester buys a plan, but the phone number is still returned only by
+ * consumeContactReveal after entitlement/quota checks.
+ */
+export const requestContactAccess = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const requesterUid = context.auth?.uid;
+  if (!requesterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+  if (!targetUid || targetUid === requesterUid || targetUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+
+  const matchId = [requesterUid, targetUid].sort().join("_");
+  const requestRef = contactRequestRef(requesterUid, targetUid);
+  const result = await db.runTransaction(async (tx) => {
+    const [
+      matchSnap,
+      outgoingBlock,
+      incomingBlock,
+      requesterRelation,
+      targetRelation,
+      targetSettings,
+      existingGrant,
+      existingRequest,
+    ] = await Promise.all([
+      tx.get(db.collection("matches").doc(matchId)),
+      tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
+      tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
+      tx.get(relationRef(requesterUid, targetUid)),
+      tx.get(relationRef(targetUid, requesterUid)),
+      tx.get(db.collection("privacySettings").doc(targetUid)),
+      tx.get(grantRef(targetUid, requesterUid)),
+      tx.get(requestRef),
+    ]);
+
+    if (!matchSnap.exists) {
+      throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    }
+    if (outgoingBlock.exists || incomingBlock.exists) {
+      throw new functions.https.HttpsError("permission-denied", "Contact request is unavailable for this member");
+    }
+    if (
+      requesterRelation.data()?.profileHidden === true ||
+      targetRelation.data()?.profileHidden === true ||
+      targetRelation.data()?.contactHidden === true
+    ) {
+      throw new functions.https.HttpsError("permission-denied", "Contact request is unavailable for this privacy relationship");
+    }
+
+    const visibility = String(targetSettings.data()?.contactVisibility || "selected_people");
+    if (visibility === "nobody") {
+      throw new functions.https.HttpsError("permission-denied", "This member is not accepting contact sharing");
+    }
+    if (visibility === "mutual_matches") {
+      return { status: "AUTO_SHARE_ALLOWED", canReveal: true };
+    }
+
+    const grant = existingGrant.data() || {};
+    if (existingGrant.exists && grant.phoneAllowed === true) {
+      return { status: "APPROVED", canReveal: true };
+    }
+
+    const request = existingRequest.data() || {};
+    const status = String(request.status || "");
+    if (status === "PENDING") return { status: "PENDING", canReveal: false };
+    if (status === "APPROVED") return { status: "APPROVED", canReveal: existingGrant.exists };
+    if (status === "DECLINED") {
+      const updatedAt = request.updatedAt instanceof admin.firestore.Timestamp
+        ? request.updatedAt.toMillis()
+        : 0;
+      if (updatedAt > Date.now() - CONTACT_REQUEST_COOLDOWN_MS) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "Please wait before sending another contact request to this member"
+        );
+      }
+    }
+
+    tx.set(requestRef, {
+      requesterUid,
+      targetUid,
+      status: "PENDING",
+      requestedTypes: ["phone"],
+      createdAt: status ? request.createdAt || admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      respondedAt: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    return { status: "PENDING", canReveal: false };
+  });
+
+  return result;
+});
+
+/** Target member approves or declines an incoming contact request. */
+export const respondContactAccess = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const targetUid = context.auth?.uid;
+  if (!targetUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const requesterUid = typeof data?.requesterUid === "string" ? data.requesterUid.trim() : "";
+  const approve = data?.approve === true;
+  if (!requesterUid || requesterUid === targetUid || requesterUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid requester profile");
+  }
+
+  const requestRef = contactRequestRef(requesterUid, targetUid);
+  const grant = grantRef(targetUid, requesterUid);
+  return db.runTransaction(async (tx) => {
+    const [requestSnap, outgoingBlock, incomingBlock, targetSettings] = await Promise.all([
+      tx.get(requestRef),
+      tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
+      tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
+      tx.get(db.collection("privacySettings").doc(targetUid)),
+    ]);
+
+    if (!requestSnap.exists || requestSnap.data()?.targetUid !== targetUid ||
+        requestSnap.data()?.requesterUid !== requesterUid) {
+      throw new functions.https.HttpsError("not-found", "Contact request not found");
+    }
+    if (String(requestSnap.data()?.status || "") !== "PENDING") {
+      return { status: String(requestSnap.data()?.status || "UNKNOWN") };
+    }
+    if (outgoingBlock.exists || incomingBlock.exists) {
+      throw new functions.https.HttpsError("permission-denied", "Contact request is unavailable after a block");
+    }
+    const visibility = String(targetSettings.data()?.contactVisibility || "selected_people");
+    if (visibility === "nobody") {
+      throw new functions.https.HttpsError("failed-precondition", "Contact sharing is disabled");
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    tx.update(requestRef, {
+      status: approve ? "APPROVED" : "DECLINED",
+      updatedAt: now,
+      respondedAt: now,
+    });
+    if (approve) {
+      tx.set(grant, {
+        viewerUid: requesterUid,
+        phoneAllowed: true,
+        whatsappAllowed: false,
+        grantedAt: now,
+        updatedAt: now,
+        source: "contact_request",
+      }, { merge: true });
+    } else {
+      tx.delete(grant);
+    }
+    return { status: approve ? "APPROVED" : "DECLINED" };
   });
 });
 

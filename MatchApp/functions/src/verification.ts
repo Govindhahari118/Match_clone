@@ -29,6 +29,35 @@ function requireDocumentPath(uid: string, value: unknown): string {
  * object into a PENDING verification request. The callable verifies object existence, owner
  * metadata, type and size first so the UI cannot manufacture a pending/verified state.
  */
+export const confirmPhoneVerification = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const authUser = await admin.auth().getUser(uid);
+  const phoneNumber = authUser.phoneNumber?.trim() || "";
+  if (!phoneNumber) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "A phone credential must be linked to this signed-in account first"
+    );
+  }
+
+  const batch = db.batch();
+  batch.set(db.collection("verifications").doc(uid), {
+    phoneStatus: "VERIFIED",
+    phoneVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  batch.set(db.collection("userPrivate").doc(uid), {
+    phoneNumber,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  await batch.commit();
+
+  return { success: true, phoneStatus: "VERIFIED", phoneNumber };
+});
+
 export const submitVerificationRequest = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const uid = context.auth?.uid;

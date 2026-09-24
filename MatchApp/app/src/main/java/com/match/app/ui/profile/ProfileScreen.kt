@@ -182,7 +182,7 @@ fun ProfileScreen(
             InfoRow(Icons.Filled.Restaurant, p.diet)
             if (p.hobbies.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, label = { Text(hobby) }) }
+                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, enabled = false, label = { Text(hobby) }) }
                 }
             }
         }

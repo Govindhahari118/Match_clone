@@ -31,6 +31,117 @@ function normalizedSearchValue(value: unknown): string {
   return stringValue(value).trim().toLocaleLowerCase("en-IN");
 }
 
+function filterString(data: unknown, key: string, max = 100): string {
+  if (!data || typeof data !== "object") return "";
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function filterBoolean(data: unknown, key: string): boolean {
+  if (!data || typeof data !== "object") return false;
+  return (data as Record<string, unknown>)[key] === true;
+}
+
+function filterInt(data: unknown, key: string, min: number, max: number): number {
+  if (!data || typeof data !== "object") return 0;
+  const raw = Number((data as Record<string, unknown>)[key] ?? 0);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(min, Math.min(max, Math.trunc(raw)));
+}
+
+function equalsFilter(expected: string, actual: unknown): boolean {
+  return !expected || normalizedSearchValue(actual) === expected.toLocaleLowerCase("en-IN");
+}
+
+function boolFromAnyFilter(value: string, actual: boolean): boolean {
+  const normalized = value.toLocaleLowerCase("en-IN");
+  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
+  if (normalized.startsWith("yes")) return actual;
+  if (normalized.startsWith("no")) return !actual;
+  return true;
+}
+
+function matchesServerFilters(
+  candidate: FirebaseFirestore.DocumentData,
+  data: unknown,
+  now: number
+): boolean {
+  const textFields: Array<[string, string]> = [
+    ["city", "city"], ["state", "state"], ["religion", "religion"],
+    ["caste", "caste"], ["subCaste", "subCaste"], ["motherTongue", "motherTongue"],
+    ["maritalStatus", "maritalStatus"], ["diet", "diet"], ["educationLevel", "education"],
+    ["educationField", "educationField"], ["occupationCategory", "occupationCategory"],
+    ["employerType", "employerType"], ["residentialStatus", "residentialStatus"],
+    ["nativeState", "nativeState"], ["countryOfResidence", "countryOfResidence"],
+    ["citizenship", "citizenship"], ["gothra", "gothra"], ["smoking", "smoking"],
+    ["drinking", "drinking"], ["familyType", "familyType"], ["familyStatus", "familyStatus"],
+    ["physicalStatus", "physicalStatus"], ["rasi", "rasi"], ["nakshatra", "nakshatra"],
+    ["manglik", "manglik"],
+  ];
+  for (const [requestKey, profileKey] of textFields) {
+    if (!equalsFilter(filterString(data, requestKey), candidate[profileKey])) return false;
+  }
+
+  const verifiedOnly = filterBoolean(data, "verifiedOnly");
+  if (verifiedOnly && candidate.isVerified !== true) return false;
+  const verifiedLevel = filterInt(data, "verifiedLevel", 0, 100);
+  if (verifiedLevel > 0 && Number(candidate.verificationLevel || 0) < verifiedLevel) return false;
+  if (filterBoolean(data, "premiumOnly") && candidate.isPremium !== true) return false;
+  if (filterBoolean(data, "withPhotoOnly") && !stringValue(candidate.photoUrl)) return false;
+  if (filterBoolean(data, "willingToRelocate") && candidate.willingToRelocate !== true) return false;
+
+  const hobbies = filterString(data, "hobbies");
+  const candidateHobbies = Array.isArray(candidate.hobbies)
+    ? candidate.hobbies.filter((item: unknown) => typeof item === "string").join(" ")
+    : stringValue(candidate.hobbies);
+  if (hobbies && !candidateHobbies.toLocaleLowerCase("en-IN").includes(hobbies.toLocaleLowerCase("en-IN"))) {
+    return false;
+  }
+
+  const incomeMin = filterString(data, "incomeMin");
+  if (incomeMin && !normalizedSearchValue(candidate.incomeBand).includes(incomeMin.toLocaleLowerCase("en-IN"))) {
+    return false;
+  }
+  const incomeMax = filterString(data, "incomeMax");
+  if (incomeMax && !normalizedSearchValue(candidate.incomeBand).includes(incomeMax.toLocaleLowerCase("en-IN"))) {
+    return false;
+  }
+
+  if (!boolFromAnyFilter(filterString(data, "hasChildren"), candidate.hasChildren === true)) return false;
+  if (!boolFromAnyFilter(filterString(data, "hasChildrenFilter"), candidate.hasChildren === true)) return false;
+
+  const nriOnly = filterBoolean(data, "nriOnly");
+  const isNri = candidate.isNRI === true ||
+    (stringValue(candidate.countryOfResidence) &&
+     normalizedSearchValue(candidate.countryOfResidence) !== "india");
+  if (nriOnly && !isNri) return false;
+  const nriStatus = filterString(data, "nriStatus").toLocaleLowerCase("en-IN");
+  if (nriStatus === "only" && !isNri) return false;
+  if (nriStatus === "exclude" && isNri) return false;
+
+  const recentlyJoinedDays = filterInt(data, "recentlyJoinedDays", 0, 3650);
+  if (recentlyJoinedDays > 0) {
+    const created = createdAtMillis(candidate);
+    if (created <= 0 || now - created > recentlyJoinedDays * 86_400_000) return false;
+  }
+  const lastActiveDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
+  if (lastActiveDays > 0) {
+    const raw = candidate.lastActiveAt;
+    const lastActive = raw instanceof admin.firestore.Timestamp
+      ? raw.toMillis()
+      : Number(raw || 0);
+    if (!Number.isFinite(lastActive) || lastActive <= 0 ||
+        now - lastActive > lastActiveDays * 86_400_000) return false;
+  }
+
+  const hasHoroscope = filterString(data, "hasHoroscope").toLocaleLowerCase("en-IN");
+  const hasAstrology = stringValue(candidate.rasi).length > 0 && stringValue(candidate.nakshatra).length > 0;
+  if (hasHoroscope === "yes" && !hasAstrology) return false;
+  if (hasHoroscope === "no" && hasAstrology) return false;
+
+  return true;
+}
+
 function matchesKeyword(data: FirebaseFirestore.DocumentData, keyword: string): boolean {
   if (!keyword) return true;
   const normalized = keyword.replace(/^@+/, "");
@@ -50,7 +161,9 @@ function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Recor
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
     const value = data[field];
-    if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+    if (value instanceof admin.firestore.Timestamp) {
+      result[field] = value.toMillis();
+    } else if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
       result[field] = value;
     } else if (Array.isArray(value)) {
       result[field] = value.filter((item) => typeof item === "string");
@@ -172,6 +285,8 @@ export const discoverProfiles = functions
       if (profiles.length >= RETURN_LIMIT) break;
       if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
       const candidate = doc.data() || {};
+      const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
+      if (accountStatus !== "ACTIVE") continue;
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
@@ -183,6 +298,7 @@ export const discoverProfiles = functions
       const candidateAccepts = candidateLookingFor === "ANY" || candidateLookingFor === viewerGender;
       if (!viewerAccepts || !candidateAccepts) continue;
       if (!matchesKeyword(candidate, keyword)) continue;
+      if (!matchesServerFilters(candidate, data, now)) continue;
 
       profiles.push(publicProfile(doc.id, candidate));
     }

@@ -1,15 +1,7 @@
 import fs from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
-import {
-  assertFails,
-  assertSucceeds,
-  initializeTestEnvironment,
-} from '@firebase/rules-unit-testing';
-import {
-  doc,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 
 const projectId = 'matchapp-religion-lock-test';
 let env;
@@ -21,13 +13,8 @@ before(async () => {
   });
 });
 
-after(async () => {
-  await env?.cleanup();
-});
-
-beforeEach(async () => {
-  await env.clearFirestore();
-});
+after(async () => { await env?.cleanup(); });
+beforeEach(async () => { await env.clearFirestore(); });
 
 function baseProfile(overrides = {}) {
   return {
@@ -48,66 +35,51 @@ function baseProfile(overrides = {}) {
   };
 }
 
-test('owner may create an unlocked profile before religion confirmation', async () => {
+test('client-created profile begins with unconfirmed religion authority', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await assertSucceeds(setDoc(doc(db, 'users/alice'), baseProfile()));
+  await assertFails(setDoc(doc(db, 'users/bob'), baseProfile({
+    firebaseUid: 'bob',
+    religion: 'Hindu',
+    religionId: 'HINDU',
+    religionLocked: true,
+    religionConfirmedAt: Date.now(),
+  })));
 });
 
-test('owner may confirm and lock a non-empty religion in one update', async () => {
+test('owner cannot directly confirm religion or forge lock metadata', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await setDoc(doc(db, 'users/alice'), baseProfile());
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
-    religion: 'Hindu',
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
+
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Hindu' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religionId: 'HINDU' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religionLocked: true }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religionConfirmedAt: Date.now() }));
 });
 
-test('owner cannot lock an empty religion', async () => {
+test('ordinary owner profile updates remain allowed while religion is server-controlled', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await setDoc(doc(db, 'users/alice'), baseProfile());
-  await assertFails(updateDoc(doc(db, 'users/alice'), {
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
-});
-
-test('owner cannot change religion after confirmation lock', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(db, 'users/alice'), baseProfile({
-    religion: 'Hindu',
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Christian' }));
-});
-
-test('owner cannot clear the religion lock after confirmation', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(db, 'users/alice'), baseProfile({
-    religion: 'Hindu',
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religionLocked: false }));
-});
-
-test('owner cannot rewrite religion confirmation timestamp after lock', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(db, 'users/alice'), baseProfile({
-    religion: 'Hindu',
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
-  await assertFails(updateDoc(doc(db, 'users/alice'), { religionConfirmedAt: 1_800_000_000_000 }));
-});
-
-test('ordinary profile updates continue after religion lock', async () => {
-  const db = env.authenticatedContext('alice').firestore();
-  await setDoc(doc(db, 'users/alice'), baseProfile({
-    religion: 'Hindu',
-    religionLocked: true,
-    religionConfirmedAt: 1_700_000_000_000,
-  }));
   await assertSucceeds(updateDoc(doc(db, 'users/alice'), { displayName: 'Alice S.' }));
+});
+
+test('locked canonical religion cannot be changed or unlocked by owner', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice'), baseProfile({
+      religion: 'Hindu',
+      religionId: 'HINDU',
+      religionLocked: true,
+      religionConfirmedAt: Date.now(),
+    }));
+  });
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Christian' }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religionLocked: false }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { religionConfirmedAt: Date.now() + 1000 }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { city: 'Secunderabad' }));
+});
+
+test('arbitrary religion values cannot enter the public profile', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(db, 'users/alice'), baseProfile({ religion: 'arbitrary-client-value' })));
 });

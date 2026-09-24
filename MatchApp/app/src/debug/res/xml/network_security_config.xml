@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Production trusts the Android system CA store and forbids cleartext traffic.
-         Do not pin Google/Firebase managed endpoints: their certificate chains rotate. -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
 </network-security-config>

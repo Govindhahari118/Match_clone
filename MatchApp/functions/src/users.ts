@@ -1,13 +1,20 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
-import { db, generateMatrimonyId, getFcmToken, messaging, requireAppCheck } from "./shared";
+import {
+  db,
+  getFcmToken,
+  messaging,
+  releaseMatrimonyId,
+  requireAppCheck,
+  reserveMatrimonyId,
+} from "./shared";
 
 export const onUserCreate = functions.firestore
   .document("users/{uid}")
   .onCreate(async (snap, context) => {
     const uid = context.params.uid;
-    const matrimonyId = generateMatrimonyId();
+    const matrimonyId = await reserveMatrimonyId(uid);
 
     await snap.ref.update({
       matrimonyId,
@@ -134,6 +141,8 @@ async function deleteQuery(query: FirebaseFirestore.Query): Promise<number> {
     snap.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
     deleted += snap.size;
+    // If a phase is interrupted after any committed batch, retrying the same phase safely
+    // continues from the remaining query results instead of restoring already-deleted data.
     hasMore = snap.size === DELETE_BATCH_SIZE;
   }
   return deleted;
@@ -143,9 +152,39 @@ async function deleteCollection(path: string): Promise<number> {
   return deleteQuery(db.collection(path));
 }
 
-async function deleteChatThread(thread: FirebaseFirestore.QueryDocumentSnapshot): Promise<void> {
-  await deleteQuery(thread.ref.collection("messages"));
-  await thread.ref.delete();
+type DeletionPhase =
+  | "RELATIONSHIPS"
+  | "ACTIVITY_AND_SERVICES"
+  | "OWNER_SCOPED_DATA"
+  | "CHATS"
+  | "MEDIA"
+  | "PRIVATE_SINGLETONS"
+  | "IDENTITY_REGISTRY"
+  | "PUBLIC_PROFILE";
+
+async function runDeletionPhase(
+  requestRef: FirebaseFirestore.DocumentReference,
+  completed: Set<string>,
+  phase: DeletionPhase,
+  work: () => Promise<void>
+): Promise<void> {
+  if (completed.has(phase)) return;
+
+  await requestRef.set({
+    status: "PROCESSING",
+    currentPhase: phase,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  await work();
+
+  completed.add(phase);
+  await requestRef.set({
+    completedPhases: admin.firestore.FieldValue.arrayUnion(phase),
+    lastCompletedPhase: phase,
+    currentPhase: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 export const deleteUserAccount = functions
@@ -155,91 +194,179 @@ export const deleteUserAccount = functions
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
+    const authTimeSeconds = Number(context.auth?.token?.auth_time || 0);
+    const authAgeMs = Date.now() - authTimeSeconds * 1000;
+    if (!Number.isFinite(authAgeMs) || authTimeSeconds <= 0 || authAgeMs > 5 * 60 * 1000) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Recent authentication required before permanent account deletion"
+      );
+    }
+
     const requestRef = db.collection("deletionRequests").doc(uid);
-    await requestRef.set({
-      status: "PROCESSING",
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const existingRequest = await requestRef.get();
+    if (existingRequest.data()?.status === "DELETED") {
+      return { success: true, status: "DELETED" };
+    }
+
+    const completed = new Set<string>(
+      Array.isArray(existingRequest.data()?.completedPhases) ?
+        existingRequest.data()?.completedPhases as string[] :
+        []
+    );
+
+    if (!existingRequest.exists) {
+      await requestRef.set({
+        status: "PROCESSING",
+        completedPhases: [],
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await requestRef.set({
+        status: "PROCESSING",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        errorCode: admin.firestore.FieldValue.delete(),
+      }, { merge: true });
+    }
+
+    // Public suppression is deliberately outside the phase ledger: every retry reasserts it before
+    // any cleanup work, so a partial failure can never make the account discoverable again.
+    const userRef = db.collection("users").doc(uid);
+    await userRef.set({
+      accountStatus: "DELETING",
+      searchStatus: "CLOSED",
+      stealthMode: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
     try {
-      await deleteQuery(db.collection("interests").where("fromUid", "==", uid));
-      await deleteQuery(db.collection("interests").where("toUid", "==", uid));
-      await deleteQuery(db.collection("interestResponses").where("senderUid", "==", uid));
-      await deleteQuery(db.collection("interestResponses").where("recipientUid", "==", uid));
-      await deleteQuery(db.collection("matches").where("users", "array-contains", uid));
-      await deleteQuery(db.collection("notifications").where("userId", "==", uid));
-      await deleteQuery(db.collection("profileViews").where("viewerUid", "==", uid));
-      await deleteQuery(db.collection("profileViews").where("viewedUid", "==", uid));
-      await deleteQuery(db.collection("eventRegistrations").where("uid", "==", uid));
-      await deleteQuery(db.collection("counsellingBookings").where("uid", "==", uid));
-      await deleteQuery(db.collection("referrals").where("referrerUid", "==", uid));
-      await deleteQuery(db.collection("rmRequests").where("uid", "==", uid));
-      await deleteQuery(db.collection("backgroundChecks").where("requestedBy", "==", uid));
-      await deleteQuery(db.collection("backgroundChecks").where("targetUid", "==", uid));
-      await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
-      await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
+      await runDeletionPhase(requestRef, completed, "RELATIONSHIPS", async () => {
+        await deleteQuery(db.collection("interests").where("fromUid", "==", uid));
+        await deleteQuery(db.collection("interests").where("toUid", "==", uid));
+        await deleteQuery(db.collection("interestResponses").where("senderUid", "==", uid));
+        await deleteQuery(db.collection("interestResponses").where("recipientUid", "==", uid));
+        await deleteQuery(db.collection("matches").where("users", "array-contains", uid));
+        await deleteQuery(db.collection("contactRequests").where("requesterUid", "==", uid));
+        await deleteQuery(db.collection("contactRequests").where("targetUid", "==", uid));
+      });
 
-      await deleteCollection(`savedSearches/${uid}/items`);
-      await deleteQuery(db.collection("usernames").where("uid", "==", uid));
-      await deleteCollection(`shortlists/${uid}/saved`);
-      await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
-      await deleteCollection(`blocks/${uid}/blocked`);
-      await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
-      await deleteCollection(`privacyRelations/${uid}/members`);
-      await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
-      await deleteCollection(`subscriptions/${uid}/usage`);
-      await deleteCollection(`profileAnalytics/${uid}/weekly`);
-      await deleteCollection(`sessions/${uid}/devices`);
+      await runDeletionPhase(requestRef, completed, "ACTIVITY_AND_SERVICES", async () => {
+        await deleteQuery(db.collection("notifications").where("userId", "==", uid));
+        await deleteQuery(db.collection("profileViews").where("viewerUid", "==", uid));
+        await deleteQuery(db.collection("profileViews").where("viewedUid", "==", uid));
+        await deleteQuery(db.collection("eventRegistrations").where("uid", "==", uid));
+        await deleteQuery(db.collection("counsellingBookings").where("uid", "==", uid));
+        await deleteQuery(db.collection("referrals").where("referrerUid", "==", uid));
+        await deleteQuery(db.collection("rmRequests").where("uid", "==", uid));
+        await deleteQuery(db.collection("backgroundChecks").where("requestedBy", "==", uid));
+        await deleteQuery(db.collection("backgroundChecks").where("targetUid", "==", uid));
+        await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
+        await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
+      });
 
-      const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
-      const chatThreadIds = chats.docs.map((thread) => thread.id);
-      for (const thread of chats.docs) await deleteChatThread(thread);
+      await runDeletionPhase(requestRef, completed, "OWNER_SCOPED_DATA", async () => {
+        await deleteCollection(`savedSearches/${uid}/items`);
+        await deleteQuery(db.collection("usernames").where("uid", "==", uid));
+        await deleteCollection(`shortlists/${uid}/saved`);
+        await deleteQuery(db.collectionGroup("saved").where("targetUid", "==", uid));
+        await deleteCollection(`blocks/${uid}/blocked`);
+        await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
+        await deleteCollection(`privacyRelations/${uid}/members`);
+        await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
+        await deleteCollection(`contactGrants/${uid}/viewers`);
+        await deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid));
+        await deleteCollection(`subscriptions/${uid}/usage`);
+        await deleteCollection(`profileAnalytics/${uid}/weekly`);
+        await deleteCollection(`sessions/${uid}/devices`);
+      });
 
       const bucket = admin.storage().bucket();
-      for (const prefix of ["photos", "videos", "voicebios", "verifications"]) {
-        await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
-      }
-      for (const threadId of chatThreadIds) {
-        await bucket.deleteFiles({ prefix: `chat-media/${threadId}/` });
-      }
 
-      const singletonRefs = [
-        db.collection("users").doc(uid),
-        db.collection("userPrivate").doc(uid),
-        db.collection("presencePrivate").doc(uid),
-        db.collection("savedSearches").doc(uid),
-        db.collection("shortlists").doc(uid),
-        db.collection("blocks").doc(uid),
-        db.collection("privacyRelations").doc(uid),
-        db.collection("privacySettings").doc(uid),
-        db.collection("subscriptions").doc(uid),
-        db.collection("profileAnalytics").doc(uid),
-        db.collection("notificationPrefs").doc(uid),
-        db.collection("verifications").doc(uid),
-        db.collection("verificationRequests").doc(uid),
-        db.collection("rewards").doc(uid),
-        db.collection("sessions").doc(uid),
-        db.collection("fcmTokens").doc(uid),
-        db.collection("userLocations").doc(uid),
-      ];
-      for (let i = 0; i < singletonRefs.length; i += DELETE_BATCH_SIZE) {
-        const batch = db.batch();
-        singletonRefs.slice(i, i + DELETE_BATCH_SIZE).forEach((ref) => batch.delete(ref));
-        await batch.commit();
-      }
+      await runDeletionPhase(requestRef, completed, "CHATS", async () => {
+        const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
+        for (const thread of chats.docs) {
+          await bucket.deleteFiles({ prefix: `chat-media/${thread.id}/` });
+          await deleteQuery(thread.ref.collection("messages"));
+          await thread.ref.delete();
+        }
+      });
 
-      await admin.auth().deleteUser(uid);
+      await runDeletionPhase(requestRef, completed, "MEDIA", async () => {
+        for (const prefix of ["photos", "videos", "voicebios", "verifications"]) {
+          await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
+        }
+      });
+
+      await runDeletionPhase(requestRef, completed, "PRIVATE_SINGLETONS", async () => {
+        const singletonRefs = [
+          db.collection("userPrivate").doc(uid),
+          db.collection("presencePrivate").doc(uid),
+          db.collection("savedSearches").doc(uid),
+          db.collection("shortlists").doc(uid),
+          db.collection("blocks").doc(uid),
+          db.collection("privacyRelations").doc(uid),
+          db.collection("privacySettings").doc(uid),
+          db.collection("contactGrants").doc(uid),
+          db.collection("subscriptions").doc(uid),
+          db.collection("profileAnalytics").doc(uid),
+          db.collection("notificationPrefs").doc(uid),
+          db.collection("verifications").doc(uid),
+          db.collection("verificationRequests").doc(uid),
+          db.collection("rewards").doc(uid),
+          db.collection("sessions").doc(uid),
+          db.collection("fcmTokens").doc(uid),
+          db.collection("userLocations").doc(uid),
+        ];
+        for (let i = 0; i < singletonRefs.length; i += DELETE_BATCH_SIZE) {
+          const batch = db.batch();
+          singletonRefs.slice(i, i + DELETE_BATCH_SIZE).forEach((ref) => batch.delete(ref));
+          await batch.commit();
+        }
+      });
+
+      await runDeletionPhase(requestRef, completed, "IDENTITY_REGISTRY", async () => {
+        await releaseMatrimonyId(uid);
+      });
+
+      await runDeletionPhase(requestRef, completed, "PUBLIC_PROFILE", async () => {
+        await userRef.delete();
+      });
+
+      // All public/private product data is gone or separately retained by explicit legal/safety
+      // policy. Checkpoint before deleting Auth because the user cannot be relied on to retry after
+      // their authentication identity is removed.
+      await requestRef.set({
+        status: "AUTH_DELETE_PENDING",
+        currentPhase: "AUTH_DELETE",
+        cleanupCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      try {
+        await admin.auth().deleteUser(uid);
+      } catch (error: unknown) {
+        const code = typeof error === "object" && error !== null && "code" in error ?
+          String((error as { code?: unknown }).code || "") :
+          "";
+        if (code !== "auth/user-not-found") throw error;
+      }
 
       await requestRef.set({
         status: "DELETED",
+        currentPhase: admin.firestore.FieldValue.delete(),
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
       }, { merge: true });
-      return { success: true };
+      return { success: true, status: "DELETED" };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      functions.logger.error("Account deletion failed", { uid, error: message });
+      functions.logger.error("Account deletion failed", {
+        uid,
+        error: message,
+        completedPhases: [...completed],
+      });
       await requestRef.set({
         status: "FAILED_RETRYABLE",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -248,6 +375,47 @@ export const deleteUserAccount = functions
       throw new functions.https.HttpsError("internal", "Account deletion could not be completed. Please retry.");
     }
   });
+
+export const setMatrimonyPaused = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const paused = data?.paused === true;
+  const userRef = db.collection("users").doc(uid);
+
+  const status = await db.runTransaction(async (tx) => {
+    const user = await tx.get(userRef);
+    if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+    const current = String(user.data()?.accountStatus || "ACTIVE");
+    if (current === "DELETING" || current === "DELETED") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Account deletion is already in progress"
+      );
+    }
+
+    const next = paused ? "PAUSED" : "ACTIVE";
+    tx.set(userRef, {
+      accountStatus: next,
+      searchStatus: paused ? "PAUSED" : "ACTIVE",
+      pausedAt: paused ? admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return next;
+  });
+
+  return { accountStatus: status, paused: status === "PAUSED" };
+});
+
+export const getMyAccountLifecycle = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const user = await db.collection("users").doc(uid).get();
+  if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+  const status = String(user.data()?.accountStatus || "ACTIVE");
+  return { accountStatus: status, paused: status === "PAUSED" };
+});
 
 export const recordProfileView = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
