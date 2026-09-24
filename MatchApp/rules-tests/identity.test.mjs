@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import {
   assertFails,
+  assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
