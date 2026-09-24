@@ -497,9 +497,9 @@ private fun DiscoveryCard(
                     contentPadding = PaddingValues(horizontal = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (p.education.isNotBlank()) item { AssistChip(onClick = {}, label = { Text(p.education) }) }
-                    if (p.maritalStatus.isNotBlank()) item { AssistChip(onClick = {}, label = { Text(p.maritalStatus) }) }
-                    if (p.heightCm > 0) item { AssistChip(onClick = {}, label = { Text("${p.heightCm} cm") }) }
+                    if (p.education.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.education) }) }
+                    if (p.maritalStatus.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.maritalStatus) }) }
+                    if (p.heightCm > 0) item { AssistChip(onClick = {}, enabled = false, label = { Text("${p.heightCm} cm") }) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
