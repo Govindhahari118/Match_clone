@@ -152,16 +152,6 @@ async function deleteCollection(path: string): Promise<number> {
   return deleteQuery(db.collection(path));
 }
 
-async function deleteChatThread(
-  thread: FirebaseFirestore.QueryDocumentSnapshot,
-  bucket: ReturnType<typeof admin.storage>["prototype"] extends never ? never : any
-): Promise<void> {
-  // Revoke durable attachment bytes before removing the thread that identifies their scope.
-  await bucket.deleteFiles({ prefix: `chat-media/${thread.id}/` });
-  await deleteQuery(thread.ref.collection("messages"));
-  await thread.ref.delete();
-}
-
 type DeletionPhase =
   | "RELATIONSHIPS"
   | "ACTIVITY_AND_SERVICES"
@@ -355,8 +345,11 @@ export const deleteUserAccount = functions
 
       try {
         await admin.auth().deleteUser(uid);
-      } catch (error: any) {
-        if (error?.code !== "auth/user-not-found") throw error;
+      } catch (error: unknown) {
+        const code = typeof error === "object" && error !== null && "code" in error ?
+          String((error as { code?: unknown }).code || "") :
+          "";
+        if (code !== "auth/user-not-found") throw error;
       }
 
       await requestRef.set({
