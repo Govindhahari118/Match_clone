@@ -146,9 +146,9 @@ class AuthRepository @Inject constructor(
         val uid = firebaseAuth.currentUser?.uid
         if (!uid.isNullOrBlank()) {
             try {
-                firestoreProfile.updateFields(uid, mapOf("fcmToken" to FieldValue.delete()))
+                firestoreProfile.deleteFcmToken(uid)
             } catch (ex: Exception) {
-                Log.w("AuthRepository", "Unable to clear FCM token during sign-out", ex)
+                Log.w("AuthRepository", "Unable to revoke FCM token during sign-out", ex)
             }
         }
         firebaseAuth.signOut()
