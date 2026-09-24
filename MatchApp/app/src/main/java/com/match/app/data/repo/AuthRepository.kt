@@ -90,11 +90,16 @@ class AuthRepository @Inject constructor(
 
     suspend fun signIn(email: String, password: String): AuthResult {
         val e = email.trim().lowercase()
+        val previousUid = firebaseAuth.currentUser?.uid
 
         return try {
             val authResult = firebaseAuth.signInWithEmailAndPassword(e, password).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Firebase sign-in failed")
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
 
             val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
             val localUser = userDao.findByFirebaseUid(firebaseUid)
@@ -147,6 +152,15 @@ class AuthRepository @Inject constructor(
             }
         }
         firebaseAuth.signOut()
+        clearLocalAccountState()
+    }
+
+    private suspend fun clearLocalAccountState() {
+        try {
+            withContext(Dispatchers.IO) { localDb.clearAllTables() }
+        } catch (ex: Exception) {
+            Log.e("AuthRepository", "Unable to clear account-scoped Room cache", ex)
+        }
         session.clear()
     }
 
@@ -335,9 +349,8 @@ class AuthRepository @Inject constructor(
                 .call()
                 .await()
 
-            withContext(Dispatchers.IO) { localDb.clearAllTables() }
             firebaseAuth.signOut()
-            session.clear()
+            clearLocalAccountState()
             AuthResult.Success(userId)
         } catch (e: Exception) {
             Log.e("AuthRepository", "Account deletion was not confirmed by server", e)
@@ -346,11 +359,16 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signInWithGoogle(idToken: String, displayName: String, email: String): AuthResult {
+        val previousUid = firebaseAuth.currentUser?.uid
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val authResult = firebaseAuth.signInWithCredential(credential).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Google sign-in failed")
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
 
             val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
             val normalizedEmail = email.trim().lowercase()
