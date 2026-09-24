@@ -208,6 +208,27 @@ class FirestoreProfileService @Inject constructor(
         ).await()
     }
 
+    suspend fun deleteFcmToken(firebaseUid: String) {
+        if (firebaseUid.isBlank()) return
+        require(auth.currentUser?.uid == firebaseUid) { "Cannot clear another user's token" }
+        val batch = db.batch()
+        batch.set(
+            privateCol.document(firebaseUid),
+            mapOf(
+                "fcmToken" to FieldValue.delete(),
+                "updatedAt" to System.currentTimeMillis()
+            ),
+            SetOptions.merge()
+        )
+        // Remove any pre-migration public token at the same time.
+        batch.set(
+            usersCol.document(firebaseUid),
+            mapOf("fcmToken" to FieldValue.delete()),
+            SetOptions.merge()
+        )
+        batch.commit().await()
+    }
+
     suspend fun deleteProfile(firebaseUid: String) {
         if (firebaseUid.isBlank()) return
         require(auth.currentUser?.uid == firebaseUid) { "Cannot delete another user's profile" }
