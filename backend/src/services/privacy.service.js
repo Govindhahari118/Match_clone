@@ -92,15 +92,15 @@ const privacyService = {
         return true;
     },
 
-    canViewPhotos({ settings, isOwner, isMutualMatch, viewerIsPremium }) {
+    canViewPhotos({ settings, isOwner, isMutualMatch, hasExplicitGrant = false }) {
         if (isOwner) return true;
         if (!settings.showPhoto) return false;
 
         if (settings.photoVisibility === 'public') return true;
-        if (settings.photoVisibility === 'protected') return Boolean(isMutualMatch);
-        if (settings.photoVisibility === 'request_access') return Boolean(isMutualMatch || viewerIsPremium);
+        if (settings.photoVisibility === 'protected') return Boolean(isMutualMatch || hasExplicitGrant);
+        if (settings.photoVisibility === 'request_access') return Boolean(hasExplicitGrant);
 
-        return true;
+        return false;
     },
 };
 
