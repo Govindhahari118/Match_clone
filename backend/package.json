@@ -9,7 +9,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "seed": "node prisma/seed-pg.js",
-    "test": "node --test test/**/*.test.js",
+    "test": "node --test test",
     "prisma:validate": "prisma validate"
   },
   "keywords": [],
