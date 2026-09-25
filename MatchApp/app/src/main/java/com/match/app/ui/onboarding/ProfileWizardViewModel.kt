@@ -11,6 +11,8 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.profile.ReligionProfileSchemas
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -97,12 +99,15 @@ class ProfileWizardViewModel @Inject constructor(
     val religionConfirmed = _religionConfirmed.asStateFlow()
     private val _religionConfirmationRequired = MutableStateFlow(false)
     val religionConfirmationRequired = _religionConfirmationRequired.asStateFlow()
+    private var draftSaveJob: Job? = null
 
     init {
         viewModelScope.launch {
             val uid = session.userId.first() ?: return@launch
             val user = userDao.findById(uid) ?: return@launch
             _wizardState.value = user.toWizardState()
+            _religionConfirmed.value = user.religion.isNotBlank()
+            _currentStep.value = session.profileWizardStep.first().coerceIn(0, LAST_STEP)
         }
     }
 
@@ -127,6 +132,7 @@ class ProfileWizardViewModel @Inject constructor(
             _wizardState.value = state
         }
         _saveError.value = null
+        scheduleDraftSave()
     }
 
     fun nextStep() {
@@ -137,7 +143,7 @@ class ProfileWizardViewModel @Inject constructor(
             return
         }
         persistDraft()
-        _currentStep.value = (step + 1).coerceAtMost(LAST_STEP)
+        moveToStep(step + 1)
     }
 
     fun confirmReligionAndContinue() {
@@ -149,14 +155,14 @@ class ProfileWizardViewModel @Inject constructor(
         _religionConfirmed.value = true
         _religionConfirmationRequired.value = false
         persistDraft()
-        _currentStep.value = (RELIGION_STEP + 1).coerceAtMost(LAST_STEP)
+        moveToStep(RELIGION_STEP + 1)
     }
 
     fun cancelReligionConfirmation() { _religionConfirmationRequired.value = false }
 
     fun previousStep() {
         persistDraft()
-        _currentStep.value = (_currentStep.value - 1).coerceAtLeast(0)
+        moveToStep(_currentStep.value - 1)
     }
 
     fun skipStep() {
@@ -172,7 +178,7 @@ class ProfileWizardViewModel @Inject constructor(
             return
         }
         persistDraft()
-        _currentStep.value = (step + 1).coerceAtMost(LAST_STEP)
+        moveToStep(step + 1)
     }
 
     fun clearError() { _saveError.value = null }
@@ -181,10 +187,11 @@ class ProfileWizardViewModel @Inject constructor(
         validateCompleteProfile()?.let { _saveError.value = it; return@launch }
         if (!_religionConfirmed.value) {
             _saveError.value = "Review and confirm your religion before completing your profile."
-            _currentStep.value = RELIGION_STEP
+            moveToStep(RELIGION_STEP)
             return@launch
         }
         if (_saving.value) return@launch
+        draftSaveJob?.cancel()
         _saving.value = true
         _saveError.value = null
 
@@ -205,6 +212,7 @@ class ProfileWizardViewModel @Inject constructor(
             }
             userDao.update(updated)
             session.setCommunitySetupDone(true)
+            session.setProfileWizardStep(0)
             onComplete()
         } catch (e: Exception) {
             _saveError.value = e.message?.take(180) ?: "Could not save your profile. Please try again."
@@ -213,9 +221,28 @@ class ProfileWizardViewModel @Inject constructor(
         }
     }
 
-    private fun persistDraft() = viewModelScope.launch {
-        val uid = session.userId.first() ?: return@launch
-        val user = userDao.findById(uid) ?: return@launch
+    private fun moveToStep(step: Int) {
+        val normalized = step.coerceIn(0, LAST_STEP)
+        _currentStep.value = normalized
+        viewModelScope.launch { session.setProfileWizardStep(normalized) }
+    }
+
+    private fun scheduleDraftSave() {
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            delay(350)
+            persistDraftNow()
+        }
+    }
+
+    private fun persistDraft() {
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch { persistDraftNow() }
+    }
+
+    private suspend fun persistDraftNow() {
+        val uid = session.userId.first() ?: return
+        val user = userDao.findById(uid) ?: return
         val draft = user.applyWizard(_wizardState.value, user.username)
         val safeDraft = if (_religionConfirmed.value) {
             draft
