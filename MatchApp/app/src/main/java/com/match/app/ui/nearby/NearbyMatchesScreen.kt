@@ -257,6 +257,7 @@ fun NearbyMatchesScreen(
                         if (ui.statusLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         else AssistChip(
                             onClick = {},
+                            enabled = false,
                             label = { Text(if (ui.sharingLocation) "Nearby sharing is on" else "Nearby sharing is off") },
                             leadingIcon = { Icon(if (ui.sharingLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff, null, Modifier.size(16.dp)) }
                         )
