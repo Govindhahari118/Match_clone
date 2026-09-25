@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
 const prisma = require('../config/prisma');
 
 const plans = [
@@ -17,60 +19,137 @@ const plans = [
     }
 ];
 
+function getPlan(planId) {
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) throw new Error('Invalid Plan');
+    return plan;
+}
+
+function getGateway() {
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_API_KEY;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_API_SECRET;
+    if (!keyId || !keySecret) {
+        throw new Error('Payment gateway is not configured');
+    }
+    return {
+        client: new Razorpay({ key_id: keyId, key_secret: keySecret }),
+        keyId,
+        keySecret
+    };
+}
+
 const paymentService = {
     getPlans() {
         return plans;
     },
 
     async createOrder(userId, planId) {
-        const plan = plans.find(p => p.id === planId);
-        if (!plan) throw new Error("Invalid Plan");
+        const plan = getPlan(planId);
+        const { client } = getGateway();
 
-        // Mock Order ID from Payment Gateway
-        const orderId = `order_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-        return {
-            orderId,
-            amount: plan.price,
-            currency: "INR",
-            planId
-        };
-    },
-
-    async verifyPayment(userId, { paymentId, orderId, planId }) {
-        // Mock verification logic
-        if (!paymentId) throw new Error("Payment failed");
-
-        const plan = plans.find(p => p.id === planId);
-
-        // Calculate expiry
-        const expiryDate = new Date();
-        expiryDate.setMonth(expiryDate.getMonth() + plan.durationMonths);
-
-        // Create Subscription Record
-        await prisma.subscription.create({
-            data: {
-                userId,
-                plan: plan.name,
-                status: 'active',
-                expiresAt: expiryDate,
-                // Record specific payment usually goes to Payment table, but for now linking logic
-            }
+        const order = await client.orders.create({
+            amount: Math.round(plan.price * 100),
+            currency: 'INR',
+            receipt: `matree_${userId}_${Date.now()}`,
+            notes: { userId, planId }
         });
 
-        // Also create payment record
         await prisma.payment.create({
             data: {
                 userId,
                 amountInr: plan.price,
-                plan: plan.name,
-                status: 'completed',
-                razorpayOrderId: orderId, // linking our mock order id
-                razorpayPaymentId: paymentId
+                plan: plan.id,
+                status: 'pending',
+                razorpayOrderId: order.id
             }
         });
 
-        return { success: true, expiryDate };
+        return {
+            orderId: order.id,
+            amount: plan.price,
+            amountPaise: order.amount,
+            currency: order.currency,
+            planId
+        };
+    },
+
+    async verifyPayment(userId, { paymentId, orderId, signature, planId }) {
+        if (!paymentId || !orderId || !signature) {
+            throw new Error('paymentId, orderId and signature are required');
+        }
+
+        const plan = getPlan(planId);
+        const { client, keySecret } = getGateway();
+
+        const expected = crypto
+            .createHmac('sha256', keySecret)
+            .update(`${orderId}|${paymentId}`)
+            .digest('hex');
+
+        const signatureValid =
+            signature.length === expected.length &&
+            crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+        if (!signatureValid) throw new Error('Invalid payment signature');
+
+        const existingPayment = await prisma.payment.findUnique({ where: { razorpayOrderId: orderId } });
+        if (!existingPayment || existingPayment.userId !== userId) {
+            throw new Error('Payment order not found for this user');
+        }
+        if (existingPayment.plan !== plan.id) {
+            throw new Error('Payment plan mismatch');
+        }
+
+        if (existingPayment.status === 'completed' && existingPayment.subscriptionId) {
+            const subscription = await prisma.subscription.findUnique({ where: { id: existingPayment.subscriptionId } });
+            return { success: true, subscription, recovered: true };
+        }
+
+        const [gatewayPayment, gatewayOrder] = await Promise.all([
+            client.payments.fetch(paymentId),
+            client.orders.fetch(orderId)
+        ]);
+
+        if (gatewayPayment.order_id !== orderId) throw new Error('Gateway payment/order mismatch');
+        if (!['captured', 'authorized'].includes(gatewayPayment.status)) throw new Error('Payment is not successful');
+        if (Number(gatewayPayment.amount) !== Math.round(plan.price * 100) || gatewayPayment.currency !== 'INR') {
+            throw new Error('Gateway amount or currency mismatch');
+        }
+        if (Number(gatewayOrder.amount) !== Math.round(plan.price * 100) || gatewayOrder.currency !== 'INR') {
+            throw new Error('Gateway order amount or currency mismatch');
+        }
+
+        const expiryDate = new Date();
+        expiryDate.setMonth(expiryDate.getMonth() + plan.durationMonths);
+
+        return prisma.$transaction(async tx => {
+            const current = await tx.payment.findUnique({ where: { razorpayOrderId: orderId } });
+            if (current.status === 'completed' && current.subscriptionId) {
+                const subscription = await tx.subscription.findUnique({ where: { id: current.subscriptionId } });
+                return { success: true, subscription, recovered: true };
+            }
+
+            const subscription = await tx.subscription.create({
+                data: {
+                    userId,
+                    plan: plan.id,
+                    status: 'active',
+                    expiresAt: expiryDate,
+                    autoRenew: false
+                }
+            });
+
+            await tx.payment.update({
+                where: { id: current.id },
+                data: {
+                    status: 'completed',
+                    razorpayPaymentId: paymentId,
+                    razorpaySignature: signature,
+                    subscriptionId: subscription.id
+                }
+            });
+
+            return { success: true, subscription, recovered: false };
+        });
     }
 };
 
