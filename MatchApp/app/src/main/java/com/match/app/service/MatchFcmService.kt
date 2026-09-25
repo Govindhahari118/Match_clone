@@ -109,6 +109,7 @@ class MatchFcmService : FirebaseMessagingService() {
         val body = message.data["body"] ?: message.notification?.body ?: "Open the app for details"
         val fromFirebaseUid = message.data["peer_uid"] ?: message.data["user_id"]
         val intendedRecipientUid = message.data["recipient_uid"]?.trim()?.takeIf { it.isNotEmpty() }
+        val notificationId = message.data["notification_id"]?.trim()?.takeIf { it.isNotEmpty() }
 
         serviceScope.launch {
             // FCM tokens can race with logout/account-switch cleanup. A tagged push must never be
@@ -123,7 +124,7 @@ class MatchFcmService : FirebaseMessagingService() {
 
             val localPeer = fromFirebaseUid?.let { resolveLocalPeerId(it) }
             showNotification(title, body, type, localPeer, localPeer)
-            persistNotification(localType(type), title, body, localPeer)
+            persistNotification(localType(type), title, body, localPeer, notificationId)
         }
     }
 
@@ -144,11 +145,18 @@ class MatchFcmService : FirebaseMessagingService() {
             .getOrNull()
     }
 
-    private suspend fun persistNotification(type: String, title: String, body: String, fromUserId: Long?) {
+    private suspend fun persistNotification(
+        type: String,
+        title: String,
+        body: String,
+        fromUserId: Long?,
+        remoteNotificationId: String?
+    ) {
         try {
             val currentMyId = session.userId.firstOrNull() ?: return
             notifDao.insert(
                 NotificationEntity(
+                    id = remoteNotificationId?.let(::stableNotificationId) ?: 0,
                     userId = currentMyId,
                     type = type,
                     fromUserId = fromUserId,
@@ -160,6 +168,12 @@ class MatchFcmService : FirebaseMessagingService() {
         } catch (error: Exception) {
             Log.e("MatchFcm", "Failed to persist notification", error)
         }
+    }
+
+    private fun stableNotificationId(remoteId: String): Long {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(remoteId.toByteArray(Charsets.UTF_8))
+        return java.nio.ByteBuffer.wrap(digest.copyOfRange(0, 8)).long and Long.MAX_VALUE
     }
 
     private fun showNotification(
