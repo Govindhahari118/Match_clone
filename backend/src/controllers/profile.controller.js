@@ -46,6 +46,19 @@ const getProfileById = async (req, res) => {
         if (!profile) return res.status(404).json({ error: 'Profile not found' });
         const isOwner = viewerId && viewerId === id;
 
+        if (!isOwner && viewerId) {
+            const blocked = await prisma.block.findFirst({
+                where: {
+                    OR: [
+                        { blockerId: viewerId, blockedId: id },
+                        { blockerId: id, blockedId: viewerId }
+                    ]
+                },
+                select: { id: true }
+            });
+            if (blocked) return res.status(404).json({ error: 'Profile not found' });
+        }
+
         if (!isOwner && (!profile.user.isActive || profile.user.isBanned)) {
             return res.status(404).json({ error: 'Profile not found' });
         }
@@ -87,7 +100,7 @@ const getProfileById = async (req, res) => {
             settings,
             isOwner,
             isMutualMatch,
-            viewerIsPremium,
+            hasExplicitGrant: false,
         });
 
         // Record profile view asynchronously so profile read path stays fast.
@@ -95,12 +108,12 @@ const getProfileById = async (req, res) => {
             interactionService.recordProfileView(viewerId, id).catch(() => { });
         }
 
-        let compatibilityScore = null;
+        let compatibility = null;
         if (viewerId && viewerId !== id) {
             try {
-                compatibilityScore = await interactionService.getCompatibilityScore(viewerId, profile.id);
+                compatibility = await interactionService.getCompatibilityExplanation(viewerId, profile.id);
             } catch {
-                compatibilityScore = null;
+                compatibility = null;
             }
         }
 
@@ -118,7 +131,7 @@ const getProfileById = async (req, res) => {
 
         return res.json({
             ...projectedProfile,
-            compatibilityScore,
+            compatibility,
             privacy: {
                 canViewPhotos,
                 photoVisibility: settings.photoVisibility,
