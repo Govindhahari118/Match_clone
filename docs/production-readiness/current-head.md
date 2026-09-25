@@ -40,25 +40,49 @@ win over earlier exploratory text; security/privacy invariants are never weakene
 - persisted notification event ledger before FCM delivery
 - deterministic notification event IDs so retried triggers do not duplicate user-visible events
 - cross-device Firestore notification history and read-state synchronization
+- private per-installation FCM registration/revocation with account-switch transfer
+- per-channel notification preferences enforced in Settings, Firestore Rules and backend delivery
 - FCM-to-Room deduplication using the same persisted notification identity
 - authenticated actor hydration for notification navigation after reinstall/second-device use
-- Firestore Rules regression coverage for recipient-only notification reads and read-only client mutation
-- account logout/account-switch/deletion cache cleanup now includes protected profile media and chat media
+- Firestore Rules regression coverage for notification ownership/read-only mutation/preferences
+- account logout/account-switch/deletion cache cleanup includes protected profile and chat media
 - Nearby sharing status is explicitly non-interactive instead of a dead callback
-- chat message tap now has a real message-action behavior instead of an empty callback
-- CI production-integrity scan added before Android tests for executable stubs and interactive empty callbacks
-- production route inventory added at `docs/production-readiness/route-inventory.md`, with unsupported/provider-dependent screens classified rather than implied READY
+- chat message tap has a real action instead of an empty callback
+- CI production-integrity scan added before Android tests for executable stubs and enabled empty callbacks
+- CI now uploads SHA-labelled Android, Functions and Rules evidence artifacts
+- production route inventory added at `docs/production-readiness/route-inventory.md`
+- architecture/authority/environment map added at
+  `docs/production-readiness/architecture-authority-environments.md`
+- Firebase Remote Config no longer uses a production fake/bypass path; real SDK values are used and
+  optional/risky features fail safe OFF
+- placeholder Firebase `google-services.json` is scoped to `src/debug`; release source has no
+  committed placeholder production project
+- CI release/R8 validation may temporarily inject the debug placeholder strictly for compile/R8
+  validation, deletes any resulting AAB, and emits a provenance marker instead
+- release AAB creation therefore remains blocked until a real release Firebase config is supplied
+- Razorpay membership/Boost Functions and Android dependency removed; Google Play verification is
+  the single deployed digital-entitlement authority
+- stale optional/provider callables (`features.ts`, `backgroundChecks.ts`) removed from production
+  deployment, eliminating the alternate reward→Boost path and unlaunched service request APIs
+- pricing claims narrowed to actual server-enforced membership duration/contact quotas and
+  Google-Play-backed restore/verification behavior
+- profile-view notification trigger now binds the Firestore event context used in its deterministic ID
 
 ## Exact-head evidence
 
-The completion branch remains Draft until the latest `Production CI` run succeeds for the exact
-HEAD after the final documentation/code commit.
+The branch had an all-green exact-head Production CI at SHA
+`65608f49375152bfff4c6995e5d2cc9e85cb1602` before the later environment/billing hardening commits.
+
+That prior green run is **historical evidence only**. The current branch must obtain a new all-green
+Production CI after this final documentation/code state before it can be treated as the current
+repository-side baseline.
 
 Mandatory CI jobs:
 
-1. production-integrity source gate + Android unit tests + lint + debug build + release/R8 bundle
-2. Firebase Functions lint + build/typecheck + production dependency audit
-3. Firestore + Storage emulator security-rules tests
+1. production-integrity source gate + Android unit tests + lint + debug build + non-production
+   release/R8 validation + evidence artifact
+2. Firebase Functions lint + build/typecheck + production dependency audit + evidence artifact
+3. Firestore + Storage emulator security-rules tests + evidence artifact
 
 ## Remaining repository verification before release
 
@@ -79,8 +103,9 @@ corresponding code path exists:
 
 These cannot be truthfully completed by repository code alone:
 
-- production Firebase project/configuration/indexes/rules/Functions deployment evidence
-- App Check production enforcement + Play Integrity evidence
+- real production Firebase `google-services.json`, project IDs and dev/staging/prod project mapping
+- production Firebase indexes/rules/Functions deployment evidence
+- App Check production enforcement + Play Integrity console evidence
 - production KYC/provider credentials and real provider failure-path verification
 - real Google Play Console product configuration, licensed test purchases, restore/refund/expiry evidence
 - Play App Signing/release signing and production SHA fingerprints
@@ -90,10 +115,10 @@ These cannot be truthfully completed by repository code alone:
 - physical-device matrix (Pixel-equivalent, Samsung, low/mid-range; supported Android versions)
 - production-like two-user/two-device journey recording
 - repository branch-protection/required-check policy where hosting permissions permit
-- final signed AAB hash, staged rollout, monitoring and rollback criteria
+- final signed production AAB hash, staged rollout, monitoring and rollback criteria
 
 ## Release statement
 
-This branch and PR #18 must remain Draft until release-critical code verification and all required
+This branch and PR #18 must remain Draft until the current exact HEAD is green and all required
 external gates have current evidence. Code volume, screenshots, historical green commits or a
 rendering Compose screen are not completion evidence.
