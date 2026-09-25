@@ -149,6 +149,74 @@ export async function sendDataToUserDevices(
   }
 }
 
+
+export type PersistedNotificationInput = {
+  notificationId: string;
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  entityType: string;
+  entityId: string;
+  deepLink: string;
+  pushType: string;
+  preferenceKey: NotificationPreferenceKey;
+  priority?: "high" | "normal";
+  fromFirebaseUid?: string;
+};
+
+/**
+ * Durable notification contract: commit the user-visible event first, then attempt data-only push
+ * delivery. Trigger retries reuse the same event id; a repeated push still carries that id so the
+ * client cache is idempotent.
+ */
+export async function persistAndSendNotification(
+  input: PersistedNotificationInput
+): Promise<void> {
+  const ref = db.collection("notifications").doc(input.notificationId);
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (!existing.exists) {
+      tx.create(ref, {
+        userId: input.userId,
+        type: input.type,
+        title: input.title,
+        body: input.body,
+        entityType: input.entityType,
+        entityId: input.entityId,
+        deepLink: input.deepLink,
+        ...(input.fromFirebaseUid ? { fromFirebaseUid: input.fromFirebaseUid } : {}),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        readAt: null,
+      });
+    }
+  });
+
+  await sendDataToUserDevices(
+    input.userId,
+    {
+      type: input.pushType,
+      title: input.title,
+      body: input.body,
+      recipient_uid: input.userId,
+      notification_id: input.notificationId,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      deep_link: input.deepLink,
+      ...(input.fromFirebaseUid ? {
+        user_id: input.fromFirebaseUid,
+        peer_uid: input.fromFirebaseUid,
+      } : {}),
+    },
+    { priority: input.priority ?? "high" },
+    input.preferenceKey
+  );
+
+  await ref.set({
+    pushLastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 const MATRIMONY_ID_ATTEMPTS = 12;
 
 function newMatrimonyIdCandidate(): string {
