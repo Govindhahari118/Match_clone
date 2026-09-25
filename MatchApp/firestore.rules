@@ -236,6 +236,7 @@ service cloud.firestore {
     match /sessions/{uid}/devices/{deviceId} { allow read: if isOwner(uid); allow write: if false; }
     match /sessions/{uid} { allow read: if isOwner(uid); }
     match /otpLog/{hash} { allow read, write: if false; }
+    match /adminAudit/{auditId} { allow read, write: if false; }
     match /paymentOrders/{orderId} { allow read, write: if false; }
     match /payments/{paymentId} { allow read, write: if false; }
     match /webhookEvents/{eventId} { allow read, write: if false; }
