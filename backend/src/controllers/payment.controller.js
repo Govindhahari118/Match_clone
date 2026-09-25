@@ -23,8 +23,8 @@ const createOrder = async (req, res) => {
 const verifyPayment = async (req, res) => {
     try {
         const userId = req.user.sub;
-        const { paymentId, orderId, planId } = req.body;
-        const result = await paymentService.verifyPayment(userId, { paymentId, orderId, planId });
+        const { paymentId, orderId, signature, planId } = req.body;
+        const result = await paymentService.verifyPayment(userId, { paymentId, orderId, signature, planId });
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
