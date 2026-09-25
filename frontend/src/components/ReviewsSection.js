@@ -1,116 +1,135 @@
 "use client";
-import Image from "next/image";
-import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "../context/AuthContext";
-import api from "../services/api";
-import { toast } from "react-toastify";
 
-function getFallbackReviews() {
-    const now = Date.now();
-    return [
-        { id: "m1", reviewerName: "Sneha Gupta", rating: 5, comment: "Very polite and genuine person. Had a great conversation!", createdAt: new Date(now).toISOString(), reviewerPhoto: "https://randomuser.me/api/portraits/women/65.jpg" },
-        { id: "m2", reviewerName: "Amit Kumar", rating: 4, comment: "Good profile, but slow to respond.", createdAt: new Date(now - 86400000).toISOString(), reviewerPhoto: "https://randomuser.me/api/portraits/men/32.jpg" }
-    ];
-}
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "react-toastify";
+import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
+import SafeProfileImage from "./SafeProfileImage";
 
 export default function ReviewsSection({ userId, userName }) {
-    const { user } = useAuth();
-    const [reviews, setReviews] = useState([]);
-    const [rating, setRating] = useState(5);
-    const [comment, setComment] = useState("");
-    const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const [reviews, setReviews] = useState([]);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [state, setState] = useState("loading");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const isSelf = user?.id === userId;
 
-    const isSelf = user?.id === userId;
+  const fetchReviews = useCallback(async () => {
+    if (!userId) {
+      setReviews([]);
+      setState("content");
+      return;
+    }
+    setState("loading");
+    setError("");
+    try {
+      const response = await api.get(`/reviews/user/${userId}`);
+      setReviews(Array.isArray(response.data) ? response.data : []);
+      setState("content");
+    } catch (err) {
+      setReviews([]);
+      setError(err.response?.data?.error || "Couldn’t load reviews.");
+      setState("error");
+    }
+  }, [userId]);
 
-    const fetchReviews = useCallback(async () => {
-        try {
-            const res = await api.get(`/reviews/user/${userId}`);
-            setReviews(res.data);
-        } catch (err) {
-            void err;
-            setReviews(getFallbackReviews());
-        } finally {
-            setLoading(false);
-        }
-    }, [userId]);
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
 
-    useEffect(() => {
-        if (!userId) {
-            setReviews([]);
-            setLoading(false);
-            return;
-        }
-        fetchReviews();
-    }, [userId, fetchReviews]);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!comment.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.post("/reviews", { reviewedUserId: userId, rating, comment: comment.trim() });
+      toast.success("Review submitted.");
+      setComment("");
+      await fetchReviews();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Failed to submit review.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!comment.trim()) return;
-        try {
-            await api.post("/reviews", { reviewedUserId: userId, rating, comment });
-            toast.success("Review submitted!");
-            setComment("");
-            fetchReviews();
-        } catch (err) {
-            toast.error(err.response?.data?.error || "Failed to submit review");
-        }
-    };
+  return (
+    <section className="panel" style={{ padding: 24, marginTop: 24 }}>
+      <h3 style={{ fontSize: 20, fontWeight: 800, marginTop: 0 }}>Reviews & Ratings</h3>
 
-    return (
-        <div style={{ background: "white", borderRadius: 16, padding: 24, border: "1px solid #f1f5f9", marginTop: 24 }}>
-            <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16, color: "#111827" }}>Reviews & Ratings</h3>
+      {state === "loading" && <p style={{ color: "var(--ink-muted)" }}>Loading reviews…</p>}
 
-            {/* List */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
-                {loading ? <p style={{ fontSize: 14, color: "#64748b" }}>Loading reviews...</p> : reviews.length === 0 ? <p style={{ color: "#94a3b8", fontSize: 14, fontStyle: "italic" }}>No reviews yet. Be the first to review!</p> : (
-                    reviews.map((r) => (
-                        <div key={r.id} style={{ borderBottom: "1px solid #f8fafc", paddingBottom: 16 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    {r.reviewerPhoto ? (
-                                        <Image
-                                            src={r.reviewerPhoto}
-                                            alt={r.reviewerName}
-                                            width={24}
-                                            height={24}
-                                            sizes="24px"
-                                            style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover" }}
-                                        />
-                                    ) : (
-                                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>{r.reviewerName[0]}</div>
-                                    )}
-                                    <div style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>{r.reviewerName}</div>
-                                    <div style={{ display: "flex", gap: 1 }}>{[...Array(5)].map((_, i) => <span key={i} style={{ fontSize: 12, color: i < r.rating ? "#fbbf24" : "#e2e8f0" }}>{"\u2605"}</span>)}</div>
-                                </div>
-                                <div style={{ fontSize: 12, color: "#94a3b8" }}>{new Date(r.createdAt).toLocaleDateString()}</div>
-                            </div>
-                            <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6 }}>{r.comment}</p>
-                        </div>
-                    ))
-                )}
-            </div>
-
-            {/* Form */}
-            {user && !isSelf && (
-                <form onSubmit={handleSubmit} style={{ background: "#f8fafc", padding: 20, borderRadius: 16, border: "1px dashed #cbd5e1" }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "#334155" }}>Write a Review for {userName}</h4>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                        {[1, 2, 3, 4, 5].map((s) => (
-                            <button key={s} type="button" onClick={() => setRating(s)} style={{ fontSize: 24, background: "none", border: "none", cursor: "pointer", transition: "transform 0.1s", transform: s <= rating ? "scale(1.1)" : "scale(1)", filter: s <= rating ? "grayscale(0)" : "grayscale(100%) opacity(0.3)" }}>{"\u2B50"}</button>
-                        ))}
-                    </div>
-                    <textarea
-                        value={comment}
-                        onChange={(e) => setComment(e.target.value)}
-                        placeholder={`Share your experience with ${userName}...`}
-                        style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #e2e8f0", marginBottom: 16, fontSize: 14, minHeight: 100, outline: "none", resize: "vertical" }}
-                        onFocus={(e) => e.target.style.borderColor = "#cbd5e1"}
-                        onBlur={(e) => e.target.style.borderColor = "#e2e8f0"}
-                        required
-                    />
-                    <button type="submit" style={{ padding: "10px 24px", background: "#e11d48", color: "white", borderRadius: 99, border: "none", fontWeight: 700, cursor: "pointer", fontSize: 14, boxShadow: "0 4px 12px rgba(225,29,72,0.2)" }}>Submit Review</button>
-                </form>
-            )}
+      {state === "error" && (
+        <div role="alert">
+          <p style={{ color: "var(--ink-muted)" }}>{error}</p>
+          <button type="button" className="button button-secondary" onClick={fetchReviews}>Retry</button>
         </div>
-    );
+      )}
+
+      {state === "content" && reviews.length === 0 && (
+        <p style={{ color: "var(--ink-muted)" }}>No reviews have been recorded for this profile.</p>
+      )}
+
+      {state === "content" && reviews.length > 0 && (
+        <div style={{ display: "grid", gap: 16, marginBottom: 24 }}>
+          {reviews.map((review) => (
+            <article key={review.id} style={{ borderBottom: "1px solid #eef2f7", paddingBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <SafeProfileImage
+                    src={review.reviewerPhoto}
+                    alt={review.reviewerName ? `${review.reviewerName} profile` : "Reviewer photo"}
+                    width={28}
+                    height={28}
+                    sizes="28px"
+                    style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }}
+                  />
+                  <strong style={{ fontSize: 14 }}>{review.reviewerName || "Member"}</strong>
+                  <span aria-label={`${review.rating} out of 5 stars`} style={{ fontSize: 12 }}>
+                    {"★".repeat(Math.max(0, Math.min(5, Number(review.rating) || 0)))}
+                  </span>
+                </div>
+                {review.createdAt && (
+                  <time style={{ fontSize: 12, color: "var(--ink-muted)" }}>
+                    {new Date(review.createdAt).toLocaleDateString()}
+                  </time>
+                )}
+              </div>
+              {review.comment && <p style={{ marginBottom: 0, color: "var(--ink-muted)", lineHeight: 1.6 }}>{review.comment}</p>}
+            </article>
+          ))}
+        </div>
+      )}
+
+      {user && !isSelf && (
+        <form onSubmit={handleSubmit} style={{ background: "#f8fafc", padding: 20, borderRadius: 16 }}>
+          <h4 style={{ marginTop: 0 }}>Write a Review for {userName || "this member"}</h4>
+          <label className="form-label" htmlFor={`review-rating-${userId}`}>Rating</label>
+          <select
+            id={`review-rating-${userId}`}
+            className="form-input"
+            value={rating}
+            onChange={(event) => setRating(Number(event.target.value))}
+          >
+            {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} / 5</option>)}
+          </select>
+          <label className="form-label" htmlFor={`review-comment-${userId}`} style={{ marginTop: 12 }}>Comment</label>
+          <textarea
+            id={`review-comment-${userId}`}
+            className="form-input"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            rows={4}
+            maxLength={1000}
+            required
+          />
+          <button type="submit" className="button button-primary" disabled={submitting} style={{ marginTop: 12 }}>
+            {submitting ? "Submitting…" : "Submit Review"}
+          </button>
+        </form>
+      )}
+    </section>
+  );
 }
