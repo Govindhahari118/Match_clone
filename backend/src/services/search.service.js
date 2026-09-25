@@ -30,10 +30,10 @@ function profileToSearchItem(userRow, viewerId) {
         city: profile.city,
         state: profile.state,
         profession: profile.profession,
-        photo: userRow.photos?.[0]?.thumbnailUrl || userRow.photos?.[0]?.photoUrl || 'https://via.placeholder.com/150',
+        photo: userRow.photos?.[0]?.thumbnailUrl || userRow.photos?.[0]?.photoUrl || null,
         isVerified: userRow.isVerified,
         isPremium: (userRow.subscriptions || []).length > 0,
-        match: 90,
+        match: null,
         religion: profile.religion,
         caste: profile.caste,
         motherTongue: profile.motherTongue,
@@ -66,6 +66,19 @@ const searchService = {
                     sort,
                     message: 'profileId is required for profile_id mode',
                 };
+            }
+
+            const blocked = await prisma.block.findFirst({
+                where: {
+                    OR: [
+                        { blockerId: userId, blockedId: profileId },
+                        { blockerId: profileId, blockedId: userId }
+                    ]
+                },
+                select: { id: true }
+            });
+            if (blocked || profileId === userId) {
+                return { mode, items: [], page: 1, limit: 1, total: 0, hasNextPage: false, sort };
             }
 
             const userRow = await prisma.user.findFirst({
