@@ -68,6 +68,14 @@ jobs:
           fi
           trap 'if [ "$cleanup" -eq 1 ]; then rm -f app/src/release/google-services.json; fi' EXIT
           ./gradlew --no-daemon bundleRelease
+          if [ "$cleanup" -eq 1 ]; then
+            rm -f app/build/outputs/bundle/release/*.aab
+            cat > app/build/outputs/bundle/release/NON_PRODUCTION_FIREBASE_CONFIG.txt <<EOF
+          SHA: ${GITHUB_SHA}
+          Release/R8 code validation used the debug-only placeholder Firebase configuration.
+          No production AAB is emitted until a real release google-services.json is supplied.
+          EOF
+          fi
       - name: Upload Android evidence
         if: always()
         uses: actions/upload-artifact@v4
