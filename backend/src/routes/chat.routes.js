@@ -15,7 +15,8 @@ router.get('/conversations', async (req, res) => {
         const conversations = await messageService.getConnectedUsers(userId);
         res.json(conversations);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const status = ['BLOCKED', 'NOT_CONNECTED', 'INVALID_RECEIVER', 'EMPTY_MESSAGE'].includes(error.code) ? 403 : 500;
+        res.status(status).json({ error: error.message, code: error.code || 'CHAT_ERROR' });
     }
 });
 
@@ -35,8 +36,8 @@ router.get('/:userId', async (req, res) => {
 router.post('/send', async (req, res) => {
     try {
         const myId = req.user.sub;
-        const { receiverId, content } = req.body;
-        const message = await messageService.saveMessage(myId, receiverId, content);
+        const { receiverId, content, clientMessageId } = req.body;
+        const message = await messageService.saveMessage(myId, receiverId, content, { clientMessageId });
         // Ideally emit socket event here too via io instance
         res.json(message);
     } catch (error) {
