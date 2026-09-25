@@ -1,6 +1,11 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
-import { db, getFcmToken, messaging } from "./shared";
+import {
+  db,
+  NotificationPreferenceKey,
+  requireAppCheck,
+  sendDataToUserDevices,
+} from "./shared";
 
 type NotificationPayload = {
   userId: string;
@@ -12,6 +17,84 @@ type NotificationPayload = {
   deepLink: string;
   fromFirebaseUid?: string;
 };
+
+function requireDeviceId(value: unknown): string {
+  const deviceId = typeof value === "string" ? value.trim() : "";
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(deviceId)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid device identity");
+  }
+  return deviceId;
+}
+
+function requireFcmToken(value: unknown): string {
+  const token = typeof value === "string" ? value.trim() : "";
+  if (token.length < 20 || token.length > 4096) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid notification token");
+  }
+  return token;
+}
+
+/**
+ * Register exactly this authenticated app installation. A device identity can belong to only one
+ * signed-in account at a time; registering after an account switch atomically removes the prior
+ * account's device record.
+ */
+export const registerFcmDevice = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const deviceId = requireDeviceId(data?.deviceId);
+  const token = requireFcmToken(data?.token);
+  const appVersion = typeof data?.appVersion === "string" ?
+    data.appVersion.trim().slice(0, 64) : "";
+
+  const deviceRef = db.collection("fcmTokens").doc(uid).collection("devices").doc(deviceId);
+  const ownerRef = db.collection("fcmDeviceOwners").doc(deviceId);
+
+  await db.runTransaction(async (tx) => {
+    const owner = await tx.get(ownerRef);
+    const priorUid = owner.data()?.uid;
+    if (typeof priorUid === "string" && priorUid && priorUid !== uid) {
+      tx.delete(db.collection("fcmTokens").doc(priorUid).collection("devices").doc(deviceId));
+    }
+
+    tx.set(deviceRef, {
+      uid,
+      deviceId,
+      token,
+      platform: "android",
+      appVersion,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.set(ownerRef, {
+      uid,
+      deviceId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  return { registered: true };
+});
+
+/** Revoke only the current authenticated installation, not the user's other signed-in devices. */
+export const revokeFcmDevice = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const deviceId = requireDeviceId(data?.deviceId);
+  const deviceRef = db.collection("fcmTokens").doc(uid).collection("devices").doc(deviceId);
+  const ownerRef = db.collection("fcmDeviceOwners").doc(deviceId);
+
+  await db.runTransaction(async (tx) => {
+    const owner = await tx.get(ownerRef);
+    tx.delete(deviceRef);
+    if (owner.data()?.uid === uid) tx.delete(ownerRef);
+  });
+
+  return { revoked: true };
+});
 
 async function persistNotificationOnce(
   notificationId: string,
@@ -30,17 +113,11 @@ async function persistNotificationOnce(
   });
 }
 
-async function notificationChannelEnabled(
-  uid: string,
-  type: string
-): Promise<boolean> {
-  const prefs = await db.collection("notificationPrefs").doc(uid).get();
-  if (!prefs.exists) return true;
-  const data = prefs.data() ?? {};
-  const key = type === "INTEREST" ? "interests" :
-    type === "MATCH" ? "matches" :
-      type === "MESSAGE" ? "messages" : "system";
-  return data[key] !== false;
+function preferenceFor(type: string): NotificationPreferenceKey {
+  if (type === "INTEREST") return "interests";
+  if (type === "MATCH") return "matches";
+  if (type === "MESSAGE") return "messages";
+  return "system";
 }
 
 async function deliverPersistedNotification(
@@ -51,18 +128,13 @@ async function deliverPersistedNotification(
   const created = await persistNotificationOnce(notificationId, payload);
   if (!created) return;
 
-  if (!(await notificationChannelEnabled(payload.userId, payload.type))) return;
-
-  const fcmToken = await getFcmToken(payload.userId);
-  if (!fcmToken) return;
-
   const pushType = payload.type === "INTEREST" ? "interest_received" :
     payload.type === "MATCH" ? "mutual_match" :
       payload.type === "MESSAGE" ? "message" : payload.type.toLowerCase();
 
-  await messaging.send({
-    token: fcmToken,
-    data: {
+  await sendDataToUserDevices(
+    payload.userId,
+    {
       type: pushType,
       title: payload.title,
       body: payload.body,
@@ -76,8 +148,9 @@ async function deliverPersistedNotification(
         peer_uid: payload.fromFirebaseUid,
       } : {}),
     },
-    android: { priority: "high", notification: { channelId } },
-  });
+    { priority: "high", notification: { channelId } },
+    preferenceFor(payload.type)
+  );
 }
 
 export const onInterestCreated = functions.firestore
