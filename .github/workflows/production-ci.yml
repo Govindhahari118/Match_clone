@@ -90,6 +90,7 @@ jobs:
             MatchApp/app/build/intermediates/lint_intermediate_text_report/debug/**
             MatchApp/app/build/outputs/apk/debug/*.apk
             MatchApp/app/build/outputs/bundle/release/*.aab
+            MatchApp/app/build/outputs/bundle/release/*.txt
             MatchApp/app/build/outputs/mapping/release/**
 
   functions:
