@@ -54,13 +54,25 @@ jobs:
           exit "$status"
       - name: Debug build
         run: ./gradlew --no-daemon assembleDebug
-      - name: Release bundle / R8 validation
-        run: ./gradlew --no-daemon bundleRelease
+      - name: Non-production release bundle / R8 validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup=0
+          if [ ! -f app/src/release/google-services.json ] && [ ! -f app/google-services.json ]; then
+            mkdir -p app/src/release
+            cp app/src/debug/google-services.json app/src/release/google-services.json
+            cleanup=1
+            echo "Using DEBUG-ONLY placeholder Firebase config strictly for compile/R8 validation."
+            echo "This AAB is NOT a production release candidate."
+          fi
+          trap 'if [ "$cleanup" -eq 1 ]; then rm -f app/src/release/google-services.json; fi' EXIT
+          ./gradlew --no-daemon bundleRelease
       - name: Upload Android evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-evidence-${{ github.sha }}
+          name: android-code-evidence-${{ github.sha }}
           if-no-files-found: warn
           retention-days: 30
           path: |
