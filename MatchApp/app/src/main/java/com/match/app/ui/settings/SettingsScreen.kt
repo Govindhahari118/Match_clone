@@ -23,6 +23,8 @@ import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
+import com.match.app.data.repo.NotificationPreferenceRepository
+import com.match.app.data.repo.NotificationPreferences
 import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
@@ -50,7 +52,8 @@ class SettingsViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val authRepo: AuthRepository,
-    private val savedSearchRepo: SavedSearchRepository
+    private val savedSearchRepo: SavedSearchRepository,
+    private val notificationPreferenceRepo: NotificationPreferenceRepository
 ) : ViewModel() {
     val appearance = session.appearancePreference
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
@@ -58,6 +61,8 @@ class SettingsViewModel @Inject constructor(
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
+    val notificationPreferences = notificationPreferenceRepo.observe()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NotificationPreferences())
 
     val user: StateFlow<UserEntity?> = session.userId
         .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
@@ -98,6 +103,11 @@ class SettingsViewModel @Inject constructor(
     }
     fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
+
+    fun setNotificationPreference(key: String, enabled: Boolean) = viewModelScope.launch {
+        runCatching { notificationPreferenceRepo.update(key, enabled) }
+            .onFailure { _searchMessage.value = "Could not update notification preference." }
+    }
 
     fun saveCurrentSearch(name: String) = viewModelScope.launch {
         val id = session.userId.first() ?: return@launch
@@ -169,6 +179,7 @@ fun SettingsScreen(
     val language by vm.uiLanguage.collectAsState()
     val accountState by vm.accountState.collectAsState()
     val currentFilter by vm.currentFilter.collectAsState()
+    val notificationPreferences by vm.notificationPreferences.collectAsState()
     val savedSearches by vm.savedSearches.collectAsState()
     val searchMessage by vm.searchMessage.collectAsState()
     val profilePaused by vm.profilePaused.collectAsState()
@@ -347,6 +358,41 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Choose which real account events may send a push notification. Notification history remains available in the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SettingToggle(
+                icon = Icons.Filled.PersonAdd,
+                title = "Interests",
+                subtitle = "New interest requests and related updates.",
+                checked = notificationPreferences.interests,
+                onCheckedChange = { vm.setNotificationPreference("interests", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Favorite,
+                title = "Matches",
+                subtitle = "Mutual-match notifications.",
+                checked = notificationPreferences.matches,
+                onCheckedChange = { vm.setNotificationPreference("matches", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Forum,
+                title = "Messages",
+                subtitle = "New-message notifications.",
+                checked = notificationPreferences.messages,
+                onCheckedChange = { vm.setNotificationPreference("messages", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Notifications,
+                title = "Account & system",
+                subtitle = "Verification, safety, subscription and service updates.",
+                checked = notificationPreferences.system,
+                onCheckedChange = { vm.setNotificationPreference("system", it) }
+            )
 
             Text("Language & security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
