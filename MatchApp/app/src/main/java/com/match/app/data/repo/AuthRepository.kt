@@ -11,6 +11,7 @@ import com.match.app.data.local.MatchDatabase
 import com.match.app.data.local.dao.LikeDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
@@ -36,6 +37,7 @@ class AuthRepository @Inject constructor(
     private val photoRepo: PhotoRepository,
     private val session: SessionStore,
     private val firestoreProfile: FirestoreProfileService,
+    private val fcmDeviceRegistry: FcmDeviceRegistry,
     private val localDb: MatchDatabase,
     @ApplicationContext private val appContext: Context
 ) {
@@ -148,9 +150,14 @@ class AuthRepository @Inject constructor(
         val uid = firebaseAuth.currentUser?.uid
         if (!uid.isNullOrBlank()) {
             try {
-                firestoreProfile.deleteFcmToken(uid)
+                fcmDeviceRegistry.revoke()
             } catch (ex: Exception) {
-                Log.w("AuthRepository", "Unable to revoke FCM token during sign-out", ex)
+                Log.w("AuthRepository", "Unable to revoke current FCM device during sign-out", ex)
+            }
+            try {
+                FirebaseMessaging.getInstance().deleteToken().await()
+            } catch (ex: Exception) {
+                Log.w("AuthRepository", "Unable to rotate FCM token during sign-out", ex)
             }
         }
         firebaseAuth.signOut()
@@ -528,11 +535,12 @@ class AuthRepository @Inject constructor(
     )
 
     private suspend fun registerFcmToken(firebaseUid: String) {
+        if (firebaseAuth.currentUser?.uid != firebaseUid) return
         try {
             val token = FirebaseMessaging.getInstance().token.await()
-            firestoreProfile.saveFcmToken(firebaseUid, token)
+            fcmDeviceRegistry.register(token)
         } catch (ex: Exception) {
-            Log.w("AuthRepository", "FCM token registration failed", ex)
+            Log.w("AuthRepository", "FCM device registration failed", ex)
         }
     }
 }
