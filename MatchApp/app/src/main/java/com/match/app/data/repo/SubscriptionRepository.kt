@@ -30,6 +30,40 @@ class SubscriptionRepository @Inject constructor(
     private val db = FirebaseFirestore.getInstance()
     private val functions = FirebaseFunctions.getInstance()
 
+    /**
+     * The backend validates the opaque token with Google Play and owns all product-to-entitlement
+     * mapping. Android never chooses membership duration, boost duration, price or expiry.
+     */
+    suspend fun verifyGooglePlayPurchase(productId: String, purchaseToken: String): Result<PlayEntitlement> = runCatching {
+        require(productId.isNotBlank() && purchaseToken.isNotBlank())
+        val result = functions.getHttpsCallable("verifyGooglePlayPurchase")
+            .call(mapOf("productId" to productId, "purchaseToken" to purchaseToken)).await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid Play verification response")
+        if (data["success"] as? Boolean != true) error("Play purchase was not activated")
+
+        val entitlementType = data["entitlementType"] as? String ?: "MEMBERSHIP"
+        val entitlementId = data["entitlementId"] as? String
+            ?: data["planId"] as? String
+            ?: error("Missing entitlement id")
+        val expiresAt = (data["expiresAt"] as? Number)?.toLong()
+            ?: (data["premiumUntil"] as? Number)?.toLong()
+            ?: (data["boostUntil"] as? Number)?.toLong()
+            ?: error("Missing entitlement expiry")
+
+        val entitlement = PlayEntitlement(
+            entitlementType = entitlementType,
+            entitlementId = entitlementId,
+            expiresAt = expiresAt,
+            consumptionPending = data["consumptionPending"] as? Boolean ?: false
+        )
+        if (entitlementType == "BOOST") {
+            syncBoostStatusFromServer()
+        } else {
+            syncPremiumStatusFromServer()
+        }
+        entitlement
+    }
 
     fun observePremiumStatus(): Flow<Boolean> = callbackFlow {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
