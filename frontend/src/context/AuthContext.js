@@ -63,11 +63,22 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return undefined;
 
-    const newSocket = io(SOCKET_URL);
+    const token = localStorage.getItem("accessToken") || localStorage.getItem("access_token");
+    if (!token) return undefined;
+
+    const newSocket = io(SOCKET_URL, {
+      auth: { token },
+      extraHeaders: { Authorization: `Bearer ${token}` },
+    });
 
     newSocket.on("connect", () => {
-      newSocket.emit("join_room", user.id);
       setSocket(newSocket);
+    });
+
+    newSocket.on("connect_error", (error) => {
+      if (error?.message === "AUTH_REQUIRED" || error?.message === "AUTH_INVALID") {
+        toast.error("Your session is no longer valid. Please sign in again.");
+      }
     });
 
     newSocket.on("new_match", () => {
