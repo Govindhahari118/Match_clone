@@ -41,10 +41,14 @@ async function deliverPersistedNotification(
   const fcmToken = await getFcmToken(payload.userId);
   if (!fcmToken) return;
 
+  const pushType = payload.type === "INTEREST" ? "interest_received" :
+    payload.type === "MATCH" ? "mutual_match" :
+      payload.type === "MESSAGE" ? "message" : payload.type.toLowerCase();
+
   await messaging.send({
     token: fcmToken,
     data: {
-      type: payload.type.toLowerCase(),
+      type: pushType,
       title: payload.title,
       body: payload.body,
       recipient_uid: payload.userId,
@@ -78,7 +82,7 @@ export const onInterestCreated = functions.firestore
         body: "Someone is interested in your profile. Open the app to view it.",
         entityType: "profile",
         entityId: fromUid,
-        deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(fromUid)}`,
+        deepLink: "matrimonyconnect://interests",
         fromFirebaseUid: fromUid,
       },
       "match_interests"
@@ -103,7 +107,7 @@ export const onMatchCreated = functions.firestore
           body: "You have a new mutual match. Open the app to view the profile.",
           entityType: "profile",
           entityId: uid2,
-          deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(uid2)}`,
+          deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid2,
         },
         "match_matches"
@@ -117,7 +121,7 @@ export const onMatchCreated = functions.firestore
           body: "You have a new mutual match. Open the app to view the profile.",
           entityType: "profile",
           entityId: uid1,
-          deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(uid1)}`,
+          deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid1,
         },
         "match_matches"
@@ -142,7 +146,7 @@ export const onNewMessage = functions.firestore
         body: "Open the app to view your message.",
         entityType: "chat",
         entityId: context.params.threadId,
-        deepLink: `matrimonyconnect://chat?thread=${encodeURIComponent(context.params.threadId)}&peer=${encodeURIComponent(fromFirebaseUid)}`,
+        deepLink: "matrimonyconnect://notifications",
         fromFirebaseUid,
       },
       "match_messages"
