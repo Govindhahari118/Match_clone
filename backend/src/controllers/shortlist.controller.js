@@ -50,10 +50,8 @@ exports.removeShortlist = async (req, res) => {
         const userId = req.user.sub;
         const { shortlistedUserId } = req.body;
 
-        await prisma.shortlist.delete({
-            where: {
-                userId_shortlistedUserId: { userId, shortlistedUserId }
-            }
+        await prisma.shortlist.deleteMany({
+            where: { userId, shortlistedUserId }
         });
 
         res.json({ message: "Removed from shortlist" });
