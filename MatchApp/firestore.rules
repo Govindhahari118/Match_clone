@@ -219,7 +219,16 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     match /notifications/{notifId} { allow read: if isSignedIn() && resource.data.userId == request.auth.uid; allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']); allow create, delete: if false; }
-    match /notificationPrefs/{uid} { allow read, write: if isOwner(uid); }
+    match /notificationPrefs/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) &&
+        request.resource.data.keys().hasOnly(['interests','matches','messages','system']) &&
+        (!('interests' in request.resource.data) || request.resource.data.interests is bool) &&
+        (!('matches' in request.resource.data) || request.resource.data.matches is bool) &&
+        (!('messages' in request.resource.data) || request.resource.data.messages is bool) &&
+        (!('system' in request.resource.data) || request.resource.data.system is bool);
+      allow delete: if isOwner(uid);
+    }
     match /profileViews/{viewId} { allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid); allow create, update, delete: if false; }
     match /sessions/{uid}/devices/{deviceId} { allow read: if isOwner(uid); allow write: if false; }
     match /sessions/{uid} { allow read: if isOwner(uid); }
