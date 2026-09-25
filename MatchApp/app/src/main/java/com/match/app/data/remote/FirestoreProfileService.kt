@@ -41,7 +41,7 @@ class FirestoreProfileService @Inject constructor(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
         )
         private val PRIVATE_FIELDS = setOf(
-            "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
+            "email", "phoneNumber", "dateOfBirth", "rasi", "nakshatra",
             "manglik", "birthTime", "birthPlace", "incomeBand"
         )
         private val LEGACY_PUBLIC_PRIVACY_FIELDS = setOf("isIncognito", "showLastActive")
@@ -197,36 +197,6 @@ class FirestoreProfileService @Inject constructor(
             if (!city.isNullOrBlank() && !entity.city.equals(city, ignoreCase = true)) return@mapNotNull null
             entity
         }
-    }
-
-    suspend fun saveFcmToken(firebaseUid: String, token: String) {
-        if (firebaseUid.isBlank() || token.isBlank()) return
-        require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's token" }
-        privateCol.document(firebaseUid).set(
-            mapOf("fcmToken" to token, "updatedAt" to System.currentTimeMillis()),
-            SetOptions.merge()
-        ).await()
-    }
-
-    suspend fun deleteFcmToken(firebaseUid: String) {
-        if (firebaseUid.isBlank()) return
-        require(auth.currentUser?.uid == firebaseUid) { "Cannot clear another user's token" }
-        val batch = db.batch()
-        batch.set(
-            privateCol.document(firebaseUid),
-            mapOf(
-                "fcmToken" to FieldValue.delete(),
-                "updatedAt" to System.currentTimeMillis()
-            ),
-            SetOptions.merge()
-        )
-        // Remove any pre-migration public token at the same time.
-        batch.set(
-            usersCol.document(firebaseUid),
-            mapOf("fcmToken" to FieldValue.delete()),
-            SetOptions.merge()
-        )
-        batch.commit().await()
     }
 
     suspend fun deleteProfile(firebaseUid: String) {
