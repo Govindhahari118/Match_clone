@@ -16,6 +16,7 @@ import com.match.app.R
 import com.match.app.data.local.dao.NotificationDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.NotificationEntity
+import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
 import dagger.hilt.android.AndroidEntryPoint
@@ -34,6 +35,7 @@ class MatchFcmService : FirebaseMessagingService() {
     @Inject lateinit var userDao: UserDao
     @Inject lateinit var session: SessionStore
     @Inject lateinit var profileService: FirestoreProfileService
+    @Inject lateinit var fcmDeviceRegistry: FcmDeviceRegistry
 
     companion object {
         const val CHANNEL_ID = "match_default_channel"
@@ -91,13 +93,13 @@ class MatchFcmService : FirebaseMessagingService() {
         getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
             .edit().putString("pending_fcm_token", token).apply()
         serviceScope.launch {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+            FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
             try {
-                profileService.saveFcmToken(uid, token)
+                fcmDeviceRegistry.register(token)
                 getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
                     .edit().remove("pending_fcm_token").apply()
             } catch (error: Exception) {
-                Log.w("MatchFcm", "FCM token sync failed; retained for retry", error)
+                Log.w("MatchFcm", "FCM device sync failed; retained for retry", error)
             }
         }
     }
