@@ -9,7 +9,7 @@ import com.match.app.data.local.entity.*
     entities = [UserEntity::class, QuestionnaireEntity::class, PhotoEntity::class, MessageEntity::class,
         LikeEntity::class, BlockEntity::class, ShortlistEntity::class, NotificationEntity::class,
         ProfileViewEntity::class, SavedSearchEntity::class, PendingMessageEntity::class, NoteEntity::class],
-    version = 22,
+    version = Migrations.CURRENT_VERSION,
     exportSchema = true
 )
 abstract class MatchDatabase : RoomDatabase() {
