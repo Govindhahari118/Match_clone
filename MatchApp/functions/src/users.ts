@@ -148,6 +148,27 @@ async function deleteCollection(path: string): Promise<number> {
   return deleteQuery(db.collection(path));
 }
 
+async function deleteFcmDevicesForUser(uid: string): Promise<void> {
+  const devices = db.collection("fcmTokens").doc(uid).collection("devices");
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await devices.limit(DELETE_BATCH_SIZE).get();
+    if (snapshot.empty) break;
+
+    const ownerRefs = snapshot.docs.map((doc) => db.collection("fcmDeviceOwners").doc(doc.id));
+    const ownerDocs = ownerRefs.length > 0 ? await db.getAll(...ownerRefs) : [];
+    const batch = db.batch();
+    snapshot.docs.forEach((doc, index) => {
+      batch.delete(doc.ref);
+      if (ownerDocs[index]?.data()?.uid === uid) {
+        batch.delete(ownerRefs[index]);
+      }
+    });
+    await batch.commit();
+    hasMore = snapshot.size === DELETE_BATCH_SIZE;
+  }
+}
+
 type DeletionPhase =
   | "RELATIONSHIPS"
   | "ACTIVITY_AND_SERVICES"
@@ -275,6 +296,7 @@ export const deleteUserAccount = functions
         await deleteCollection(`subscriptions/${uid}/usage`);
         await deleteCollection(`profileAnalytics/${uid}/weekly`);
         await deleteCollection(`sessions/${uid}/devices`);
+        await deleteFcmDevicesForUser(uid);
       });
 
       const bucket = admin.storage().bucket();
