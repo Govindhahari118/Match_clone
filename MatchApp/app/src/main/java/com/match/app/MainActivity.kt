@@ -128,9 +128,11 @@ class MainActivity : FragmentActivity() {
                 "interest_received" -> fromUserId?.let { "detail/$it" } ?: "interests"
                 "new_match", "mutual_match" -> fromUserId?.let { "detail/$it" } ?: "matches"
                 "profile_viewed" -> "who_viewed"
+                "profile_incomplete" -> "profile"
+                "inactivity_nudge" -> "matches"
                 "like" -> "interests"
                 "notification", "reward" -> "notifications"
-                "boost_expiring" -> "pricing"
+                "boost_expiring", "subscription_expiry" -> "pricing"
                 "verification", "verification_update" -> "verification"
                 else -> null
             }
