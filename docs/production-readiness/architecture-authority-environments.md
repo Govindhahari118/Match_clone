@@ -25,7 +25,7 @@
 | Private contact/birth fields | Owner-scoped private document + server privacy logic | Read/write only own allowed fields |
 | Religion confirmation/lock | Trusted server mutation | Request/confirm through supported flow; appearance cannot rewrite it |
 | Verification/KYC status | Trusted Functions/provider/admin | Submit protected evidence; display returned state |
-| Premium/subscription/Boost | Google Play + trusted verification Functions | Launch purchase/restore; never set entitlement/expiry |
+| Premium/subscription/Boost | Google Play + trusted verification Functions | Launch purchase/restore; never set entitlement/expiry; no Razorpay or reward side authority |
 | Interest/match authority | Trusted Functions/transactions | Request action; observe server result |
 | Block/report/risk/moderation | Trusted Functions/admin where applicable | Request action; cannot self-author server status |
 | Chat sender identity | Auth UID + Firestore Rules | Compose payload; Rules bind sender/participants |
@@ -52,6 +52,10 @@
 - `firebase.json` defines Rules/Indexes/Functions/Storage and emulator configuration, but the
   repository intentionally has no committed `.firebaserc` project alias. Production Firebase
   project selection/deployment proof is an external gate.
+- The placeholder Firebase client config is committed only under `app/src/debug/google-services.json`.
+  There is no committed release `google-services.json`; a real production file must be supplied by
+  the release environment. CI may temporarily copy the debug placeholder solely to exercise release
+  compilation/R8, then deletes the generated AAB and emits a non-production provenance marker.
 
 ## Remote Config kill switches
 
@@ -98,7 +102,7 @@ trusted server/provider timestamps or trusted server calculations.
 
 ## Still external / not certified by this document
 
-- actual dev/staging/prod Firebase project IDs and separation
+- actual dev/staging/prod Firebase project IDs and separation, including the real release `google-services.json`
 - production App Check enforcement switch and Play Integrity console proof
 - secret-manager/provider credentials and rotation evidence
 - deployed Remote Config values
