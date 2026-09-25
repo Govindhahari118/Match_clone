@@ -8,11 +8,15 @@ router.use(authMiddleware);
 // ── Interests CRUD ────────────────────────────────────────
 router.get('/interests', interactionController.getInterests);          // ?type=received|sent|mutual
 router.post('/like', interactionController.likeUser);
+router.post('/interests/:senderId/accept', interactionController.acceptInterest);
+router.post('/interests/:receiverId/withdraw', interactionController.withdrawInterest);
 router.post('/reject', interactionController.rejectUser);
 router.post('/decline', interactionController.declineInterest);        // receiver declines an incoming interest
 
 // ── Report / Safety ────────────────────────────────────────
 router.post('/report', interactionController.reportUser);
+router.post('/block', interactionController.blockUser);
+router.delete('/block/:userId', interactionController.unblockUser);
 
 // ── Profile Views ─────────────────────────────────────────
 // ── Profile Views ─────────────────────────────────────────
