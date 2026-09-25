@@ -56,6 +56,21 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
       - name: Release bundle / R8 validation
         run: ./gradlew --no-daemon bundleRelease
+      - name: Upload Android evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            MatchApp/app/build/test-results/testDebugUnitTest/**
+            MatchApp/app/build/reports/tests/testDebugUnitTest/**
+            MatchApp/app/build/reports/lint-results-debug.*
+            MatchApp/app/build/intermediates/lint_intermediate_text_report/debug/**
+            MatchApp/app/build/outputs/apk/debug/*.apk
+            MatchApp/app/build/outputs/bundle/release/*.aab
+            MatchApp/app/build/outputs/mapping/release/**
 
   functions:
     name: Firebase Functions lint, build and production dependency audit
@@ -75,7 +90,23 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=high --json > production-audit.json
+          status=$?
+          cat production-audit.json
+          exit "$status"
+      - name: Upload Functions evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functions-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            MatchApp/functions/lib/**
+            MatchApp/functions/production-audit.json
 
   firebase-rules:
     name: Firestore and Storage security rules
@@ -96,4 +127,15 @@ jobs:
       - name: Install pinned test dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Run Firebase emulator security tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee rules-test.log
+      - name: Upload rules evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rules-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: MatchApp/rules-tests/rules-test.log
