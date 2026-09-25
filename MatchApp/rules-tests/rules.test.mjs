@@ -346,3 +346,26 @@ test('notification preferences are owner-only and schema constrained', async () 
   await assertFails(updateDoc(prefs, { arbitraryField: true }));
   await assertFails(updateDoc(prefs, { interests: 'yes' }));
 });
+
+
+test('FCM device registry is server-only and legacy client token writes are rejected', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+
+  await assertFails(updateDoc(doc(aliceDb, 'userPrivate/alice'), {
+    fcmToken: 'client-must-not-write-a-token-value',
+  }));
+
+  const devicePath = 'fcmTokens/alice/devices/device_1234567890abcdef';
+  await assertFails(setDoc(doc(aliceDb, devicePath), {
+    uid: 'alice',
+    deviceId: 'device_1234567890abcdef',
+    token: 'forged-client-token-that-is-long-enough',
+  }));
+  await assertFails(getDoc(doc(aliceDb, devicePath)));
+  await assertFails(getDoc(doc(bobDb, devicePath)));
+
+  await assertFails(setDoc(doc(aliceDb, 'fcmDeviceOwners/device_1234567890abcdef'), {
+    uid: 'alice',
+  }));
+});
