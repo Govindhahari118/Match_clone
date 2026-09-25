@@ -32,7 +32,7 @@
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
 | Kundali | BETA | Available only where applicable; provider/production evidence required for any provider-backed interpretation. |
-| Membership / Pricing | PREMIUM | Google Play product/verification path; production Play Console evidence required. |
+| Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
 | Help | READY | Support/help navigation; support operations depend on backend records where shown. |
@@ -53,7 +53,9 @@ standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Storie
 `Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
 
 Their Kotlin files are not proof of product availability. They must not be re-added to production
-navigation merely because a screen renders.
+navigation merely because a screen renders. Provider-backed optional callables for the retired
+feature bundle/background-check prototype are also removed from the deployed Functions export
+surface; promotion requires a new audited backend/provider contract, not just re-enabling a route.
 
 ## Deep-link exposure
 
