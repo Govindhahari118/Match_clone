@@ -90,7 +90,7 @@ service cloud.firestore {
     }
     match /userPrivate/{userId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && request.resource.data.keys().hasOnly(['email','phoneNumber','fcmToken','dateOfBirth','rasi','nakshatra','manglik','birthTime','birthPlace','incomeBand','lastActiveAt','updatedAt']);
+      allow create, update: if isOwner(userId) && request.resource.data.keys().hasOnly(['email','phoneNumber','dateOfBirth','rasi','nakshatra','manglik','birthTime','birthPlace','incomeBand','lastActiveAt','updatedAt']);
       allow delete: if isOwner(userId);
     }
     match /usernames/{username} { allow read, write: if false; }
@@ -230,6 +230,9 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
     match /profileViews/{viewId} { allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid); allow create, update, delete: if false; }
+    match /fcmTokens/{uid}/devices/{deviceId} { allow read, write: if false; }
+    match /fcmTokens/{uid} { allow read, write: if false; }
+    match /fcmDeviceOwners/{deviceId} { allow read, write: if false; }
     match /sessions/{uid}/devices/{deviceId} { allow read: if isOwner(uid); allow write: if false; }
     match /sessions/{uid} { allow read: if isOwner(uid); }
     match /otpLog/{hash} { allow read, write: if false; }
