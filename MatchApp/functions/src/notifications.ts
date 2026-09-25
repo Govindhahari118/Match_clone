@@ -2,9 +2,8 @@ import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import {
   db,
-  NotificationPreferenceKey,
+  persistAndSendNotification,
   requireAppCheck,
-  sendDataToUserDevices,
 } from "./shared";
 
 type NotificationPayload = {
@@ -96,24 +95,7 @@ export const revokeFcmDevice = functions.https.onCall(async (data, context) => {
   return { revoked: true };
 });
 
-async function persistNotificationOnce(
-  notificationId: string,
-  payload: NotificationPayload
-): Promise<boolean> {
-  const ref = db.collection("notifications").doc(notificationId);
-  return db.runTransaction(async (tx) => {
-    const existing = await tx.get(ref);
-    if (existing.exists) return false;
-    tx.create(ref, {
-      ...payload,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      readAt: null,
-    });
-    return true;
-  });
-}
-
-function preferenceFor(type: string): NotificationPreferenceKey {
+function preferenceFor(type: string): "interests" | "matches" | "messages" | "system" {
   if (type === "INTEREST") return "interests";
   if (type === "MATCH") return "matches";
   if (type === "MESSAGE") return "messages";
@@ -123,34 +105,26 @@ function preferenceFor(type: string): NotificationPreferenceKey {
 async function deliverPersistedNotification(
   notificationId: string,
   payload: NotificationPayload,
-  channelId: string
+  _channelId: string
 ): Promise<void> {
-  const created = await persistNotificationOnce(notificationId, payload);
-  if (!created) return;
-
   const pushType = payload.type === "INTEREST" ? "interest_received" :
     payload.type === "MATCH" ? "mutual_match" :
       payload.type === "MESSAGE" ? "message" : payload.type.toLowerCase();
 
-  await sendDataToUserDevices(
-    payload.userId,
-    {
-      type: pushType,
-      title: payload.title,
-      body: payload.body,
-      recipient_uid: payload.userId,
-      notification_id: notificationId,
-      entity_type: payload.entityType,
-      entity_id: payload.entityId,
-      deep_link: payload.deepLink,
-      ...(payload.fromFirebaseUid ? {
-        user_id: payload.fromFirebaseUid,
-        peer_uid: payload.fromFirebaseUid,
-      } : {}),
-    },
-    { priority: "high", notification: { channelId } },
-    preferenceFor(payload.type)
-  );
+  await persistAndSendNotification({
+    notificationId,
+    userId: payload.userId,
+    type: payload.type,
+    title: payload.title,
+    body: payload.body,
+    entityType: payload.entityType,
+    entityId: payload.entityId,
+    deepLink: payload.deepLink,
+    pushType,
+    preferenceKey: preferenceFor(payload.type),
+    priority: "high",
+    fromFirebaseUid: payload.fromFirebaseUid,
+  });
 }
 
 export const onInterestCreated = functions.firestore
