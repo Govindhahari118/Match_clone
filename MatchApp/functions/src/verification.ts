@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
-import { db, getFcmToken, messaging, requireAppCheck } from "./shared";
+import { createHash } from "crypto";
+import { db, persistAndSendNotification, requireAppCheck } from "./shared";
 
 const VERIFICATION_TYPES = new Set(["Aadhaar", "Passport", "PAN Card", "Voter ID"]);
 const MAX_VERIFICATION_BYTES = 5 * 1024 * 1024;
@@ -169,25 +170,31 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   }
   await batch.commit();
 
-  const fcmToken = await getFcmToken(targetUid);
-  if (fcmToken) {
-    try {
-      await messaging.send({
-        token: fcmToken,
-        data: {
-          type: "verification_update",
-          title: approved ? "Verification Approved ✅" : "Verification Update",
-          body: approved ? "Your profile is now verified." : "Your verification needs attention. Open the app for details.",
-          recipient_uid: targetUid,
-        },
-        android: { priority: "high", notification: { channelId: "match_system" } },
-      });
-    } catch (err) {
-      functions.logger.warn("Verification notification delivery failed", {
-        targetUid,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  const requestKey = createHash("sha256")
+    .update(String(requestSnap.data()?.documentPath || targetUid))
+    .digest("hex")
+    .slice(0, 24);
+  try {
+    await persistAndSendNotification({
+      notificationId: `verification_${targetUid}_${requestKey}_${approved ? "approved" : "rejected"}`,
+      userId: targetUid,
+      type: "VERIFICATION",
+      title: approved ? "Verification approved" : "Verification update",
+      body: approved ?
+        "Your profile verification was approved." :
+        "Your verification needs attention. Open Matree for details.",
+      entityType: "verification",
+      entityId: targetUid,
+      deepLink: "matrimonyconnect://verification",
+      pushType: "verification_update",
+      preferenceKey: "system",
+      priority: "high",
+    });
+  } catch (err) {
+    functions.logger.warn("Verification notification delivery failed", {
+      targetUid,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
   return { success: true };
 });
