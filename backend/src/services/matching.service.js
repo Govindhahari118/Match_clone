@@ -164,7 +164,6 @@ function buildMatchReasons({ candidateUser, candidateProfile, filters, viewerPro
     const reasons = [];
 
     if (candidateUser.isVerified) reasons.push('Verified profile');
-    if (isPremium) reasons.push('Premium member');
 
     if (!isAny(filters.religion) && String(candidateProfile.religion || '').toLowerCase() === String(filters.religion).toLowerCase()) {
         reasons.push('Matches selected religion');
@@ -463,7 +462,7 @@ const matchingService = {
                 case 'newest':
                     return (b.rankSignal || 0) - (a.rankSignal || 0);
                 case 'activity':
-                    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
+                    return (b.rankSignal || 0) - (a.rankSignal || 0);
                 case 'compatibility':
                 case 'relevance':
                 default:
