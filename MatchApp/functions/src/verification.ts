@@ -1,20 +1,10 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { createHash } from "crypto";
-import { db, persistAndSendNotification, requireAppCheck } from "./shared";
+import { db, persistAndSendNotification, requireAppCheck, requireOpsRole } from "./shared";
 
 const VERIFICATION_TYPES = new Set(["Aadhaar", "Passport", "PAN Card", "Voter ID"]);
 const MAX_VERIFICATION_BYTES = 5 * 1024 * 1024;
-
-function requireAdmin(context: functions.https.CallableContext): string {
-  requireAppCheck(context);
-  const uid = context.auth?.uid;
-  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
-  if (context.auth?.token.admin !== true) {
-    throw new functions.https.HttpsError("permission-denied", "Admin access required");
-  }
-  return uid;
-}
 
 function requireDocumentPath(uid: string, value: unknown): string {
   const path = typeof value === "string" ? value.trim() : "";
@@ -135,7 +125,8 @@ export const onVerificationSubmitted = functions.firestore
   });
 
 export const approveVerification = functions.https.onCall(async (data, context) => {
-  const reviewerUid = requireAdmin(context);
+  const reviewer = requireOpsRole(context, ["kyc_reviewer", "ops_admin"]);
+  const reviewerUid = reviewer.uid;
   const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
   const approved = data?.approved === true;
   const rejectionReason = typeof data?.rejectionReason === "string" ? data.rejectionReason.trim().slice(0, 500) : "";
@@ -145,29 +136,59 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   if (approved && (!Number.isInteger(newLevel) || newLevel < 1 || newLevel > 5)) {
     throw new functions.https.HttpsError("invalid-argument", "newLevel must be an integer from 1 to 5 for approvals");
   }
+  if (!approved && rejectionReason.length < 3) {
+    throw new functions.https.HttpsError("invalid-argument", "A rejection reason is required");
+  }
 
   const requestRef = db.collection("verificationRequests").doc(targetUid);
-  const requestSnap = await requestRef.get();
+  const profileRef = db.collection("users").doc(targetUid);
+  const [requestSnap, profileSnap] = await Promise.all([requestRef.get(), profileRef.get()]);
   if (!requestSnap.exists) throw new functions.https.HttpsError("not-found", "Verification request not found");
+  if (!profileSnap.exists) throw new functions.https.HttpsError("not-found", "Target profile not found");
   if (String(requestSnap.data()?.status || "").toLowerCase() !== "pending") {
     throw new functions.https.HttpsError("failed-precondition", "Only pending verification requests can be reviewed");
   }
 
+  const previousLevel = Number(profileSnap.data()?.verificationLevel || 0);
+  const previousVerified = profileSnap.data()?.isVerified === true;
+  const nextStatus = approved ? "verified" : "rejected";
+  const nextLevel = approved ? newLevel : previousLevel;
+  const nextVerified = approved ? newLevel >= 2 : previousVerified;
+  const effectiveReason = approved ? "APPROVED" : rejectionReason;
+
   const batch = db.batch();
   batch.update(requestRef, {
-    status: approved ? "verified" : "rejected",
-    rejectionReason: approved ? "" : (rejectionReason || "Please re-submit"),
+    status: nextStatus,
+    rejectionReason: approved ? "" : rejectionReason,
     reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
     reviewedBy: reviewerUid,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   if (approved) {
-    batch.update(db.collection("users").doc(targetUid), {
+    batch.update(profileRef, {
       verificationLevel: newLevel,
       isVerified: newLevel >= 2,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   }
+  batch.set(db.collection("adminAudit").doc(), {
+    actorUid: reviewerUid,
+    actorRole: reviewer.role,
+    action: "verification.review",
+    targetUid,
+    before: {
+      requestStatus: "pending",
+      verificationLevel: previousLevel,
+      isVerified: previousVerified,
+    },
+    after: {
+      requestStatus: nextStatus,
+      verificationLevel: nextLevel,
+      isVerified: nextVerified,
+    },
+    reason: effectiveReason,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
   await batch.commit();
 
   const requestKey = createHash("sha256")
