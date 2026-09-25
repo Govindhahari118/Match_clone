@@ -1,72 +1,99 @@
-# Matree production readiness — current implementation branch
+# Matree production readiness — current completion branch
 
-> Branch: `gpt/matree-pin-to-pin-20260923`
+> Branch: `gpt/matree-pin-to-pin-completion-20260925`
 >
-> Baseline: `Gpt_matree`
+> Baseline: `gpt/matree-pin-to-pin-20260923` (itself based on canonical `Gpt_matree`)
 >
 > Status: **DRAFT / NOT PRODUCTION-READY**
 >
-> Rule: a green workflow certifies only the exact SHA it ran against. Any later code or configuration commit invalidates that release claim until mandatory gates rerun.
+> Rule: a green workflow certifies only the exact SHA it ran against. Any later code or
+> configuration commit invalidates that release claim until mandatory gates rerun.
 
 ## Requirements baseline
 
-Implementation is governed by the uploaded Matree production source plus the pin-to-pin implementation plan. Latest explicit canonical decisions win over earlier exploratory text; security/privacy invariants are never weakened for UI convenience.
+Implementation is governed by the uploaded `matree_all.txt` source and
+`MATREE_PRODUCTION_READY_PIN_TO_PIN_IMPLEMENTATION_PLAN.md`. Latest explicit canonical decisions
+win over earlier exploratory text; security/privacy invariants are never weakened for UI convenience.
 
-## Implemented hardening on this integration branch
+## Existing hardening inherited from the integration branch
 
+- Android Kotlin + Jetpack Compose + Firebase authority model retained
 - protected Firebase media resolution through authenticated object identity/current authorization
 - truthful video capture/upload/playback states; no local fallback as uploaded success
 - server/privacy-authoritative contact reveal and grant flow
 - collision-safe nationwide-neutral `MAT-` Matrimony ID reservation and deletion release
-- server-authoritative religion confirmation/lock
-- client denial for religion authority metadata
+- server-authoritative religion confirmation/lock and appearance separation
 - onboarding fabrication removal and supported-locale restriction
-- neutral pre-religion onboarding (no forced astrology)
-- release network policy without brittle Google/Firebase certificate pinning; emulator cleartext debug-only
+- neutral pre-religion onboarding
+- release network policy with emulator cleartext debug-only
 - server-authoritative Boost; legacy client/local Boost grant disabled
 - Biodata dead-action/fabricated-default cleanup
-- production Home callback surface reduced to actually rendered/audited routes
-- visible Matree branding alignment on primary app/sign-in shell
+- production Home callback surface reduced to rendered/audited routes
 - no fabricated local fallback for missing Matrimony ID
-- deletion requires recent authentication and immediately marks profile `DELETING`/hidden before deep cleanup
+- resumable account deletion with recent-auth requirement and immediate public suppression
+- pause/resume lifecycle callable and Settings UI
 - peer reads of deleting accounts denied by Firestore Rules
+- server-authoritative saved searches and private Nearby coordinates
+
+## Completion work added on this branch
+
+- persisted notification event ledger before FCM delivery
+- deterministic notification event IDs so retried triggers do not duplicate user-visible events
+- cross-device Firestore notification history and read-state synchronization
+- FCM-to-Room deduplication using the same persisted notification identity
+- authenticated actor hydration for notification navigation after reinstall/second-device use
+- Firestore Rules regression coverage for recipient-only notification reads and read-only client mutation
+- account logout/account-switch/deletion cache cleanup now includes protected profile media and chat media
+- Nearby sharing status is explicitly non-interactive instead of a dead callback
+- chat message tap now has a real message-action behavior instead of an empty callback
+- CI production-integrity scan added before Android tests for executable stubs and interactive empty callbacks
+- production route inventory added at `docs/production-readiness/route-inventory.md`, with unsupported/provider-dependent screens classified rather than implied READY
 
 ## Exact-head evidence
 
-Do not hard-code a green claim here unless the workflow completed for the exact branch HEAD. Consult the Production CI workflow run associated with the current commit.
+The completion branch remains Draft until the latest `Production CI` run succeeds for the exact
+HEAD after the final documentation/code commit.
 
 Mandatory CI jobs:
-1. Android unit tests, lint, debug build and release/R8 validation
-2. Firebase Functions lint, build/typecheck and production dependency audit
-3. Firestore + Storage emulator security rules tests
 
-## Known remaining code/repository work
+1. production-integrity source gate + Android unit tests + lint + debug build + release/R8 bundle
+2. Firebase Functions lint + build/typecheck + production dependency audit
+3. Firestore + Storage emulator security-rules tests
 
-- continue route-by-route/button-by-button truthfulness audit
-- finish pause vs permanent-delete lifecycle and deletion checkpoint/large-account verification
-- verify account-switch/cache/media clearing across every repository
-- verify remaining optional/provider-backed routes are READY/BETA/HIDDEN according to real backend state
-- verify Saved Search, Nearby, notifications/deep links, chat, interests and discovery against the full two-device/state matrices
-- complete source-wide mock/demo/fake/placeholder scan and classify every occurrence
-- verify Room migrations from every supported production DB version
-- add/finish App Links only after the real production domain + Digital Asset Links are available; never invent a domain
-- final exact-head release evidence after the last change
+## Remaining repository verification before release
 
-## External / operator gates (cannot be truthfully marked complete by repository code alone)
+These are evidence/verification tasks that cannot be honestly marked complete merely because the
+corresponding code path exists:
 
-- production Firebase projects/configuration/indexes/rules/functions deployment
-- App Check production enforcement and Play Integrity evidence
-- production KYC/provider credentials and provider error-path verification
-- real Google Play Console product configuration and licensed test purchases
-- Play App Signing/release signing/fingerprints
-- production FCM real-device delivery matrix
-- real domain + `.well-known/assetlinks.json` for verified HTTPS App Links
-- privacy policy/terms/data-safety/account-deletion/location/KYC/media store declarations
+- execute the full two-user/two-device matrix for interests, chat, notification/deep-link, block,
+  privacy-revocation, discovery, payment recovery and deletion
+- execute large-account deletion/retry verification with >500 related records and forced partial failure
+- prove Room upgrade migrations from every actually supported historical production DB version;
+  destructive migration remains debug-only
+- finish physical-device/process-death/network-chaos evidence for supported Android versions/OEMs
+- verify all BETA/provider-backed routes against production provider state before promotion
+- add verified HTTPS App Links only after the real production domain and Digital Asset Links file exist
+- repeat the exact-head production-integrity sweep after every subsequent production-source change
+
+## External / operator gates
+
+These cannot be truthfully completed by repository code alone:
+
+- production Firebase project/configuration/indexes/rules/Functions deployment evidence
+- App Check production enforcement + Play Integrity evidence
+- production KYC/provider credentials and real provider failure-path verification
+- real Google Play Console product configuration, licensed test purchases, restore/refund/expiry evidence
+- Play App Signing/release signing and production SHA fingerprints
+- production FCM delivery matrix on real devices
+- real production domain + `.well-known/assetlinks.json` for verified HTTPS App Links
+- final Privacy Policy, Terms, Data Safety, account-deletion, location, KYC and media store declarations
 - physical-device matrix (Pixel-equivalent, Samsung, low/mid-range; supported Android versions)
-- two-user/two-device production-like journey recording
-- branch protection/repository policy where hosting permissions permit
-- final signed AAB hash, staged rollout and monitored rollback criteria
+- production-like two-user/two-device journey recording
+- repository branch-protection/required-check policy where hosting permissions permit
+- final signed AAB hash, staged rollout, monitoring and rollback criteria
 
 ## Release statement
 
-This branch/PR must remain draft until all release-critical P0/P1 requirements and external gates have current evidence. Code volume, screenshots, historical green commits or UI presence are not completion evidence.
+This branch and PR #18 must remain Draft until release-critical code verification and all required
+external gates have current evidence. Code volume, screenshots, historical green commits or a
+rendering Compose screen are not completion evidence.
