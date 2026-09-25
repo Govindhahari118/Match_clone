@@ -369,3 +369,18 @@ test('FCM device registry is server-only and legacy client token writes are reje
     uid: 'alice',
   }));
 });
+
+
+test('operations audit log is never client readable or writable', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const audit = doc(aliceDb, 'adminAudit/fake-client-audit');
+
+  await assertFails(getDoc(audit));
+  await assertFails(setDoc(audit, {
+    actorUid: 'alice',
+    actorRole: 'ops_admin',
+    action: 'verification.review',
+    targetUid: 'bob',
+    createdAt: new Date(),
+  }));
+});
