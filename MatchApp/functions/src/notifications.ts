@@ -30,6 +30,19 @@ async function persistNotificationOnce(
   });
 }
 
+async function notificationChannelEnabled(
+  uid: string,
+  type: string
+): Promise<boolean> {
+  const prefs = await db.collection("notificationPrefs").doc(uid).get();
+  if (!prefs.exists) return true;
+  const data = prefs.data() ?? {};
+  const key = type === "INTEREST" ? "interests" :
+    type === "MATCH" ? "matches" :
+      type === "MESSAGE" ? "messages" : "system";
+  return data[key] !== false;
+}
+
 async function deliverPersistedNotification(
   notificationId: string,
   payload: NotificationPayload,
@@ -37,6 +50,8 @@ async function deliverPersistedNotification(
 ): Promise<void> {
   const created = await persistNotificationOnce(notificationId, payload);
   if (!created) return;
+
+  if (!(await notificationChannelEnabled(payload.userId, payload.type))) return;
 
   const fcmToken = await getFcmToken(payload.userId);
   if (!fcmToken) return;
