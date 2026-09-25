@@ -6,11 +6,6 @@
 export * from "./users";
 export * from "./religionProfile";
 export * from "./notifications";
-export {
-  createRazorpayOrder,
-  verifyRazorpayPayment,
-  razorpayWebhook,
-} from "./payments";
 export { consumeContactReveal } from "./privacy";
 export * from "./interests";
 export * from "./playBilling";
