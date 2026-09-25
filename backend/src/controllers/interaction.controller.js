@@ -19,6 +19,59 @@ const likeUser = async (req, res) => {
     }
 };
 
+const acceptInterest = async (req, res) => {
+    try {
+        const receiverId = req.user.sub;
+        const senderId = req.params.senderId || req.body.userId;
+        const result = await interactionService.acceptInterest(receiverId, senderId);
+        const io = req.app.get('io');
+        if (result.matchId) {
+            io.to(receiverId).emit('new_match', { matchId: result.matchId, userId: senderId });
+            io.to(senderId).emit('new_match', { matchId: result.matchId, userId: receiverId });
+        }
+        res.status(200).json(result);
+    } catch (error) {
+        const status = ['INTEREST_NOT_FOUND'].includes(error.code) ? 404 :
+            ['INVALID_INTEREST_STATE', 'BLOCKED', 'PROFILE_UNAVAILABLE', 'INVALID_TARGET'].includes(error.code) ? 409 : 500;
+        res.status(status).json({ error: error.message, code: error.code || 'INTERACTION_ERROR' });
+    }
+};
+
+const withdrawInterest = async (req, res) => {
+    try {
+        const senderId = req.user.sub;
+        const receiverId = req.params.receiverId || req.body.userId;
+        const result = await interactionService.withdrawInterest(senderId, receiverId);
+        res.status(200).json(result);
+    } catch (error) {
+        const status = error.code === 'INVALID_INTEREST_STATE' ? 409 : 500;
+        res.status(status).json({ error: error.message, code: error.code || 'INTERACTION_ERROR' });
+    }
+};
+
+const blockUser = async (req, res) => {
+    try {
+        const blockerId = req.user.sub;
+        const { userId } = req.body;
+        const result = await interactionService.blockUser(blockerId, userId);
+        res.status(200).json(result);
+    } catch (error) {
+        const status = ['INVALID_TARGET', 'PROFILE_UNAVAILABLE'].includes(error.code) ? 400 : 500;
+        res.status(status).json({ error: error.message, code: error.code || 'INTERACTION_ERROR' });
+    }
+};
+
+const unblockUser = async (req, res) => {
+    try {
+        const blockerId = req.user.sub;
+        const blockedId = req.params.userId;
+        const result = await interactionService.unblockUser(blockerId, blockedId);
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message, code: error.code || 'INTERACTION_ERROR' });
+    }
+};
+
 const rejectUser = async (req, res) => {
     try {
         const senderId = req.user.sub;
@@ -104,4 +157,16 @@ const getHoroscopeMatch = async (req, res) => {
     }
 };
 
-module.exports = { likeUser, rejectUser, declineInterest, getInterests, reportUser, getProfileViewers, getHoroscopeMatch };
+module.exports = {
+    likeUser,
+    acceptInterest,
+    withdrawInterest,
+    rejectUser,
+    declineInterest,
+    blockUser,
+    unblockUser,
+    getInterests,
+    reportUser,
+    getProfileViewers,
+    getHoroscopeMatch
+};
