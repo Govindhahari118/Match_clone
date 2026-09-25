@@ -298,3 +298,33 @@ test('verification documents cannot be read by another client', async () => {
   await assertSucceeds(uploadBytes(ref(aliceStorage, 'verifications/alice/id.jpg'), bytes, { contentType: 'image/jpeg' }));
   await assertFails(getBytes(ref(bobStorage, 'verifications/alice/id.jpg')));
 });
+
+
+test('notifications are server-created, recipient-only, and clients may only mark read', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'notifications/n1'), {
+      userId: 'alice',
+      type: 'INTEREST',
+      title: 'New interest',
+      body: 'Open the app to view it.',
+      entityType: 'profile',
+      entityId: 'bob',
+      deepLink: 'matrimonyconnect://match?uid=bob',
+      fromFirebaseUid: 'bob',
+      createdAt: new Date(),
+      readAt: null,
+    });
+  });
+
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const n = doc(aliceDb, 'notifications/n1');
+
+  await assertSucceeds(getDoc(n));
+  await assertFails(getDoc(doc(bobDb, 'notifications/n1')));
+  await assertFails(setDoc(doc(aliceDb, 'notifications/forged'), {
+    userId: 'alice', type: 'MATCH', title: 'Fake', body: 'Fake', createdAt: new Date(), readAt: null,
+  }));
+  await assertSucceeds(updateDoc(n, { readAt: new Date() }));
+  await assertFails(updateDoc(n, { title: 'Tampered' }));
+});
