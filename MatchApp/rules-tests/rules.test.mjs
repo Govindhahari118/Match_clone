@@ -328,3 +328,21 @@ test('notifications are server-created, recipient-only, and clients may only mar
   await assertSucceeds(updateDoc(n, { readAt: new Date() }));
   await assertFails(updateDoc(n, { title: 'Tampered' }));
 });
+
+
+test('notification preferences are owner-only and schema constrained', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const prefs = doc(aliceDb, 'notificationPrefs/alice');
+
+  await assertSucceeds(setDoc(prefs, {
+    interests: true,
+    matches: false,
+    messages: true,
+    system: true,
+  }));
+  await assertSucceeds(getDoc(prefs));
+  await assertFails(getDoc(doc(bobDb, 'notificationPrefs/alice')));
+  await assertFails(updateDoc(prefs, { arbitraryField: true }));
+  await assertFails(updateDoc(prefs, { interests: 'yes' }));
+});
