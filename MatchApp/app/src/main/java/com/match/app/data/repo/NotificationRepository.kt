@@ -7,6 +7,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.match.app.data.local.dao.NotificationDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.NotificationEntity
+import com.match.app.data.remote.FirestoreProfileService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -31,7 +32,8 @@ import javax.inject.Singleton
 @Singleton
 class NotificationRepository @Inject constructor(
     private val dao: NotificationDao,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val profileService: FirestoreProfileService
 ) {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -56,7 +58,7 @@ class NotificationRepository @Inject constructor(
                             remoteIds[localId] = doc.id
                             val actorFirebaseUid = doc.getString("fromFirebaseUid").orEmpty()
                             val fromUserId = actorFirebaseUid.takeIf { it.isNotBlank() }
-                                ?.let { userDao.findByFirebaseUid(it)?.id }
+                                ?.let { resolveLocalPeerId(it) }
                             NotificationEntity(
                                 id = localId,
                                 userId = localUid,
@@ -117,6 +119,20 @@ class NotificationRepository @Inject constructor(
 
     /** Debug/test-only local injection path. Production notification truth comes from Firestore. */
     suspend fun push(n: NotificationEntity) = withContext(Dispatchers.IO) { dao.insert(n) }
+
+    private suspend fun resolveLocalPeerId(firebaseUid: String): Long? {
+        userDao.findByFirebaseUid(firebaseUid)?.let { return it.id }
+        val remote = runCatching { profileService.fetchProfileFromServer(firebaseUid) }.getOrNull()
+            ?: return null
+        val cached = remote.copy(
+            email = "$firebaseUid@cache.invalid",
+            passwordHash = "",
+            isSeed = false
+        )
+        return runCatching { userDao.insert(cached) }
+            .recoverCatching { userDao.findByFirebaseUid(firebaseUid)?.id ?: throw it }
+            .getOrNull()
+    }
 
     private fun stableLocalId(remoteId: String): Long {
         val digest = MessageDigest.getInstance("SHA-256").digest(remoteId.toByteArray(Charsets.UTF_8))
