@@ -40,11 +40,23 @@ def main() -> int:
     findings: list[str] = []
     for path in iter_source_files():
         text = path.read_text(encoding="utf-8", errors="replace")
-        for line_no, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for line_no, line in enumerate(lines, start=1):
             for label, pattern in RULES:
                 if pattern.search(line):
                     rel = path.relative_to(ROOT)
                     findings.append(f"{rel}:{line_no}: {label}: {line.strip()}")
+
+            # An empty onClick is a defect only when the component is actually interactive.
+            # Material chips used purely as status/metadata are allowed when explicitly disabled.
+            if re.search(r"onClick\\s*=\\s*\\{\\s*\\}", line):
+                nearby = "\n".join(lines[line_no - 1:min(len(lines), line_no + 3)])
+                explicitly_disabled = re.search(r"enabled\\s*=\\s*false", nearby) is not None
+                if not explicitly_disabled:
+                    rel = path.relative_to(ROOT)
+                    findings.append(
+                        f"{rel}:{line_no}: interactive empty Compose onClick callback: {line.strip()}"
+                    )
 
     if findings:
         print("Production truthfulness scan FAILED")
