@@ -20,6 +20,35 @@ export function requireAppCheck(context: functions.https.CallableContext): void 
   }
 }
 
+export type OpsRole =
+  | "support"
+  | "moderator"
+  | "kyc_reviewer"
+  | "payment_ops"
+  | "ops_admin";
+
+export function requireOpsRole(
+  context: functions.https.CallableContext,
+  allowed: OpsRole[]
+): { uid: string; role: OpsRole } {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const raw = context.auth?.token?.roles;
+  const roles = Array.isArray(raw) ?
+    raw.filter((value): value is string => typeof value === "string") :
+    [];
+  const matched = allowed.find((role) => roles.includes(role));
+  if (!matched) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Your operations role does not permit this action"
+    );
+  }
+  return { uid, role: matched };
+}
+
 export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system";
 
 type FcmDeviceToken = {
