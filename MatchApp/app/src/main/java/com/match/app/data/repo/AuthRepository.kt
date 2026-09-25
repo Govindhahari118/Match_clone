@@ -1,5 +1,6 @@
 package com.match.app.data.repo
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -18,6 +19,7 @@ import com.match.app.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,7 +36,8 @@ class AuthRepository @Inject constructor(
     private val photoRepo: PhotoRepository,
     private val session: SessionStore,
     private val firestoreProfile: FirestoreProfileService,
-    private val localDb: MatchDatabase
+    private val localDb: MatchDatabase,
+    @ApplicationContext private val appContext: Context
 ) {
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -160,7 +163,21 @@ class AuthRepository @Inject constructor(
         } catch (ex: Exception) {
             Log.e("AuthRepository", "Unable to clear account-scoped Room cache", ex)
         }
+        clearPrivateMediaCaches()
         session.clear()
+    }
+
+    private fun clearPrivateMediaCaches() {
+        listOf(
+            java.io.File(appContext.cacheDir, "protected_media"),
+            java.io.File(appContext.filesDir, "chat_media")
+        ).forEach { dir ->
+            runCatching {
+                if (dir.exists()) dir.deleteRecursively()
+            }.onFailure { error ->
+                Log.w("AuthRepository", "Unable to clear private media cache at ${dir.name}", error)
+            }
+        }
     }
 
     suspend fun sendPasswordReset(email: String): String? {
