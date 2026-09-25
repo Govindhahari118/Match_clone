@@ -3,8 +3,7 @@ import * as admin from "firebase-admin";
 import { createHash } from "crypto";
 import {
   db,
-  getFcmToken,
-  messaging,
+  persistAndSendNotification,
   releaseMatrimonyId,
   requireAppCheck,
   reserveMatrimonyId,
@@ -34,7 +33,7 @@ export const onUserCreate = functions.firestore
 export const sendInactivityNudge = functions.pubsub
   .schedule("0 5 * * *")
   .timeZone("Asia/Kolkata")
-  .onRun(async () => {
+  .onRun(async (context) => {
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const fourteenDaysAgo = now - 14 * 24 * 60 * 60 * 1000;
@@ -47,20 +46,19 @@ export const sendInactivityNudge = functions.pubsub
 
     const sends: Promise<unknown>[] = [];
     for (const doc of nudge7.docs) {
-      sends.push((async () => {
-        const token = await getFcmToken(doc.id);
-        if (!token) return;
-        await messaging.send({
-          token,
-          data: {
-            type: "inactivity_nudge",
-            title: "We miss you! 💝",
-            body: "New profiles matching your preferences are waiting. Come back and explore!",
-            recipient_uid: doc.id,
-          },
-          android: { priority: "normal", notification: { channelId: "match_system" } },
-        });
-      })());
+      sends.push(persistAndSendNotification({
+        notificationId: `inactivity_${context.eventId}_${doc.id}`,
+        userId: doc.id,
+        type: "SYSTEM",
+        title: "Your Matree profile is still here",
+        body: "Open Matree when you're ready to review your current matches and account activity.",
+        entityType: "account",
+        entityId: doc.id,
+        deepLink: "matrimonyconnect://notifications",
+        pushType: "inactivity_nudge",
+        preferenceKey: "system",
+        priority: "normal",
+      }));
     }
     await Promise.allSettled(sends);
     functions.logger.info(`Inactivity nudges processed: ${sends.length}`);
@@ -69,7 +67,7 @@ export const sendInactivityNudge = functions.pubsub
 export const sendProfileIncompleteD2 = functions.pubsub
   .schedule("0 4 * * *")
   .timeZone("Asia/Kolkata")
-  .onRun(async () => {
+  .onRun(async (context) => {
     const now = Date.now();
     const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000;
     const threeDaysAgo = now - 3 * 24 * 60 * 60 * 1000;
@@ -79,27 +77,26 @@ export const sendProfileIncompleteD2 = functions.pubsub
       .where("createdAt", ">", threeDaysAgo)
       .limit(200).get();
 
-    const sends = incomplete.docs.map(async (doc) => {
-      const token = await getFcmToken(doc.id);
-      if (!token) return;
-      await messaging.send({
-        token,
-        data: {
-          type: "profile_incomplete",
-          title: "Complete your profile 📝",
-          body: "Complete your profile to improve match quality and visibility.",
-          recipient_uid: doc.id,
-        },
-        android: { priority: "normal", notification: { channelId: "match_system" } },
-      });
-    });
+    const sends = incomplete.docs.map((doc) => persistAndSendNotification({
+      notificationId: `profile_incomplete_d2_${context.eventId}_${doc.id}`,
+      userId: doc.id,
+      type: "SYSTEM",
+      title: "Complete your profile",
+      body: "Complete your profile to improve match quality and visibility.",
+      entityType: "profile",
+      entityId: doc.id,
+      deepLink: "matrimonyconnect://notifications",
+      pushType: "profile_incomplete",
+      preferenceKey: "system",
+      priority: "normal",
+    }));
     await Promise.allSettled(sends);
   });
 
 export const sendProfileIncompleteD7 = functions.pubsub
   .schedule("0 4 * * *")
   .timeZone("Asia/Kolkata")
-  .onRun(async () => {
+  .onRun(async (context) => {
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const eightDaysAgo = now - 8 * 24 * 60 * 60 * 1000;
@@ -109,20 +106,19 @@ export const sendProfileIncompleteD7 = functions.pubsub
       .where("createdAt", ">", eightDaysAgo)
       .limit(200).get();
 
-    const sends = incomplete.docs.map(async (doc) => {
-      const token = await getFcmToken(doc.id);
-      if (!token) return;
-      await messaging.send({
-        token,
-        data: {
-          type: "profile_incomplete",
-          title: "Finish your profile 💡",
-          body: "Add your remaining details and photo to improve match quality.",
-          recipient_uid: doc.id,
-        },
-        android: { priority: "normal", notification: { channelId: "match_system" } },
-      });
-    });
+    const sends = incomplete.docs.map((doc) => persistAndSendNotification({
+      notificationId: `profile_incomplete_d7_${context.eventId}_${doc.id}`,
+      userId: doc.id,
+      type: "SYSTEM",
+      title: "Finish your profile",
+      body: "Add your remaining details and photo to improve match quality.",
+      entityType: "profile",
+      entityId: doc.id,
+      deepLink: "matrimonyconnect://notifications",
+      pushType: "profile_incomplete",
+      preferenceKey: "system",
+      priority: "normal",
+    }));
     await Promise.allSettled(sends);
   });
 
@@ -480,20 +476,18 @@ export const onProfileViewed = functions.firestore
       profileViewCount: admin.firestore.FieldValue.increment(1),
     });
 
-    const token = await getFcmToken(viewedUid);
-    if (!token) return;
-    const viewerDoc = await db.collection("users").doc(viewerUid).get();
-    const viewerName = viewerDoc.data()?.displayName || "Someone";
-
-    await messaging.send({
-      token,
-      data: {
-        type: "profile_viewed",
-        title: "Profile Viewed 👀",
-        body: `${viewerName} viewed your profile`,
-        user_id: viewerUid,
-        recipient_uid: viewedUid,
-      },
-      android: { priority: "normal", notification: { channelId: "match_system" } },
+    await persistAndSendNotification({
+      notificationId: `profile_view_${context.params.viewId}_${viewedUid}`,
+      userId: viewedUid,
+      type: "VIEW",
+      title: "Profile viewed",
+      body: "Someone viewed your profile. Open Matree to see your activity.",
+      entityType: "profile",
+      entityId: viewerUid,
+      deepLink: "matrimonyconnect://who_viewed",
+      pushType: "profile_viewed",
+      preferenceKey: "system",
+      priority: "normal",
+      fromFirebaseUid: viewerUid,
     });
   });
