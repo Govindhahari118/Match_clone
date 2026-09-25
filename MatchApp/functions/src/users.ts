@@ -479,7 +479,7 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
 
 export const onProfileViewed = functions.firestore
   .document("profileViews/{viewId}")
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
     const data = snap.data();
     const viewedUid = data.viewedUid as string;
     const viewerUid = data.viewerUid as string;
