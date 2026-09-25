@@ -4,6 +4,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object Migrations {
+    const val OLDEST_SUPPORTED_VERSION = 13
+    const val CURRENT_VERSION = 22
     val MIGRATION_13_14 = object : Migration(13, 14) { override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE users ADD COLUMN lastActiveAt INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE users ADD COLUMN isIncognito INTEGER NOT NULL DEFAULT 0")
@@ -102,4 +104,16 @@ object Migrations {
         db.execSQL("ALTER TABLE messages ADD COLUMN clientMessageId TEXT NOT NULL DEFAULT ''")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_messages_clientMessageId ON messages(clientMessageId)")
     }}
+    val ALL: List<Migration> = listOf(
+        MIGRATION_13_14,
+        MIGRATION_14_15,
+        MIGRATION_15_16,
+        MIGRATION_16_17,
+        MIGRATION_17_18,
+        MIGRATION_18_19,
+        MIGRATION_19_20,
+        MIGRATION_20_21,
+        MIGRATION_21_22
+    )
+
 }
