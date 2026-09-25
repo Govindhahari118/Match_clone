@@ -213,35 +213,18 @@ const authService = {
             });
 
             if (!user) {
-                // 3. Create New User
-                const newUser = await prisma.user.create({
+                // Create only the authenticated account. A matrimony profile must be
+                // completed through onboarding; never fabricate required profile fields.
+                user = await prisma.user.create({
                     data: {
                         socialId: uid,
                         email: email || null,
                         phone: phone_number || null,
-                        isVerified: !!email, // Email verified by Google usually
+                        isVerified: Boolean(decodedToken.email_verified || phone_number),
                         isActive: true,
-                        role: 'user',
-                        profile: {
-                            create: {
-                                firstName: name ? name.split(' ')[0] : 'User',
-                                lastName: name ? name.split(' ').slice(1).join(' ') : '',
-                            }
-                        }
+                        role: 'user'
                     }
                 });
-
-                // Add photo if provided
-                if (picture) {
-                    await prisma.photo.create({
-                        data: {
-                            userId: newUser.id,
-                            photoUrl: picture,
-                            isPrimary: true
-                        }
-                    });
-                }
-                user = newUser;
             } else {
                 // 4. Link Social ID if missing
                 if (!user.socialId) {
