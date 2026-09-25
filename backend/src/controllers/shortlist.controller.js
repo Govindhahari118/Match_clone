@@ -92,7 +92,8 @@ exports.getShortlistedProfiles = async (req, res) => {
             .map(s => ({
                 ...s.shortlistedUser.profile,
                 userId: s.shortlistedUser.id,
-                shortlistId: s.id
+                shortlistId: s.id,
+                shortlistedAt: s.createdAt
             }));
 
         res.json(profiles);
