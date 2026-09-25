@@ -436,7 +436,7 @@ private fun MessageBubble(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(
             Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(16.dp)).background(background)
-                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .combinedClickable(onClick = onLongPress, onLongClick = onLongPress)
                 .padding(10.dp)
         ) {
             repliedMessage?.let {
