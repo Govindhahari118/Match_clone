@@ -20,26 +20,133 @@ export function requireAppCheck(context: functions.https.CallableContext): void 
   }
 }
 
-/** Read an FCM token from the private document and migrate any legacy public token. */
-export async function getFcmToken(uid: string): Promise<string | undefined> {
+export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system";
+
+type FcmDeviceToken = {
+  deviceId: string;
+  token: string;
+  ref: admin.firestore.DocumentReference;
+};
+
+function validFcmToken(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length >= 20 && value.trim().length <= 4096;
+}
+
+async function migrateLegacyFcmToken(uid: string): Promise<FcmDeviceToken | undefined> {
   const privateRef = db.collection("userPrivate").doc(uid);
-  const privateDoc = await privateRef.get();
-  const token = privateDoc.data()?.fcmToken as string | undefined;
-  if (token) return token;
-
   const publicRef = db.collection("users").doc(uid);
-  const publicDoc = await publicRef.get();
-  const legacy = publicDoc.data()?.fcmToken as string | undefined;
-  if (!legacy) return undefined;
+  const [privateDoc, publicDoc] = await Promise.all([privateRef.get(), publicRef.get()]);
+  const privateToken = privateDoc.data()?.fcmToken;
+  const publicToken = publicDoc.data()?.fcmToken;
+  const token = validFcmToken(privateToken) ? privateToken.trim() :
+    validFcmToken(publicToken) ? publicToken.trim() : undefined;
+  if (!token) return undefined;
 
-  const batch = db.batch();
-  batch.set(privateRef, {
-    fcmToken: legacy,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-  batch.update(publicRef, { fcmToken: admin.firestore.FieldValue.delete() });
-  await batch.commit();
-  return legacy;
+  const deviceId = "legacy_" + crypto.createHash("sha256").update(token).digest("hex").slice(0, 32);
+  const tokenRef = db.collection("fcmTokens").doc(uid).collection("devices").doc(deviceId);
+  const ownerRef = db.collection("fcmDeviceOwners").doc(deviceId);
+
+  await db.runTransaction(async (tx) => {
+    const owner = await tx.get(ownerRef);
+    const priorUid = owner.data()?.uid;
+    if (typeof priorUid === "string" && priorUid && priorUid !== uid) {
+      tx.delete(db.collection("fcmTokens").doc(priorUid).collection("devices").doc(deviceId));
+    }
+    tx.set(tokenRef, {
+      uid,
+      deviceId,
+      token,
+      platform: "android",
+      migratedLegacy: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.set(ownerRef, {
+      uid,
+      deviceId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  const cleanup = db.batch();
+  if (privateDoc.exists && privateDoc.data()?.fcmToken !== undefined) {
+    cleanup.update(privateRef, {
+      fcmToken: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  if (publicDoc.exists && publicDoc.data()?.fcmToken !== undefined) {
+    cleanup.update(publicRef, { fcmToken: admin.firestore.FieldValue.delete() });
+  }
+  await cleanup.commit();
+
+  return { deviceId, token, ref: tokenRef };
+}
+
+/**
+ * Private per-installation FCM registry. Existing single-token accounts are migrated lazily on the
+ * first send, while every current Android install registers through the authenticated callable.
+ */
+export async function getFcmDeviceTokens(uid: string): Promise<FcmDeviceToken[]> {
+  const devices = db.collection("fcmTokens").doc(uid).collection("devices");
+  const snapshot = await devices.limit(500).get();
+  const records = snapshot.docs.flatMap((doc) => {
+    const token = doc.data()?.token;
+    return validFcmToken(token) ? [{
+      deviceId: doc.id,
+      token: token.trim(),
+      ref: doc.ref,
+    }] : [];
+  });
+  if (records.length > 0) return records;
+
+  const migrated = await migrateLegacyFcmToken(uid);
+  return migrated ? [migrated] : [];
+}
+
+export async function notificationPreferenceEnabled(
+  uid: string,
+  key: NotificationPreferenceKey
+): Promise<boolean> {
+  const prefs = await db.collection("notificationPrefs").doc(uid).get();
+  return prefs.data()?.[key] !== false;
+}
+
+/**
+ * Deliver one minimal data notification to all currently registered installations for the account.
+ * Invalid/expired tokens are pruned from the private registry without exposing tokens to clients.
+ */
+export async function sendDataToUserDevices(
+  uid: string,
+  data: Record<string, string>,
+  android: admin.messaging.AndroidConfig,
+  preferenceKey: NotificationPreferenceKey
+): Promise<void> {
+  if (!(await notificationPreferenceEnabled(uid, preferenceKey))) return;
+
+  const records = await getFcmDeviceTokens(uid);
+  if (records.length === 0) return;
+
+  const unique = Array.from(new Map(records.map((record) => [record.token, record])).values());
+  for (let offset = 0; offset < unique.length; offset += 500) {
+    const chunk = unique.slice(offset, offset + 500);
+    const response = await messaging.sendEachForMulticast({
+      tokens: chunk.map((record) => record.token),
+      data,
+      android,
+    });
+
+    const cleanup = db.batch();
+    let cleanupCount = 0;
+    response.responses.forEach((result, index) => {
+      const code = result.error?.code;
+      if (code === "messaging/registration-token-not-registered" ||
+          code === "messaging/invalid-registration-token") {
+        cleanup.delete(chunk[index].ref);
+        cleanupCount += 1;
+      }
+    });
+    if (cleanupCount > 0) await cleanup.commit();
+  }
 }
 
 const MATRIMONY_ID_ATTEMPTS = 12;
