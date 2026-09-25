@@ -9,10 +9,11 @@ SCAN_ROOTS = [ROOT / "app" / "src" / "main", ROOT / "functions" / "src"]
 EXTENSIONS = {".kt", ".kts", ".java", ".ts", ".js", ".xml"}
 
 STUB_RULES = [
-    ("Kotlin TODO executable stub", re.compile(r"\\bTODO\\s*\\(")),
-    ("NotImplementedError executable stub", re.compile(r"\\bNotImplementedError\\b")),
-    ("UnsupportedOperationException executable stub", re.compile(r"\\bUnsupportedOperationException\\b")),
+    ("Kotlin TODO executable stub", re.compile(r"\bTODO\s*\(")),
+    ("NotImplementedError executable stub", re.compile(r"\bNotImplementedError\b")),
+    ("UnsupportedOperationException executable stub", re.compile(r"\bUnsupportedOperationException\b")),
 ]
+
 
 def source_files():
     for root in SCAN_ROOTS:
@@ -20,6 +21,7 @@ def source_files():
             for path in root.rglob("*"):
                 if path.is_file() and path.suffix.lower() in EXTENSIONS:
                     yield path
+
 
 def main() -> int:
     findings = []
@@ -30,9 +32,9 @@ def main() -> int:
                 if pattern.search(line):
                     findings.append(f"{path.relative_to(ROOT)}:{line_no}: {label}: {line.strip()}")
 
-            if re.search(r"onClick\\s*=\\s*\\{\\s*\\}", line):
-                nearby = "\\n".join(lines[line_no - 1:min(len(lines), line_no + 3)])
-                disabled = re.search(r"enabled\\s*=\\s*false", nearby) is not None
+            if re.search(r"onClick\s*=\s*\{\s*\}", line):
+                nearby = "\n".join(lines[line_no - 1:min(len(lines), line_no + 3)])
+                disabled = re.search(r"enabled\s*=\s*false", nearby) is not None
                 if not disabled:
                     findings.append(
                         f"{path.relative_to(ROOT)}:{line_no}: interactive empty onClick: {line.strip()}"
@@ -43,8 +45,10 @@ def main() -> int:
         for finding in findings:
             print(finding)
         return 1
+
     print("Production integrity scan passed.")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
