@@ -1,65 +1,146 @@
+const crypto = require('crypto');
 const prisma = require('../config/prisma'); // Import singleton
 const { generateTokens } = require('../utils/jwt');
 const { hashPassword, comparePassword } = require('../utils/password');
 const admin = require('../config/firebase');
 
 const authService = {
-    // Request OTP for phone (signup/login)
+    // Request OTP for phone. Signup and login remain separate operations.
     async requestOtp(phone, type = 'signup') {
-        // Check if user exists or create placeholder
-        let user = await prisma.user.findUnique({ where: { phone } });
+        const normalizedType = String(type || 'signup').toLowerCase();
+        if (!['signup', 'login'].includes(normalizedType)) {
+            throw new Error('Invalid OTP purpose');
+        }
 
-        // For MVP/Dev, we use a fixed OTP '123456' or generate random
-        const otp = '123456';
-        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+        let user = await prisma.user.findUnique({ where: { phone } });
+        if (!user && normalizedType === 'login') {
+            throw new Error('User not found. Please sign up.');
+        }
+        if (user && normalizedType === 'signup' && user.isVerified) {
+            throw new Error('Account already exists. Please log in.');
+        }
+
+        const now = new Date();
+        const resendCooldownMs = Number(process.env.OTP_RESEND_COOLDOWN_SECONDS || 60) * 1000;
+        if (user?.otpLastSentAt && now.getTime() - new Date(user.otpLastSentAt).getTime() < resendCooldownMs) {
+            const retryAfter = Math.ceil((resendCooldownMs - (now.getTime() - new Date(user.otpLastSentAt).getTime())) / 1000);
+            const error = new Error('OTP recently sent. Please wait before retrying.');
+            error.code = 'OTP_RESEND_COOLDOWN';
+            error.retryAfter = retryAfter;
+            throw error;
+        }
+
+        const otp = String(crypto.randomInt(100000, 1000000));
+        const otpSecret = process.env.OTP_HASH_SECRET || process.env.JWT_SECRET;
+        if (!otpSecret) throw new Error('OTP security secret is not configured');
+        const otpCodeHash = crypto.createHmac('sha256', otpSecret).update(`${phone}:${normalizedType}:${otp}`).digest('hex');
+        const ttlSeconds = Number(process.env.OTP_TTL_SECONDS || 600);
+        const otpExpiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
         if (!user) {
-            if (type === 'login') {
-                throw new Error('User not found. Please sign up.');
-            }
-            // Create temporary user record
             user = await prisma.user.create({
                 data: {
                     phone,
                     isVerified: false,
-                    verificationCode: otp,
-                    // We can store expiry if we add a field, or rely on created_at logic
+                    otpCodeHash,
+                    otpExpiresAt,
+                    otpAttempts: 0,
+                    otpLastSentAt: now,
+                    otpPurpose: normalizedType,
+                    verificationCode: null
                 }
             });
         } else {
-            // Update existing user
-            await prisma.user.update({
+            user = await prisma.user.update({
                 where: { id: user.id },
-                data: { verificationCode: otp }
+                data: {
+                    otpCodeHash,
+                    otpExpiresAt,
+                    otpAttempts: 0,
+                    otpLastSentAt: now,
+                    otpPurpose: normalizedType,
+                    verificationCode: null
+                }
             });
         }
 
+        // Production must have a real delivery provider; never pretend an OTP was sent.
+        const providerUrl = process.env.OTP_PROVIDER_URL;
+        const providerKey = process.env.OTP_PROVIDER_API_KEY;
+        if (process.env.NODE_ENV === 'production' && (!providerUrl || !providerKey)) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { otpCodeHash: null, otpExpiresAt: null, otpPurpose: null }
+            });
+            throw new Error('OTP provider is not configured');
+        }
+
+        if (providerUrl && providerKey) {
+            const response = await fetch(providerUrl, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    authorization: `Bearer ${providerKey}`
+                },
+                body: JSON.stringify({ phone, otp, purpose: normalizedType, expiresIn: ttlSeconds })
+            });
+            if (!response.ok) {
+                await prisma.user.update({
+                    where: { id: user.id },
+                    data: { otpCodeHash: null, otpExpiresAt: null, otpPurpose: null }
+                });
+                throw new Error('OTP delivery failed');
+            }
+        }
+
         return {
-            otpId: user.id, // Using user ID as reference for simplicity
-            message: `OTP sent to ${phone}`,
-            expiresIn: 600
+            otpId: user.id,
+            message: providerUrl ? `OTP sent to ${phone}` : 'Development OTP generated',
+            expiresIn: ttlSeconds,
+            ...(process.env.NODE_ENV !== 'production' && !providerUrl ? { debugOtp: otp } : {})
         };
     },
 
-    // Verify OTP
+    // Verify OTP with expiry and attempt controls.
     async verifyOtp(phone, otp) {
         const user = await prisma.user.findUnique({ where: { phone } });
 
         if (!user) {
             throw new Error('User not found');
         }
+        if (!user.otpCodeHash || !user.otpExpiresAt || !user.otpPurpose) {
+            throw new Error('OTP not requested or already used');
+        }
+        if (new Date(user.otpExpiresAt).getTime() < Date.now()) {
+            throw new Error('OTP expired');
+        }
 
-        // In production, check expiry
-        if (user.verificationCode !== otp) {
+        const maxAttempts = Number(process.env.OTP_MAX_ATTEMPTS || 5);
+        if (user.otpAttempts >= maxAttempts) {
+            throw new Error('OTP attempt limit exceeded');
+        }
+
+        const otpSecret = process.env.OTP_HASH_SECRET || process.env.JWT_SECRET;
+        const suppliedHash = crypto.createHmac('sha256', otpSecret).update(`${phone}:${user.otpPurpose}:${otp}`).digest('hex');
+        const valid = crypto.timingSafeEqual(Buffer.from(user.otpCodeHash, 'hex'), Buffer.from(suppliedHash, 'hex'));
+        if (!valid) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { otpAttempts: { increment: 1 } }
+            });
             throw new Error('Invalid OTP');
         }
 
-        // Mark verified
+        // Mark verified and clear single-use OTP state.
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 isVerified: true,
-                verificationCode: null, // Clear OTP
+                verificationCode: null,
+                otpCodeHash: null,
+                otpExpiresAt: null,
+                otpAttempts: 0,
+                otpPurpose: null,
                 lastLogin: new Date()
             }
         });
@@ -132,35 +213,18 @@ const authService = {
             });
 
             if (!user) {
-                // 3. Create New User
-                const newUser = await prisma.user.create({
+                // Create only the authenticated account. A matrimony profile must be
+                // completed through onboarding; never fabricate required profile fields.
+                user = await prisma.user.create({
                     data: {
                         socialId: uid,
                         email: email || null,
                         phone: phone_number || null,
-                        isVerified: !!email, // Email verified by Google usually
+                        isVerified: Boolean(decodedToken.email_verified || phone_number),
                         isActive: true,
-                        role: 'user',
-                        profile: {
-                            create: {
-                                firstName: name ? name.split(' ')[0] : 'User',
-                                lastName: name ? name.split(' ').slice(1).join(' ') : '',
-                            }
-                        }
+                        role: 'user'
                     }
                 });
-
-                // Add photo if provided
-                if (picture) {
-                    await prisma.photo.create({
-                        data: {
-                            userId: newUser.id,
-                            photoUrl: picture,
-                            isPrimary: true
-                        }
-                    });
-                }
-                user = newUser;
             } else {
                 // 4. Link Social ID if missing
                 if (!user.socialId) {

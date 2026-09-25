@@ -16,7 +16,12 @@ const requestOtp = async (req, res) => {
         });
     } catch (error) {
         console.error('Request OTP error:', error);
-        res.status(500).json({ error: error.message });
+        const status = error.code === 'OTP_RESEND_COOLDOWN' ? 429 :
+            /already exists|not found|Invalid OTP purpose/i.test(error.message) ? 400 : 500;
+        res.status(status).json({
+            error: error.message,
+            ...(error.retryAfter ? { retry_after: error.retryAfter } : {})
+        });
     }
 };
 
@@ -40,7 +45,7 @@ const verifyOtp = async (req, res) => {
         });
     } catch (error) {
         console.error('Verify OTP error:', error);
-        if (error.message === 'User not found' || error.message === 'Invalid OTP') {
+        if (['User not found', 'Invalid OTP', 'OTP expired', 'OTP not requested or already used', 'OTP attempt limit exceeded'].includes(error.message)) {
             return res.status(400).json({ error: error.message });
         }
         res.status(500).json({ error: 'Internal server error' });

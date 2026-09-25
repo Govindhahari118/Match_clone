@@ -3,6 +3,7 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
+const jwt = require('jsonwebtoken');
 require('dotenv').config({ quiet: true });
 
 const authRoutes = require('./routes/auth.routes');
@@ -71,38 +72,83 @@ app.use('/api/reviews', reviewRoutes);
 const verificationRoutes = require('./routes/verification.routes');
 app.use('/api/verification', verificationRoutes);
 
-// Socket.io for Real-time
-// We need to import message service to save messages
+// Socket.io for real-time chat. The authenticated token is the only sender identity.
 const messageService = require('./services/message.service');
 
-io.on('connection', (socket) => {
-  console.log('User connected', socket.id);
+io.use((socket, next) => {
+  try {
+    const bearer = socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+    const token = String(bearer || '').replace(/^Bearer\s+/i, '');
+    if (!token) return next(new Error('AUTH_REQUIRED'));
+    const claims = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = claims;
+    return next();
+  } catch (error) {
+    return next(new Error('AUTH_INVALID'));
+  }
+});
 
-  socket.on('join_room', (userId) => {
-    // Joining a room based on USER ID is simplest for "dm" style
-    // Or we join a room based on matchId
-    socket.join(userId); // Join my own room to receive messages
-    console.log(`User ${socket.id} joined room ${userId}`);
+io.on('connection', (socket) => {
+  const authenticatedUserId = socket.user.sub;
+  socket.join(authenticatedUserId);
+  console.log('Authenticated user connected', authenticatedUserId, socket.id);
+
+  // Legacy clients may still emit join_room; they can only join their own authenticated room.
+  socket.on('join_room', () => {
+    socket.join(authenticatedUserId);
   });
 
-  socket.on('send_message', async (data) => {
-    // data: { senderId, receiverId, content }
-    console.log('Message received:', data);
-
-    // Save to DB
+  socket.on('send_message', async (data = {}, ack = () => {}) => {
     try {
-      await messageService.saveMessage(data.senderId, data.receiverId, data.content);
+      const receiverId = data.receiverId;
+      const content = data.content;
+      const clientMessageId = data.clientMessageId || null;
+      if (!receiverId || !content) {
+        return ack({ ok: false, code: 'INVALID_MESSAGE', error: 'receiverId and content are required' });
+      }
 
-      // Emit to receiver's room
-      io.to(data.receiverId).emit('receive_message', data);
-      // Also emit back to sender? Or let frontend handle optimist UI
+      const message = await messageService.saveMessage(authenticatedUserId, receiverId, content, { clientMessageId });
+      const event = {
+        id: message.id,
+        matchId: message.matchId,
+        senderId: authenticatedUserId,
+        receiverId,
+        content: message.content,
+        status: message.status,
+        createdAt: message.createdAt,
+        clientMessageId: message.clientMessageId
+      };
+
+      io.to(receiverId).emit('receive_message', event);
+      return ack({ ok: true, message: event });
     } catch (err) {
       console.error('Error saving message', err);
+      return ack({ ok: false, code: err.code || 'MESSAGE_SEND_FAILED', error: err.message });
+    }
+  });
+
+  socket.on('message_delivered', async ({ messageId } = {}, ack = () => {}) => {
+    try {
+      const message = await messageService.markDelivered(authenticatedUserId, messageId);
+      io.to(message.senderId).emit('message_status', { messageId: message.id, status: message.status, deliveredAt: message.deliveredAt });
+      return ack({ ok: true });
+    } catch (err) {
+      return ack({ ok: false, code: err.code || 'DELIVERY_ACK_FAILED', error: err.message });
+    }
+  });
+
+  socket.on('message_read', async ({ messageId } = {}, ack = () => {}) => {
+    try {
+      const message = await messageService.markRead(authenticatedUserId, messageId);
+      io.to(message.senderId).emit('message_status', { messageId: message.id, status: message.status, readAt: message.readAt });
+      return ack({ ok: true });
+    } catch (err) {
+      return ack({ ok: false, code: err.code || 'READ_ACK_FAILED', error: err.message });
     }
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected', socket.id);
+    console.log('User disconnected', authenticatedUserId, socket.id);
   });
 });
 

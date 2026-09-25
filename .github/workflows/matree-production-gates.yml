@@ -1,0 +1,62 @@
+name: Matree Production Gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "feature/matree-production-hardening-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://matrimony_user:matrimony_dev_pass@localhost:5432/matrimony_db
+      JWT_SECRET: ci_only_not_for_production
+      OTP_HASH_SECRET: ci_only_not_for_production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run prisma:validate
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  trust-sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject known production trust violations
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RIn --exclude-dir=node_modules --exclude-dir=.git -E "randomuser\.me|const otp = ['\"]123456['\"]|Mock verification logic|saveMessage\(data\.senderId|via\.placeholder\.com" backend frontend; then
+            echo "Found forbidden production trust fallback/pattern."
+            exit 1
+          fi

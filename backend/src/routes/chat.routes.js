@@ -8,6 +8,13 @@ const authMiddleware = require('../middleware/auth.middleware');
 
 router.use(authMiddleware);
 
+function sendChatError(res, error) {
+    const status = error.code === 'MESSAGE_NOT_FOUND' ? 404 :
+        ['BLOCKED', 'NOT_CONNECTED', 'INVALID_RECEIVER', 'EMPTY_MESSAGE'].includes(error.code) ? 403 : 500;
+    return res.status(status).json({ error: error.message, code: error.code || 'CHAT_ERROR' });
+}
+
+
 // Get conversations list (Matched users)
 router.get('/conversations', async (req, res) => {
     try {
@@ -15,7 +22,7 @@ router.get('/conversations', async (req, res) => {
         const conversations = await messageService.getConnectedUsers(userId);
         res.json(conversations);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return sendChatError(res, error);
     }
 });
 
@@ -27,7 +34,7 @@ router.get('/:userId', async (req, res) => {
         const messages = await messageService.getMessages(myId, otherId);
         res.json(messages);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return sendChatError(res, error);
     }
 });
 
@@ -35,12 +42,12 @@ router.get('/:userId', async (req, res) => {
 router.post('/send', async (req, res) => {
     try {
         const myId = req.user.sub;
-        const { receiverId, content } = req.body;
-        const message = await messageService.saveMessage(myId, receiverId, content);
+        const { receiverId, content, clientMessageId } = req.body;
+        const message = await messageService.saveMessage(myId, receiverId, content, { clientMessageId });
         // Ideally emit socket event here too via io instance
         res.json(message);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return sendChatError(res, error);
     }
 });
 

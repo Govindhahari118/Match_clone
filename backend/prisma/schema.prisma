@@ -13,7 +13,12 @@ model User {
   email             String?     @unique
   passwordHash      String?
   isVerified        Boolean     @default(false)
-  verificationCode  String?
+  verificationCode  String?     // legacy only; production OTP uses otpCodeHash
+  otpCodeHash       String?
+  otpExpiresAt      DateTime?
+  otpAttempts       Int         @default(0)
+  otpLastSentAt     DateTime?
+  otpPurpose        String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   lastLogin         DateTime?
@@ -223,19 +228,27 @@ model Match {
 }
 
 model Message {
-  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  matchId   String      @db.Uuid
-  senderId  String      @db.Uuid
-  content   String      @db.Text
-  isRead    Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId         String      @db.Uuid
+  senderId        String      @db.Uuid
+  receiverId      String      @db.Uuid
+  clientMessageId String?
+  content         String      @db.Text
+  status          String      @default("sent") // sent, delivered, read, failed
+  isRead          Boolean     @default(false) // legacy compatibility
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   match     Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
   sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
+  @@unique([senderId, clientMessageId])
   @@index([matchId, createdAt(sort: Desc)])
   @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
   @@index([isRead])
 }
 
@@ -361,4 +374,16 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt(sort: Desc)])
+}
+
+
+model Block {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
 }

@@ -113,16 +113,30 @@ function getAge(dateOfBirth) {
     return age;
 }
 
-function deterministicScore(viewerId, user, profile) {
-    const seed = `${viewerId}|${user.id}|${profile.religion || ''}|${profile.city || ''}|${profile.educationLevel || ''}|${profile.profession || ''}`;
-    const hash = seed.split('').reduce((acc, char) => ((acc * 31) + char.charCodeAt(0)) % 997, 7);
-    const qualityBoost =
-        (user.isVerified ? 8 : 0) +
-        (profile.educationLevel ? 5 : 0) +
-        (profile.profession ? 5 : 0) +
-        (profile.city ? 3 : 0) +
-        (profile.motherTongue ? 3 : 0);
-    return Math.min(99, Math.max(60, 60 + (hash % 21) + qualityBoost));
+function internalRankSignal(user, profile, reasons) {
+    // Internal ordering signal only. Never expose this value as a compatibility percentage.
+    let score = 0;
+    if (user.isVerified) score += 3;
+    if (profile.educationLevel) score += 1;
+    if (profile.profession) score += 1;
+    if (profile.city) score += 1;
+    if (profile.motherTongue) score += 1;
+    score += Math.min(reasons.length, 4) * 2;
+    if (user.lastLogin) {
+        const ageDays = Math.max(0, (Date.now() - new Date(user.lastLogin).getTime()) / 86400000);
+        if (ageDays <= 7) score += 3;
+        else if (ageDays <= 30) score += 1;
+    }
+    return score;
+}
+
+function activityBucket(lastLogin) {
+    if (!lastLogin) return 'unknown';
+    const days = Math.max(0, (Date.now() - new Date(lastLogin).getTime()) / 86400000);
+    if (days <= 1) return 'active_today';
+    if (days <= 7) return 'active_this_week';
+    if (days <= 30) return 'active_recently';
+    return 'low_recent_activity';
 }
 
 function parsePositiveInteger(value, fallback) {
@@ -150,7 +164,6 @@ function buildMatchReasons({ candidateUser, candidateProfile, filters, viewerPro
     const reasons = [];
 
     if (candidateUser.isVerified) reasons.push('Verified profile');
-    if (isPremium) reasons.push('Premium member');
 
     if (!isAny(filters.religion) && String(candidateProfile.religion || '').toLowerCase() === String(filters.religion).toLowerCase()) {
         reasons.push('Matches selected religion');
@@ -214,8 +227,15 @@ const matchingService = {
         const viewerIsPremium = Boolean(viewer.subscriptions?.length);
         const viewerIsVerified = Boolean(viewer.isVerified);
 
+        const blockedPairs = await prisma.block.findMany({
+            where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
+            select: { blockerId: true, blockedId: true }
+        });
+        const blockedIds = blockedPairs.map((b) => b.blockerId === userId ? b.blockedId : b.blockerId);
+
         const excludeIds = [
             userId,
+            ...blockedIds,
             ...viewer.likesSent.map((item) => item.receiverId),
             ...viewer.matches.map((item) => item.userBId),
             ...viewer.matchesAsUserB.map((item) => item.userAId),
@@ -385,14 +405,13 @@ const matchingService = {
                     settings: privacySettings,
                     isOwner: false,
                     isMutualMatch: false,
-                    viewerIsPremium,
+                    hasExplicitGrant: false,
                 });
                 if (boolValue(filters.withPhotoOnly) && !canViewPhotos) return null;
 
-                const matchScore = deterministicScore(userId, userRow, profile);
                 const photo = canViewPhotos
-                    ? (userRow.photos[0]?.thumbnailUrl || userRow.photos[0]?.photoUrl || 'https://via.placeholder.com/150')
-                    : 'https://via.placeholder.com/150?text=Photo+Protected';
+                    ? (userRow.photos[0]?.thumbnailUrl || userRow.photos[0]?.photoUrl || null)
+                    : null;
                 const reasons = buildMatchReasons({
                     candidateUser: userRow,
                     candidateProfile: profile,
@@ -416,7 +435,12 @@ const matchingService = {
                     photoLocked: !canViewPhotos,
                     isVerified: userRow.isVerified,
                     isPremium,
-                    match: matchScore,
+                    match: null,
+                    compatibility: {
+                        reasons,
+                        percentage: null
+                    },
+                    rankSignal: internalRankSignal(userRow, profile, reasons),
                     religion: profile.religion,
                     caste: profile.caste,
                     motherTongue: profile.motherTongue,
@@ -426,7 +450,8 @@ const matchingService = {
                     heightCm: profile.heightCm,
                     hasChildren: extension.hasChildren,
                     residentialStatus: extension.residentialStatus,
-                    lastActiveAt: privacySettings.showLastSeen ? userRow.lastLogin : null,
+                    lastActiveAt: null,
+                    activity: privacySettings.showLastSeen ? activityBucket(userRow.lastLogin) : null,
                     reasons,
                 };
             })
@@ -435,23 +460,25 @@ const matchingService = {
         const sorted = [...mapped].sort((a, b) => {
             switch (sort) {
                 case 'newest':
-                    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
+                    return (b.rankSignal || 0) - (a.rankSignal || 0);
                 case 'activity':
-                    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
+                    return (b.rankSignal || 0) - (a.rankSignal || 0);
                 case 'compatibility':
                 case 'relevance':
                 default:
-                    return (b.match || 0) - (a.match || 0);
+                    return (b.rankSignal || 0) - (a.rankSignal || 0);
             }
         });
 
+        const publicItems = sorted.map(({ rankSignal, ...item }) => item);
+
         if (!includeMeta) {
-            return sorted.slice(0, 50);
+            return publicItems.slice(0, 50);
         }
 
         const start = (page - 1) * limit;
-        const items = sorted.slice(start, start + limit);
-        const total = sorted.length;
+        const items = publicItems.slice(start, start + limit);
+        const total = publicItems.length;
         return {
             items,
             page,
