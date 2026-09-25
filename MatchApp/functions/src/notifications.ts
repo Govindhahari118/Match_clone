@@ -1,90 +1,150 @@
 import * as functions from "firebase-functions/v1";
-import { getFcmToken, messaging } from "./shared";
+import * as admin from "firebase-admin";
+import { db, getFcmToken, messaging } from "./shared";
+
+type NotificationPayload = {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  entityType: string;
+  entityId: string;
+  deepLink: string;
+  fromFirebaseUid?: string;
+};
+
+async function persistNotificationOnce(
+  notificationId: string,
+  payload: NotificationPayload
+): Promise<boolean> {
+  const ref = db.collection("notifications").doc(notificationId);
+  return db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists) return false;
+    tx.create(ref, {
+      ...payload,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      readAt: null,
+    });
+    return true;
+  });
+}
+
+async function deliverPersistedNotification(
+  notificationId: string,
+  payload: NotificationPayload,
+  channelId: string
+): Promise<void> {
+  const created = await persistNotificationOnce(notificationId, payload);
+  if (!created) return;
+
+  const fcmToken = await getFcmToken(payload.userId);
+  if (!fcmToken) return;
+
+  await messaging.send({
+    token: fcmToken,
+    data: {
+      type: payload.type.toLowerCase(),
+      title: payload.title,
+      body: payload.body,
+      recipient_uid: payload.userId,
+      notification_id: notificationId,
+      entity_type: payload.entityType,
+      entity_id: payload.entityId,
+      deep_link: payload.deepLink,
+      ...(payload.fromFirebaseUid ? {
+        user_id: payload.fromFirebaseUid,
+        peer_uid: payload.fromFirebaseUid,
+      } : {}),
+    },
+    android: { priority: "high", notification: { channelId } },
+  });
+}
 
 export const onInterestCreated = functions.firestore
   .document("interests/{interestId}")
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
     const data = snap.data();
     const fromUid = data.fromUid as string;
     const toUid = data.toUid as string;
     if (!fromUid || !toUid) return;
 
-    const fcmToken = await getFcmToken(toUid);
-    if (!fcmToken) return;
-
-    // Keep relationship identity off the lock screen. The authenticated app resolves the sender.
-    await messaging.send({
-      token: fcmToken,
-      data: {
-        type: "interest_received",
+    await deliverPersistedNotification(
+      `interest_${context.params.interestId}_${toUid}`,
+      {
+        userId: toUid,
+        type: "INTEREST",
         title: "New interest",
         body: "Someone is interested in your profile. Open the app to view it.",
-        user_id: fromUid,
-        recipient_uid: toUid,
+        entityType: "profile",
+        entityId: fromUid,
+        deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(fromUid)}`,
+        fromFirebaseUid: fromUid,
       },
-      android: { priority: "high", notification: { channelId: "match_interests" } },
-    });
+      "match_interests"
+    );
   });
 
 export const onMatchCreated = functions.firestore
   .document("matches/{matchId}")
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
     const data = snap.data();
     const users = data.users as string[];
     if (!users || users.length !== 2) return;
 
     const [uid1, uid2] = users;
-    const [token1, token2] = await Promise.all([getFcmToken(uid1), getFcmToken(uid2)]);
-    const sends: Promise<string>[] = [];
-    if (token1) {
-      sends.push(messaging.send({
-        token: token1,
-        data: {
-          type: "mutual_match",
+    await Promise.allSettled([
+      deliverPersistedNotification(
+        `match_${context.params.matchId}_${uid1}`,
+        {
+          userId: uid1,
+          type: "MATCH",
           title: "New mutual match",
           body: "You have a new mutual match. Open the app to view the profile.",
-          user_id: uid2,
-          recipient_uid: uid1,
+          entityType: "profile",
+          entityId: uid2,
+          deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(uid2)}`,
+          fromFirebaseUid: uid2,
         },
-        android: { priority: "high", notification: { channelId: "match_matches" } },
-      }));
-    }
-    if (token2) {
-      sends.push(messaging.send({
-        token: token2,
-        data: {
-          type: "mutual_match",
+        "match_matches"
+      ),
+      deliverPersistedNotification(
+        `match_${context.params.matchId}_${uid2}`,
+        {
+          userId: uid2,
+          type: "MATCH",
           title: "New mutual match",
           body: "You have a new mutual match. Open the app to view the profile.",
-          user_id: uid1,
-          recipient_uid: uid2,
+          entityType: "profile",
+          entityId: uid1,
+          deepLink: `matrimonyconnect://match?uid=${encodeURIComponent(uid1)}`,
+          fromFirebaseUid: uid1,
         },
-        android: { priority: "high", notification: { channelId: "match_matches" } },
-      }));
-    }
-    await Promise.allSettled(sends);
+        "match_matches"
+      ),
+    ]);
   });
 
 export const onNewMessage = functions.firestore
   .document("chats/{threadId}/messages/{messageId}")
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
     const data = snap.data();
     const fromFirebaseUid = data.fromFirebaseUid as string | undefined;
     const toFirebaseUid = data.toFirebaseUid as string | undefined;
     if (!fromFirebaseUid || !toFirebaseUid) return;
 
-    const fcmToken = await getFcmToken(toFirebaseUid);
-    if (!fcmToken) return;
-
-    await messaging.send({
-      token: fcmToken,
-      data: {
-        type: "message",
+    await deliverPersistedNotification(
+      `message_${context.params.threadId}_${context.params.messageId}_${toFirebaseUid}`,
+      {
+        userId: toFirebaseUid,
+        type: "MESSAGE",
         title: "New message",
         body: "Open the app to view your message.",
-        peer_uid: fromFirebaseUid,
-        recipient_uid: toFirebaseUid,
+        entityType: "chat",
+        entityId: context.params.threadId,
+        deepLink: `matrimonyconnect://chat?thread=${encodeURIComponent(context.params.threadId)}&peer=${encodeURIComponent(fromFirebaseUid)}`,
+        fromFirebaseUid,
       },
-      android: { priority: "high", notification: { channelId: "match_messages" } },
-    });
+      "match_messages"
+    );
   });
