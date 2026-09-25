@@ -86,6 +86,7 @@ class SessionStore(private val context: Context) {
     private val KEY_SUB_PLAN   = stringPreferencesKey("subscription_plan")
     private val KEY_DPDP_CONSENT = booleanPreferencesKey("dpdp_consent_given")
     private val KEY_DPDP_CONSENT_AT = longPreferencesKey("dpdp_consent_at")
+    private val KEY_WIZARD_STEP = intPreferencesKey("profile_wizard_step")
 
     // Discovery experience only. These values never redefine the member's declared religion.
     private val KEY_RELIGION_LENSES = stringPreferencesKey("religion_lenses")
@@ -205,6 +206,7 @@ class SessionStore(private val context: Context) {
     val hasQuestionnaire: Flow<Boolean> = context.dataStore.data.map { it[booleanPreferencesKey("has_questionnaire")] ?: false }
     val incognitoMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_INCOGNITO] ?: false }
     val dpdpConsentGiven: Flow<Boolean> = context.dataStore.data.map { it[KEY_DPDP_CONSENT] ?: false }
+    val profileWizardStep: Flow<Int> = context.dataStore.data.map { (it[KEY_WIZARD_STEP] ?: 0).coerceIn(0, 7) }
 
     suspend fun setUser(id: Long) = context.dataStore.edit { it[KEY_USER_ID] = id }
     suspend fun setFirebaseUid(uid: String) = context.dataStore.edit { it[KEY_FIREBASE_UID] = uid }
@@ -341,6 +343,7 @@ class SessionStore(private val context: Context) {
     suspend fun setCommunitySetupDone(v: Boolean) = context.dataStore.edit { it[KEY_COMMUNITY_SETUP_DONE] = v }
     suspend fun setHasQuestionnaire(v: Boolean) = context.dataStore.edit { it[booleanPreferencesKey("has_questionnaire")] = v }
     suspend fun setIncognitoMode(v: Boolean) = context.dataStore.edit { it[KEY_INCOGNITO] = v }
+    suspend fun setProfileWizardStep(step: Int) = context.dataStore.edit { it[KEY_WIZARD_STEP] = step.coerceIn(0, 7) }
     suspend fun setDpdpConsent(accepted: Boolean) = context.dataStore.edit {
         it[KEY_DPDP_CONSENT] = accepted
         it[KEY_DPDP_CONSENT_AT] = System.currentTimeMillis()
