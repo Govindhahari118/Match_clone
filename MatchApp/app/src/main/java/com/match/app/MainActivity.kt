@@ -25,6 +25,7 @@ import com.match.app.core.update.InAppUpdateManager
 import com.match.app.data.billing.PlayBillingManager
 import com.match.app.data.repo.PresenceRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.navigation.DeepLinkRouteResolver
 import com.match.app.ui.MatchRoot
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -128,19 +129,11 @@ class MainActivity : FragmentActivity() {
             val type = intent?.getStringExtra("notif_type")
             val fromUserId = intent?.getLongExtra("from_user_id", -1L).takeIf { it != null && it > 0 }
             val chatPeerId = intent?.getLongExtra("peer_id", -1L).takeIf { it != null && it > 0 }
-            pendingDeepLink = when (type) {
-                "message" -> chatPeerId?.let { "chat/$it" } ?: "chat_list"
-                "interest_received" -> fromUserId?.let { "detail/$it" } ?: "interests"
-                "new_match", "mutual_match" -> fromUserId?.let { "detail/$it" } ?: "matches"
-                "profile_viewed" -> "who_viewed"
-                "profile_incomplete" -> "profile"
-                "inactivity_nudge" -> "matches"
-                "like" -> "interests"
-                "notification", "reward" -> "notifications"
-                "boost_expiring", "subscription_expiry" -> "pricing"
-                "verification", "verification_update" -> "verification"
-                else -> null
-            }
+            pendingDeepLink = DeepLinkRouteResolver.fromNotification(
+                type = type,
+                fromUserId = fromUserId,
+                chatPeerId = chatPeerId
+            )
             return
         }
 
@@ -148,37 +141,16 @@ class MainActivity : FragmentActivity() {
         // Navigation route: malformed path values can otherwise bypass typed route assumptions or
         // crash argument parsing. External profile/chat links currently use a positive local id;
         // profile/chat repositories remain the authorization boundary for the destination data.
-        if (!uri.scheme.equals(DEEP_LINK_SCHEME, ignoreCase = true) || uri.userInfo != null) {
-            rejectDeepLink(uri.toString())
-            return
-        }
-
-        val host = uri.host?.lowercase()
-        val segments = uri.pathSegments
-        val hasUnexpectedExtras = !uri.query.isNullOrBlank() || !uri.fragment.isNullOrBlank()
-
-        pendingDeepLink = when (host) {
-            "match", "chat" -> {
-                if (hasUnexpectedExtras || segments.size != 1) null
-                else segments.single().toLongOrNull()?.takeIf { it > 0 }?.let { id ->
-                    if (host == "match") "detail/$id" else "chat/$id"
-                }
-            }
-            "notifications" -> staticRouteOrNull(segments, hasUnexpectedExtras, "notifications")
-            "interests" -> staticRouteOrNull(segments, hasUnexpectedExtras, "interests")
-            "matches" -> staticRouteOrNull(segments, hasUnexpectedExtras, "matches")
-            "who_viewed" -> staticRouteOrNull(segments, hasUnexpectedExtras, "who_viewed")
-            "pricing" -> staticRouteOrNull(segments, hasUnexpectedExtras, "pricing")
-            "verification" -> staticRouteOrNull(segments, hasUnexpectedExtras, "verification")
-            "nearby" -> staticRouteOrNull(segments, hasUnexpectedExtras, "nearby")
-            else -> null
-        }
+        pendingDeepLink = DeepLinkRouteResolver.fromUri(
+            scheme = uri.scheme,
+            userInfo = uri.userInfo,
+            host = uri.host,
+            pathSegments = uri.pathSegments,
+            hasQueryOrFragment = !uri.query.isNullOrBlank() || !uri.fragment.isNullOrBlank()
+        )
 
         if (pendingDeepLink == null) rejectDeepLink(uri.toString())
     }
-
-    private fun staticRouteOrNull(segments: List<String>, hasUnexpectedExtras: Boolean, route: String): String? =
-        route.takeIf { segments.isEmpty() && !hasUnexpectedExtras }
 
     private fun rejectDeepLink(raw: String) {
         pendingDeepLink = null
@@ -195,6 +167,5 @@ class MainActivity : FragmentActivity() {
 
     private companion object {
         const val PRESENCE_HEARTBEAT_INTERVAL_MS = 2L * 60L * 1000L
-        const val DEEP_LINK_SCHEME = "matrimonyconnect"
     }
 }
