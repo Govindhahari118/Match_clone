@@ -290,3 +290,127 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
     truncated: tickets.size >= 1000 || reports.size >= 1000,
   };
 });
+
+
+/**
+ * Role-scoped payment support view. Raw purchase tokens are never stored or returned.
+ * The response is intentionally limited to reconciliation metadata and current server entitlement.
+ */
+export const getPaymentReconciliationCase = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["payment_ops", "ops_admin"]);
+  const paymentId = safeId(data?.paymentId, "payment");
+
+  const payment = await db.collection("payments").doc(paymentId).get();
+  if (!payment.exists) {
+    throw new functions.https.HttpsError("not-found", "Payment record not found");
+  }
+  const value = payment.data() || {};
+  const uid = String(value.uid || "");
+  if (!uid) {
+    throw new functions.https.HttpsError("failed-precondition", "Payment record has no account owner");
+  }
+
+  const [user, subscription] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("subscriptions").doc(uid).get(),
+  ]);
+  const userData = user.data() || {};
+  const subscriptionData = subscription.data() || {};
+
+  return {
+    payment: {
+      id: payment.id,
+      uid,
+      provider: String(value.provider || ""),
+      status: String(value.status || ""),
+      productId: String(value.productId || ""),
+      entitlementType: String(value.entitlementType || ""),
+      entitlementId: String(value.entitlementId || value.planId || value.boostId || ""),
+      orderId: typeof value.orderId === "string" ? value.orderId : null,
+      regionCode: typeof value.regionCode === "string" ? value.regionCode : null,
+      grantedAtMillis: Number(value.grantedAtMillis || 0),
+      expiresAtMillis: Number(value.expiresAtMillis || 0),
+      consumptionPending: value.consumptionPending === true,
+      verifiedAtMillis: timestampMillis(value.verifiedAt),
+      voidedAtMillis: Number(value.voidedAtMillis || 0) || timestampMillis(value.voidedAt),
+      voidedReason: typeof value.voidedReason === "string" ? value.voidedReason : null,
+    },
+    currentEntitlement: {
+      isPremium: userData.isPremium === true,
+      subscriptionPlan: String(userData.subscriptionPlan || "FREE"),
+      subscriptionExpiry: Number(userData.subscriptionExpiry || 0),
+      boostUntil: Number(subscriptionData.boostUntil || 0),
+    },
+  };
+});
+
+/**
+ * Moderator case view: only report evidence needed for review plus a minimal target trust state.
+ * It deliberately omits contact details, exact location, messages, payment data and identity docs.
+ */
+export const getModerationCase = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["moderator", "ops_admin"]);
+  const reportId = safeId(data?.reportId, "profile report");
+  const report = await db.collection("profileReports").doc(reportId).get();
+  if (!report.exists) {
+    throw new functions.https.HttpsError("not-found", "Profile report not found");
+  }
+  const value = report.data() || {};
+  const targetUid = String(value.targetUid || "");
+  if (!targetUid) {
+    throw new functions.https.HttpsError("failed-precondition", "Report target is missing");
+  }
+
+  const [target, verification, audit] = await Promise.all([
+    db.collection("users").doc(targetUid).get(),
+    db.collection("verifications").doc(targetUid).get(),
+    db.collection("opsAuditLog")
+      .where("targetCollection", "==", "profileReports")
+      .where("targetId", "==", reportId)
+      .limit(50)
+      .get(),
+  ]);
+  const targetData = target.data() || {};
+  const verificationData = verification.data() || {};
+
+  return {
+    report: {
+      id: report.id,
+      reporterUid: String(value.reporterUid || ""),
+      targetUid,
+      reason: String(value.reason || ""),
+      details: typeof value.details === "string" ? value.details : null,
+      status: String(value.status || "OPEN"),
+      createdAtMillis: timestampMillis(value.createdAt),
+      updatedAtMillis: timestampMillis(value.updatedAt),
+      resolutionReason: typeof value.resolutionReason === "string"
+        ? value.resolutionReason
+        : null,
+    },
+    target: {
+      exists: target.exists,
+      displayName: String(targetData.displayName || ""),
+      matrimonyId: String(targetData.matrimonyId || ""),
+      isVerified: targetData.isVerified === true,
+      verificationLevel: Number(targetData.verificationLevel || 0),
+      accountStatus: String(targetData.accountStatus || "ACTIVE"),
+      matrimonyPaused: targetData.matrimonyPaused === true,
+    },
+    verification: {
+      status: String(verificationData.status || ""),
+      level: Number(verificationData.level || 0),
+      updatedAtMillis: timestampMillis(verificationData.updatedAt),
+    },
+    audit: audit.docs.map((doc) => {
+      const entry = doc.data();
+      return {
+        id: doc.id,
+        actorUid: String(entry.actorUid || ""),
+        actorRole: String(entry.actorRole || ""),
+        action: String(entry.action || ""),
+        reason: String(entry.reason || ""),
+        createdAtMillis: timestampMillis(entry.createdAt),
+      };
+    }),
+  };
+});
