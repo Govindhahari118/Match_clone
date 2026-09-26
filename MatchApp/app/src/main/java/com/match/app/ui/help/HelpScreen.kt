@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.repo.SupportRepository
 import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -79,7 +80,8 @@ private val SUPPORT_CATEGORIES = listOf(
 
 @HiltViewModel
 class HelpViewModel @Inject constructor(
-    private val supportRepository: SupportRepository
+    private val supportRepository: SupportRepository,
+    private val telemetry: MatreeTelemetry
 ) : ViewModel() {
     private val _submitting = MutableStateFlow(false)
     val submitting: StateFlow<Boolean> = _submitting.asStateFlow()
@@ -92,8 +94,14 @@ class HelpViewModel @Inject constructor(
         _submitting.value = true
         _message.value = null
         supportRepository.submitSupportTicket(category, text)
-            .onSuccess { ticketId -> _message.value = "Support request submitted. Ticket: ${ticketId.take(12)}" }
-            .onFailure { _message.value = "Could not submit the support request. Check your connection and try again." }
+            .onSuccess { ticketId ->
+                telemetry.supportSubmitted(category)
+                _message.value = "Support request submitted. Ticket: ${ticketId.take(12)}"
+            }
+            .onFailure { error ->
+                telemetry.recordFailure(MatreeTelemetry.Operation.FUNCTIONS, error)
+                _message.value = "Could not submit the support request. Check your connection and try again."
+            }
         _submitting.value = false
     }
 
