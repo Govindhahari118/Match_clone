@@ -2,7 +2,7 @@ import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { db, requireOpsRole } from "./shared";
 
-const SUPPORT_STATUSES = new Set(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]);
+const SUPPORT_STATUSES = new Set(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "RESOLVED", "CLOSED", "ESCALATED"]);
 const REPORT_STATUSES = new Set(["OPEN", "REVIEWING", "ACTIONED", "DISMISSED"]);
 const MAX_PAGE_SIZE = 100;
 
@@ -31,6 +31,15 @@ function safeReason(value: unknown): string {
     );
   }
   return reason;
+}
+
+function safeAssignment(value: unknown, label: string): string | null {
+  const assignment = typeof value === "string" ? value.trim() : "";
+  if (!assignment) return null;
+  if (assignment.length > 128 || /[\r\n]/.test(assignment)) {
+    throw new functions.https.HttpsError("invalid-argument", `Invalid ${label}`);
+  }
+  return assignment;
 }
 
 function safeNote(value: unknown): string | null {
@@ -78,7 +87,11 @@ export const listSupportTickets = functions.https.onCall(async (data, context) =
         source: String(value.source || ""),
         createdAtMillis: timestampMillis(value.createdAt),
         updatedAtMillis: timestampMillis(value.updatedAt),
+        assignedTo: typeof value.assignedTo === "string" ? value.assignedTo : null,
+        assignedTeam: typeof value.assignedTeam === "string" ? value.assignedTeam : null,
         operatorNote: typeof value.operatorNote === "string" ? value.operatorNote : null,
+        resolvedAtMillis: timestampMillis(value.resolvedAt),
+        escalatedAtMillis: timestampMillis(value.escalatedAt),
       };
     }),
   };
@@ -94,6 +107,15 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
   const nextStatus = safeStatus(data?.status, SUPPORT_STATUSES, "support ticket");
   const reason = safeReason(data?.reason);
   const note = safeNote(data?.note);
+  const assignedTo = safeAssignment(data?.assignedTo, "ticket owner");
+  const assignedTeam = safeAssignment(data?.assignedTeam, "ticket team");
+
+  if (nextStatus === "ASSIGNED" && !assignedTo && !assignedTeam) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Assigned tickets require an owner or team"
+    );
+  }
 
   const ticketRef = db.collection("supportTickets").doc(ticketId);
   const auditRef = db.collection("opsAuditLog").doc();
@@ -112,6 +134,8 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
     tx.update(ticketRef, {
       status: nextStatus,
       operatorNote: note,
+      assignedTo,
+      assignedTeam,
       lastHandledBy: actor.uid,
       lastHandledRole: actor.role,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -119,6 +143,11 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
         resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
       } : {
         resolvedAt: admin.firestore.FieldValue.delete(),
+      }),
+      ...(nextStatus === "ESCALATED" ? {
+        escalatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      } : {
+        escalatedAt: admin.firestore.FieldValue.delete(),
       }),
     });
 
@@ -129,7 +158,7 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
       targetCollection: "supportTickets",
       targetId: ticketId,
       before: { status: previousStatus },
-      after: { status: nextStatus },
+      after: { status: nextStatus, assignedTo, assignedTeam },
       reason,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -217,4 +246,47 @@ export const updateProfileReportStatus = functions.https.onCall(async (data, con
   });
 
   return { success: true, reportId, status: nextStatus };
+});
+
+
+/**
+ * Minimal privacy-safe queue/SLA metrics for operations dashboards.
+ * Returns counts and age buckets only; no member messages, report details, contact data or KYC data.
+ */
+export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) => {
+  requireOpsRole(context, ["support", "moderator", "payment_ops", "ops_admin"]);
+  const now = Date.now();
+
+  const [tickets, reports] = await Promise.all([
+    db.collection("supportTickets")
+      .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "ESCALATED"])
+      .limit(1000)
+      .get(),
+    db.collection("profileReports")
+      .where("status", "in", ["OPEN", "REVIEWING"])
+      .limit(1000)
+      .get(),
+  ]);
+
+  const summarize = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) => {
+    let olderThan24h = 0;
+    let olderThan72h = 0;
+    for (const doc of docs) {
+      const createdAt = doc.data().createdAt;
+      const createdMillis = createdAt instanceof admin.firestore.Timestamp
+        ? createdAt.toMillis()
+        : now;
+      const age = Math.max(0, now - createdMillis);
+      if (age >= 24 * 60 * 60 * 1000) olderThan24h += 1;
+      if (age >= 72 * 60 * 60 * 1000) olderThan72h += 1;
+    }
+    return { open: docs.length, olderThan24h, olderThan72h };
+  };
+
+  return {
+    generatedAtMillis: now,
+    support: summarize(tickets.docs),
+    moderation: summarize(reports.docs),
+    truncated: tickets.size >= 1000 || reports.size >= 1000,
+  };
 });
