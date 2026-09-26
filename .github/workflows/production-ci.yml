@@ -110,6 +110,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - run: npm test
       - name: Audit production dependencies
         shell: bash
         run: |
