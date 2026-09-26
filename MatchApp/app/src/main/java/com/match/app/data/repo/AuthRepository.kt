@@ -177,7 +177,8 @@ class AuthRepository @Inject constructor(
     private fun clearPrivateMediaCaches() {
         listOf(
             java.io.File(appContext.cacheDir, "protected_media"),
-            java.io.File(appContext.filesDir, "chat_media")
+            java.io.File(appContext.filesDir, "chat_media"),
+            java.io.File(appContext.filesDir, "chat_outbox")
         ).forEach { dir ->
             runCatching {
                 if (dir.exists()) dir.deleteRecursively()
@@ -185,6 +186,14 @@ class AuthRepository @Inject constructor(
                 Log.w("AuthRepository", "Unable to clear private media cache at ${dir.name}", error)
             }
         }
+        appContext.cacheDir.listFiles()
+            ?.filter { file -> file.isFile && file.name.startsWith("voice_") && file.name.endsWith(".m4a") }
+            ?.forEach { file ->
+                runCatching { file.delete() }
+                    .onFailure { error ->
+                        Log.w("AuthRepository", "Unable to clear temporary voice recording", error)
+                    }
+            }
     }
 
     suspend fun sendPasswordReset(email: String): String? {
