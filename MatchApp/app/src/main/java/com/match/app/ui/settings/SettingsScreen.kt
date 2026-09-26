@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
@@ -55,7 +56,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepo: AuthRepository,
     private val savedSearchRepo: SavedSearchRepository,
     private val notificationPreferenceRepo: NotificationPreferenceRepository,
-    private val appearancePreferenceRepo: AppearancePreferenceRepository
+    private val appearancePreferenceRepo: AppearancePreferenceRepository,
+    private val telemetry: MatreeTelemetry
 ) : ViewModel() {
     val appearance = appearancePreferenceRepo.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
@@ -104,6 +106,14 @@ class SettingsViewModel @Inject constructor(
 
     private fun updateTheme(preference: ThemePreference, manualThemeKey: String? = null) = viewModelScope.launch {
         runCatching { appearancePreferenceRepo.setThemePreference(preference, manualThemeKey) }
+            .onSuccess {
+                val paletteKey = when (preference) {
+                    ThemePreference.AUTOMATIC -> "AUTOMATIC"
+                    ThemePreference.NEUTRAL -> "VIVAH"
+                    ThemePreference.MANUAL -> manualThemeKey ?: "VIVAH"
+                }
+                telemetry.themeChanged(preference.name, paletteKey)
+            }
             .onFailure {
                 _searchMessage.value =
                     "Theme changed on this device. Account sync will retry when the connection is available."
