@@ -235,7 +235,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val pendingDeepLink = activity?.pendingDeepLink
     LaunchedEffect(pendingDeepLink) {
         if (pendingDeepLink != null) {
-            activity.consumeDeepLink()?.let { destination ->
+            activity?.consumeDeepLink()?.let { destination ->
                 nav.navigate(destination) { launchSingleTop = true }
             }
         }
