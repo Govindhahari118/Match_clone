@@ -33,10 +33,7 @@ private data class LangEntry(val code: String, val label: String, val native: St
 private val SUPPORTED_LANGUAGES = listOf(
     LangEntry("en", "English", "English"),
     LangEntry("te", "Telugu", "తెలుగు"),
-    LangEntry("hi", "Hindi", "हिन्दी"),
-    LangEntry("ta", "Tamil", "தமிழ்"),
-    LangEntry("kn", "Kannada", "ಕನ್ನಡ"),
-    LangEntry("mr", "Marathi", "मराठी")
+    LangEntry("hi", "Hindi", "हिन्दी")
 )
 
 @HiltViewModel
@@ -76,7 +73,7 @@ fun LanguageSelectionScreen(
         ) {
             item {
                 Text(
-                    "Available languages",
+                    t("available_languages", "Available languages"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -96,7 +93,10 @@ fun LanguageSelectionScreen(
             item {
                 HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 Text(
-                    "More languages will appear only after translation and layout QA is complete.",
+                    t(
+                        "more_languages_after_qa",
+                        "More languages will appear only after translation and layout QA is complete."
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
