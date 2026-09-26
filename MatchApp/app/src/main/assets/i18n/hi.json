@@ -75,5 +75,7 @@
   "app_language": "ऐप भाषा",
   "verify_phone": "फ़ोन सत्यापित करें",
   "upgrade_now": "योजनाएँ देखें",
-  "maybe_later": "बाद में"
+  "maybe_later": "बाद में",
+  "available_languages": "उपलब्ध भाषाएँ",
+  "more_languages_after_qa": "अधिक भाषाएँ अनुवाद और लेआउट QA पूरा होने के बाद ही दिखाई देंगी।"
 }
