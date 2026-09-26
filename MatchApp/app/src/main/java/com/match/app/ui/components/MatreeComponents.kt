@@ -1,6 +1,8 @@
 package com.match.app.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -393,6 +395,308 @@ fun MatreeProfileCard(
             }
 
             actions()
+        }
+    }
+}
+
+
+@Composable
+fun MatreeVerificationBadge(
+    verified: Boolean,
+    modifier: Modifier = Modifier,
+    verifiedLabel: String = "Verified",
+    pendingLabel: String = "Not verified"
+) {
+    MatreeStatusChip(
+        text = if (verified) verifiedLabel else pendingLabel,
+        tone = if (verified) MatreeStatusTone.VERIFIED else MatreeStatusTone.NEUTRAL,
+        modifier = modifier.semantics { role = Role.Image }
+    )
+}
+
+@Composable
+fun MatreeCoverageBadge(
+    complete: Int,
+    total: Int,
+    modifier: Modifier = Modifier,
+    label: String = "Profile"
+) {
+    val safeTotal = total.coerceAtLeast(1)
+    val safeComplete = complete.coerceIn(0, safeTotal)
+    val tone = when {
+        safeComplete >= safeTotal -> MatreeStatusTone.SUCCESS
+        safeComplete > 0 -> MatreeStatusTone.WARNING
+        else -> MatreeStatusTone.NEUTRAL
+    }
+    MatreeStatusChip(
+        text = label + " " + safeComplete + "/" + safeTotal,
+        tone = tone,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun MatreeMatchSignal(
+    label: String,
+    modifier: Modifier = Modifier,
+    score: Float? = null,
+    supportingText: String? = null
+) {
+    val normalized = score?.coerceIn(0f, 1f)
+    MatreeInfoCard(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                supportingText?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            normalized?.let {
+                Text(
+                    ((it * 100).toInt()).toString() + "%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        normalized?.let {
+            LinearProgressIndicator(
+                progress = { it },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun MatreeIconAction(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.size(MatreeDesign.sizes.touchTarget)
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(MatreeDesign.sizes.icon)
+        )
+    }
+}
+
+@Composable
+fun MatreeChoiceChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        leadingIcon = icon?.let { image ->
+            {
+                Icon(
+                    image,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall)
+                )
+            }
+        },
+        label = { Text(text) }
+    )
+}
+
+/**
+ * Shared photo pager. Models are always supplied by the caller's authorized repository state;
+ * this component never invents sample people or fallback network photos.
+ */
+@Composable
+fun MatreePhotoPager(
+    photoModels: List<Any>,
+    profileName: String,
+    modifier: Modifier = Modifier,
+    fallbackInitial: String = profileName.firstOrNull()?.uppercase() ?: "?",
+    aspectRatio: Float = MatreeDesign.profilePhotoAspectRatio
+) {
+    val models = remember(photoModels) {
+        photoModels.filter { model -> model !is String || model.isNotBlank() }
+    }
+    val pageCount = models.size.coerceAtLeast(1)
+    val pagerState = rememberPagerState(pageCount = { pageCount })
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(aspectRatio)
+        ) { page ->
+            val model = models.getOrNull(page)
+            if (model != null) {
+                AsyncImage(
+                    model = model,
+                    contentDescription = profileName + " profile photo " + (page + 1) + " of " + models.size,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            fallbackInitial,
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+
+        if (models.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = MatreeDesign.spacing.xs),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                models.indices.forEach { index ->
+                    Surface(
+                        modifier = Modifier
+                            .padding(horizontal = MatreeDesign.spacing.xxs)
+                            .size(if (pagerState.currentPage == index) 8.dp else 6.dp),
+                        shape = RoundedCornerShape(percent = 50),
+                        color = if (pagerState.currentPage == index) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        }
+                    ) {}
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Canonical photo-first profile header used by profile and profile-detail surfaces.
+ */
+@Composable
+fun MatreeProfileHeader(
+    name: String,
+    age: Int?,
+    photoModels: List<Any>,
+    modifier: Modifier = Modifier,
+    username: String = "",
+    primaryLine: String = "",
+    secondaryLine: String = "",
+    isVerified: Boolean = false,
+    isPremium: Boolean = false,
+    managedBy: String? = null,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null
+) {
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.large),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = MatreeDesign.elevation.card)
+    ) {
+        Column {
+            MatreePhotoPager(
+                photoModels = photoModels,
+                profileName = name,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Column(
+                Modifier.padding(MatreeDesign.spacing.md),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        buildString {
+                            append(name)
+                            age?.takeIf { value -> value > 0 }?.let { value -> append(", ").append(value) }
+                        },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    trailingContent?.invoke(this)
+                }
+                if (username.isNotBlank()) {
+                    Text(
+                        "@$username",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (primaryLine.isNotBlank()) {
+                    Text(primaryLine, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (secondaryLine.isNotBlank()) {
+                    Text(
+                        secondaryLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isVerified) MatreeVerificationBadge(verified = true)
+                    if (isPremium) MatreeStatusChip("Premium", MatreeStatusTone.PREMIUM)
+                    managedBy?.takeIf { it.isNotBlank() }?.let {
+                        MatreeStatusChip("Managed by $it", MatreeStatusTone.NEUTRAL)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MatreeProfileSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.card)
+    ) {
+        Column(
+            Modifier.padding(MatreeDesign.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            content()
         }
     }
 }
