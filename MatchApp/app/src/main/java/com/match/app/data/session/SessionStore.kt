@@ -15,6 +15,7 @@ import com.match.app.domain.model.MatchMode
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.domain.model.ThemePreference
+import com.match.app.ui.i18n.SupportedUiLocales
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -96,15 +97,10 @@ class SessionStore(private val context: Context) {
 
     companion object {
         private const val SESSION_EXPIRY_MS = 30L * 24 * 60 * 60 * 1000
-        private val SUPPORTED_UI_LANGUAGES = setOf("en", "hi", "te")
     }
 
-    private fun normalizeUiLanguage(value: String?): String {
-        val requested = value?.trim()?.lowercase().orEmpty()
-        if (requested in SUPPORTED_UI_LANGUAGES) return requested
-        val systemLanguage = java.util.Locale.getDefault().language.lowercase()
-        return systemLanguage.takeIf { it in SUPPORTED_UI_LANGUAGES } ?: "en"
-    }
+    private fun normalizeUiLanguage(value: String?): String =
+        SupportedUiLocales.normalize(value)
 
     val userId: Flow<Long?> = context.dataStore.data.map { it[KEY_USER_ID]?.takeIf { id -> id > 0 } }
     val firebaseUid: Flow<String?> = context.dataStore.data.map { it[KEY_FIREBASE_UID]?.takeIf { uid -> uid.isNotBlank() } }
