@@ -329,6 +329,7 @@ export const deleteUserAccount = functions
           db.collection("subscriptions").doc(uid),
           db.collection("profileAnalytics").doc(uid),
           db.collection("notificationPrefs").doc(uid),
+          db.collection("appearancePrefs").doc(uid),
           db.collection("verifications").doc(uid),
           db.collection("verificationRequests").doc(uid),
           db.collection("rewards").doc(uid),

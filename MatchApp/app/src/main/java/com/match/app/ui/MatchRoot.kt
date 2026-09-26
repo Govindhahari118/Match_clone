@@ -27,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.DisplayMode
@@ -61,11 +62,12 @@ object Routes {
 class RootViewModel @Inject constructor(
     private val session: SessionStore,
     private val connectivity: ConnectivityObserver,
-    userDao: UserDao
+    userDao: UserDao,
+    appearancePreferenceRepository: AppearancePreferenceRepository
 ) : ViewModel() {
     val userId = session.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val onboarded = session.onboarded.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val appearance = session.appearancePreference
+    val appearance = appearancePreferenceRepository.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)

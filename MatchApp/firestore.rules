@@ -229,6 +229,19 @@ service cloud.firestore {
         (!('system' in request.resource.data) || request.resource.data.system is bool);
       allow delete: if isOwner(uid);
     }
+    match /appearancePrefs/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) &&
+        request.resource.data.keys().hasOnly(['themePreference','manualThemeKey','updatedAt']) &&
+        request.resource.data.themePreference is string &&
+        request.resource.data.themePreference in ['AUTOMATIC','NEUTRAL','MANUAL'] &&
+        request.resource.data.manualThemeKey is string &&
+        request.resource.data.manualThemeKey in [
+          'VIVAH','HINDU','MUSLIM','CHRISTIAN','SIKH','BUDDHIST','JAIN','PARSI'
+        ] &&
+        request.resource.data.updatedAt is timestamp;
+      allow delete: if isOwner(uid);
+    }
     match /profileViews/{viewId} { allow read: if isSignedIn() && (resource.data.viewerUid == request.auth.uid || resource.data.viewedUid == request.auth.uid); allow create, update, delete: if false; }
     match /fcmTokens/{uid}/devices/{deviceId} { allow read, write: if false; }
     match /fcmTokens/{uid} { allow read, write: if false; }

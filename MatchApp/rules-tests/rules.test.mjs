@@ -384,3 +384,26 @@ test('operations audit log is never client readable or writable', async () => {
     createdAt: new Date(),
   }));
 });
+
+
+test('appearance preferences are private, account-scoped, and presentation-only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const prefs = doc(aliceDb, 'appearancePrefs/alice');
+
+  await assertSucceeds(setDoc(prefs, {
+    themePreference: 'AUTOMATIC',
+    manualThemeKey: 'HINDU',
+    updatedAt: new Date(),
+  }));
+  await assertSucceeds(getDoc(prefs));
+  await assertFails(getDoc(doc(bobDb, 'appearancePrefs/alice')));
+  await assertFails(setDoc(doc(bobDb, 'appearancePrefs/alice'), {
+    themePreference: 'MANUAL',
+    manualThemeKey: 'MUSLIM',
+    updatedAt: new Date(),
+  }));
+  await assertFails(updateDoc(prefs, { religion: 'Muslim' }));
+  await assertFails(updateDoc(prefs, { manualThemeKey: 'UNSAFE_UNKNOWN_THEME' }));
+  await assertFails(updateDoc(prefs, { themePreference: 'RELIGION_OVERRIDE' }));
+});

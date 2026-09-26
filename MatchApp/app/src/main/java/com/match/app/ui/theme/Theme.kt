@@ -71,7 +71,7 @@ private val AppTypography = Typography(
 @Composable
 fun MatchTheme(
     darkMode: Boolean? = null,
-    palette: AppPalette = AppPalette.ROSE,
+    palette: AppPalette = AppPalette.VIVAH,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()

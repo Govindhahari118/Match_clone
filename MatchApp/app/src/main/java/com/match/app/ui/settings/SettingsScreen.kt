@@ -21,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
 import com.match.app.data.repo.NotificationPreferenceRepository
@@ -53,9 +54,10 @@ class SettingsViewModel @Inject constructor(
     private val userDao: UserDao,
     private val authRepo: AuthRepository,
     private val savedSearchRepo: SavedSearchRepository,
-    private val notificationPreferenceRepo: NotificationPreferenceRepository
+    private val notificationPreferenceRepo: NotificationPreferenceRepository,
+    private val appearancePreferenceRepo: AppearancePreferenceRepository
 ) : ViewModel() {
-    val appearance = session.appearancePreference
+    val appearance = appearancePreferenceRepo.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
@@ -96,10 +98,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun useAutomaticTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.AUTOMATIC) }
-    fun useNeutralTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.NEUTRAL) }
-    fun useManualTheme(value: AppPalette) = viewModelScope.launch {
-        session.setThemePreference(ThemePreference.MANUAL, value.name)
+    fun useAutomaticTheme() = updateTheme(ThemePreference.AUTOMATIC)
+    fun useNeutralTheme() = updateTheme(ThemePreference.NEUTRAL)
+    fun useManualTheme(value: AppPalette) = updateTheme(ThemePreference.MANUAL, value.name)
+
+    private fun updateTheme(preference: ThemePreference, manualThemeKey: String? = null) = viewModelScope.launch {
+        runCatching { appearancePreferenceRepo.setThemePreference(preference, manualThemeKey) }
+            .onFailure {
+                _searchMessage.value =
+                    "Theme changed on this device. Account sync will retry when the connection is available."
+            }
     }
     fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
