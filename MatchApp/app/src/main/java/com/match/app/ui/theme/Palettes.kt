@@ -20,7 +20,7 @@ enum class AppPalette(val label: String, val swatch: Color) {
     MONO    ("Mono",     Color(0xFF424242)),
     GLACIER ("Glacier",  Color(0xFF4FC3F7)),
     TELUGU  ("Telugu",   Color(0xFFD4A017)),
-    VIVAH   ("Vivah",    Color(0xFF8B1A1A)),
+    VIVAH   ("Matree Neutral", Color(0xFF475569)),
     HINDU   ("Hindu",    Color(0xFFC76B00)),
     CHRISTIAN("Christian", Color(0xFF315E8A)),
     MUSLIM  ("Muslim",   Color(0xFF17705A)),
@@ -125,9 +125,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         dark = dark
     )
     AppPalette.VIVAH -> scheme(
-        primary = Color(0xFF8B1A1A), primaryContainer = Color(0xFFFFE8E8), onPrimaryContainer = Color(0xFF3E0000),
-        secondary = Color(0xFFB8860B), secondaryContainer = Color(0xFFFFF8DC), onSecondaryContainer = Color(0xFF4A3000),
-        tertiary = Color(0xFF1B5E20),
+        primary = Color(0xFF475569), primaryContainer = Color(0xFFE2E8F0), onPrimaryContainer = Color(0xFF0F172A),
+        secondary = Color(0xFF64748B), secondaryContainer = Color(0xFFF1F5F9), onSecondaryContainer = Color(0xFF1E293B),
+        tertiary = Color(0xFF4F6B5A),
         dark = dark
     )
     AppPalette.HINDU -> scheme(
