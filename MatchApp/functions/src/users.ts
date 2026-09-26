@@ -247,15 +247,20 @@ export const deleteUserAccount = functions
       }, { merge: true });
     }
 
-    // Public suppression is deliberately outside the phase ledger: every retry reasserts it before
-    // any cleanup work, so a partial failure can never make the account discoverable again.
+    // Public suppression is deliberately outside the phase ledger while the public profile still
+    // exists: every retry reasserts it before cleanup, so a partial failure cannot make the account
+    // discoverable again. Once PUBLIC_PROFILE is checkpointed the document is already deleted;
+    // never recreate a ghost users/{uid} document merely to reassert suppression while retrying
+    // Auth deletion.
     const userRef = db.collection("users").doc(uid);
-    await userRef.set({
-      accountStatus: "DELETING",
-      searchStatus: "CLOSED",
-      stealthMode: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    if (!completed.has("PUBLIC_PROFILE")) {
+      await userRef.set({
+        accountStatus: "DELETING",
+        searchStatus: "CLOSED",
+        stealthMode: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
 
     try {
       await runDeletionPhase(requestRef, completed, "RELATIONSHIPS", async () => {
