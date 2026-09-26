@@ -6,98 +6,104 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Central analytics facade wrapping Firebase Analytics.
- * All user-action tracking goes through this singleton so events
- * stay consistent and can be swapped to another provider later.
+ * Legacy compatibility facade for existing call sites.
+ *
+ * New feature instrumentation should use MatreeTelemetry. This facade intentionally discards
+ * member identifiers, free-form query/reason text, price strings and provider error text so older
+ * screens cannot bypass Matree's privacy-safe analytics contract while they are migrated.
  */
 @Singleton
 class AnalyticsManager @Inject constructor(
-    private val fa: FirebaseAnalytics
+    private val analytics: FirebaseAnalytics
 ) {
+    fun logSignIn(method: String) =
+        log("login", "method" to safeEnum(method))
 
-    // ── Auth ─────────────────────────────────────────────────────────────
+    fun logSignUp(method: String) =
+        log("sign_up", "method" to safeEnum(method))
 
-    fun logSignIn(method: String) = log("login", bundle("method" to method))
+    fun logProfileView(@Suppress("UNUSED_PARAMETER") targetUserId: Long) =
+        log("profile_view")
 
-    fun logSignUp(method: String) = log("sign_up", bundle("method" to method))
+    fun logInterestSent(@Suppress("UNUSED_PARAMETER") targetUserId: Long) =
+        log("interest_sent")
 
-    // ── Discovery & Matching ─────────────────────────────────────────────
-
-    fun logProfileView(targetUserId: Long) =
-        log("profile_view", bundle("target_user_id" to targetUserId.toString()))
-
-    fun logInterestSent(targetUserId: Long) =
-        log("interest_sent", bundle("target_user_id" to targetUserId.toString()))
-
-    fun logMutualMatch(targetUserId: Long) =
-        log("mutual_match", bundle("target_user_id" to targetUserId.toString()))
+    fun logMutualMatch(@Suppress("UNUSED_PARAMETER") targetUserId: Long) =
+        log("mutual_match")
 
     fun logFilterApplied(filterName: String) =
-        log("filter_applied", bundle("filter" to filterName))
+        log("filter_applied", "filter" to safeEnum(filterName))
 
     fun logSearchPerformed(query: String) =
-        log("search_performed", bundle("query" to query.take(100)))
-
-    // ── Chat ─────────────────────────────────────────────────────────────
+        log("search_performed", "has_query" to query.isNotBlank())
 
     fun logMessageSent(type: String = "text") =
-        log("message_sent", bundle("type" to type))
+        log("message_sent", "type" to safeEnum(type))
 
     fun logVoiceMessageSent() = logMessageSent("voice")
 
-    fun logChatOpened(peerId: Long) =
-        log("chat_opened", bundle("peer_id" to peerId.toString()))
-
-    // ── Premium & Payments ───────────────────────────────────────────────
+    fun logChatOpened(@Suppress("UNUSED_PARAMETER") peerId: Long) =
+        log("chat_opened")
 
     fun logPricingViewed() = log("pricing_viewed")
 
     fun logPurchaseStarted(planName: String) =
-        log("purchase_started", bundle("plan" to planName))
+        log("purchase_started", "plan" to safeEnum(planName))
 
-    fun logPurchaseCompleted(planName: String, amount: String) =
-        log("purchase_completed", bundle("plan" to planName, "amount" to amount))
+    fun logPurchaseCompleted(planName: String, @Suppress("UNUSED_PARAMETER") amount: String) =
+        log("purchase_completed", "plan" to safeEnum(planName))
 
-    fun logPurchaseFailed(reason: String) =
-        log("purchase_failed", bundle("reason" to reason.take(100)))
-
-    // ── Engagement ───────────────────────────────────────────────────────
+    fun logPurchaseFailed(@Suppress("UNUSED_PARAMETER") reason: String) =
+        log("purchase_failed")
 
     fun logScreenView(screenName: String) =
-        log(FirebaseAnalytics.Event.SCREEN_VIEW, bundle(
-            FirebaseAnalytics.Param.SCREEN_NAME to screenName
-        ))
+        log(
+            FirebaseAnalytics.Event.SCREEN_VIEW,
+            FirebaseAnalytics.Param.SCREEN_NAME to safeEnum(screenName)
+        )
 
     fun logDailyRewardClaimed(day: Int) =
-        log("daily_reward_claimed", bundle("day" to day.toString()))
+        log("daily_reward_claimed", "day" to day.coerceIn(1, 365))
 
-    fun logShortlistToggled(targetUserId: Long, added: Boolean) =
-        log("shortlist_toggled", bundle(
-            "target_user_id" to targetUserId.toString(),
-            "action" to if (added) "added" else "removed"
-        ))
+    fun logShortlistToggled(
+        @Suppress("UNUSED_PARAMETER") targetUserId: Long,
+        added: Boolean
+    ) = log("shortlist_toggled", "action" to if (added) "ADDED" else "REMOVED")
 
     fun logFeatureUsed(featureName: String) =
-        log("feature_used", bundle("feature" to featureName))
-
-    // ── Verification & Safety ────────────────────────────────────────────
+        log("feature_used", "feature" to safeEnum(featureName))
 
     fun logVerificationStarted(type: String) =
-        log("verification_started", bundle("type" to type))
+        log("verification_started", "type" to safeEnum(type))
 
     fun logProfileReported(reason: String) =
-        log("profile_reported", bundle("reason" to reason.take(100)))
+        log("profile_reported", "reason_category" to safeEnum(reason))
 
     fun logBlockToggled(blocked: Boolean) =
-        log("block_toggled", bundle("action" to if (blocked) "blocked" else "unblocked"))
+        log("block_toggled", "action" to if (blocked) "BLOCKED" else "UNBLOCKED")
 
-    // ── Internal helpers ─────────────────────────────────────────────────
-
-    private fun log(event: String, params: Bundle? = null) {
-        fa.logEvent(event, params)
+    private fun log(event: String, vararg params: Pair<String, Any>) {
+        val bundle = Bundle()
+        params.forEach { (key, value) ->
+            when (value) {
+                is String -> bundle.putString(key, value.take(MAX_VALUE_LENGTH))
+                is Int -> bundle.putLong(key, value.toLong())
+                is Long -> bundle.putLong(key, value)
+                is Boolean -> bundle.putLong(key, if (value) 1 else 0)
+            }
+        }
+        analytics.logEvent(event, bundle)
     }
 
-    private fun bundle(vararg pairs: Pair<String, String>): Bundle = Bundle().apply {
-        pairs.forEach { (k, v) -> putString(k, v) }
+    private fun safeEnum(value: String): String =
+        value.trim()
+            .uppercase()
+            .replace(Regex("[^A-Z0-9_]+"), "_")
+            .trim('_')
+            .take(MAX_VALUE_LENGTH)
+            .ifBlank { "UNKNOWN" }
+
+    private companion object {
+        const val MAX_VALUE_LENGTH = 40
     }
 }
