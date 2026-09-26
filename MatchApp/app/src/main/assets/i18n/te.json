@@ -75,5 +75,7 @@
   "app_language": "యాప్ భాష",
   "verify_phone": "ఫోన్ ధృవీకరించండి",
   "upgrade_now": "ప్లాన్‌లు చూడండి",
-  "maybe_later": "తర్వాత"
+  "maybe_later": "తర్వాత",
+  "available_languages": "అందుబాటులో ఉన్న భాషలు",
+  "more_languages_after_qa": "అనువాదం మరియు లేఅవుట్ QA పూర్తైన తర్వాత మాత్రమే మరిన్ని భాషలు కనిపిస్తాయి."
 }
