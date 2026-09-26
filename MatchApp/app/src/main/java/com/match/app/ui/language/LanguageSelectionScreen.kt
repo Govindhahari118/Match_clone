@@ -17,6 +17,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.i18n.SupportedUiLocales
 import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,7 +44,7 @@ class LanguageSelectionViewModel @Inject constructor(
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
 
     fun setLanguage(code: String) = viewModelScope.launch {
-        if (SUPPORTED_LANGUAGES.any { it.code == code }) session.setUiLanguage(code)
+        if (code in SupportedUiLocales.codes) session.setUiLanguage(code)
     }
 }
 
