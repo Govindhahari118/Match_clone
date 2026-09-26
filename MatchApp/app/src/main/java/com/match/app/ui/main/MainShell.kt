@@ -232,8 +232,13 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val scope = rememberCoroutineScope()
 
     val activity = LocalContext.current as? MainActivity
-    LaunchedEffect(Unit) {
-        activity?.consumeDeepLink()?.let { destination -> nav.navigate(destination) { launchSingleTop = true } }
+    val pendingDeepLink = activity?.pendingDeepLink
+    LaunchedEffect(pendingDeepLink) {
+        if (pendingDeepLink != null) {
+            activity.consumeDeepLink()?.let { destination ->
+                nav.navigate(destination) { launchSingleTop = true }
+            }
+        }
     }
 
     val showBottomBar = currentRoute in setOf(
