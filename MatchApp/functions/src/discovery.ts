@@ -61,6 +61,18 @@ function boolFromAnyFilter(value: string, actual: boolean): boolean {
   return true;
 }
 
+function premiumExpiryMillis(data: FirebaseFirestore.DocumentData): number {
+  if (data.premiumUntil instanceof admin.firestore.Timestamp) {
+    return data.premiumUntil.toMillis();
+  }
+  const expiry = Number(data.subscriptionExpiry || 0);
+  return Number.isFinite(expiry) ? expiry : 0;
+}
+
+function premiumIsActive(data: FirebaseFirestore.DocumentData, now: number): boolean {
+  return data.isPremium === true && premiumExpiryMillis(data) > now;
+}
+
 function matchesServerFilters(
   candidate: FirebaseFirestore.DocumentData,
   data: unknown,
@@ -86,7 +98,7 @@ function matchesServerFilters(
   if (verifiedOnly && candidate.isVerified !== true) return false;
   const verifiedLevel = filterInt(data, "verifiedLevel", 0, 100);
   if (verifiedLevel > 0 && Number(candidate.verificationLevel || 0) < verifiedLevel) return false;
-  if (filterBoolean(data, "premiumOnly") && candidate.isPremium !== true) return false;
+  if (filterBoolean(data, "premiumOnly") && !premiumIsActive(candidate, now)) return false;
   if (filterBoolean(data, "withPhotoOnly") && !stringValue(candidate.photoUrl)) return false;
   if (filterBoolean(data, "willingToRelocate") && candidate.willingToRelocate !== true) return false;
 
@@ -156,10 +168,18 @@ function matchesKeyword(data: FirebaseFirestore.DocumentData, keyword: string): 
   return fields.some((value) => normalizedSearchValue(value).includes(normalized));
 }
 
-function publicProfile(uid: string, data: FirebaseFirestore.DocumentData): Record<string, unknown> {
+function publicProfile(
+  uid: string,
+  data: FirebaseFirestore.DocumentData,
+  now: number
+): Record<string, unknown> {
   const result: Record<string, unknown> = { firebaseUid: uid };
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
+    if (field === "isPremium") {
+      result[field] = premiumIsActive(data, now);
+      continue;
+    }
     const value = data[field];
     if (value instanceof admin.firestore.Timestamp) {
       result[field] = value.toMillis();
@@ -300,7 +320,7 @@ export const discoverProfiles = functions
       if (!matchesKeyword(candidate, keyword)) continue;
       if (!matchesServerFilters(candidate, data, now)) continue;
 
-      profiles.push(publicProfile(doc.id, candidate));
+      profiles.push(publicProfile(doc.id, candidate, now));
     }
 
     const nextCursor = scan.docs.length === SCAN_LIMIT
