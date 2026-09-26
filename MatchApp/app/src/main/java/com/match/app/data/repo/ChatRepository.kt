@@ -119,6 +119,18 @@ class ChatRepository @Inject constructor(
         return target.absolutePath
     }
 
+    suspend fun retryFailed(message: MessageEntity) = withContext(Dispatchers.IO) {
+        require(message.id > 0 && message.clientMessageId.isNotBlank()) {
+            "Message is not retryable"
+        }
+        val reset = pendingDao.resetRetry(message.id)
+        require(reset > 0) {
+            "This failed message is no longer in the durable outbox"
+        }
+        dao.updateStatus(message.id, "sending")
+        MessageRetryWorker.enqueue(context)
+    }
+
     suspend fun markRead(me: Long, peer: Long) = withContext(Dispatchers.IO) {
         dao.markRead(me, peer)
         val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
