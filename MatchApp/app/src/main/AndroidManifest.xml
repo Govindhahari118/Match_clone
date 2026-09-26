@@ -54,6 +54,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="matrimonyconnect" android:host="notifications" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="matrimonyconnect" android:host="interests" />
+                <data android:scheme="matrimonyconnect" android:host="matches" />
+                <data android:scheme="matrimonyconnect" android:host="who_viewed" />
+                <data android:scheme="matrimonyconnect" android:host="pricing" />
+                <data android:scheme="matrimonyconnect" android:host="verification" />
+                <data android:scheme="matrimonyconnect" android:host="nearby" />
+            </intent-filter>
         </activity>
 
         <service
