@@ -96,7 +96,7 @@ class SessionStore(private val context: Context) {
 
     companion object {
         private const val SESSION_EXPIRY_MS = 30L * 24 * 60 * 60 * 1000
-        private val SUPPORTED_UI_LANGUAGES = setOf("en", "hi", "te", "ta", "kn", "mr")
+        private val SUPPORTED_UI_LANGUAGES = setOf("en", "hi", "te")
     }
 
     private fun normalizeUiLanguage(value: String?): String {
