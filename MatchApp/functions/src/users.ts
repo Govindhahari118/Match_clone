@@ -8,6 +8,7 @@ import {
   requireAppCheck,
   reserveMatrimonyId,
 } from "./shared";
+import { shouldReassertPublicSuppression } from "./deletionPolicy";
 
 export const onUserCreate = functions.firestore
   .document("users/{uid}")
@@ -253,7 +254,7 @@ export const deleteUserAccount = functions
     // never recreate a ghost users/{uid} document merely to reassert suppression while retrying
     // Auth deletion.
     const userRef = db.collection("users").doc(uid);
-    if (!completed.has("PUBLIC_PROFILE")) {
+    if (shouldReassertPublicSuppression(completed)) {
       await userRef.set({
         accountStatus: "DELETING",
         searchStatus: "CLOSED",
