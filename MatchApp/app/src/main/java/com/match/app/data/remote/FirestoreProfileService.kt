@@ -35,19 +35,19 @@ class FirestoreProfileService @Inject constructor(
             "isPremium", "isVerified", "matrimonyId", "verificationLevel",
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
-            "username", "usernameNormalized", "lastActiveAt"
+            "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
-            "religion", "religionLocked", "religionConfirmedAt"
+            "religion", "religionId", "religionLocked", "religionConfirmedAt"
         )
         private val PRIVATE_FIELDS = setOf(
-            "email", "phoneNumber", "fcmToken", "dateOfBirth", "rasi", "nakshatra",
+            "email", "phoneNumber", "dateOfBirth", "rasi", "nakshatra",
             "manglik", "birthTime", "birthPlace", "incomeBand"
         )
         private val LEGACY_PUBLIC_PRIVACY_FIELDS = setOf("isIncognito", "showLastActive")
     }
 
-    suspend fun pushProfile(entity: UserEntity, confirmReligion: Boolean = false) {
+    suspend fun pushProfile(entity: UserEntity) {
         if (entity.firebaseUid.isBlank()) return
         val uid = entity.firebaseUid
         require(auth.currentUser?.uid == uid) { "Cannot update another user's profile" }
@@ -70,20 +70,6 @@ class FirestoreProfileService @Inject constructor(
             put("showLastActive", FieldValue.delete())
         }
 
-        if (confirmReligion) {
-            require(entity.religion.isNotBlank()) { "Religion must be selected before confirmation" }
-            val current = usersCol.document(uid).get().await()
-            val alreadyLocked = current.getBoolean("religionLocked") == true
-            if (alreadyLocked) {
-                val canonicalReligion = current.getString("religion").orEmpty()
-                require(canonicalReligion.equals(entity.religion, ignoreCase = true)) {
-                    "Religion is already confirmed and cannot be changed from the app"
-                }
-            } else {
-                publicData["religionLocked"] = true
-                publicData["religionConfirmedAt"] = System.currentTimeMillis()
-            }
-        }
 
         val batch = db.batch()
         batch.set(usersCol.document(uid), publicData, SetOptions.merge())
@@ -211,15 +197,6 @@ class FirestoreProfileService @Inject constructor(
             if (!city.isNullOrBlank() && !entity.city.equals(city, ignoreCase = true)) return@mapNotNull null
             entity
         }
-    }
-
-    suspend fun saveFcmToken(firebaseUid: String, token: String) {
-        if (firebaseUid.isBlank() || token.isBlank()) return
-        require(auth.currentUser?.uid == firebaseUid) { "Cannot update another user's token" }
-        privateCol.document(firebaseUid).set(
-            mapOf("fcmToken" to token, "updatedAt" to System.currentTimeMillis()),
-            SetOptions.merge()
-        ).await()
     }
 
     suspend fun deleteProfile(firebaseUid: String) {

@@ -15,7 +15,7 @@ import javax.inject.Inject
 
 data class CounsellingUiState(
     val loading: Boolean = false,
-    val booked: Boolean = false,
+    val submitted: Boolean = false,
     val bookings: List<Map<String, Any?>> = emptyList(),
     val error: String? = null
 )
@@ -56,12 +56,12 @@ class CounsellingViewModel @Inject constructor(
                 date = "TBD",
                 time = "TBD"
             )
-            _ui.update { it.copy(loading = false, booked = true) }
+            _ui.update { it.copy(loading = false, submitted = true) }
             loadBookings()
         } catch (e: Exception) {
-            _ui.update { it.copy(loading = false, error = "Failed to book session. Please try again.") }
+            _ui.update { it.copy(loading = false, error = "Failed to submit counselling request. Please try again.") }
         }
     }
 
-    fun resetBooking() = _ui.update { it.copy(booked = false) }
+    fun resetBooking() = _ui.update { it.copy(submitted = false) }
 }

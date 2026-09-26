@@ -38,6 +38,10 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
+import com.match.app.ui.components.LoadingState
+import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProfileSection
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -116,22 +120,24 @@ fun ProfileScreen(
 
     val p = profile
     if (p == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.testTag("profile_loading"))
-        }
+        LoadingState(
+            modifier = Modifier.fillMaxSize().testTag("profile_loading"),
+            message = "Loading your profile…"
+        )
         return
     }
 
+    val spacing = MatreeDesign.spacing
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("profile_screen"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
-        ProfileHero(p)
+        ProfileHero(p, photos)
 
         ProfileCompletenessBar(
             profile = p,
             onComplete = onGoSettings,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.md)
         )
 
         ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
@@ -182,7 +188,7 @@ fun ProfileScreen(
             InfoRow(Icons.Filled.Restaurant, p.diet)
             if (p.hobbies.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, label = { Text(hobby) }) }
+                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, enabled = false, label = { Text(hobby) }) }
                 }
             }
         }
@@ -191,25 +197,25 @@ fun ProfileScreen(
 
         PhotosSection(photos, picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, vm = vm)
 
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+        Column(Modifier.padding(horizontal = spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
                 Icon(Icons.Filled.PrivacyTip, null); Spacer(Modifier.size(8.dp)); Text("Privacy & visibility")
             }
-            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
                 Icon(Icons.Filled.Description, null); Spacer(Modifier.size(8.dp)); Text("View biodata")
             }
-            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_settings")) {
+            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_settings")) {
                 Icon(Icons.Filled.Settings, null); Spacer(Modifier.size(8.dp)); Text("Settings")
             }
             OutlinedButton(
                 onClick = vm::signOut,
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_sign_out"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_sign_out"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ExitToApp, null); Spacer(Modifier.size(8.dp)); Text("Sign out")
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(spacing.xxl))
     }
 }
 
@@ -217,24 +223,51 @@ private fun labeled(label: String, value: String): String =
     if (value.isBlank()) "" else "${label.removeSuffix(" (optional)")}: $value"
 
 @Composable
-private fun ProfileHero(p: UserProfile) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(84.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+private fun ProfileHero(p: UserProfile, photos: List<PhotoEntity>) {
+    val photoModels = remember(p.id, p.photoUrl, p.primaryPhotoPath, photos) {
+        buildList<Any> {
+            photos
+                .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
+                .forEach { photo ->
+                    add(
+                        if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) {
+                            photo.path
+                        } else {
+                            File(photo.path)
+                        }
+                    )
+                }
+            if (isEmpty()) {
+                when {
+                    p.photoUrl.startsWith("https://") || p.photoUrl.startsWith("http://") ->
+                        add(p.photoUrl)
+                    !p.primaryPhotoPath.isNullOrBlank() ->
+                        add(File(p.primaryPhotoPath))
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(p.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                if (p.isVerified) { Spacer(Modifier.size(5.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
-            }
-            Text(listOf(p.age.takeIf { it > 0 }?.toString().orEmpty(), p.city, p.profession).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
-            Text(listOf(p.religion, p.caste).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(p.matrimonyId.ifBlank { "Profile ID: M${p.id}" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
     }
+
+    MatreeProfileHeader(
+        name = p.displayName,
+        age = p.age.takeIf { it > 0 },
+        username = p.username,
+        photoModels = photoModels,
+        primaryLine = listOf(p.city, p.state, p.profession)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        secondaryLine = listOf(p.religion, p.caste, p.motherTongue)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        isVerified = p.isVerified,
+        isPremium = p.isPremium
+    )
+    Text(
+        p.matrimonyId.ifBlank { "Profile ID: M" + p.id },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.outline,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md)
+    )
 }
 
 @Composable
@@ -288,11 +321,11 @@ private fun TrustAndVerificationCard(p: UserProfile, hasPhoto: Boolean, onVerify
 
 @Composable
 private fun ProfileSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); content()
-        }
-    }
+    MatreeProfileSection(
+        title = title,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md),
+        content = content
+    )
 }
 
 @Composable

@@ -5,7 +5,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const projectId = 'matchapp-chat-atomic-test';
 let env;
@@ -71,4 +71,42 @@ test('first-message batch is denied when either member blocked the other', async
   });
   const alice = env.authenticatedContext('alice').firestore();
   await assertFails(firstMessageBatch(alice).commit());
+});
+
+
+test('only recipient may acknowledge delivery and read state', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  const aliceMessage = doc(alice, 'chats/thread1/messages/client_1234567890');
+  const bobMessage = doc(bob, 'chats/thread1/messages/client_1234567890');
+
+  await assertFails(updateDoc(aliceMessage, { deliveredAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(bobMessage, { deliveredAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(bobMessage, {
+    isRead: true,
+    readAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(bobMessage, { isRead: false }));
+});
+
+test('block revokes recipient receipt updates immediately', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob',
+      blockedAt: Date.now(),
+    });
+  });
+
+  await assertFails(updateDoc(
+    doc(bob, 'chats/thread1/messages/client_1234567890'),
+    { deliveredAt: serverTimestamp() },
+  ));
 });

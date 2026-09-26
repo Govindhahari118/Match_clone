@@ -43,17 +43,26 @@ private data class Plan(
 )
 
 private val PLANS = listOf(
-    Plan("FREE", "Free", "Start your journey", "ALWAYS FREE", "No contact reveal", listOf(
-        "Create & complete profile", "Browse daily matches", "Send up to 5 interests/day", "Shortlist profiles", "Receive interests"
+    Plan("FREE", "Free", "Start your journey", "ALWAYS FREE", "No paid contact reveals", listOf(
+        "Create and complete your profile",
+        "Browse eligible profiles",
+        "Send and receive interests",
+        "Shortlist profiles"
     ), "Free plan", Icons.Filled.Person),
-    Plan("SILVER_3M", "Silver", "Serious matchmaking", "3 MONTHS", "75 contacts", listOf(
-        "Everything in Free", "View 75 matched-member contacts", "Advanced search filters", "Unlimited messaging", "See who viewed you", "Kundli compatibility report"
+    Plan("SILVER_3M", "Silver", "Verified paid membership", "3 MONTHS", "75 contact reveals", listOf(
+        "75 matched-member contact reveals during this entitlement",
+        "3-month server-verified membership entitlement",
+        "Purchase and restore handled through Google Play"
     ), "Choose Silver", Icons.Filled.WorkspacePremium),
-    Plan("GOLD_6M", "Gold", "More visibility and support", "6 MONTHS", "150 contacts", listOf(
-        "Everything in Silver", "View 150 matched-member contacts", "Profile boost", "Priority support", "Stealth browsing"
+    Plan("GOLD_6M", "Gold", "Verified paid membership", "6 MONTHS", "150 contact reveals", listOf(
+        "150 matched-member contact reveals during this entitlement",
+        "6-month server-verified membership entitlement",
+        "Purchase and restore handled through Google Play"
     ), "Choose Gold", Icons.Filled.Star),
-    Plan("PLATINUM_12M", "Platinum", "Maximum membership access", "12 MONTHS", "300 contacts", listOf(
-        "Everything in Gold", "View 300 matched-member contacts", "Video-call eligibility", "Relationship-manager eligibility", "Maximum membership feature access"
+    Plan("PLATINUM_12M", "Platinum", "Verified paid membership", "12 MONTHS", "300 contact reveals", listOf(
+        "300 matched-member contact reveals during this entitlement",
+        "12-month server-verified membership entitlement",
+        "Purchase and restore handled through Google Play"
     ), "Choose Platinum", Icons.Filled.Diamond)
 )
 

@@ -41,6 +41,8 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProfileSection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -450,48 +452,44 @@ fun MatchDetailScreen(
 
 @Composable
 private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
-    val primary = photos.firstOrNull { it.isPrimary } ?: photos.firstOrNull()
-    val model: Any? = when {
-        primary != null && (primary.path.startsWith("https://") || primary.path.startsWith("http://")) -> primary.path
-        primary != null -> File(primary.path)
-        profile.photoUrl.startsWith("https://") || profile.photoUrl.startsWith("http://") -> profile.photoUrl
-        !profile.primaryPhotoPath.isNullOrBlank() -> File(profile.primaryPhotoPath)
-        else -> null
-    }
-
-    ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (model != null) {
-                AsyncImage(
-                    model = model,
-                    contentDescription = "${profile.displayName} profile photo",
-                    modifier = Modifier.fillMaxWidth().height(300.dp),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Surface(modifier = Modifier.fillMaxWidth().height(180.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
-                    }
+    val photoModels = remember(profile.id, profile.photoUrl, profile.primaryPhotoPath, photos) {
+        buildList<Any> {
+            photos
+                .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
+                .forEach { photo ->
+                    add(
+                        if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) {
+                            photo.path
+                        } else {
+                            File(photo.path)
+                        }
+                    )
                 }
-            }
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${profile.displayName}, ${profile.age}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (profile.isVerified) {
-                        Spacer(Modifier.width(5.dp))
-                        Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
-                    }
+            if (isEmpty()) {
+                when {
+                    profile.photoUrl.startsWith("https://") || profile.photoUrl.startsWith("http://") ->
+                        add(profile.photoUrl)
+                    !profile.primaryPhotoPath.isNullOrBlank() ->
+                        add(File(profile.primaryPhotoPath))
                 }
-                Text(listOf(profile.city, profile.profession).filter { it.isNotBlank() }.joinToString(" • "))
-                Text(
-                    listOf(profile.religion, profile.motherTongue).filter { it.isNotBlank() }.joinToString(" • "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
+
+    MatreeProfileHeader(
+        name = profile.displayName,
+        age = profile.age.takeIf { it > 0 },
+        username = profile.username,
+        photoModels = photoModels,
+        primaryLine = listOf(profile.city, profile.profession)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        secondaryLine = listOf(profile.religion, profile.motherTongue)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        isVerified = profile.isVerified,
+        isPremium = profile.isPremium
+    )
 }
 
 @Composable
@@ -552,10 +550,5 @@ private fun Fact(label: String, value: String) {
 
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            content()
-        }
-    }
+    MatreeProfileSection(title = title, content = content)
 }

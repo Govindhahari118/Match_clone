@@ -128,10 +128,17 @@ test('clients cannot create or delete interest and match authority documents dir
   }));
 });
 
-test('blocking relationship remains owner-controlled and private', async () => {
+test('block documents are private and server-authoritative', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await assertFails(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), {
+    blockedUid: 'bob', blockedAt: Date.now(),
+  }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
   await assertSucceeds(getDoc(doc(aliceDb, 'blocks/alice/blocked/bob')));
   await assertFails(getDoc(doc(bobDb, 'blocks/alice/blocked/bob')));
 });
@@ -184,7 +191,11 @@ test('chat thread requires server-created mutual interests and stops after a blo
     voiceUri: null, imageUri: null, voiceDurationMs: null,
   }));
 
-  await assertSucceeds(setDoc(doc(bobDb, 'blocks/bob/blocked/alice'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
+      blockedUid: 'alice', blockedAt: Date.now(),
+    });
+  });
   await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m2'), {
     body: 'blocked', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
@@ -256,7 +267,11 @@ test('blocked member cannot read profile media', async () => {
 
   await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
-  await assertSucceeds(setDoc(doc(aliceDb, 'blocks/alice/blocked/bob'), { blockedAt: Date.now() }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob', blockedAt: Date.now(),
+    });
+  });
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
 });
 
@@ -282,4 +297,144 @@ test('verification documents cannot be read by another client', async () => {
   const bytes = new Uint8Array([1, 2, 3]);
   await assertSucceeds(uploadBytes(ref(aliceStorage, 'verifications/alice/id.jpg'), bytes, { contentType: 'image/jpeg' }));
   await assertFails(getBytes(ref(bobStorage, 'verifications/alice/id.jpg')));
+});
+
+
+test('notifications are server-created, recipient-only, and clients may only mark read', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'notifications/n1'), {
+      userId: 'alice',
+      type: 'INTEREST',
+      title: 'New interest',
+      body: 'Open the app to view it.',
+      entityType: 'profile',
+      entityId: 'bob',
+      deepLink: 'matrimonyconnect://match?uid=bob',
+      fromFirebaseUid: 'bob',
+      createdAt: new Date(),
+      readAt: null,
+    });
+  });
+
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const n = doc(aliceDb, 'notifications/n1');
+
+  await assertSucceeds(getDoc(n));
+  await assertFails(getDoc(doc(bobDb, 'notifications/n1')));
+  await assertFails(setDoc(doc(aliceDb, 'notifications/forged'), {
+    userId: 'alice', type: 'MATCH', title: 'Fake', body: 'Fake', createdAt: new Date(), readAt: null,
+  }));
+  await assertSucceeds(updateDoc(n, { readAt: new Date() }));
+  await assertFails(updateDoc(n, { title: 'Tampered' }));
+});
+
+
+test('notification preferences are owner-only and schema constrained', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const prefs = doc(aliceDb, 'notificationPrefs/alice');
+
+  await assertSucceeds(setDoc(prefs, {
+    interests: true,
+    matches: false,
+    messages: true,
+    system: true,
+  }));
+  await assertSucceeds(getDoc(prefs));
+  await assertFails(getDoc(doc(bobDb, 'notificationPrefs/alice')));
+  await assertFails(updateDoc(prefs, { arbitraryField: true }));
+  await assertFails(updateDoc(prefs, { interests: 'yes' }));
+});
+
+
+test('FCM device registry is server-only and legacy client token writes are rejected', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+
+  await assertFails(updateDoc(doc(aliceDb, 'userPrivate/alice'), {
+    fcmToken: 'client-must-not-write-a-token-value',
+  }));
+
+  const devicePath = 'fcmTokens/alice/devices/device_1234567890abcdef';
+  await assertFails(setDoc(doc(aliceDb, devicePath), {
+    uid: 'alice',
+    deviceId: 'device_1234567890abcdef',
+    token: 'forged-client-token-that-is-long-enough',
+  }));
+  await assertFails(getDoc(doc(aliceDb, devicePath)));
+  await assertFails(getDoc(doc(bobDb, devicePath)));
+
+  await assertFails(setDoc(doc(aliceDb, 'fcmDeviceOwners/device_1234567890abcdef'), {
+    uid: 'alice',
+  }));
+});
+
+
+test('operations audit log is never client readable or writable', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const audit = doc(aliceDb, 'adminAudit/fake-client-audit');
+
+  await assertFails(getDoc(audit));
+  await assertFails(setDoc(audit, {
+    actorUid: 'alice',
+    actorRole: 'ops_admin',
+    action: 'verification.review',
+    targetUid: 'bob',
+    createdAt: new Date(),
+  }));
+});
+
+
+test('appearance preferences are private, account-scoped, and presentation-only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  const bobDb = env.authenticatedContext('bob').firestore();
+  const prefs = doc(aliceDb, 'appearancePrefs/alice');
+
+  await assertSucceeds(setDoc(prefs, {
+    themePreference: 'AUTOMATIC',
+    manualThemeKey: 'HINDU',
+    updatedAt: new Date(),
+  }));
+  await assertSucceeds(getDoc(prefs));
+  await assertFails(getDoc(doc(bobDb, 'appearancePrefs/alice')));
+  await assertFails(setDoc(doc(bobDb, 'appearancePrefs/alice'), {
+    themePreference: 'MANUAL',
+    manualThemeKey: 'MUSLIM',
+    updatedAt: new Date(),
+  }));
+  await assertFails(updateDoc(prefs, { religion: 'Muslim' }));
+  await assertFails(updateDoc(prefs, { manualThemeKey: 'UNSAFE_UNKNOWN_THEME' }));
+  await assertFails(updateDoc(prefs, { themePreference: 'RELIGION_OVERRIDE' }));
+});
+
+
+test('operations records are server-only for ordinary authenticated clients', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'supportTickets/ticket1'), {
+      uid: 'alice', category: 'Account', message: 'Please help with my account.',
+      status: 'OPEN', createdAt: new Date(), updatedAt: new Date(),
+    });
+    await setDoc(doc(db, 'profileReports/report1'), {
+      reporterUid: 'alice', targetUid: 'bob', reason: 'Spam',
+      status: 'OPEN', createdAt: new Date(), updatedAt: new Date(),
+    });
+    await setDoc(doc(db, 'opsAuditLog/audit1'), {
+      actorUid: 'operator', actorRole: 'support',
+      action: 'SUPPORT_TICKET_STATUS_UPDATED',
+      targetCollection: 'supportTickets', targetId: 'ticket1',
+      reason: 'Test audit', createdAt: new Date(),
+    });
+  });
+
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  for (const path of [
+    'supportTickets/ticket1',
+    'profileReports/report1',
+    'opsAuditLog/audit1',
+  ]) {
+    await assertFails(getDoc(doc(aliceDb, path)));
+    await assertFails(setDoc(doc(aliceDb, path), { status: 'CLOSED' }, { merge: true }));
+  }
 });

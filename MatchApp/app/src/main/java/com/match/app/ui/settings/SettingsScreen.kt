@@ -18,11 +18,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
+import com.match.app.data.repo.NotificationPreferenceRepository
+import com.match.app.data.repo.NotificationPreferences
 import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
@@ -50,14 +54,19 @@ class SettingsViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val authRepo: AuthRepository,
-    private val savedSearchRepo: SavedSearchRepository
+    private val savedSearchRepo: SavedSearchRepository,
+    private val notificationPreferenceRepo: NotificationPreferenceRepository,
+    private val appearancePreferenceRepo: AppearancePreferenceRepository,
+    private val telemetry: MatreeTelemetry
 ) : ViewModel() {
-    val appearance = session.appearancePreference
+    val appearance = appearancePreferenceRepo.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
+    val notificationPreferences = notificationPreferenceRepo.observe()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NotificationPreferences())
 
     val user: StateFlow<UserEntity?> = session.userId
         .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
@@ -80,13 +89,43 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
-    fun useAutomaticTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.AUTOMATIC) }
-    fun useNeutralTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.NEUTRAL) }
-    fun useManualTheme(value: AppPalette) = viewModelScope.launch {
-        session.setThemePreference(ThemePreference.MANUAL, value.name)
+    private val _profilePaused = MutableStateFlow(false)
+    val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
+    private val _lifecycleBusy = MutableStateFlow(false)
+    val lifecycleBusy: StateFlow<Boolean> = _lifecycleBusy.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _profilePaused.value = authRepo.getMatrimonyPaused()
+        }
+    }
+
+    fun useAutomaticTheme() = updateTheme(ThemePreference.AUTOMATIC)
+    fun useNeutralTheme() = updateTheme(ThemePreference.NEUTRAL)
+    fun useManualTheme(value: AppPalette) = updateTheme(ThemePreference.MANUAL, value.name)
+
+    private fun updateTheme(preference: ThemePreference, manualThemeKey: String? = null) = viewModelScope.launch {
+        runCatching { appearancePreferenceRepo.setThemePreference(preference, manualThemeKey) }
+            .onSuccess {
+                val paletteKey = when (preference) {
+                    ThemePreference.AUTOMATIC -> "AUTOMATIC"
+                    ThemePreference.NEUTRAL -> "VIVAH"
+                    ThemePreference.MANUAL -> manualThemeKey ?: "VIVAH"
+                }
+                telemetry.themeChanged(preference.name, paletteKey)
+            }
+            .onFailure {
+                _searchMessage.value =
+                    "Theme changed on this device. Account sync will retry when the connection is available."
+            }
     }
     fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
+
+    fun setNotificationPreference(key: String, enabled: Boolean) = viewModelScope.launch {
+        runCatching { notificationPreferenceRepo.update(key, enabled) }
+            .onFailure { _searchMessage.value = "Could not update notification preference." }
+    }
 
     fun saveCurrentSearch(name: String) = viewModelScope.launch {
         val id = session.userId.first() ?: return@launch
@@ -106,6 +145,23 @@ class SettingsViewModel @Inject constructor(
 
     fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
+
+    fun setProfilePaused(paused: Boolean) = viewModelScope.launch {
+        if (_lifecycleBusy.value) return@launch
+        _lifecycleBusy.value = true
+        val result = authRepo.setMatrimonyPaused(paused)
+        result.onSuccess { actual ->
+            _profilePaused.value = actual
+            _searchMessage.value = if (actual) {
+                "Matrimony profile paused. You are hidden from new discovery."
+            } else {
+                "Matrimony profile resumed. Current privacy and eligibility rules apply."
+            }
+        }.onFailure {
+            _searchMessage.value = it.message ?: "Could not update matrimony visibility."
+        }
+        _lifecycleBusy.value = false
+    }
 
     fun deleteAccount() = viewModelScope.launch {
         val id = session.userId.first()
@@ -141,8 +197,11 @@ fun SettingsScreen(
     val language by vm.uiLanguage.collectAsState()
     val accountState by vm.accountState.collectAsState()
     val currentFilter by vm.currentFilter.collectAsState()
+    val notificationPreferences by vm.notificationPreferences.collectAsState()
     val savedSearches by vm.savedSearches.collectAsState()
     val searchMessage by vm.searchMessage.collectAsState()
+    val profilePaused by vm.profilePaused.collectAsState()
+    val lifecycleBusy by vm.lifecycleBusy.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
@@ -203,7 +262,7 @@ fun SettingsScreen(
                         if (user?.isVerified == true) Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
                     }
                     user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
-                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { user?.id?.let { id -> "M$id" } ?: "" }.orEmpty())
+                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { "Being assigned" }.orEmpty())
                 }
             }
 
@@ -318,6 +377,41 @@ fun SettingsScreen(
                 }
             }
 
+            Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Choose which real account events may send a push notification. Notification history remains available in the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SettingToggle(
+                icon = Icons.Filled.PersonAdd,
+                title = "Interests",
+                subtitle = "New interest requests and related updates.",
+                checked = notificationPreferences.interests,
+                onCheckedChange = { vm.setNotificationPreference("interests", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Favorite,
+                title = "Matches",
+                subtitle = "Mutual-match notifications.",
+                checked = notificationPreferences.matches,
+                onCheckedChange = { vm.setNotificationPreference("matches", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Forum,
+                title = "Messages",
+                subtitle = "New-message notifications.",
+                checked = notificationPreferences.messages,
+                onCheckedChange = { vm.setNotificationPreference("messages", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Notifications,
+                title = "Account & system",
+                subtitle = "Verification, safety, subscription and service updates.",
+                checked = notificationPreferences.system,
+                onCheckedChange = { vm.setNotificationPreference("system", it) }
+            )
+
             Text("Language & security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -339,7 +433,37 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            Text("Account deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Matrimony visibility", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                if (profilePaused) {
+                    "Your profile is paused and excluded from new discovery. Messages, shortlist, preferences and account history are preserved."
+                } else {
+                    "Pause your matrimony profile without deleting your account. You can resume later."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { vm.setProfilePaused(!profilePaused) },
+                enabled = !lifecycleBusy && accountState !is SettingsViewModel.AccountState.Deleting,
+                modifier = Modifier.fillMaxWidth().testTag("settings_pause_profile")
+            ) {
+                if (lifecycleBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(if (profilePaused) Icons.Filled.PlayArrow else Icons.Filled.PauseCircle, null)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        lifecycleBusy -> "Updating…"
+                        profilePaused -> "Resume matrimony profile"
+                        else -> "Pause matrimony profile"
+                    }
+                )
+            }
+
+            Text("Permanent deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Permanently delete your account and start the authenticated server cleanup flow. This action cannot be undone.",
                 style = MaterialTheme.typography.bodySmall,

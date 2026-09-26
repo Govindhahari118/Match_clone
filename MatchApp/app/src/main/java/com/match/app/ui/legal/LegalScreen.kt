@@ -115,15 +115,16 @@ private val SECURITY = listOf(
 )
 
 private val REFUNDS = listOf(
-    LegalSection("Eligibility", listOf(
-        "Refunds are available within 7 days of plan activation.",
-        "Only the original payment method can receive refunds."
+    LegalSection("Purchase channel", listOf(
+        "Refund and cancellation eligibility depends on the purchase channel, product state, and the policy that applies to that purchase.",
+        "For Google Play purchases, the current Google Play purchase/subscription and refund process remains authoritative."
     )),
-    LegalSection("How to Request", listOf(
-        "Email support@matrimonyconnect.com with your order ID and the reason for cancellation."
+    LegalSection("Support", listOf(
+        "Use the in-app support flow with the relevant order or purchase reference when you need billing help.",
+        "Matree does not promise a universal refund window unless that exact policy is displayed for the product and purchase channel."
     )),
-    LegalSection("Exceptions", listOf(
-        "Refunds may not be granted after 7 days, or if the plan was purchased through a partner marketplace."
+    LegalSection("Entitlement changes", listOf(
+        "Verified refunds, cancellations, expiries and chargebacks update server-owned entitlement state and are reconciled across devices."
     ))
 )
 
@@ -143,7 +144,7 @@ private fun subtitleFor(type: String) = when (type) {
     "privacy" -> "MatrimonyConnect is built around trust. This policy explains what data we collect, why we collect it, and how you control your privacy."
     "guidelines" -> "MatrimonyConnect is built for serious, respectful matchmaking. These guidelines protect everyone on the platform."
     "security" -> "We take security seriously. This page outlines basic practices and how to report security issues responsibly."
-    "refunds" -> "All paid plans include a 7-day money-back guarantee. If you are not satisfied, contact support within 7 days."
+    "refunds" -> "Refund and cancellation terms depend on the real purchase channel and the policy shown for that product."
     else -> ""
 }
 

@@ -23,8 +23,9 @@ class MessageRetryWorker @AssistedInject constructor(
     private val storage: FirebaseStorageService
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
-        pendingDao.pruneStale()
-        val pending = pendingDao.oldest()
+        val pending = pendingDao.oldestAutomatic(MAX_AUTO_RETRIES)
+        // Rows that exhaust automatic retries remain persisted so the user can explicitly retry
+        // the same stable clientMessageId later instead of silently losing the operation.
         if (pending.isEmpty()) return Result.success()
         for (msg in pending) {
             try {
@@ -45,11 +46,12 @@ class MessageRetryWorker @AssistedInject constructor(
                 if (msg.localMessageId > 0) messageDao.updateStatus(msg.localMessageId, "failed")
             }
         }
-        return if (pendingDao.count() > 0) Result.retry() else Result.success()
+        return if (pendingDao.countAutomatic(MAX_AUTO_RETRIES) > 0) Result.retry() else Result.success()
     }
 
     companion object {
         private const val UNIQUE_WORK = "chat_outbox_retry"
+        private const val MAX_AUTO_RETRIES = 10
         fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<MessageRetryWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "messages",
-    indices = [Index(value = ["fromUserId", "toUserId"]), Index("toUserId")]
+    indices = [Index(value = ["fromUserId", "toUserId"]), Index("toUserId"), Index("clientMessageId")]
 )
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -23,6 +23,8 @@ data class MessageEntity(
     val voiceDurationMs: Long? = null,
     /** ID of the message this is a reply to (null = top-level message). */
     val replyToId: Long? = null,
-    /** Delivery status: "sent", "delivered", "read". */
+    /** Stable Firestore/client id used to reconcile retries and recipient acknowledgements. */
+    val clientMessageId: String = "",
+    /** Delivery status: "sending", "failed", "sent", "delivered", "read". */
     val status: String = "sent"
 )

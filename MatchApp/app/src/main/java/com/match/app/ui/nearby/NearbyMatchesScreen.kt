@@ -30,6 +30,9 @@ import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.match.app.data.repo.LocationRepository
 import com.match.app.data.repo.NearbyProfile
+import com.match.app.ui.components.EmptyState
+import com.match.app.ui.components.MatreeLoadingSkeleton
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -236,10 +239,11 @@ fun NearbyMatchesScreen(
             )
         }
     ) { padding ->
+        val spacing = MatreeDesign.spacing
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize().testTag("nearby_screen"),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = PaddingValues(spacing.md),
+            verticalArrangement = Arrangement.spacedBy(spacing.sm)
         ) {
             item {
                 ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
@@ -257,6 +261,7 @@ fun NearbyMatchesScreen(
                         if (ui.statusLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         else AssistChip(
                             onClick = {},
+                            enabled = false,
                             label = { Text(if (ui.sharingLocation) "Nearby sharing is on" else "Nearby sharing is off") },
                             leadingIcon = { Icon(if (ui.sharingLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff, null, Modifier.size(16.dp)) }
                         )
@@ -371,32 +376,37 @@ fun NearbyMatchesScreen(
             }
 
             if (ui.loading) {
-                item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                item {
+                    MatreeLoadingSkeleton(
+                        modifier = Modifier.fillMaxWidth(),
+                        height = MatreeDesign.sizes.avatarHero
+                    )
+                }
             } else if (ui.sharingLocation && ui.matches.isEmpty() && ui.error == null) {
                 item {
-                    Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.LocationSearching, null, Modifier.size(42.dp), tint = MaterialTheme.colorScheme.outline)
-                        Spacer(Modifier.height(8.dp))
-                        Text("No profiles found within ${radius.toInt()} km", fontWeight = FontWeight.SemiBold)
-                        Text("Try a larger radius later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    EmptyState(
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Filled.LocationSearching,
+                        title = "No profiles found within ${radius.toInt()} km",
+                        subtitle = "Try a larger radius or refresh after more eligible profiles are active nearby."
+                    )
                 }
             }
 
             if (ui.matches.isNotEmpty()) {
                 item { Text("${ui.matches.size} nearby profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 items(ui.matches, key = { it.firebaseUid }) { profile ->
-                    ElevatedCard(onClick = { onOpenProfile(profile.userId) }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    ElevatedCard(onClick = { onOpenProfile(profile.userId) }, shape = RoundedCornerShape(MatreeDesign.radii.card), modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (profile.photoUrl.isNotBlank()) {
                                 AsyncImage(
                                     model = profile.photoUrl,
                                     contentDescription = "${profile.displayName} profile photo",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(56.dp)
+                                    modifier = Modifier.size(MatreeDesign.sizes.avatarCompact)
                                 )
                             } else {
-                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(56.dp)) {
+                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(MatreeDesign.sizes.avatarCompact)) {
                                     Box(contentAlignment = Alignment.Center) { Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold) }
                                 }
                             }

@@ -183,7 +183,7 @@ private fun AppDrawer(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("MatrimonyConnect", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Matree", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close menu") }
@@ -232,8 +232,13 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val scope = rememberCoroutineScope()
 
     val activity = LocalContext.current as? MainActivity
-    LaunchedEffect(Unit) {
-        activity?.consumeDeepLink()?.let { destination -> nav.navigate(destination) { launchSingleTop = true } }
+    val pendingDeepLink = activity?.pendingDeepLink
+    LaunchedEffect(pendingDeepLink) {
+        if (pendingDeepLink != null) {
+            activity?.consumeDeepLink()?.let { destination ->
+                nav.navigate(destination) { launchSingleTop = true }
+            }
+        }
     }
 
     val showBottomBar = currentRoute in setOf(
@@ -262,12 +267,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
             topBar = {
                 if (showBottomBar) {
                     val pageTitle = when (currentRoute) {
-                        MainRoutes.HOME -> "MatrimonyConnect"
+                        MainRoutes.HOME -> "Matree"
                         MainRoutes.MATCHES -> "Discover"
                         MainRoutes.INTERESTS -> "Interests"
                         MainRoutes.CHAT_LIST -> "Messages"
                         MainRoutes.PROFILE -> "My Profile"
-                        else -> "MatrimonyConnect"
+                        else -> "Matree"
                     }
                     TopAppBar(
                         title = { Text(pageTitle, fontWeight = FontWeight.Bold) },
@@ -318,23 +323,16 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     HomeLauncherScreen(
                         onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
                         onGoQuiz = { nav.navigate(MainRoutes.QUIZ) },
-                        onGoStories = {},
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoRegions = { nav.navigate(MainRoutes.MATCHES) },
-                        onGoCircles = {},
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
                         onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
-                        onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
-                        onGoFamily = { nav.navigate(MainRoutes.PROFILE) },
-                        onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
-                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) },
-                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) }
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }

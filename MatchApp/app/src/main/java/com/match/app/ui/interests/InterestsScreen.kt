@@ -31,6 +31,7 @@ import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -229,32 +230,28 @@ private fun InterestCard(
     ElevatedCard(onClick = onOpen, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("interest_card_${profile.id}")) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val gradColors = remember(profile.id) {
-                    val palette = listOf(
-                        listOf(Color(0xFFE91E63), Color(0xFFFF5722)), listOf(Color(0xFF9C27B0), Color(0xFF3F51B5)),
-                        listOf(Color(0xFF009688), Color(0xFF4CAF50)), listOf(Color(0xFF1976D2), Color(0xFF00BCD4)),
-                        listOf(Color(0xFF795548), Color(0xFF607D8B))
-                    )
-                    palette[(profile.id % palette.size).toInt()]
-                }
+                val gradColors = listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                )
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(Brush.linearGradient(gradColors)), contentAlignment = Alignment.Center) {
-                    Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("${profile.displayName}, ${profile.age}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        if (profile.isVerified) Icon(Icons.Filled.Verified, "Verified", Modifier.size(14.dp), tint = Color(0xFF1976D2))
-                        if (profile.isPremium) Icon(Icons.Filled.Star, "Premium", Modifier.size(14.dp), tint = Color(0xFFFFB300))
+                        if (profile.isVerified) Icon(Icons.Filled.Verified, "Verified", Modifier.size(14.dp), tint = MatreeDesign.colors.verified)
+                        if (profile.isPremium) Icon(Icons.Filled.Star, "Premium", Modifier.size(14.dp), tint = MatreeDesign.colors.premium)
                     }
                     if (profile.username.isNotBlank()) Text("@${profile.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     Text("${profile.city} • ${profile.profession}", style = MaterialTheme.typography.bodySmall)
                     Text("${profile.religion} • ${profile.motherTongue}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (profile.showLastActive) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(shape = CircleShape, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline, modifier = Modifier.size(7.dp)) {}
+                            Surface(shape = CircleShape, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline, modifier = Modifier.size(7.dp)) {}
                             Spacer(Modifier.width(5.dp))
-                            Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

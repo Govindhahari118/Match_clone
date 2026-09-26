@@ -134,6 +134,16 @@ class ChatViewModel @Inject constructor(
             .onFailure { e -> _state.update { it.copy(error = e.message ?: "Voice message could not be queued.") } }
     }
 
+    fun retryFailed(message: MessageEntity) = viewModelScope.launch {
+        if (message.fromUserId != _state.value.meId || !message.status.equals("failed", true)) return@launch
+        runCatching { chat.retryFailed(message) }
+            .onFailure { error ->
+                _state.update {
+                    it.copy(error = error.message ?: "This message could not be retried.")
+                }
+            }
+    }
+
     fun setReplyTo(message: MessageEntity?) = _state.update { it.copy(replyingTo = message) }
     fun clearError() = _state.update { it.copy(error = null) }
 
@@ -390,7 +400,8 @@ fun ChatScreen(
                             message = message,
                             mine = message.fromUserId == state.meId,
                             repliedMessage = message.replyToId?.let { id -> state.messages.firstOrNull { it.id == id } },
-                            onLongPress = { vm.setReplyTo(message) }
+                            onLongPress = { vm.setReplyTo(message) },
+                            onRetry = { vm.retryFailed(message) }
                         )
                     }
                 }
@@ -427,7 +438,8 @@ private fun MessageBubble(
     message: MessageEntity,
     mine: Boolean,
     repliedMessage: MessageEntity?,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    onRetry: () -> Unit
 ) {
     val background = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val foreground = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -436,7 +448,13 @@ private fun MessageBubble(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(
             Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(16.dp)).background(background)
-                .combinedClickable(onClick = {}, onLongClick = onLongPress)
+                .combinedClickable(
+                    onClick = {
+                        if (mine && message.status.equals("failed", true)) onRetry()
+                        else onLongPress()
+                    },
+                    onLongClick = onLongPress
+                )
                 .padding(10.dp)
         ) {
             repliedMessage?.let {
@@ -466,6 +484,14 @@ private fun MessageBubble(
                         else -> Icons.Filled.Check
                     }
                     Icon(icon, message.status, Modifier.size(13.dp), tint = if (message.status.equals("failed", true)) MaterialTheme.colorScheme.error else foreground.copy(alpha = 0.75f))
+                    if (message.status.equals("failed", true)) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Tap to retry",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }

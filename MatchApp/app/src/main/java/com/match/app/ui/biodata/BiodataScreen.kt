@@ -118,10 +118,13 @@ class BiodataViewModel @Inject constructor(
             "City" to p.city,
             "State" to p.state
         )
-        section("Astrology",
-            "Rasi" to p.rasi,
-            "Nakshatra" to p.nakshatra
-        )
+        if (p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank()) {
+            section("Astrology",
+                "Rasi" to p.rasi,
+                "Nakshatra" to p.nakshatra,
+                "Manglik" to p.manglik
+            )
+        }
         if (p.bio.isNotBlank()) {
             section("About Me", "Bio" to p.bio)
         }
@@ -147,7 +150,6 @@ fun BiodataScreen(
     var selectedTemplate by remember { mutableStateOf(0) }
     val templates = listOf("Classic", "Modern", "Minimal")
     val context = LocalContext.current
-    var pdfExported by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -158,14 +160,6 @@ fun BiodataScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
                     }
                 },
-                actions = {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("Share") },
-                        leadingIcon = { Icon(Icons.Filled.Share, null, Modifier.size(16.dp)) }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
             )
         }
     ) { pad ->
@@ -186,7 +180,7 @@ fun BiodataScreen(
                     Column(Modifier.weight(1f)) {
                         Text(t("free_biodata_maker", "Free Biodata Maker"), style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-                        Text("Create a professional matrimonial biodata instantly — 100% free",
+                        Text("Generate a biodata PDF from the profile details you choose to share.",
                             style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
                     }
                 }
@@ -238,14 +232,13 @@ fun BiodataScreen(
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(Intent.createChooser(intent, "Open PDF"))
-                            pdfExported = true
                         }
                     },
                     modifier = Modifier.weight(1f).testTag("biodata_export_pdf")
                 ) {
                     Icon(Icons.Filled.PictureAsPdf, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(if (pdfExported) "PDF Saved!" else "Export PDF")
+                    Text("Open PDF")
                 }
                 Button(
                     onClick = {
@@ -315,7 +308,7 @@ fun BiodataScreen(
                         "✅ Add a recent, smiling profile photo",
                         "✅ Complete your family details for credibility",
                         "✅ Mention hobbies and interests to stand out",
-                        "✅ Get verified — 3× more responses with ✓ badge",
+                        "✅ Verification signals can help others understand which checks you completed",
                         "✅ Share biodata with family/relatives directly via WhatsApp"
                     ).forEach { tip ->
                         Text(tip, style = MaterialTheme.typography.bodySmall,
@@ -374,23 +367,29 @@ private fun ClassicBiodata(p: UserProfile) {
                 BiodataSection("Personal Details", MAROON, listOf(
                     "Name" to p.displayName,
                     "Age" to "${p.age} years",
-                    "Date of Birth" to "—",
+                    "Date of Birth" to p.dateOfBirth.ifBlank { "Not provided" },
                     "Height" to if (p.heightCm > 0) "${p.heightCm} cm" else "—",
-                    "Complexion" to "—",
-                    "Marital Status" to p.maritalStatus.ifBlank { "Never Married" }
+                    "Complexion" to p.complexion.ifBlank { "Not provided" },
+                    "Marital Status" to p.maritalStatus.ifBlank { "Not provided" }
                 ))
                 Spacer(Modifier.height(8.dp))
 
-                BiodataSection("Religious Background", MAROON, listOf(
-                    "Religion" to p.religion.ifBlank { "—" },
-                    "Caste" to p.caste.ifBlank { "—" },
-                    "Sub-Caste" to p.subCaste.ifBlank { "—" },
-                    "Gotra / Gothra" to p.gothra.ifBlank { "—" },
-                    "Rasi (Moon Sign)" to p.rasi.ifBlank { "—" },
-                    "Nakshatra (Star)" to p.nakshatra.ifBlank { "—" },
-                    "Mangal Dosh" to "—"
+                BiodataSection("Community", MAROON, listOf(
+                    "Religion" to p.religion.ifBlank { "Not provided" },
+                    "Mother Tongue" to p.motherTongue.ifBlank { "Not provided" },
+                    "Community / Caste" to p.caste.ifBlank { "Not provided" },
+                    "Sub-Community" to p.subCaste.ifBlank { "Not provided" }
                 ))
                 Spacer(Modifier.height(8.dp))
+                if (p.gothra.isNotBlank() || p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank()) {
+                    BiodataSection("Astrology", MAROON, listOf(
+                        "Gotra / Gothra" to p.gothra.ifBlank { "Not provided" },
+                        "Rasi (Moon Sign)" to p.rasi.ifBlank { "Not provided" },
+                        "Nakshatra (Star)" to p.nakshatra.ifBlank { "Not provided" },
+                        "Manglik" to p.manglik.ifBlank { "Not provided" }
+                    ))
+                    Spacer(Modifier.height(8.dp))
+                }
 
                 BiodataSection("Educational & Professional", MAROON, listOf(
                     "Education" to p.education.ifBlank { "—" },
@@ -403,8 +402,8 @@ private fun ClassicBiodata(p: UserProfile) {
                 BiodataSection("Location Details", MAROON, listOf(
                     "City" to p.city.ifBlank { "—" },
                     "State" to p.state.ifBlank { "—" },
-                    "Native Place" to "—",
-                    "Residential Status" to p.residentialStatus.ifBlank { "Citizen" }
+                    "Native Place" to p.nativeState.ifBlank { "Not provided" },
+                    "Residential Status" to p.residentialStatus.ifBlank { "Not provided" }
                 ))
                 Spacer(Modifier.height(8.dp))
 
@@ -428,7 +427,7 @@ private fun ClassicBiodata(p: UserProfile) {
 
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = MAROON.copy(alpha = 0.2f))
-                Text("Generated by Match App · matchapp.in",
+                Text("Generated by Matree",
                     style = MaterialTheme.typography.labelSmall,
                     color = MAROON.copy(alpha = 0.5f),
                     textAlign = TextAlign.Center,
@@ -498,12 +497,12 @@ private fun ModernBiodata(p: UserProfile) {
                 }
             }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ModernInfoRow(Icons.Filled.Person,    "Personal",  "${p.age} yrs · ${p.maritalStatus.ifBlank { "Never Married" }} · ${if (p.heightCm > 0) "${p.heightCm}cm" else ""}")
+                ModernInfoRow(Icons.Filled.Person,    "Personal",  "${p.age} yrs · ${p.maritalStatus.ifBlank { "Not provided" }} · ${if (p.heightCm > 0) "${p.heightCm}cm" else ""}")
                 ModernInfoRow(Icons.Filled.TempleHindu,"Religion", "${p.religion.ifBlank { "—" }} · ${p.caste.ifBlank { "—" }} · ${p.rasi.ifBlank { "—" }}")
                 ModernInfoRow(Icons.Filled.School,    "Education", "${p.education.ifBlank { "—" }} · ${p.profession.ifBlank { "—" }}")
                 ModernInfoRow(Icons.Filled.AttachMoney,"Income",   p.incomeBand.ifBlank { "Not disclosed" })
-                ModernInfoRow(Icons.Filled.LocationOn, "Location", "${p.city.ifBlank { "—" }}, ${p.state.ifBlank { "India" }}")
-                ModernInfoRow(Icons.Filled.Group,     "Family",   "${p.familyType.ifBlank { "Nuclear" }} · Father: ${p.fatherOccupation.ifBlank { "—" }}")
+                ModernInfoRow(Icons.Filled.LocationOn, "Location", "${p.city.ifBlank { "—" }}, ${p.state.ifBlank { "Not provided" }}")
+                ModernInfoRow(Icons.Filled.Group,     "Family",   "${p.familyType.ifBlank { "Not provided" }} · Father: ${p.fatherOccupation.ifBlank { "—" }}")
                 if (p.bio.isNotBlank()) {
                     HorizontalDivider()
                     Text(p.bio, style = MaterialTheme.typography.bodySmall,
@@ -541,7 +540,7 @@ private fun MinimalBiodata(p: UserProfile) {
                 Column(Modifier.weight(1f)) {
                     Text(p.displayName, style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold)
-                    Text("${p.age} · ${p.profession.ifBlank { "Professional" }} · ${p.city}",
+                    Text("${p.age} · ${p.profession.ifBlank { "Not provided" }} · ${p.city}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

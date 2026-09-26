@@ -98,7 +98,7 @@ fun SignInScreen(
                     ) {
                         Icon(Icons.Filled.Favorite, null, Modifier.size(40.dp), tint = Color.White)
                     }
-                    Text("Match", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                    Text("Matree", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = Color.White)
                     Text(
                         t("ai_picks_for_you", "Find someone who truly fits."),
                         style = MaterialTheme.typography.bodyMedium,

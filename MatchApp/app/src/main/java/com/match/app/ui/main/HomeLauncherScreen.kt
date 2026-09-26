@@ -1,4 +1,3 @@
-@file:Suppress("UNUSED_PARAMETER")
 package com.match.app.ui.main
 
 import androidx.compose.foundation.layout.Arrangement
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -26,12 +24,8 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,59 +40,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.ReligionCategory
+import com.match.app.ui.components.MatreeActionCard
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.theme.MatreeDesign
 
 /** Production home intentionally exposes only audited journeys. */
 @Composable
 fun HomeLauncherScreen(
     onGoMatches:       () -> Unit,
     onGoQuiz:          () -> Unit,
-    onGoStories:       () -> Unit,
     onGoPricing:       () -> Unit,
     onGoInterests:     () -> Unit,
     onGoNotifications: () -> Unit,
     onGoShortlists:    () -> Unit,
-    onGoRegions:       () -> Unit,
-    onGoCircles:       () -> Unit,
     onGoMessages:      () -> Unit,
     onGoProfile:       () -> Unit,
     onGoVerification:  () -> Unit,
     onGoKundli:        () -> Unit,
-    onGoWhoViewed:     () -> Unit,
-    onGoFamily:        () -> Unit,
-    onGoHelp:          () -> Unit,
-    onGoBiodata:            () -> Unit = {},
-    onGoSecondMarriage:     () -> Unit = {},
-    onGoCompatibilityQuiz:  () -> Unit = {},
-    onGoAssisted:           () -> Unit = {},
-    onGoVirtualMeet:        () -> Unit = {},
-    onGoBioGen:             () -> Unit = {},
-    onGoPhotoEditor:        () -> Unit = {},
-    onGoCounselling:        () -> Unit = {},
-    onGoGuides:             () -> Unit = {},
-    onGoBoost:              () -> Unit = {},
-    onGoVideoProfile:       () -> Unit = {},
-    onGoRecentlyJoined:     () -> Unit = {},
-    onGoTestimonials:       () -> Unit = {},
-    onGoSwipeDiscover:      () -> Unit = {},
-    onGoCommunityBrowse:    () -> Unit = {},
-    onGoLiveEvents:         () -> Unit = {},
-    onGoBgCheck:            () -> Unit = {},
-    onGoSecureCall:         () -> Unit = {},
-    onGoPrivacyDash:        () -> Unit = {},
-    onGoAIInsights:         () -> Unit = {},
-    onGoAnalytics:          () -> Unit = {},
-    onGoWeddingPlanner:     () -> Unit = {},
-    onGoAdvHoroscope:       () -> Unit = {},
-    onGoDailyRewards:       () -> Unit = {},
-    onGoNearby:             () -> Unit = {},
-    onGoNRIMatch:           () -> Unit = {},
-    onGoSafetyCenter:       () -> Unit = {},
-    onGoTimeline:           () -> Unit = {},
-    onGoReferral:           () -> Unit = {},
-    onGoMuhurat:            () -> Unit = {},
-    onGoDeepCompat:         () -> Unit = {},
-    onGoWizard:             () -> Unit = {},
-    onOpenProfile:          (Long) -> Unit = {},
+    onGoPrivacyDash:   () -> Unit,
+    onGoNearby:        () -> Unit,
     vm: HomeViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
@@ -114,14 +75,26 @@ fun HomeLauncherScreen(
     ) {
         if (p == null) {
             Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(MatreeDesign.radii.large),
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
-                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Complete your profile to discover relevant matches", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = onGoProfile) { Text("Open profile") }
+                Column(
+                    Modifier.padding(MatreeDesign.spacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+                ) {
+                    Text(
+                        "Complete your profile to discover relevant matches",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    MatreePrimaryButton(
+                        text = "Open profile",
+                        onClick = onGoProfile,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
             return@Column
@@ -156,13 +129,11 @@ fun HomeLauncherScreen(
 
         val religion = ReligionCategory.fromReligion(p.religion)
         HomeSectionTitle(if (religion == ReligionCategory.HINDU) "Special Home" else "Compatibility Home")
-        Card(
+        MatreeActionCard(
             onClick = if (religion == ReligionCategory.HINDU) onGoKundli else onGoQuiz,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md)
         ) {
-            Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary)
                 Spacer(Modifier.padding(6.dp))
                 Column(Modifier.weight(1f)) {
@@ -224,9 +195,9 @@ private fun HomeActionCard(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
-    Card(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(16.dp)) {
+    MatreeActionCard(onClick = onClick, modifier = modifier) {
         Column(
-            Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 6.dp),
+            Modifier.fillMaxWidth().padding(vertical = MatreeDesign.spacing.xs),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
@@ -238,9 +209,10 @@ private fun HomeActionCard(
 
 @Composable
 private fun EssentialButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = modifier.height(52.dp)) {
-        Icon(icon, null)
-        Spacer(Modifier.padding(4.dp))
-        Text(label)
-    }
+    MatreeSecondaryButton(
+        text = label,
+        onClick = onClick,
+        modifier = modifier,
+        icon = icon
+    )
 }

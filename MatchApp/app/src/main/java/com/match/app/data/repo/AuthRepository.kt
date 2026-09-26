@@ -1,9 +1,9 @@
 package com.match.app.data.repo
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
@@ -11,6 +11,7 @@ import com.match.app.data.local.MatchDatabase
 import com.match.app.data.local.dao.LikeDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
@@ -19,6 +20,7 @@ import com.match.app.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,7 +37,9 @@ class AuthRepository @Inject constructor(
     private val photoRepo: PhotoRepository,
     private val session: SessionStore,
     private val firestoreProfile: FirestoreProfileService,
-    private val localDb: MatchDatabase
+    private val fcmDeviceRegistry: FcmDeviceRegistry,
+    private val localDb: MatchDatabase,
+    @ApplicationContext private val appContext: Context
 ) {
     private val firebaseAuth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -90,11 +94,16 @@ class AuthRepository @Inject constructor(
 
     suspend fun signIn(email: String, password: String): AuthResult {
         val e = email.trim().lowercase()
+        val previousUid = firebaseAuth.currentUser?.uid
 
         return try {
             val authResult = firebaseAuth.signInWithEmailAndPassword(e, password).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Firebase sign-in failed")
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
 
             val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
             val localUser = userDao.findByFirebaseUid(firebaseUid)
@@ -141,13 +150,50 @@ class AuthRepository @Inject constructor(
         val uid = firebaseAuth.currentUser?.uid
         if (!uid.isNullOrBlank()) {
             try {
-                firestoreProfile.updateFields(uid, mapOf("fcmToken" to FieldValue.delete()))
+                fcmDeviceRegistry.revoke()
             } catch (ex: Exception) {
-                Log.w("AuthRepository", "Unable to clear FCM token during sign-out", ex)
+                Log.w("AuthRepository", "Unable to revoke current FCM device during sign-out", ex)
+            }
+            try {
+                FirebaseMessaging.getInstance().deleteToken().await()
+            } catch (ex: Exception) {
+                Log.w("AuthRepository", "Unable to rotate FCM token during sign-out", ex)
             }
         }
         firebaseAuth.signOut()
+        clearLocalAccountState()
+    }
+
+    private suspend fun clearLocalAccountState() {
+        try {
+            withContext(Dispatchers.IO) { localDb.clearAllTables() }
+        } catch (ex: Exception) {
+            Log.e("AuthRepository", "Unable to clear account-scoped Room cache", ex)
+        }
+        clearPrivateMediaCaches()
         session.clear()
+    }
+
+    private fun clearPrivateMediaCaches() {
+        listOf(
+            java.io.File(appContext.cacheDir, "protected_media"),
+            java.io.File(appContext.filesDir, "chat_media"),
+            java.io.File(appContext.filesDir, "chat_outbox")
+        ).forEach { dir ->
+            runCatching {
+                if (dir.exists()) dir.deleteRecursively()
+            }.onFailure { error ->
+                Log.w("AuthRepository", "Unable to clear private media cache at ${dir.name}", error)
+            }
+        }
+        appContext.cacheDir.listFiles()
+            ?.filter { file -> file.isFile && file.name.startsWith("voice_") && file.name.endsWith(".m4a") }
+            ?.forEach { file ->
+                runCatching { file.delete() }
+                    .onFailure { error ->
+                        Log.w("AuthRepository", "Unable to clear temporary voice recording", error)
+                    }
+            }
     }
 
     suspend fun sendPasswordReset(email: String): String? {
@@ -277,15 +323,16 @@ class AuthRepository @Inject constructor(
 
     suspend fun getViewCount(userId: Long): Int = userDao.findById(userId)?.profileViewCount ?: 0
 
+    /**
+     * Legacy API retained only for source compatibility.
+     * Boost activation must come from PlayBillingManager -> verifyGooglePlayPurchase -> server
+     * entitlement. Calling this path must never create a local-only or client-authored boost.
+     */
+    @Deprecated("Boost activation is server-authoritative through Google Play verification")
     suspend fun activateBoost(userId: Long, durationMs: Long = 24 * 60 * 60 * 1000L) {
-        val u = userDao.findById(userId) ?: return
-        val boostUntil = System.currentTimeMillis() + durationMs
-        userDao.updateBoostExpiry(userId, boostUntil)
-        if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.updateFields(u.firebaseUid, mapOf("boostActiveUntil" to boostUntil)) } catch (ex: Exception) {
-                Log.w("AuthRepository", "Boost cloud sync failed", ex)
-            }
-        }
+        throw IllegalStateException(
+            "Boost cannot be activated locally. Use the verified Google Play purchase flow."
+        )
     }
 
     suspend fun isBoostActive(userId: Long): Boolean {
@@ -296,6 +343,31 @@ class AuthRepository @Inject constructor(
     suspend fun getBoostExpiryMs(userId: Long): Long = userDao.findById(userId)?.boostActiveUntil ?: 0L
 
     suspend fun getFirebaseUid(userId: Long): String = userDao.findById(userId)?.firebaseUid ?: ""
+
+    suspend fun getMatrimonyPaused(): Boolean {
+        return try {
+            val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+                .getHttpsCallable("getMyAccountLifecycle")
+                .call()
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?>
+            data?.get("paused") as? Boolean ?: false
+        } catch (e: Exception) {
+            Log.w("AuthRepository", "Unable to load matrimony lifecycle", e)
+            false
+        }
+    }
+
+    suspend fun setMatrimonyPaused(paused: Boolean): Result<Boolean> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("setMatrimonyPaused")
+            .call(mapOf("paused" to paused))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid lifecycle response")
+        data["paused"] as? Boolean ?: error("Missing lifecycle state")
+    }
 
     /**
      * Permanently erases the account through the restartable trusted backend cleanup.
@@ -309,9 +381,8 @@ class AuthRepository @Inject constructor(
                 .call()
                 .await()
 
-            withContext(Dispatchers.IO) { localDb.clearAllTables() }
             firebaseAuth.signOut()
-            session.clear()
+            clearLocalAccountState()
             AuthResult.Success(userId)
         } catch (e: Exception) {
             Log.e("AuthRepository", "Account deletion was not confirmed by server", e)
@@ -320,11 +391,16 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signInWithGoogle(idToken: String, displayName: String, email: String): AuthResult {
+        val previousUid = firebaseAuth.currentUser?.uid
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val authResult = firebaseAuth.signInWithCredential(credential).await()
             val firebaseUid = authResult.user?.uid
                 ?: return AuthResult.Error("Google sign-in failed")
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
 
             val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
             val normalizedEmail = email.trim().lowercase()
@@ -468,11 +544,12 @@ class AuthRepository @Inject constructor(
     )
 
     private suspend fun registerFcmToken(firebaseUid: String) {
+        if (firebaseAuth.currentUser?.uid != firebaseUid) return
         try {
             val token = FirebaseMessaging.getInstance().token.await()
-            firestoreProfile.saveFcmToken(firebaseUid, token)
+            fcmDeviceRegistry.register(token)
         } catch (ex: Exception) {
-            Log.w("AuthRepository", "FCM token registration failed", ex)
+            Log.w("AuthRepository", "FCM device registration failed", ex)
         }
     }
 }
