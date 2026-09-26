@@ -61,6 +61,10 @@ data class MatreeSemanticColors(
     val onWarning: Color,
     val warningContainer: Color,
     val onWarningContainer: Color,
+    val interest: Color,
+    val onInterest: Color,
+    val interestContainer: Color,
+    val onInterestContainer: Color,
     val verified: Color,
     val premium: Color,
     val online: Color
@@ -106,6 +110,10 @@ private fun lightSemanticColors() = MatreeSemanticColors(
     onWarning = Color.White,
     warningContainer = Color(0xFFFFE8BD),
     onWarningContainer = Color(0xFF4A2D00),
+    interest = Color(0xFF8B3A62),
+    onInterest = Color.White,
+    interestContainer = Color(0xFFF7DCE9),
+    onInterestContainer = Color(0xFF4B1730),
     verified = Color(0xFF245F9E),
     premium = Color(0xFF7B5B00),
     online = Color(0xFF176B45)
@@ -120,6 +128,10 @@ private fun darkSemanticColors() = MatreeSemanticColors(
     onWarning = Color(0xFF4A2D00),
     warningContainer = Color(0xFF5A3A00),
     onWarningContainer = Color(0xFFFFE8BD),
+    interest = Color(0xFFFFA8CF),
+    onInterest = Color(0xFF4B1730),
+    interestContainer = Color(0xFF63304A),
+    onInterestContainer = Color(0xFFFFD9EA),
     verified = Color(0xFF9CCBFF),
     premium = Color(0xFFFFD875),
     online = Color(0xFF74D6A0)
