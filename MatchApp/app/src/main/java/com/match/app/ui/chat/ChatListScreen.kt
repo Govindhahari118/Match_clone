@@ -30,6 +30,7 @@ import com.match.app.data.remote.FirestoreChatService
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -198,23 +199,19 @@ private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
     ElevatedCard(onClick = onClick, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("conv_card_${conv.peerId}")) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box {
-                val avatarColors = remember(conv.peerId) {
-                    val palette = listOf(
-                        listOf(Color(0xFFE91E63), Color(0xFFFF5722)), listOf(Color(0xFF9C27B0), Color(0xFF3F51B5)),
-                        listOf(Color(0xFF009688), Color(0xFF4CAF50)), listOf(Color(0xFF1976D2), Color(0xFF00BCD4)),
-                        listOf(Color(0xFF795548), Color(0xFF607D8B))
-                    )
-                    palette[(conv.peerId % palette.size).toInt()]
-                }
+                val avatarColors = listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                )
                 Box(
                     Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(avatarColors)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(conv.peerName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(conv.peerName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
                 if (conv.showLastActive && activity.isOnline) {
                     Surface(
-                        shape = CircleShape, color = Color(0xFF2E7D32),
+                        shape = CircleShape, color = MatreeDesign.colors.online,
                         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
                         modifier = Modifier.align(Alignment.BottomEnd).size(14.dp)
                     ) {}
@@ -230,7 +227,7 @@ private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
                 if (conv.username.isNotBlank()) Text("@${conv.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 Text(conv.lastMessage.ifBlank { "Conversation started" }, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (conv.showLastActive) {
-                    Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline)
+                    Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline)
                 }
             }
         }

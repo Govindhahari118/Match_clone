@@ -38,6 +38,7 @@ import com.match.app.domain.model.MatchResult
 import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.common.ShimmerList
 import com.match.app.ui.components.EmptyState
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -336,7 +337,7 @@ private fun QuickFilters(filter: MatchFilter, onChange: (MatchFilter) -> Unit, o
                 selected = filter.lastActiveWithinDays == 1,
                 onClick = { onChange(filter.copy(lastActiveWithinDays = if (filter.lastActiveWithinDays == 1) 0 else 1)) },
                 label = { Text("Active today") },
-                leadingIcon = { Icon(Icons.Filled.Circle, null, Modifier.size(9.dp), tint = Color(0xFF2E7D32)) }
+                leadingIcon = { Icon(Icons.Filled.Circle, null, Modifier.size(9.dp), tint = MatreeDesign.colors.online) }
             )
         }
         item {
@@ -485,9 +486,9 @@ private fun DiscoveryCard(
                     Text(listOf(p.religion, p.caste, p.subCaste, p.motherTongue).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                     if (p.showLastActive) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(shape = CircleShape, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline, modifier = Modifier.size(8.dp)) {}
+                            Surface(shape = CircleShape, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline, modifier = Modifier.size(8.dp)) {}
                             Spacer(Modifier.width(6.dp))
-                            Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
