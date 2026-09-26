@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,8 +48,10 @@ class MainActivity : FragmentActivity() {
     private var presenceJob: Job? = null
     private val requestNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isPermissionPromptInFlight = false }
 
-    var pendingDeepLink: String? = null
+    /** Compose-observable so a deep link received by a warm singleTask Activity is not dropped. */
+    var pendingDeepLink: String? by mutableStateOf(null)
         private set
+
     fun consumeDeepLink(): String? = pendingDeepLink.also { pendingDeepLink = null }
 
     private var isReady = false
@@ -164,6 +169,8 @@ class MainActivity : FragmentActivity() {
             "matches" -> staticRouteOrNull(segments, hasUnexpectedExtras, "matches")
             "who_viewed" -> staticRouteOrNull(segments, hasUnexpectedExtras, "who_viewed")
             "pricing" -> staticRouteOrNull(segments, hasUnexpectedExtras, "pricing")
+            "verification" -> staticRouteOrNull(segments, hasUnexpectedExtras, "verification")
+            "nearby" -> staticRouteOrNull(segments, hasUnexpectedExtras, "nearby")
             else -> null
         }
 
