@@ -27,6 +27,13 @@ export type OpsRole =
   | "payment_ops"
   | "ops_admin";
 
+export function resolveOpsRole(raw: unknown, allowed: OpsRole[]): OpsRole | undefined {
+  const roles = Array.isArray(raw) ?
+    raw.filter((value): value is string => typeof value === "string") :
+    [];
+  return allowed.find((role) => roles.includes(role));
+}
+
 export function requireOpsRole(
   context: functions.https.CallableContext,
   allowed: OpsRole[]
@@ -35,11 +42,7 @@ export function requireOpsRole(
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
-  const raw = context.auth?.token?.roles;
-  const roles = Array.isArray(raw) ?
-    raw.filter((value): value is string => typeof value === "string") :
-    [];
-  const matched = allowed.find((role) => roles.includes(role));
+  const matched = resolveOpsRole(context.auth?.token?.roles, allowed);
   if (!matched) {
     throw new functions.https.HttpsError(
       "permission-denied",
