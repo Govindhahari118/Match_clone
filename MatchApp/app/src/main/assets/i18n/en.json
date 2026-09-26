@@ -75,5 +75,7 @@
   "app_language": "App language",
   "verify_phone": "Verify phone",
   "upgrade_now": "View plans",
-  "maybe_later": "Maybe later"
+  "maybe_later": "Maybe later",
+  "available_languages": "Available languages",
+  "more_languages_after_qa": "More languages will appear only after translation and layout QA is complete."
 }
