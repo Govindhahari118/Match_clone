@@ -6,12 +6,18 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCAN_ROOTS = [ROOT / "app" / "src" / "main", ROOT / "functions" / "src"]
-EXTENSIONS = {".kt", ".kts", ".java", ".ts", ".js", ".xml"}
+EXTENSIONS = {".kt", ".kts", ".java", ".ts", ".js", ".xml", ".json"}
 
 STUB_RULES = [
     ("Kotlin TODO executable stub", re.compile(r"\bTODO\s*\(")),
     ("NotImplementedError executable stub", re.compile(r"\bNotImplementedError\b")),
     ("UnsupportedOperationException executable stub", re.compile(r"\bUnsupportedOperationException\b")),
+    ("Firebase fake-key bypass", re.compile(r"fake API keys|Bypassing Firebase", re.IGNORECASE)),
+]
+
+I18N_LEGACY_RULES = [
+    ("stale prototype brand", re.compile(r"GreenKart|MobileMart|MobileVerify|\bMHub\b")),
+    ("corrupted UTF-8/mojibake", re.compile(r"â‚¹|â€”|â†[‘’“”]|Â©|Ã°|Å¸|Â")),
 ]
 
 
@@ -31,6 +37,13 @@ def main() -> int:
             for label, pattern in STUB_RULES:
                 if pattern.search(line):
                     findings.append(f"{path.relative_to(ROOT)}:{line_no}: {label}: {line.strip()}")
+
+            if "/assets/i18n/" in path.as_posix():
+                for label, pattern in I18N_LEGACY_RULES:
+                    if pattern.search(line):
+                        findings.append(
+                            f"{path.relative_to(ROOT)}:{line_no}: {label}: {line.strip()}"
+                        )
 
             if re.search(r"onClick\s*=\s*\{\s*\}", line):
                 nearby = "\n".join(lines[line_no - 1:min(len(lines), line_no + 3)])
