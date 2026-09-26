@@ -407,3 +407,34 @@ test('appearance preferences are private, account-scoped, and presentation-only'
   await assertFails(updateDoc(prefs, { manualThemeKey: 'UNSAFE_UNKNOWN_THEME' }));
   await assertFails(updateDoc(prefs, { themePreference: 'RELIGION_OVERRIDE' }));
 });
+
+
+test('operations records are server-only for ordinary authenticated clients', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'supportTickets/ticket1'), {
+      uid: 'alice', category: 'Account', message: 'Please help with my account.',
+      status: 'OPEN', createdAt: new Date(), updatedAt: new Date(),
+    });
+    await setDoc(doc(db, 'profileReports/report1'), {
+      reporterUid: 'alice', targetUid: 'bob', reason: 'Spam',
+      status: 'OPEN', createdAt: new Date(), updatedAt: new Date(),
+    });
+    await setDoc(doc(db, 'opsAuditLog/audit1'), {
+      actorUid: 'operator', actorRole: 'support',
+      action: 'SUPPORT_TICKET_STATUS_UPDATED',
+      targetCollection: 'supportTickets', targetId: 'ticket1',
+      reason: 'Test audit', createdAt: new Date(),
+    });
+  });
+
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  for (const path of [
+    'supportTickets/ticket1',
+    'profileReports/report1',
+    'opsAuditLog/audit1',
+  ]) {
+    await assertFails(getDoc(doc(aliceDb, path)));
+    await assertFails(setDoc(doc(aliceDb, path), { status: 'CLOSED' }, { merge: true }));
+  }
+});
