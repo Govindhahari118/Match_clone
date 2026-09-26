@@ -39,6 +39,8 @@ import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
 import com.match.app.ui.components.LoadingState
+import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProfileSection
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -130,7 +132,7 @@ fun ProfileScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("profile_screen"),
         verticalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
-        ProfileHero(p)
+        ProfileHero(p, photos)
 
         ProfileCompletenessBar(
             profile = p,
@@ -221,24 +223,51 @@ private fun labeled(label: String, value: String): String =
     if (value.isBlank()) "" else "${label.removeSuffix(" (optional)")}: $value"
 
 @Composable
-private fun ProfileHero(p: UserProfile) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(84.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+private fun ProfileHero(p: UserProfile, photos: List<PhotoEntity>) {
+    val photoModels = remember(p.id, p.photoUrl, p.primaryPhotoPath, photos) {
+        buildList<Any> {
+            photos
+                .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
+                .forEach { photo ->
+                    add(
+                        if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) {
+                            photo.path
+                        } else {
+                            File(photo.path)
+                        }
+                    )
+                }
+            if (isEmpty()) {
+                when {
+                    p.photoUrl.startsWith("https://") || p.photoUrl.startsWith("http://") ->
+                        add(p.photoUrl)
+                    !p.primaryPhotoPath.isNullOrBlank() ->
+                        add(File(p.primaryPhotoPath))
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(p.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                if (p.isVerified) { Spacer(Modifier.size(5.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
-            }
-            Text(listOf(p.age.takeIf { it > 0 }?.toString().orEmpty(), p.city, p.profession).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
-            Text(listOf(p.religion, p.caste).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(p.matrimonyId.ifBlank { "Profile ID: M${p.id}" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
     }
+
+    MatreeProfileHeader(
+        name = p.displayName,
+        age = p.age.takeIf { it > 0 },
+        username = p.username,
+        photoModels = photoModels,
+        primaryLine = listOf(p.city, p.state, p.profession)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        secondaryLine = listOf(p.religion, p.caste, p.motherTongue)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        isVerified = p.isVerified,
+        isPremium = p.isPremium
+    )
+    Text(
+        p.matrimonyId.ifBlank { "Profile ID: M" + p.id },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.outline,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md)
+    )
 }
 
 @Composable
@@ -292,11 +321,11 @@ private fun TrustAndVerificationCard(p: UserProfile, hasPhoto: Boolean, onVerify
 
 @Composable
 private fun ProfileSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); content()
-        }
-    }
+    MatreeProfileSection(
+        title = title,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md),
+        content = content
+    )
 }
 
 @Composable
