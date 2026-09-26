@@ -38,6 +38,9 @@ import com.match.app.domain.model.MatchResult
 import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.common.ShimmerList
 import com.match.app.ui.components.EmptyState
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProfileCard
+import com.match.app.ui.components.MatreeProfileCardVariant
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -456,62 +459,58 @@ private fun DiscoveryCard(
 ) {
     val p = result.user
     val activity = remember(p.lastActiveAt, p.showLastActive) { ActivityStatusHelper.from(p) }
-    ElevatedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-        Column {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (p.photoUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = p.photoUrl,
-                        contentDescription = "${p.displayName} profile photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(78.dp)
-                    )
-                } else {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(78.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${p.displayName}, ${p.age}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        if (p.isVerified) {
-                            Spacer(Modifier.width(4.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    if (p.username.isNotBlank()) Text("@${p.username}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    Text(listOf(p.city, p.state, p.profession).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                    Text(listOf(p.religion, p.caste, p.subCaste, p.motherTongue).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                    if (p.showLastActive) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(shape = CircleShape, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline, modifier = Modifier.size(8.dp)) {}
-                            Spacer(Modifier.width(6.dp))
-                            Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+    val primaryLine = listOf(p.city, p.state, p.profession)
+        .filter { it.isNotBlank() }
+        .joinToString(" • ")
+    val secondaryLine = listOf(p.religion, p.caste, p.subCaste, p.motherTongue)
+        .filter { it.isNotBlank() }
+        .joinToString(" • ")
+    val supporting = buildList {
+        if (p.education.isNotBlank()) add(p.education)
+        if (p.maritalStatus.isNotBlank()) add(p.maritalStatus)
+        if (p.heightCm > 0) add("${p.heightCm} cm")
+    }
+
+    MatreeProfileCard(
+        name = p.displayName,
+        age = p.age.takeIf { it > 0 },
+        username = p.username,
+        primaryLine = primaryLine,
+        secondaryLine = secondaryLine,
+        photoModel = p.photoUrl.takeIf { it.isNotBlank() },
+        isVerified = p.isVerified,
+        isPremium = p.isPremium,
+        activityLabel = activity.label.takeIf { p.showLastActive },
+        isOnline = activity.isOnline,
+        supportingLabels = supporting,
+        variant = MatreeProfileCardVariant.STANDARD,
+        onClick = onOpen
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MatreePrimaryButton(
+                text = if (liked) "Interested" else "Send interest",
+                icon = if (liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send,
+                onClick = onInterest,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedIconButton(
+                onClick = onShortlist,
+                modifier = Modifier.size(MatreeDesign.sizes.touchTarget)
+            ) {
+                Icon(
+                    if (shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                    contentDescription = if (shortlisted) "Remove from shortlist" else "Add to shortlist"
+                )
             }
-            if (p.education.isNotBlank() || p.maritalStatus.isNotBlank() || p.heightCm > 0) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (p.education.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.education) }) }
-                    if (p.maritalStatus.isNotBlank()) item { AssistChip(onClick = {}, enabled = false, label = { Text(p.maritalStatus) }) }
-                    if (p.heightCm > 0) item { AssistChip(onClick = {}, enabled = false, label = { Text("${p.heightCm} cm") }) }
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onInterest, modifier = Modifier.weight(1f)) {
-                    Icon(if (liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(5.dp)); Text(if (liked) "Interested" else "Send interest")
-                }
-                OutlinedIconButton(onClick = onShortlist) {
-                    Icon(if (shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "Shortlist")
-                }
-                OutlinedIconButton(onClick = onOpen) { Icon(Icons.Filled.Visibility, "View profile") }
+            OutlinedIconButton(
+                onClick = onOpen,
+                modifier = Modifier.size(MatreeDesign.sizes.touchTarget)
+            ) {
+                Icon(Icons.Filled.Visibility, "View profile")
             }
         }
     }
