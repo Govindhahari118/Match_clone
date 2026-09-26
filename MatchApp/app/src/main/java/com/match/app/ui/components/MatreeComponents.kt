@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.match.app.ui.theme.MatreeDesign
 
-enum class MatreeStatusTone { NEUTRAL, SUCCESS, WARNING, ERROR, VERIFIED, PREMIUM }
+enum class MatreeStatusTone { NEUTRAL, SUCCESS, WARNING, ERROR, INTEREST, VERIFIED, PREMIUM }
 enum class MatreeProfileCardVariant { HERO, STANDARD, COMPACT }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -215,6 +215,7 @@ fun MatreeStatusChip(
         MatreeStatusTone.SUCCESS -> semantic.successContainer to semantic.onSuccessContainer
         MatreeStatusTone.WARNING -> semantic.warningContainer to semantic.onWarningContainer
         MatreeStatusTone.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        MatreeStatusTone.INTEREST -> semantic.interestContainer to semantic.onInterestContainer
         MatreeStatusTone.VERIFIED -> MaterialTheme.colorScheme.primaryContainer to semantic.verified
         MatreeStatusTone.PREMIUM -> MaterialTheme.colorScheme.secondaryContainer to semantic.premium
         MatreeStatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
