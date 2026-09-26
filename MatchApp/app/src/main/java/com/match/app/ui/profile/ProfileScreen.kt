@@ -38,6 +38,8 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
+import com.match.app.ui.components.LoadingState
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -116,22 +118,24 @@ fun ProfileScreen(
 
     val p = profile
     if (p == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.testTag("profile_loading"))
-        }
+        LoadingState(
+            modifier = Modifier.fillMaxSize().testTag("profile_loading"),
+            message = "Loading your profile…"
+        )
         return
     }
 
+    val spacing = MatreeDesign.spacing
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("profile_screen"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
         ProfileHero(p)
 
         ProfileCompletenessBar(
             profile = p,
             onComplete = onGoSettings,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.md)
         )
 
         ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
@@ -191,25 +195,25 @@ fun ProfileScreen(
 
         PhotosSection(photos, picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, vm = vm)
 
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+        Column(Modifier.padding(horizontal = spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
                 Icon(Icons.Filled.PrivacyTip, null); Spacer(Modifier.size(8.dp)); Text("Privacy & visibility")
             }
-            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
                 Icon(Icons.Filled.Description, null); Spacer(Modifier.size(8.dp)); Text("View biodata")
             }
-            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_settings")) {
+            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_settings")) {
                 Icon(Icons.Filled.Settings, null); Spacer(Modifier.size(8.dp)); Text("Settings")
             }
             OutlinedButton(
                 onClick = vm::signOut,
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_sign_out"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_sign_out"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ExitToApp, null); Spacer(Modifier.size(8.dp)); Text("Sign out")
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(spacing.xxl))
     }
 }
 
