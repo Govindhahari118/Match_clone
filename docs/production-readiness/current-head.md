@@ -93,15 +93,42 @@ win over earlier exploratory text; security/privacy invariants are never weakene
   permits that viewer; unknown activity is no longer fabricated as "Active recently"
 - the unauthorised client-side "Recently active" sort was removed because discovery does not expose
   precise presence timestamps
+- profile writes now use monotonic `profileRevision` transactions across Android, Room migration
+  and Firestore Rules; stale writers refresh the server profile and surface a conflict instead of
+  silently overwriting a newer device
+- chat attachment payloads are bound to the exact thread/message object identity and voice duration;
+  receipt updates enforce delivered-before-read semantics at the Rules boundary
+- the durable chat outbox deletes only its own managed local media after authoritative send success,
+  while failed/exhausted rows retain bytes for explicit retry
+- Nearby now suppresses inactive/deleting/suspended accounts for both viewer and candidate, and its
+  profile hydration forces a current server-authorized read rather than reviving stale cache data
+- Shortlist and Who Viewed profile hydration now re-authorize current peer visibility; Who Viewed
+  rebuilds its local history only from cloud-authoritative viewer IDs that remain readable
+- pending Sent/Received interest lists explicitly exclude mutual matches; the Sent tab exposes the
+  trusted pending-only withdrawal operation
+- legacy global public `matchScore` authority is removed: clients cannot author it, Android ignores
+  historical values, and a server migration deletes old copies because compatibility is pairwise
+- generic profile hydration keeps activity hidden unless an authorized presence lookup is performed
+- notification intents are account-bound, revoked Firebase sessions are checked without breaking
+  offline startup, and expired/revoked sessions perform a full sign-out
+- Google Play entitlement reconciliation has deterministic policy/ledger regression coverage for
+  void/refund/expiry paths, and compatibility scoring carries formula version/factor evidence
+- legacy protected-media token references have an idempotent owner-path migration policy and tests
 
 ## Exact-head evidence
 
-The branch had an all-green exact-head Production CI at SHA
-`65608f49375152bfff4c6995e5d2cc9e85cb1602` before the later environment/billing hardening commits.
+Production CI completed **all green** on exact code head
+`8551a1b3e073852b87ab9c14ec1176fb4829d4bb` (run `36337683818`).
 
-That prior green run is **historical evidence only**. The current branch must obtain a new all-green
-Production CI after this final documentation/code state before it can be treated as the current
-repository-side baseline.
+The four mandatory jobs all completed successfully on that SHA:
+
+- Android build, lint and tests
+- Firebase Functions lint, build and production dependency audit
+- Firestore and Storage security rules
+- Room migration matrix
+
+This remains exact-SHA evidence only. Any later production code/configuration change requires a new
+green run before that later SHA can inherit the claim.
 
 Mandatory CI jobs:
 
@@ -147,6 +174,7 @@ These cannot be truthfully completed by repository code alone:
 
 ## Release statement
 
-This branch and PR #18 must remain Draft until the current exact HEAD is green and all required
-external gates have current evidence. Code volume, screenshots, historical green commits or a
-rendering Compose screen are not completion evidence.
+The repository-side exact-head CI baseline is green at the SHA recorded above, but this branch and
+PR #18 must remain Draft until all required external/operator gates have current evidence. Code
+volume, screenshots, historical green commits or a rendering Compose screen are not completion
+evidence.
