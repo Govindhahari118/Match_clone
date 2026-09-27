@@ -21,6 +21,18 @@ import javax.inject.Singleton
  * fields live in `userPrivate/{firebaseUid}` and are readable only by the owner or trusted
  * server code. Firebase Auth UID is the only remote security identity; Room IDs are cache IDs.
  */
+class ProfileConflictException(
+    val expectedRevision: Long,
+    val actualRevision: Long
+) : IllegalStateException(
+    "Your profile changed on another signed-in device. The latest version was reloaded; review it before saving again."
+)
+
+private data class ProfileRevisionWriteResult(
+    val applied: Boolean,
+    val revision: Long
+)
+
 @Singleton
 class FirestoreProfileService @Inject constructor(
     private val userDao: UserDao
@@ -36,7 +48,7 @@ class FirestoreProfileService @Inject constructor(
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
-            "profileCompleteness", "profileCompletenessUpdatedAt"
+            "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
@@ -48,8 +60,8 @@ class FirestoreProfileService @Inject constructor(
         private val LEGACY_PUBLIC_PRIVACY_FIELDS = setOf("isIncognito", "showLastActive")
     }
 
-    suspend fun pushProfile(entity: UserEntity) {
-        if (entity.firebaseUid.isBlank()) return
+    suspend fun pushProfile(entity: UserEntity): UserEntity {
+        if (entity.firebaseUid.isBlank()) return entity
         val uid = entity.firebaseUid
         require(auth.currentUser?.uid == uid) { "Cannot update another user's profile" }
 
@@ -72,10 +84,13 @@ class FirestoreProfileService @Inject constructor(
         }
 
 
-        val batch = db.batch()
-        batch.set(usersCol.document(uid), publicData, SetOptions.merge())
-        batch.set(privateCol.document(uid), entityToPrivateMap(entity), SetOptions.merge())
-        batch.commit().await()
+        val revision = writeWithRevision(
+            uid = uid,
+            expectedRevision = entity.profileRevision,
+            publicUpdates = publicData,
+            privateUpdates = entityToPrivateMap(entity)
+        )
+        return entity.copy(profileRevision = revision)
     }
 
     fun ageBucketFor(age: Int): String = when {
@@ -107,12 +122,78 @@ class FirestoreProfileService @Inject constructor(
         require(fields.keys.none { it in PROTECTED_PROFILE_FIELDS }) { "Protected profile field update rejected" }
         require(fields.keys.none { it in LEGACY_PUBLIC_PRIVACY_FIELDS }) { "Legacy public privacy field update rejected" }
 
+        val local = userDao.findByFirebaseUid(firebaseUid)
+            ?: throw IllegalStateException("Local profile cache is unavailable")
         val privateUpdates = fields.filterKeys { it in PRIVATE_FIELDS }
-        val publicUpdates = fields.filterKeys { it !in PRIVATE_FIELDS }
-        val batch = db.batch()
-        if (publicUpdates.isNotEmpty()) batch.set(usersCol.document(firebaseUid), publicUpdates, SetOptions.merge())
-        if (privateUpdates.isNotEmpty()) batch.set(privateCol.document(firebaseUid), privateUpdates, SetOptions.merge())
-        batch.commit().await()
+        val publicUpdates = fields.filterKeys { it !in PRIVATE_FIELDS }.toMutableMap().apply {
+            if (isNotEmpty()) put("updatedAt", System.currentTimeMillis())
+        }
+        val revision = writeWithRevision(
+            uid = firebaseUid,
+            expectedRevision = local.profileRevision,
+            publicUpdates = publicUpdates,
+            privateUpdates = privateUpdates
+        )
+        userDao.updateProfileRevision(firebaseUid, revision)
+    }
+
+    private suspend fun writeWithRevision(
+        uid: String,
+        expectedRevision: Long,
+        publicUpdates: Map<String, Any?>,
+        privateUpdates: Map<String, Any?>
+    ): Long {
+        val userRef = usersCol.document(uid)
+        val privateRef = privateCol.document(uid)
+        val result = db.runTransaction { tx ->
+            val current = tx.get(userRef)
+            if (!current.exists()) {
+                if (expectedRevision != 0L) {
+                    return@runTransaction ProfileRevisionWriteResult(false, 0L)
+                }
+                val createData = publicUpdates.toMutableMap().apply {
+                    put("profileRevision", 0L)
+                }
+                tx.set(userRef, createData, SetOptions.merge())
+                if (privateUpdates.isNotEmpty()) {
+                    tx.set(privateRef, privateUpdates, SetOptions.merge())
+                }
+                return@runTransaction ProfileRevisionWriteResult(true, 0L)
+            }
+
+            val actualRevision = current.getLong("profileRevision") ?: 0L
+            if (actualRevision != expectedRevision) {
+                return@runTransaction ProfileRevisionWriteResult(false, actualRevision)
+            }
+
+            val nextRevision = actualRevision + 1L
+            val nextPublic = publicUpdates.toMutableMap().apply {
+                put("profileRevision", nextRevision)
+            }
+            tx.set(userRef, nextPublic, SetOptions.merge())
+            if (privateUpdates.isNotEmpty()) {
+                tx.set(privateRef, privateUpdates, SetOptions.merge())
+            }
+            ProfileRevisionWriteResult(true, nextRevision)
+        }.await()
+
+        if (!result.applied) {
+            refreshCachedProfileFromServer(uid)
+            throw ProfileConflictException(expectedRevision, result.revision)
+        }
+        return result.revision
+    }
+
+    private suspend fun refreshCachedProfileFromServer(firebaseUid: String) {
+        val local = userDao.findByFirebaseUid(firebaseUid) ?: return
+        val latest = fetchProfileFromServer(firebaseUid) ?: return
+        userDao.update(
+            latest.copy(
+                id = local.id,
+                passwordHash = local.passwordHash,
+                isSeed = local.isSeed
+            )
+        )
     }
 
     suspend fun fetchProfile(firebaseUid: String): UserEntity? = fetchProfile(firebaseUid, Source.DEFAULT)
@@ -256,7 +337,6 @@ class FirestoreProfileService @Inject constructor(
         "videoUrl" to e.videoUrl,
         "residentialStatus" to e.residentialStatus,
         "hasChildren" to e.hasChildren,
-        "boostActiveUntil" to e.boostActiveUntil,
         "nativeState" to e.nativeState,
         "countryOfResidence" to e.countryOfResidence,
         "visaStatus" to e.visaStatus,
@@ -381,6 +461,7 @@ class FirestoreProfileService @Inject constructor(
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
         subscriptionExpiry = (data["subscriptionExpiry"] as? Number)?.toLong() ?: 0L,
         matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f,
-        username = data["username"] as? String ?: ""
+        username = data["username"] as? String ?: "",
+        profileRevision = (data["profileRevision"] as? Number)?.toLong() ?: 0L
     )
 }
