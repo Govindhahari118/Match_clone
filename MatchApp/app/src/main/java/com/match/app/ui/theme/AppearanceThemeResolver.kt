@@ -14,7 +14,7 @@ object AppearanceThemeResolver {
         profileReligion: String?
     ): AppPalette = when (themePreference) {
         ThemePreference.NEUTRAL -> AppPalette.VIVAH
-        ThemePreference.MANUAL -> AppPalette.fromKey(manualPaletteKey)
+        ThemePreference.MANUAL -> AppPalette.fromProductionKey(manualPaletteKey)
         ThemePreference.AUTOMATIC -> {
             if (profileReligion.isNullOrBlank()) {
                 AppPalette.VIVAH
