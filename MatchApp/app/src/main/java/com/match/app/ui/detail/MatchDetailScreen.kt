@@ -22,14 +22,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.match.app.core.analytics.AnalyticsManager
-import com.match.app.core.matching.Astrology
-import com.match.app.core.matching.CombinedMatcher
-import com.match.app.core.matching.Vectors
+import com.match.app.core.matching.MatchScorer
 import com.match.app.data.local.Vec
 import com.match.app.data.local.dao.QuestionnaireDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PhotoEntity
 import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.repo.ShortlistRepository
@@ -38,6 +37,7 @@ import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.data.repo.SupportRepository
 import com.match.app.data.repo.WhoViewedRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
@@ -59,6 +59,9 @@ data class DetailUi(
     val qScore: Float = 0f,
     val astroScore: Float = 0f,
     val combinedScore: Float = 0f,
+    val compatibilityFactors: List<CompatibilityFactor> = emptyList(),
+    val compatibilityFormulaVersion: String = "",
+    val compatibilityAgePenalty: Float = 0f,
     val privateNote: String = "",
     val meIsPremium: Boolean = false,
     val showContactUnlock: Boolean = false,
@@ -82,6 +85,7 @@ class MatchDetailViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val qDao: QuestionnaireDao,
+    private val kundliRepo: KundliRepository,
     private val photoRepo: PhotoRepository,
     private val analytics: AnalyticsManager,
     private val noteRepo: NoteRepository,
@@ -129,29 +133,55 @@ class MatchDetailViewModel @Inject constructor(
         runCatching { whoViewed.record(meId, userId) }
         analytics.logProfileView(userId)
 
-        val seeker = userDao.findById(meId)
-        val target = userDao.findById(userId)
-        if (seeker != null && target != null) {
+        if (me != null) {
             val seekerQ = qDao.forUser(meId)
             val targetQ = qDao.forUser(userId)
-            val qScore = if (seekerQ != null && targetQ != null) {
-                Vectors.questionnaireScore(
-                    Vec.decode(seekerQ.selfVector), Vec.decode(seekerQ.partnerVector),
-                    Vec.decode(targetQ.selfVector), Vec.decode(targetQ.partnerVector)
+            var scorerMe = me.copy(
+                selfVector = seekerQ?.let { Vec.decode(it.selfVector) },
+                partnerVector = seekerQ?.let { Vec.decode(it.partnerVector) }
+            )
+            var scorerTarget = profile.copy(
+                selfVector = targetQ?.let { Vec.decode(it.selfVector) },
+                partnerVector = targetQ?.let { Vec.decode(it.partnerVector) },
+                // Peer-private astrology must never come from stale Room/profile cache.
+                rasi = "",
+                nakshatra = ""
+            )
+
+            if (profile.showHoroscope && profile.firebaseUid.isNotBlank()) {
+                val shared = kundliRepo.getSharedHoroscope(profile.firebaseUid).getOrNull()
+                if (shared?.available == true) {
+                    scorerMe = scorerMe.copy(
+                        rasi = shared.myRasi,
+                        nakshatra = shared.myNakshatra
+                    )
+                    scorerTarget = scorerTarget.copy(
+                        rasi = shared.targetRasi,
+                        nakshatra = shared.targetNakshatra
+                    )
+                } else {
+                    scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+                }
+            } else {
+                scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+            }
+
+            val result = MatchScorer.explain(scorerMe, scorerTarget)
+            val factors = result.factors.map {
+                CompatibilityFactor(
+                    key = it.key,
+                    score = it.score,
+                    configuredWeight = it.configuredWeight
                 )
-            } else 0f
-            val astro = if (
-                profile.showHoroscope && ReligionCategory.fromReligion(profile.religion) == ReligionCategory.HINDU &&
-                seeker.rasi.isNotBlank() && seeker.nakshatra.isNotBlank() &&
-                target.rasi.isNotBlank() && target.nakshatra.isNotBlank()
-            ) {
-                Astrology.score(seeker.rasi, seeker.nakshatra, target.rasi, target.nakshatra)
-            } else 0f
+            }
             _ui.update {
                 it.copy(
-                    qScore = qScore,
-                    astroScore = astro,
-                    combinedScore = CombinedMatcher.combine(qScore, astro)
+                    qScore = result.factors.firstOrNull { factor -> factor.key == "questionnaire" }?.score ?: 0f,
+                    astroScore = result.factors.firstOrNull { factor -> factor.key == "astrology" }?.score ?: 0f,
+                    combinedScore = result.percentage.toFloat() / 100f,
+                    compatibilityFactors = factors,
+                    compatibilityFormulaVersion = result.formulaVersion,
+                    compatibilityAgePenalty = result.agePenalty
                 )
             }
         }
@@ -494,12 +524,26 @@ private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
 
 @Composable
 private fun ActualCompatibilityCard(ui: DetailUi) {
-    val available = ui.qScore > 0f || ui.astroScore > 0f
-    if (!available) return
+    if (ui.compatibilityFactors.isEmpty()) return
     SectionCard("Compatibility") {
-        if (ui.qScore > 0f) ScoreRow("Questionnaire", ui.qScore)
-        if (ui.astroScore > 0f) ScoreRow("Astrology", ui.astroScore)
-        ScoreRow("Combined", ui.combinedScore)
+        ui.compatibilityFactors.forEach { factor ->
+            val label = when (factor.key) {
+                "questionnaire" -> "Questionnaire"
+                "astrology" -> "Astrology"
+                "demographics_lifestyle" -> "Profile fit"
+                "mutual_trust" -> "Mutual trust"
+                else -> factor.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+            }
+            ScoreRow(label, factor.score)
+        }
+        if (ui.compatibilityAgePenalty > 0f) {
+            Text(
+                "Age-gap adjustment: −${(ui.compatibilityAgePenalty * 100).toInt()} percentage points",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        ScoreRow("Overall", ui.combinedScore)
         Text(
             "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship.",
             style = MaterialTheme.typography.labelSmall,
