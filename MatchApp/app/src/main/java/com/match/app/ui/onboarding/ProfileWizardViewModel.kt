@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.repo.ReligionProfileRepository
 import com.match.app.data.repo.UsernameRepository
 import com.match.app.data.session.SessionStore
@@ -203,17 +204,24 @@ class ProfileWizardViewModel @Inject constructor(
             val username = if (!current.username.equals(desiredUsername, ignoreCase = true)) {
                 usernameRepository.reserve(desiredUsername).getOrThrow()
             } else desiredUsername
-            val updated = current.applyWizard(state, username)
-                .copy(profileCompleteness = calculateCompleteness(state))
+            var updated = current.applyWizard(state, username)
 
             if (updated.firebaseUid.isNotBlank()) {
                 religionProfileRepository.confirm(state.religion)
-                firestoreProfile.pushProfile(updated)
+                updated = firestoreProfile.pushProfile(updated)
             }
             userDao.update(updated)
             session.setCommunitySetupDone(true)
             session.setProfileWizardStep(0)
             onComplete()
+        } catch (e: ProfileConflictException) {
+            val localId = session.userId.first()
+            val latest = localId?.let { userDao.findById(it) }
+            if (latest != null) {
+                _wizardState.value = latest.toWizardState()
+                _religionConfirmed.value = latest.religion.isNotBlank()
+            }
+            _saveError.value = e.message
         } catch (e: Exception) {
             _saveError.value = e.message?.take(180) ?: "Could not save your profile. Please try again."
         } finally {
@@ -353,18 +361,6 @@ class ProfileWizardViewModel @Inject constructor(
             isNRI = isNri, rasi = if (isHindu) s.rasi.trim() else "", nakshatra = if (isHindu) s.nakshatra.trim() else "",
             manglik = if (isHindu) s.manglik.trim() else "", birthTime = s.birthTime.trim(), birthPlace = s.birthPlace.trim()
         )
-    }
-
-    private fun calculateCompleteness(s: WizardState): Float {
-        val checks = listOf(
-            s.username.isNotBlank(), s.displayName.isNotBlank(), s.dateOfBirth.isNotBlank(),
-            s.state.isNotBlank(), s.city.isNotBlank(), s.motherTongue.isNotBlank(), s.bio.isNotBlank(),
-            s.religion.isNotBlank(), s.education.isNotBlank(), s.profession.isNotBlank(),
-            s.heightCm > 0, s.maritalStatus.isNotBlank(), s.familyType.isNotBlank(), s.familyValues.isNotBlank(),
-            s.diet.isNotBlank(), s.countryOfResidence.isNotBlank(), s.incomeBand.isNotBlank(),
-            s.employer.isNotBlank(), s.aboutFamily.isNotBlank(), s.spokenLanguages.isNotBlank()
-        )
-        return checks.count { it }.toFloat() / checks.size.toFloat()
     }
 
     private companion object {
