@@ -12,10 +12,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProgressCard
 import com.match.app.ui.components.MatreeProfileCard
 import com.match.app.ui.components.MatreeProfileCardVariant
 import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusChip
 import com.match.app.ui.components.MatreeStatusTone
 
@@ -64,6 +67,20 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                     MatreeStatusChip("Premium", MatreeStatusTone.PREMIUM)
                     MatreeStatusChip("Warning", MatreeStatusTone.WARNING)
                 }
+                MatreeProgressCard(
+                    title = "Profile readiness",
+                    progress = 0.72f,
+                    supportingText = "Theme matrix progress component",
+                    valueLabel = "72%"
+                )
+                MatreeInlineNotice(
+                    message = "Privacy and safety semantics stay stable across religion themes.",
+                    tone = MatreeStatusTone.WARNING
+                )
+                MatreeStatePanel(
+                    title = "No results",
+                    message = "Representative empty state for theme QA."
+                )
             }
         }
     }
