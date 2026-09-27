@@ -235,6 +235,191 @@ fun MatreeStatusChip(
 }
 
 @Composable
+fun MatreeStatePanel(
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    tone: MatreeStatusTone = MatreeStatusTone.NEUTRAL,
+    primaryActionLabel: String? = null,
+    onPrimaryAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null
+) {
+    val semantic = MatreeDesign.colors
+    val (container, contentColor) = when (tone) {
+        MatreeStatusTone.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        MatreeStatusTone.WARNING -> semantic.warningContainer to semantic.onWarningContainer
+        MatreeStatusTone.SUCCESS -> semantic.successContainer to semantic.onSuccessContainer
+        MatreeStatusTone.INTEREST -> semantic.interestContainer to semantic.onInterestContainer
+        MatreeStatusTone.VERIFIED -> MaterialTheme.colorScheme.primaryContainer to semantic.verified
+        MatreeStatusTone.PREMIUM -> MaterialTheme.colorScheme.secondaryContainer to semantic.premium
+        MatreeStatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.large),
+        color = container,
+        contentColor = contentColor
+    ) {
+        Column(
+            Modifier.padding(MatreeDesign.spacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+        ) {
+            icon?.let {
+                Icon(
+                    it,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.iconLarge),
+                    tint = contentColor
+                )
+            }
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = contentColor,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            if (primaryActionLabel != null && onPrimaryAction != null) {
+                MatreePrimaryButton(
+                    text = primaryActionLabel,
+                    onClick = onPrimaryAction,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (secondaryActionLabel != null && onSecondaryAction != null) {
+                MatreeSecondaryButton(
+                    text = secondaryActionLabel,
+                    onClick = onSecondaryAction,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MatreeLoadingState(
+    modifier: Modifier = Modifier,
+    message: String = "Loading…",
+    rows: Int = 3
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(MatreeDesign.sizes.icon),
+                strokeWidth = 2.dp
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        repeat(rows.coerceIn(1, 6)) {
+            MatreeLoadingSkeleton()
+        }
+    }
+}
+
+@Composable
+fun MatreeProgressCard(
+    title: String,
+    progress: Float,
+    modifier: Modifier = Modifier,
+    supportingText: String? = null,
+    valueLabel: String? = null
+) {
+    val normalized = progress.coerceIn(0f, 1f)
+    MatreeInfoCard(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                supportingText?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            valueLabel?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        LinearProgressIndicator(
+            progress = { normalized },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+fun MatreeInlineNotice(
+    message: String,
+    modifier: Modifier = Modifier,
+    tone: MatreeStatusTone = MatreeStatusTone.NEUTRAL,
+    icon: ImageVector? = null
+) {
+    val semantic = MatreeDesign.colors
+    val (container, contentColor) = when (tone) {
+        MatreeStatusTone.ERROR -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        MatreeStatusTone.WARNING -> semantic.warningContainer to semantic.onWarningContainer
+        MatreeStatusTone.SUCCESS -> semantic.successContainer to semantic.onSuccessContainer
+        MatreeStatusTone.INTEREST -> semantic.interestContainer to semantic.onInterestContainer
+        MatreeStatusTone.VERIFIED -> MaterialTheme.colorScheme.primaryContainer to semantic.verified
+        MatreeStatusTone.PREMIUM -> MaterialTheme.colorScheme.secondaryContainer to semantic.premium
+        MatreeStatusTone.NEUTRAL -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.card),
+        color = container,
+        contentColor = contentColor
+    ) {
+        Row(
+            Modifier.padding(MatreeDesign.spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+        ) {
+            icon?.let {
+                Icon(
+                    it,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.icon),
+                    tint = contentColor
+                )
+            }
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
 fun MatreeLoadingSkeleton(
     modifier: Modifier = Modifier,
     height: Dp? = null
