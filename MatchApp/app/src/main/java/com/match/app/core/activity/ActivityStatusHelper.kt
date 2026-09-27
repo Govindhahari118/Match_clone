@@ -21,7 +21,7 @@ object ActivityStatusHelper {
 
     fun from(lastActiveAt: Long, now: Long = System.currentTimeMillis()): ActivityStatus {
         if (lastActiveAt <= 0L) {
-            return ActivityStatus("Active recently", isOnline = false, isRecent = true, daysAgo = -1)
+            return ActivityStatus("Activity unavailable", isOnline = false, isRecent = false, daysAgo = -1)
         }
         val diffMs = (now - lastActiveAt).coerceAtLeast(0L)
         val minutes = diffMs / 60_000L
