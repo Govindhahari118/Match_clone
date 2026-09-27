@@ -9,11 +9,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 // ── Content definitions ─────────────────────────────────────────────────────
 
@@ -168,47 +172,30 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("legal_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = title, onBack = onBack)
         }
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(20.dp).testTag("legal_screen_$type"),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(MatreeDesign.spacing.lg).testTag("legal_screen_$type"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.lg)
         ) {
-            // Header card
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                modifier = Modifier.fillMaxWidth()
+            MatreeHero(
+                title = title,
+                subtitle = subtitle
             ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(subtitle, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Spacer(Modifier.height(8.dp))
-                    Text(t("effective_date", "Effective March 10, 2026"), style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
-                }
+                Text(
+                    t("effective_date", "Effective March 10, 2026"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // Sections
             sections.forEach { section ->
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(18.dp)) {
+                MatreeInfoCard {
                         Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(MatreeDesign.spacing.sm))
                         section.bullets.forEach { bullet ->
                             Row(Modifier.padding(vertical = 3.dp)) {
                                 Text("•", style = MaterialTheme.typography.bodyMedium,
@@ -222,19 +209,10 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
             }
 
             // Contact footer
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "© 2026 MatrimonyConnect. All rights reserved.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-            Spacer(Modifier.height(16.dp))
+            MatreeInlineNotice(
+                message = "© 2026 MatrimonyConnect. All rights reserved."
+            )
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
         }
     }
 }
