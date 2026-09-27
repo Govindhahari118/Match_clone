@@ -31,6 +31,7 @@ function baseProfile(overrides = {}) {
     subscriptionPlan: 'FREE',
     subscriptionExpiry: 0,
     stealthMode: false,
+    profileRevision: 0,
     ...overrides,
   };
 }
@@ -60,7 +61,10 @@ test('owner cannot directly confirm religion or forge lock metadata', async () =
 test('ordinary owner profile updates remain allowed while religion is server-controlled', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await setDoc(doc(db, 'users/alice'), baseProfile());
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { displayName: 'Alice S.' }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'Alice S.',
+    profileRevision: 1,
+  }));
 });
 
 test('locked canonical religion cannot be changed or unlocked by owner', async () => {
@@ -76,7 +80,35 @@ test('locked canonical religion cannot be changed or unlocked by owner', async (
   await assertFails(updateDoc(doc(db, 'users/alice'), { religion: 'Christian' }));
   await assertFails(updateDoc(doc(db, 'users/alice'), { religionLocked: false }));
   await assertFails(updateDoc(doc(db, 'users/alice'), { religionConfirmedAt: Date.now() + 1000 }));
-  await assertSucceeds(updateDoc(doc(db, 'users/alice'), { city: 'Secunderabad' }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    city: 'Secunderabad',
+    profileRevision: 1,
+  }));
+});
+
+test('owner profile updates must advance exactly one revision', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await setDoc(doc(db, 'users/alice'), baseProfile());
+
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'Missing revision',
+  }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'Skipped revision',
+    profileRevision: 2,
+  }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'Alice revision one',
+    profileRevision: 1,
+  }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    city: 'Stale writer',
+    profileRevision: 1,
+  }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    city: 'Secunderabad',
+    profileRevision: 2,
+  }));
 });
 
 test('arbitrary religion values cannot enter the public profile', async () => {
