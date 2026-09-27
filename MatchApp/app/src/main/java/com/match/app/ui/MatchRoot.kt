@@ -31,7 +31,6 @@ import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
-import com.match.app.domain.model.DisplayMode
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -139,11 +138,10 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         manualPaletteKey = appearance.manualThemeKey,
         profileReligion = currentUser?.religion
     )
-    val darkMode = when (appearance.displayMode) {
-        DisplayMode.SYSTEM -> systemDark
-        DisplayMode.LIGHT -> false
-        DisplayMode.DARK -> true
-    }
+    val darkMode = AppearanceThemeResolver.resolveDarkMode(
+        displayMode = appearance.displayMode,
+        systemDark = systemDark
+    )
 
     val layoutDir = if (uiLanguage in setOf("ar", "ur")) LayoutDirection.Rtl else LayoutDirection.Ltr
     MatchTheme(darkMode = darkMode, palette = effectivePalette) {
@@ -168,16 +166,19 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                             Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.errorContainer)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(
+                                    horizontal = com.match.app.ui.theme.MatreeDesign.spacing.md,
+                                    vertical = com.match.app.ui.theme.MatreeDesign.spacing.xs
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 Icons.Filled.CloudOff, null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(com.match.app.ui.theme.MatreeDesign.sizes.iconSmall),
                                 tint = MaterialTheme.colorScheme.onErrorContainer
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(com.match.app.ui.theme.MatreeDesign.spacing.xs))
                             Text(
                                 "You're offline — some features may be limited",
                                 style = MaterialTheme.typography.labelMedium,
