@@ -30,4 +30,11 @@ class ActivityStatusHelperTest {
         assertEquals("Inactive", status.label)
         assertFalse(status.isRecent)
     }
+
+    @Test fun `missing activity is never presented as recent`() {
+        val status = ActivityStatusHelper.from(0L, now)
+        assertEquals("Activity unavailable", status.label)
+        assertFalse(status.isOnline)
+        assertFalse(status.isRecent)
+    }
 }
