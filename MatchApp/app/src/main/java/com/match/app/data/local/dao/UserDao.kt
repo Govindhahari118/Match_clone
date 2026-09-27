@@ -57,4 +57,7 @@ interface UserDao {
 
     @Query("UPDATE users SET profileViewCount = profileViewCount + 1 WHERE id = :userId")
     suspend fun incrementProfileViewCount(userId: Long)
+
+    @Query("UPDATE users SET profileRevision = :revision WHERE firebaseUid = :uid")
+    suspend fun updateProfileRevision(uid: String, revision: Long)
 }
