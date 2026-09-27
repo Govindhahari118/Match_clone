@@ -59,7 +59,8 @@ service cloud.firestore {
              !('usernameNormalized' in request.resource.data) &&
              !('lastActiveAt' in request.resource.data) &&
              !('profileCompleteness' in request.resource.data) &&
-             !('profileCompletenessUpdatedAt' in request.resource.data);
+             !('profileCompletenessUpdatedAt' in request.resource.data) &&
+             !('matchScore' in request.resource.data);
     }
     function userServerFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -67,7 +68,7 @@ service cloud.firestore {
         'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
         'lastActiveAt','boostActiveUntil','accountStatus','religion','religionId','religionLocked','religionConfirmedAt',
-        'profileCompleteness','profileCompletenessUpdatedAt'
+        'profileCompleteness','profileCompletenessUpdatedAt','matchScore'
       ]);
     }
     function peerReadableAccount(data) {
