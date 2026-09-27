@@ -478,7 +478,11 @@ private fun ModernBiodata(p: UserProfile) {
                     }
                 }
             }
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            }
+            Column(
+                Modifier.padding(MatreeDesign.spacing.md),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+            ) {
                 ModernInfoRow(Icons.Filled.Person,    "Personal",  "${p.age} yrs · ${p.maritalStatus.ifBlank { "Not provided" }} · ${if (p.heightCm > 0) "${p.heightCm}cm" else ""}")
                 ModernInfoRow(Icons.Filled.TempleHindu,"Religion", "${p.religion.ifBlank { "—" }} · ${p.caste.ifBlank { "—" }} · ${p.rasi.ifBlank { "—" }}")
                 ModernInfoRow(Icons.Filled.School,    "Education", "${p.education.ifBlank { "—" }} · ${p.profession.ifBlank { "—" }}")
