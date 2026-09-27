@@ -453,8 +453,9 @@ class FirestoreProfileService @Inject constructor(
         profileCompleteness = (data["profileCompleteness"] as? Number)?.toFloat() ?: 0f,
         verificationLevel = (data["verificationLevel"] as? Number)?.toInt() ?: 0,
         stealthMode = data["stealthMode"] as? Boolean ?: false,
-        // Activity visibility is resolved through privacySettings/getMemberPresence.
-        showLastActive = true,
+        // Generic profile hydration has no authorized presence result. Keep activity hidden
+        // until a caller explicitly resolves getMemberPresence for this viewer/target pair.
+        showLastActive = false,
         showHoroscope = data["showHoroscope"] as? Boolean ?: true,
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
