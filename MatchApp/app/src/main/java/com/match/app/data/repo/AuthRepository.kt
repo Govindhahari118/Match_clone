@@ -78,7 +78,8 @@ class AuthRepository @Inject constructor(
             )
             val localId = userDao.insert(entity)
 
-            firestoreProfile.pushProfile(entity.copy(id = localId))
+            val synced = firestoreProfile.pushProfile(entity.copy(id = localId))
+            userDao.update(synced)
             registerFcmToken(firebaseUid)
 
             session.setUser(localId)
@@ -128,7 +129,8 @@ class AuthRepository @Inject constructor(
                     ?: return AuthResult.Error("Profile data is unavailable. Please contact support.")
                 val migratedUser = legacyUser.copy(firebaseUid = firebaseUid, passwordHash = "")
                 userDao.update(migratedUser)
-                firestoreProfile.pushProfile(migratedUser)
+                val synced = firestoreProfile.pushProfile(migratedUser)
+                userDao.update(synced)
                 localId = legacyUser.id
             }
 
@@ -271,7 +273,10 @@ class AuthRepository @Inject constructor(
         )
         userDao.update(updated)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.pushProfile(updated) } catch (ex: Exception) {
+            try {
+                val synced = firestoreProfile.pushProfile(updated)
+                userDao.update(synced)
+            } catch (ex: Exception) {
                 Log.w("AuthRepository", "Family details cloud sync failed", ex)
             }
         }
@@ -313,7 +318,10 @@ class AuthRepository @Inject constructor(
         )
         userDao.update(updated)
         if (u.firebaseUid.isNotBlank()) {
-            try { firestoreProfile.pushProfile(updated) } catch (ex: Exception) {
+            try {
+                val synced = firestoreProfile.pushProfile(updated)
+                userDao.update(synced)
+            } catch (ex: Exception) {
                 Log.w("AuthRepository", "Account details cloud sync failed", ex)
             }
         }
@@ -442,7 +450,8 @@ class AuthRepository @Inject constructor(
                         lastActiveAt = System.currentTimeMillis()
                     )
                     val id = userDao.insert(entity)
-                    firestoreProfile.pushProfile(entity.copy(id = id))
+                    val synced = firestoreProfile.pushProfile(entity.copy(id = id))
+                    userDao.update(synced)
                     id
                 }
             }
