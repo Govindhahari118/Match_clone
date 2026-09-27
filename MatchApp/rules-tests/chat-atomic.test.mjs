@@ -74,6 +74,70 @@ test('first-message batch is denied when either member blocked the other', async
 });
 
 
+test('message attachments must belong to the same thread and one media type', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  const base = {
+    body: 'attachment',
+    sentAt: Date.now(),
+    isRead: false,
+    fromFirebaseUid: 'alice',
+    toFirebaseUid: 'bob',
+  };
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_other_thread'),
+    {
+      ...base,
+      imageUri: 'chat-media/another-thread/client_1234567890123456.jpg',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_two_media'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/client_1234567890123456.jpg',
+      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
+      voiceDurationMs: 1200,
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_voice_duration'),
+    {
+      ...base,
+      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
+      voiceDurationMs: 100,
+    },
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(alice, 'chats/thread1/messages/client_good_image_123456'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/client_good_image_123456.jpg',
+    },
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(alice, 'chats/thread1/messages/client_good_voice_123456'),
+    {
+      ...base,
+      voiceUri: 'chat-media/thread1/client_good_voice_123456.m4a',
+      voiceDurationMs: 1200,
+    },
+  ));
+});
+
+test('empty chat bodies are rejected at the rules boundary', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(firstMessageBatch(alice, '').commit());
+});
+
 test('only recipient may acknowledge delivery and read state', async () => {
   await seedUsersAndMutual();
   const alice = env.authenticatedContext('alice').firestore();
