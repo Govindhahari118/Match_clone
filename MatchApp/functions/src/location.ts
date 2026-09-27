@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { nearbyAccountIsDiscoverable } from "./nearbyPolicy";
 
 const GEOHASH_ALPHABET = "0123456789bcdefghjkmnpqrstuvwxyz";
 // Nearby represents current proximity, not a historical location. A user must refresh at least
@@ -269,7 +270,8 @@ export const nearbyProfiles = functions
       if (privacyRelations[i].exists && privacyRelations[i].data()?.profileHidden === true) continue;
       if (viewerPrivacyRelations[i].exists && viewerPrivacyRelations[i].data()?.profileHidden === true) continue;
       const candidate = profiles[i].data() || {};
-      if (candidate.stealthMode === true || !mutuallyCompatible(viewer, candidate)) continue;
+      if (!nearbyAccountIsDiscoverable(candidate.accountStatus, candidate.stealthMode)) continue;
+      if (!mutuallyCompatible(viewer, candidate)) continue;
       result.push({
         uid: distanceEntries[i].uid,
         distanceBucket: distanceBucket(distanceEntries[i].distanceKm),
