@@ -1,5 +1,6 @@
 package com.match.app.ui.theme
 
+import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ThemePreference
 
@@ -8,6 +9,12 @@ import com.match.app.domain.model.ThemePreference
  * profile. Discovery lenses, partner preferences and search filters are intentionally absent.
  */
 object AppearanceThemeResolver {
+    fun resolveDarkMode(displayMode: DisplayMode, systemDark: Boolean): Boolean = when (displayMode) {
+        DisplayMode.SYSTEM -> systemDark
+        DisplayMode.LIGHT -> false
+        DisplayMode.DARK -> true
+    }
+
     fun resolve(
         themePreference: ThemePreference,
         manualPaletteKey: String,
