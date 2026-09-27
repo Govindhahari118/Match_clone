@@ -1,6 +1,10 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import {
+  activityVisibilityAllows,
+  normalizeActivityVisibility,
+} from "./activityVisibilityPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -76,7 +80,8 @@ function premiumIsActive(data: FirebaseFirestore.DocumentData, now: number): boo
 function matchesServerFilters(
   candidate: FirebaseFirestore.DocumentData,
   data: unknown,
-  now: number
+  now: number,
+  visibleLastActiveAt: number
 ): boolean {
   const textFields: Array<[string, string]> = [
     ["city", "city"], ["state", "state"], ["religion", "religion"],
@@ -111,10 +116,13 @@ function matchesServerFilters(
   }
 
   const incomeMin = filterString(data, "incomeMin");
+  const incomeMax = filterString(data, "incomeMax");
+  if ((incomeMin || incomeMax) && stringValue(candidate.incomeDisclosure).toLowerCase() === "hidden") {
+    return false;
+  }
   if (incomeMin && !normalizedSearchValue(candidate.incomeBand).includes(incomeMin.toLocaleLowerCase("en-IN"))) {
     return false;
   }
-  const incomeMax = filterString(data, "incomeMax");
   if (incomeMax && !normalizedSearchValue(candidate.incomeBand).includes(incomeMax.toLocaleLowerCase("en-IN"))) {
     return false;
   }
@@ -138,15 +146,18 @@ function matchesServerFilters(
   }
   const lastActiveDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
   if (lastActiveDays > 0) {
-    const raw = candidate.lastActiveAt;
-    const lastActive = raw instanceof admin.firestore.Timestamp
-      ? raw.toMillis()
-      : Number(raw || 0);
-    if (!Number.isFinite(lastActive) || lastActive <= 0 ||
-        now - lastActive > lastActiveDays * 86_400_000) return false;
+    if (!Number.isFinite(visibleLastActiveAt) || visibleLastActiveAt <= 0 ||
+        now - visibleLastActiveAt > lastActiveDays * 86_400_000) return false;
   }
 
   const hasHoroscope = filterString(data, "hasHoroscope").toLocaleLowerCase("en-IN");
+  const astrologyFilterRequested =
+    filterString(data, "rasi").length > 0 ||
+    filterString(data, "nakshatra").length > 0 ||
+    filterString(data, "manglik").length > 0 ||
+    hasHoroscope === "yes" ||
+    hasHoroscope === "no";
+  if (astrologyFilterRequested && candidate.showHoroscope === false) return false;
   const hasAstrology = stringValue(candidate.rasi).length > 0 && stringValue(candidate.nakshatra).length > 0;
   if (hasHoroscope === "yes" && !hasAstrology) return false;
   if (hasHoroscope === "no" && hasAstrology) return false;
@@ -197,6 +208,21 @@ function createdAtMillis(data: FirebaseFirestore.DocumentData): number {
   if (value instanceof admin.firestore.Timestamp) return value.toMillis();
   const numeric = Number(value || 0);
   return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function needsPrivateFilterData(data: unknown): boolean {
+  const horoscope = filterString(data, "hasHoroscope").toLocaleLowerCase("en-IN");
+  return filterString(data, "incomeMin").length > 0 ||
+    filterString(data, "incomeMax").length > 0 ||
+    filterString(data, "rasi").length > 0 ||
+    filterString(data, "nakshatra").length > 0 ||
+    filterString(data, "manglik").length > 0 ||
+    horoscope === "yes" ||
+    horoscope === "no";
+}
+
+function pairId(uidA: string, uidB: string): string {
+  return [uidA, uidB].sort().join("_");
 }
 
 /**
@@ -270,15 +296,54 @@ export const discoverProfiles = functions
       db.collection("privacyRelations").doc(doc.id).collection("members").doc(viewerUid)
     );
     const subscriptionRefs = candidates.map((doc) => db.collection("subscriptions").doc(doc.id));
-    const [reverseDocs, privacyDocs, subscriptionDocs] = await Promise.all([
+    const privateFilterRequested = needsPrivateFilterData(data);
+    const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
+    const privateRefs = privateFilterRequested
+      ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
+      : [];
+    const presenceRefs = lastActiveFilterDays > 0
+      ? candidates.map((doc) => db.collection("presencePrivate").doc(doc.id))
+      : [];
+    const activitySettingsRefs = lastActiveFilterDays > 0
+      ? candidates.map((doc) => db.collection("privacySettings").doc(doc.id))
+      : [];
+    const outgoingInterestRefs = lastActiveFilterDays > 0
+      ? candidates.map((doc) => db.collection("interests").doc(`${viewerUid}_${doc.id}`))
+      : [];
+    const incomingInterestRefs = lastActiveFilterDays > 0
+      ? candidates.map((doc) => db.collection("interests").doc(`${doc.id}_${viewerUid}`))
+      : [];
+    const matchRefs = lastActiveFilterDays > 0
+      ? candidates.map((doc) => db.collection("matches").doc(pairId(viewerUid, doc.id)))
+      : [];
+
+    const [
+      reverseDocs,
+      privacyDocs,
+      subscriptionDocs,
+      privateDocs,
+      presenceDocs,
+      activitySettingsDocs,
+      outgoingInterestDocs,
+      incomingInterestDocs,
+      matchDocs,
+    ] = await Promise.all([
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
       subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
+      privateRefs.length ? db.getAll(...privateRefs) : Promise.resolve([]),
+      presenceRefs.length ? db.getAll(...presenceRefs) : Promise.resolve([]),
+      activitySettingsRefs.length ? db.getAll(...activitySettingsRefs) : Promise.resolve([]),
+      outgoingInterestRefs.length ? db.getAll(...outgoingInterestRefs) : Promise.resolve([]),
+      incomingInterestRefs.length ? db.getAll(...incomingInterestRefs) : Promise.resolve([]),
+      matchRefs.length ? db.getAll(...matchRefs) : Promise.resolve([]),
     ]);
 
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
+    const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
+    const visibleLastActiveByUid = new Map<string, number>();
     reverseDocs.forEach((doc, index) => {
       if (doc.exists) reverseBlocked.add(candidates[index].id);
     });
@@ -289,6 +354,32 @@ export const discoverProfiles = functions
       const raw = Number(doc.data()?.boostUntil || 0);
       boostUntilByUid.set(candidates[index].id, Number.isFinite(raw) ? raw : 0);
     });
+    privateDocs.forEach((doc, index) => {
+      if (doc.exists) privateFilterByUid.set(candidates[index].id, doc.data() || {});
+    });
+    if (lastActiveFilterDays > 0) {
+      candidates.forEach((candidateDoc, index) => {
+        const relationship = {
+          interested:
+            outgoingInterestDocs[index]?.exists === true ||
+            incomingInterestDocs[index]?.exists === true,
+          mutual:
+            matchDocs[index]?.exists === true ||
+            (
+              outgoingInterestDocs[index]?.exists === true &&
+              incomingInterestDocs[index]?.exists === true
+            ),
+        };
+        const lastActiveVisibility = normalizeActivityVisibility(
+          activitySettingsDocs[index]?.data()?.lastActiveVisibility
+        );
+        if (!activityVisibilityAllows(lastActiveVisibility, relationship)) return;
+        const lastActive = Number(presenceDocs[index]?.data()?.lastActiveAt || 0);
+        if (Number.isFinite(lastActive) && lastActive > 0) {
+          visibleLastActiveByUid.set(candidateDoc.id, lastActive);
+        }
+      });
+    }
 
     const now = Date.now();
     const rankedCandidates = keyword
@@ -318,7 +409,21 @@ export const discoverProfiles = functions
       const candidateAccepts = candidateLookingFor === "ANY" || candidateLookingFor === viewerGender;
       if (!viewerAccepts || !candidateAccepts) continue;
       if (!matchesKeyword(candidate, keyword)) continue;
-      if (!matchesServerFilters(candidate, data, now)) continue;
+
+      const privateData = privateFilterByUid.get(doc.id) || {};
+      const filterCandidate = {
+        ...candidate,
+        incomeBand: privateData.incomeBand,
+        rasi: privateData.rasi,
+        nakshatra: privateData.nakshatra,
+        manglik: privateData.manglik,
+      };
+      if (!matchesServerFilters(
+        filterCandidate,
+        data,
+        now,
+        visibleLastActiveByUid.get(doc.id) || 0
+      )) continue;
 
       profiles.push(publicProfile(doc.id, candidate, now));
     }
