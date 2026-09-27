@@ -36,11 +36,12 @@ import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.MatchMode
 import com.match.app.domain.model.MatchResult
 import com.match.app.domain.profile.IndiaProfileCatalog
-import com.match.app.ui.common.ShimmerList
-import com.match.app.ui.components.EmptyState
+import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeProfileCard
 import com.match.app.ui.components.MatreeProfileCardVariant
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -258,8 +259,10 @@ fun MatchesScreen(
                     }
                 },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("keyword_search"),
-                shape = RoundedCornerShape(24.dp)
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = MatreeDesign.spacing.md, vertical = MatreeDesign.spacing.xs)
+                    .testTag("keyword_search"),
+                shape = RoundedCornerShape(MatreeDesign.radii.large)
             )
 
             QuickFilters(ui.filter, vm::setFilter, onAllFilters = { showFilters = true })
@@ -273,29 +276,46 @@ fun MatchesScreen(
             ModeRow(ui.mode, ui.astrologyApplicable, vm::setMode)
 
             when {
-                ui.loading -> ShimmerList()
-                ui.error != null -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    EmptyState("Unable to load profiles", ui.error ?: "Try again.", "Retry", vm::refresh, Icons.Filled.CloudOff)
+                ui.loading -> MatreeLoadingState(
+                    modifier = Modifier.padding(MatreeDesign.spacing.md),
+                    message = "Finding eligible profiles…",
+                    rows = 4
+                )
+                ui.error != null -> Box(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MatreeStatePanel(
+                        title = "Unable to load profiles",
+                        message = ui.error ?: "Try again.",
+                        icon = Icons.Filled.CloudOff,
+                        tone = MatreeStatusTone.ERROR,
+                        primaryActionLabel = "Retry",
+                        onPrimaryAction = vm::refresh
+                    )
                 }
-                sortedItems.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    EmptyState(
-                        "No profiles found",
-                        emptyState.message,
-                        emptyState.actionLabel,
-                        when (emptyState.action) {
+                sortedItems.isEmpty() -> Box(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MatreeStatePanel(
+                        title = "No profiles found",
+                        message = emptyState.message,
+                        icon = Icons.Filled.SearchOff,
+                        primaryActionLabel = emptyState.actionLabel,
+                        onPrimaryAction = when (emptyState.action) {
                             DiscoveryEmptyState.Action.RESET -> vm::clearFilters
                             DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO -> {
                                 { vm.setFilter(ui.filter.copy(withPhotoOnly = false)) }
                             }
                             DiscoveryEmptyState.Action.NONE -> null
-                        },
-                        Icons.Filled.SearchOff
+                        }
                     )
                 }
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag("matches_list"),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(MatreeDesign.spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
                 ) {
                     item {
                         Text(
