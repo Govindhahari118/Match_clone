@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -24,7 +23,12 @@ import androidx.lifecycle.viewModelScope
 import com.android.billingclient.api.BillingClient
 import com.match.app.data.billing.PlayBillingManager
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -118,13 +122,9 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(t("membership_plans", "Membership Plans")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
+            MatreeTopBar(
+                title = t("membership_plans", "Membership Plans"),
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = vm::refresh) {
                         Icon(Icons.Filled.Refresh, "Refresh Google Play prices")
@@ -135,8 +135,8 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(MatreeDesign.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
         ) {
             Text(
                 t("choose_right_plan", "Choose the right plan"),
@@ -154,11 +154,10 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
             )
 
             if (!ready) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text(
-                    "Connecting to Google Play…",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                MatreeInlineNotice(
+                    message = "Connecting to Google Play…",
+                    icon = Icons.Filled.Sync,
+                    tone = MatreeStatusTone.NEUTRAL
                 )
             }
 
@@ -173,11 +172,11 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                     else -> "Loading…"
                 }
 
-                ElevatedCard(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(20.dp)) {
+                ElevatedCard(shape = RoundedCornerShape(MatreeDesign.radii.large), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(MatreeDesign.spacing.lg)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(plan.icon, null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.width(MatreeDesign.spacing.sm))
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     plan.name,
@@ -194,7 +193,7 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                                 AssistChip(onClick = {}, enabled = false, label = { Text("Current") })
                             }
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(MatreeDesign.spacing.sm))
                         Text(
                             price,
                             style = MaterialTheme.typography.displaySmall,
@@ -213,28 +212,25 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                                     Icons.Filled.CheckCircle,
                                     null,
                                     Modifier.size(16.dp),
-                                    tint = Color(0xFF2E7D32)
+                                    tint = MatreeDesign.colors.success
                                 )
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(MatreeDesign.spacing.xs))
                                 Text(feature, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        Spacer(Modifier.height(16.dp))
-                        Button(
+                        Spacer(Modifier.height(MatreeDesign.spacing.md))
+                        MatreePrimaryButton(
+                            text = when {
+                                isCurrent -> "Current membership"
+                                isFree -> "Free plan"
+                                offer == null && ready -> "Not available in Google Play"
+                                offer == null -> "Loading Google Play…"
+                                else -> plan.cta
+                            },
                             onClick = { pendingPlan = plan },
                             enabled = !isFree && !isCurrent && offer != null && activity != null,
                             modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                when {
-                                    isCurrent -> "Current membership"
-                                    isFree -> "Free plan"
-                                    offer == null && ready -> "Not available in Google Play"
-                                    offer == null -> "Loading Google Play…"
-                                    else -> plan.cta
-                                }
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -244,7 +240,7 @@ fun PricingScreen(onBack: () -> Unit = {}, vm: PricingViewModel = hiltViewModel(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
         }
     }
 
