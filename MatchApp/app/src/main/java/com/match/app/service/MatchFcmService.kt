@@ -124,8 +124,16 @@ class MatchFcmService : FirebaseMessagingService() {
                 }
             }
 
+            val currentUid = FirebaseAuth.getInstance().currentUser?.uid
             val localPeer = fromFirebaseUid?.let { resolveLocalPeerId(it) }
-            showNotification(title, body, type, localPeer, localPeer)
+            showNotification(
+                title = title,
+                body = body,
+                type = type,
+                userId = localPeer,
+                peerId = localPeer,
+                recipientUid = intendedRecipientUid ?: currentUid
+            )
             persistNotification(localType(type), title, body, localPeer, notificationId)
         }
     }
@@ -183,16 +191,22 @@ class MatchFcmService : FirebaseMessagingService() {
         body: String,
         type: String,
         userId: Long? = null,
-        peerId: Long? = null
+        peerId: Long? = null,
+        recipientUid: String? = null
     ) {
         createNotificationChannel(this)
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("notif_type", type)
+            recipientUid?.takeIf { it.isNotBlank() }?.let { putExtra("recipient_uid", it) }
             userId?.let { putExtra("from_user_id", it) }
             peerId?.let { putExtra("peer_id", it) }
         }
-        val requestCode = (peerId ?: userId ?: System.currentTimeMillis()).hashCode()
+        val requestCode = listOf(
+            recipientUid.orEmpty(),
+            type,
+            (peerId ?: userId ?: System.currentTimeMillis()).toString()
+        ).joinToString("|").hashCode()
         val pendingIntent = PendingIntent.getActivity(
             this,
             requestCode,
