@@ -170,12 +170,21 @@ class MatchingRepository @Inject constructor(
                     ) {
                         Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
                     } else 0f
+                    val combined = MatchScorer.explain(seekerProfile, candidateProfile)
                     MatchResult(
                         user = candidateProfile,
                         questionnaireScore = qScore,
                         astrologyScore = astro,
-                        combinedScore = MatchScorer.calculate(seekerProfile, candidateProfile).toFloat() / 100f,
-                        mode = mode
+                        combinedScore = combined.percentage.toFloat() / 100f,
+                        mode = mode,
+                        formulaVersion = combined.formulaVersion,
+                        factors = combined.factors.map {
+                            com.match.app.domain.model.CompatibilityFactor(
+                                key = it.key,
+                                score = it.score,
+                                configuredWeight = it.configuredWeight
+                            )
+                        }
                     )
                 }
                 .filter { filter.minScore <= 0f || it.combinedScore >= filter.minScore }
