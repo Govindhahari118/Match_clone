@@ -1,54 +1,124 @@
 package com.match.app.core.matching
 
+import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import kotlin.math.abs
 
 /**
- * Advanced multi-dimensional match scoring engine.
- * Calculates compatibility across:
- * 1. Personality (Cosine similarity of vectors)
- * 2. Astrology (10 Poruthams)
- * 3. Demographics (Education, Profession, Income)
- * 4. Verification & Trust
+ * Explainable, symmetric compatibility score used by production discovery.
+ *
+ * v2 fixes two truthfulness issues in the earlier formula:
+ * - astrology is included only when both profiles are Hindu and both have usable birth-sign inputs;
+ * - trust is mutual (average verification level), not a one-sided score of the candidate.
+ *
+ * Missing/inapplicable dimensions are excluded and the remaining configured weights are
+ * renormalized. This prevents absent astrology/questionnaire data from becoming a fabricated
+ * compatibility penalty or neutral bonus.
  */
 object MatchScorer {
 
-    fun calculate(me: UserProfile, peer: UserProfile): Int {
-        var score = 0f
-        
-        // 1. Questionnaire/Personality (40% weight)
-        val selfV = me.selfVector
-        val partnerV = me.partnerVector
-        val peerSelfV = peer.selfVector
-        val peerPartnerV = peer.partnerVector
-        
-        val personalityScore = if (selfV != null && partnerV != null && peerSelfV != null && peerPartnerV != null) {
-            Vectors.questionnaireScore(selfV, partnerV, peerSelfV, peerPartnerV)
-        } else 0f
-        score += personalityScore * 0.40f
+    const val FORMULA_VERSION = "match-v2-applicability"
 
-        // 2. Astrology (30% weight)
-        val astrologyScore = Astrology.score(
-            me.rasi, me.nakshatra,
-            peer.rasi, peer.nakshatra
+    data class Factor(
+        val key: String,
+        val score: Float,
+        val configuredWeight: Float
+    )
+
+    data class Result(
+        val percentage: Int,
+        val formulaVersion: String,
+        val factors: List<Factor>,
+        val agePenalty: Float
+    )
+
+    fun calculate(me: UserProfile, peer: UserProfile): Int = explain(me, peer).percentage
+
+    fun explain(me: UserProfile, peer: UserProfile): Result {
+        val factors = mutableListOf<Factor>()
+
+        questionnaireScore(me, peer)?.let {
+            factors += Factor("questionnaire", it, 0.40f)
+        }
+
+        if (astrologyApplicable(me, peer)) {
+            factors += Factor(
+                "astrology",
+                Astrology.score(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra),
+                0.30f
+            )
+        }
+
+        demographicsScore(me, peer)?.let {
+            factors += Factor("demographics_lifestyle", it, 0.20f)
+        }
+
+        val trust = (
+            verificationScore(me.verificationLevel) +
+                verificationScore(peer.verificationLevel)
+            ) / 2f
+        factors += Factor("mutual_trust", trust, 0.10f)
+
+        val activeWeight = factors.sumOf { it.configuredWeight.toDouble() }.toFloat()
+        val weighted = if (activeWeight > 0f) {
+            factors.sumOf {
+                (it.score.coerceIn(0f, 1f) * it.configuredWeight).toDouble()
+            }.toFloat() / activeWeight
+        } else {
+            0f
+        }
+
+        val agePenalty = if (abs(me.age - peer.age) > 10) 0.10f else 0f
+        val normalized = (weighted - agePenalty).coerceIn(0f, 1f)
+        return Result(
+            percentage = (normalized * 100f).toInt().coerceIn(0, 100),
+            formulaVersion = FORMULA_VERSION,
+            factors = factors.toList(),
+            agePenalty = agePenalty
         )
-        score += astrologyScore * 0.30f
-
-        // 3. Demographics & Lifestyle (20% weight)
-        var demoScore = 0.5f
-        if (me.education == peer.education) demoScore += 0.2f
-        if (me.occupationCategory == peer.occupationCategory) demoScore += 0.2f
-        if (me.diet == peer.diet) demoScore += 0.1f
-        score += demoScore.coerceIn(0f, 1f) * 0.20f
-
-        // 4. Trust & Verification (10% weight)
-        val trustScore = (peer.verificationLevel.toFloat() / 5f).coerceIn(0f, 1f)
-        score += trustScore * 0.10f
-
-        // Age proximity penalty (if outside preferred range)
-        val ageDiff = abs(me.age - peer.age)
-        if (ageDiff > 10) score -= 0.1f
-
-        return (score * 100).toInt().coerceIn(0, 100)
     }
+
+    private fun questionnaireScore(me: UserProfile, peer: UserProfile): Float? {
+        val meSelf = me.selfVector ?: return null
+        val mePartner = me.partnerVector ?: return null
+        val peerSelf = peer.selfVector ?: return null
+        val peerPartner = peer.partnerVector ?: return null
+        return Vectors.questionnaireScore(meSelf, mePartner, peerSelf, peerPartner)
+    }
+
+    private fun astrologyApplicable(me: UserProfile, peer: UserProfile): Boolean {
+        return ReligionCategory.fromReligion(me.religion) == ReligionCategory.HINDU &&
+            ReligionCategory.fromReligion(peer.religion) == ReligionCategory.HINDU &&
+            me.rasi.isNotBlank() &&
+            me.nakshatra.isNotBlank() &&
+            peer.rasi.isNotBlank() &&
+            peer.nakshatra.isNotBlank()
+    }
+
+    /**
+     * Uses only dimensions known for both profiles. The old unconditional 0.5 base was removed:
+     * unknown demographic data is now omitted rather than pretending to be a 50% match.
+     */
+    private fun demographicsScore(me: UserProfile, peer: UserProfile): Float? {
+        var weighted = 0f
+        var weight = 0f
+
+        if (me.education.isNotBlank() && peer.education.isNotBlank()) {
+            weighted += if (me.education.equals(peer.education, true)) 0.40f else 0f
+            weight += 0.40f
+        }
+        if (me.occupationCategory.isNotBlank() && peer.occupationCategory.isNotBlank()) {
+            weighted += if (me.occupationCategory.equals(peer.occupationCategory, true)) 0.40f else 0f
+            weight += 0.40f
+        }
+        if (me.diet.isNotBlank() && peer.diet.isNotBlank()) {
+            weighted += if (me.diet.equals(peer.diet, true)) 0.20f else 0f
+            weight += 0.20f
+        }
+
+        return if (weight > 0f) (weighted / weight).coerceIn(0f, 1f) else null
+    }
+
+    private fun verificationScore(level: Int): Float =
+        (level.toFloat() / 5f).coerceIn(0f, 1f)
 }
