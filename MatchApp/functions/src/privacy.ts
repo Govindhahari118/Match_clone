@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { accountIsActive } from "./accountStatusPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
   SILVER_3M: 75,
@@ -88,15 +89,23 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   }
 
   const userRef = db.collection("users").doc(uid);
+  const targetRef = db.collection("users").doc(targetUid);
   const privateRef = db.collection("userPrivate").doc(targetUid);
   const matchRef = db.collection("matches").doc(matchId);
   const usageRef = db.collection("subscriptions").doc(uid).collection("usage").doc("current");
 
   return db.runTransaction(async (tx) => {
-    const [userSnap, targetPrivateSnap, matchSnap, usageSnap] = await Promise.all([
-      tx.get(userRef), tx.get(privateRef), tx.get(matchRef), tx.get(usageRef),
+    const [userSnap, targetSnap, targetPrivateSnap, matchSnap, usageSnap] = await Promise.all([
+      tx.get(userRef), tx.get(targetRef), tx.get(privateRef), tx.get(matchRef), tx.get(usageRef),
     ]);
     if (!userSnap.exists) throw new functions.https.HttpsError("not-found", "User profile not found");
+    if (!targetSnap.exists) throw new functions.https.HttpsError("not-found", "Target profile not found");
+    if (
+      !accountIsActive(userSnap.data()?.accountStatus) ||
+      !accountIsActive(targetSnap.data()?.accountStatus)
+    ) {
+      throw new functions.https.HttpsError("failed-precondition", "Contact is unavailable while an account is not active");
+    }
     if (!matchSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
 
     const user = userSnap.data() || {};
@@ -157,6 +166,8 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
   const requestRef = contactRequestRef(requesterUid, targetUid);
   const result = await db.runTransaction(async (tx) => {
     const [
+      requesterProfile,
+      targetProfile,
       matchSnap,
       outgoingBlock,
       incomingBlock,
@@ -166,6 +177,8 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
       existingGrant,
       existingRequest,
     ] = await Promise.all([
+      tx.get(db.collection("users").doc(requesterUid)),
+      tx.get(db.collection("users").doc(targetUid)),
       tx.get(db.collection("matches").doc(matchId)),
       tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
       tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
@@ -176,6 +189,15 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
       tx.get(requestRef),
     ]);
 
+    if (!requesterProfile.exists || !targetProfile.exists) {
+      throw new functions.https.HttpsError("not-found", "Profile not found");
+    }
+    if (
+      !accountIsActive(requesterProfile.data()?.accountStatus) ||
+      !accountIsActive(targetProfile.data()?.accountStatus)
+    ) {
+      throw new functions.https.HttpsError("failed-precondition", "Contact request is unavailable while an account is not active");
+    }
     if (!matchSnap.exists) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
