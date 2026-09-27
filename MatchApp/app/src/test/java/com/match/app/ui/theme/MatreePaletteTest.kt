@@ -48,6 +48,19 @@ class MatreePaletteTest {
     }
 
     @Test
+    fun `religion palettes retain restrained identity in dark mode`() {
+        val backgrounds = productionPalettes
+            .map { colorSchemeFor(it, dark = true).background }
+            .toSet()
+        val surfaces = productionPalettes
+            .map { colorSchemeFor(it, dark = true).surfaceVariant }
+            .toSet()
+
+        assertTrue("Expected distinct dark backgrounds across Matree families", backgrounds.size >= 6)
+        assertTrue("Expected distinct dark card surfaces across Matree families", surfaces.size >= 6)
+    }
+
+    @Test
     fun `primary actions meet normal-text AA contrast in every production palette`() {
         productionPalettes.forEach { palette ->
             listOf(false, true).forEach { dark ->
