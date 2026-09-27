@@ -534,38 +534,61 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("invalid-argument", "A valid target profile is required");
   }
 
-  const [viewer, target, viewerBlocked, targetBlocked, targetPrivacy, viewerPrivacy] = await Promise.all([
-    db.collection("users").doc(viewerUid).get(),
-    db.collection("users").doc(viewedUid).get(),
-    db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
-    db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
-    db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
-    db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid).get(),
-  ]);
-  if (!viewer.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
-  if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-  if (
-    !accountIsActive(viewer.data()?.accountStatus) ||
-    !accountIsActive(target.data()?.accountStatus)
-  ) {
-    throw new functions.https.HttpsError("failed-precondition", "Profile view is unavailable while an account is not active");
-  }
-  if (
-    target.data()?.stealthMode === true ||
-    viewerBlocked.exists ||
-    targetBlocked.exists ||
-    targetPrivacy.data()?.profileHidden === true ||
-    viewerPrivacy.data()?.profileHidden === true
-  ) {
-    throw new functions.https.HttpsError("permission-denied", "Profile view is unavailable for this privacy relationship");
-  }
-
   const day = new Date().toISOString().slice(0, 10);
   const viewId = createHash("sha256").update(`${viewerUid}|${viewedUid}|${day}`).digest("hex");
   const viewRef = db.collection("profileViews").doc(viewId);
+  const viewerRef = db.collection("users").doc(viewerUid);
+  const targetRef = db.collection("users").doc(viewedUid);
+  const viewerBlockRef = db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid);
+  const targetBlockRef = db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid);
+  const targetPrivacyRef = db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid);
+  const viewerPrivacyRef = db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid);
 
   const recorded = await db.runTransaction(async (tx) => {
-    const existing = await tx.get(viewRef);
+    const [
+      viewer,
+      target,
+      viewerBlocked,
+      targetBlocked,
+      targetPrivacy,
+      viewerPrivacy,
+      existing,
+    ] = await Promise.all([
+      tx.get(viewerRef),
+      tx.get(targetRef),
+      tx.get(viewerBlockRef),
+      tx.get(targetBlockRef),
+      tx.get(targetPrivacyRef),
+      tx.get(viewerPrivacyRef),
+      tx.get(viewRef),
+    ]);
+
+    if (!viewer.exists) {
+      throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    }
+    if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+    if (
+      !accountIsActive(viewer.data()?.accountStatus) ||
+      !accountIsActive(target.data()?.accountStatus)
+    ) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Profile view is unavailable while an account is not active"
+      );
+    }
+    if (
+      target.data()?.stealthMode === true ||
+      viewerBlocked.exists ||
+      targetBlocked.exists ||
+      targetPrivacy.data()?.profileHidden === true ||
+      viewerPrivacy.data()?.profileHidden === true
+    ) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Profile view is unavailable for this privacy relationship"
+      );
+    }
+
     if (existing.exists) return false;
     tx.set(viewRef, { viewerUid, viewedUid, viewedAt: Date.now() });
     return true;
@@ -582,11 +605,32 @@ export const onProfileViewed = functions.firestore
     const viewerUid = data.viewerUid as string;
     if (!viewedUid || !viewerUid || viewedUid === viewerUid) return;
 
-    const [targetPrivacy, viewerPrivacy] = await Promise.all([
+    const [
+      viewer,
+      target,
+      viewerBlocked,
+      targetBlocked,
+      targetPrivacy,
+      viewerPrivacy,
+    ] = await Promise.all([
+      db.collection("users").doc(viewerUid).get(),
+      db.collection("users").doc(viewedUid).get(),
+      db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
+      db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
       db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
       db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid).get(),
     ]);
-    if (targetPrivacy.data()?.profileHidden === true || viewerPrivacy.data()?.profileHidden === true) {
+    const shouldSuppress =
+      !viewer.exists ||
+      !target.exists ||
+      !accountIsActive(viewer.data()?.accountStatus) ||
+      !accountIsActive(target.data()?.accountStatus) ||
+      target.data()?.stealthMode === true ||
+      viewerBlocked.exists ||
+      targetBlocked.exists ||
+      targetPrivacy.data()?.profileHidden === true ||
+      viewerPrivacy.data()?.profileHidden === true;
+    if (shouldSuppress) {
       await snap.ref.delete();
       return;
     }
