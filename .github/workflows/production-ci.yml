@@ -124,10 +124,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --force \
             --name matree-ci-api30 \
             --package "system-images;android-30;google_apis;x86_64"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          test -f "$ANDROID_AVD_HOME/matree-ci-api30.ini"
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm || true; fi
           "$ANDROID_HOME/emulator/emulator" \
             -avd matree-ci-api30 \
