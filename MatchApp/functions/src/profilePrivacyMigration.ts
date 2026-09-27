@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db } from "./shared";
+import { protectedObjectIdentity } from "./protectedMediaMigrationPolicy";
 
 const PAGE_SIZE = 250;
 const PRIVATE_PROFILE_FIELDS = [
@@ -159,6 +160,77 @@ export const migrateLegacyPublicVisibilityFields = functions.pubsub
     functions.logger.info("Legacy public visibility migration page completed", {
       scanned: page.size,
       migrated: migratedProfiles,
+      cursor: lastId,
+    });
+    return null;
+  });
+
+
+const PROTECTED_MEDIA_FIELDS = ["photoUrl", "videoUrl", "voiceBioUrl"] as const;
+
+/**
+ * Replaces legacy Firebase HTTPS download-token/profile-media references with authenticated
+ * object identity. Only owner-scoped paths under the expected media root are migrated. Advancing
+ * profileRevision invalidates stale clients that still hold the old bearer-token URL.
+ */
+export const migrateLegacyProtectedMediaReferences = functions.pubsub
+  .schedule("15 4 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("protectedMediaIdentityV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    const batch = db.batch();
+    let migratedProfiles = 0;
+    let migratedReferences = 0;
+    for (const doc of page.docs) {
+      const data = doc.data();
+      const updates: Record<string, unknown> = {};
+      for (const field of PROTECTED_MEDIA_FIELDS) {
+        const next = protectedObjectIdentity(data[field], doc.id, field);
+        if (next && next !== data[field]) {
+          updates[field] = next;
+          migratedReferences += 1;
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        updates.profileRevision = admin.firestore.FieldValue.increment(1);
+        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        batch.update(doc.ref, updates);
+        migratedProfiles += 1;
+      }
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    batch.set(stateRef, {
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migratedProfiles: admin.firestore.FieldValue.increment(migratedProfiles),
+      migratedReferences: admin.firestore.FieldValue.increment(migratedReferences),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    functions.logger.info("Legacy protected media migration page completed", {
+      scanned: page.size,
+      migratedProfiles,
+      migratedReferences,
       cursor: lastId,
     });
     return null;
