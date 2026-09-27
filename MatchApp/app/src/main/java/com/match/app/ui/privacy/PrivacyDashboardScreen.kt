@@ -28,6 +28,7 @@ import com.match.app.data.remote.ContactVisibility
 import com.match.app.data.remote.FirestorePrivacyService
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.remote.MemberPrivacyRelation
+import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -157,7 +158,13 @@ class PrivacyViewModel @Inject constructor(
         _error.value = null
         try {
             userDao.update(updated)
-            if (updated.firebaseUid.isNotBlank()) firestoreProfile.pushProfile(updated)
+            val synced = if (updated.firebaseUid.isNotBlank()) {
+                firestoreProfile.pushProfile(updated)
+            } else updated
+            userDao.update(synced)
+        } catch (conflict: ProfileConflictException) {
+            // FirestoreProfileService has already refreshed the latest server copy into Room.
+            _error.value = conflict.message
         } catch (_: Exception) {
             userDao.update(current)
             _error.value = "Could not save this privacy setting. Please try again."
