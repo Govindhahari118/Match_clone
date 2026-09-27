@@ -13,6 +13,7 @@ import com.match.app.data.remote.FirestoreInterestService
 import com.match.app.data.remote.FirestoreProfileService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -86,13 +87,31 @@ class SocialRepository @Inject constructor(
      * trusting an old Room row.
      */
     fun observeReceivedInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeIncomingInterests(myUid).map { docs -> cacheAuthorizedRemoteUids(docs.map { it.fromUid }) }
+        combine(
+            firestoreInterest.observeIncomingInterests(myUid),
+            firestoreInterest.observeMatches(myUid)
+        ) { docs, matches ->
+            val mutualUids = matches.mapTo(linkedSetOf()) { it.otherUid }
+            cacheAuthorizedRemoteUids(
+                InterestListPolicy.pendingCounterparts(docs.map { it.fromUid }, mutualUids)
+            )
+        }
 
     fun observeSentInterestsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeOutgoingInterests(myUid).map { docs -> cacheAuthorizedRemoteUids(docs.map { it.toUid }) }
+        combine(
+            firestoreInterest.observeOutgoingInterests(myUid),
+            firestoreInterest.observeMatches(myUid)
+        ) { docs, matches ->
+            val mutualUids = matches.mapTo(linkedSetOf()) { it.otherUid }
+            cacheAuthorizedRemoteUids(
+                InterestListPolicy.pendingCounterparts(docs.map { it.toUid }, mutualUids)
+            )
+        }
 
     fun observeMutualIdsRemote(myUid: String): Flow<List<Long>> =
-        firestoreInterest.observeMatches(myUid).map { matches -> cacheAuthorizedRemoteUids(matches.map { it.otherUid }) }
+        firestoreInterest.observeMatches(myUid).map { matches ->
+            cacheAuthorizedRemoteUids(matches.map { it.otherUid }.distinct())
+        }
 
     suspend fun isMutualMatch(me: Long, them: Long): Boolean = withContext(Dispatchers.IO) {
         val meUid = userDao.findById(me)?.firebaseUid.orEmpty()
