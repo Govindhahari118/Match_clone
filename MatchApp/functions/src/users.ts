@@ -9,6 +9,11 @@ import {
   reserveMatrimonyId,
 } from "./shared";
 import { shouldReassertPublicSuppression } from "./deletionPolicy";
+import {
+  calculateProfileCompletenessValue,
+  PROFILE_COMPLETENESS_PRIVATE_FIELDS,
+  PROFILE_COMPLETENESS_PUBLIC_FIELDS,
+} from "./profileCompletenessPolicy";
 
 export const onUserCreate = functions.firestore
   .document("users/{uid}")
@@ -18,7 +23,6 @@ export const onUserCreate = functions.firestore
 
     await snap.ref.update({
       matrimonyId,
-      profileCompleteness: 0.1,
       verificationLevel: 1,
       subscriptionPlan: "FREE",
     });
@@ -29,6 +33,82 @@ export const onUserCreate = functions.firestore
       matchCount: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+  });
+
+function profileCompletenessFieldsChanged(
+  before: FirebaseFirestore.DocumentData,
+  after: FirebaseFirestore.DocumentData,
+  fields: readonly string[]
+): boolean {
+  return fields.some((field) =>
+    JSON.stringify(before[field] ?? null) !== JSON.stringify(after[field] ?? null)
+  );
+}
+
+async function recomputeProfileCompleteness(uid: string): Promise<void> {
+  const userRef = db.collection("users").doc(uid);
+  const [userSnap, privateSnap] = await Promise.all([
+    userRef.get(),
+    db.collection("userPrivate").doc(uid).get(),
+  ]);
+  if (!userSnap.exists) return;
+
+  const user = userSnap.data() || {};
+  const privateProfile = privateSnap.data() || {};
+  const next = calculateProfileCompletenessValue(user, privateProfile);
+  const current = Number(user.profileCompleteness ?? -1);
+  if (Number.isFinite(current) && Math.abs(current - next) < 0.0005) return;
+
+  await userRef.update({
+    profileCompleteness: next,
+    profileCompletenessUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * Recompute the public aggregate whenever one of its non-sensitive source fields changes.
+ * Updates to the aggregate itself are ignored, preventing a trigger loop.
+ */
+export const onProfileCompletenessPublicWrite = functions.firestore
+  .document("users/{uid}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return;
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    if (
+      change.before.exists &&
+      !profileCompletenessFieldsChanged(
+        before,
+        after,
+        PROFILE_COMPLETENESS_PUBLIC_FIELDS
+      )
+    ) {
+      return;
+    }
+    await recomputeProfileCompleteness(context.params.uid);
+  });
+
+/**
+ * Sensitive completeness inputs stay owner-private. Their trigger only writes the aggregate score
+ * back to users/{uid}; it never copies the underlying values into the public profile.
+ */
+export const onProfileCompletenessPrivateWrite = functions.firestore
+  .document("userPrivate/{uid}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return;
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    if (
+      change.before.exists &&
+      !profileCompletenessFieldsChanged(
+        before,
+        after,
+        PROFILE_COMPLETENESS_PRIVATE_FIELDS
+      )
+    ) {
+      return;
+    }
+    await recomputeProfileCompleteness(context.params.uid);
   });
 
 export const sendInactivityNudge = functions.pubsub
