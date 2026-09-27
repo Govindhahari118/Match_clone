@@ -263,7 +263,9 @@ class FirestorePagingSource(
         profileCompleteness = (data["profileCompleteness"] as? Number)?.toFloat() ?: 0f,
         verificationLevel = (data["verificationLevel"] as? Number)?.toInt() ?: 0,
         stealthMode = data["stealthMode"] as? Boolean ?: false,
-        showLastActive = data["showLastActive"] as? Boolean ?: true,
+        // Discovery never receives precise presence or legacy public visibility flags. Keep the
+        // activity label hidden until an authorized getMemberPresence result is explicitly loaded.
+        showLastActive = data["showLastActive"] as? Boolean ?: false,
         showHoroscope = data["showHoroscope"] as? Boolean ?: true,
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
