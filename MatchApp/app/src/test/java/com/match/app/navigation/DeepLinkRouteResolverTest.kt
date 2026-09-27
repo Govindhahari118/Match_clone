@@ -89,6 +89,26 @@ class DeepLinkRouteResolverTest {
     }
 
     @Test
+    fun `notification route consumption is bound to intended account`() {
+        assertEquals(
+            true,
+            DeepLinkRouteResolver.notificationAccountMatches("uid-a", "uid-a")
+        )
+        assertEquals(
+            false,
+            DeepLinkRouteResolver.notificationAccountMatches("uid-a", "uid-b")
+        )
+        assertEquals(
+            false,
+            DeepLinkRouteResolver.notificationAccountMatches("uid-a", null)
+        )
+        assertEquals(
+            true,
+            DeepLinkRouteResolver.notificationAccountMatches(null, "uid-b")
+        )
+    }
+
+    @Test
     fun `notification routes use validated ids and truthful fallbacks`() {
         assertEquals("chat/9", DeepLinkRouteResolver.fromNotification("message", null, 9))
         assertEquals("chat_list", DeepLinkRouteResolver.fromNotification("message", null, -1))
