@@ -2,7 +2,9 @@ package com.match.app.data.repo
 
 import android.content.Context
 import android.util.Log
+import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
@@ -145,6 +147,46 @@ class AuthRepository @Inject constructor(
         } catch (ex: Exception) {
             Log.e("AuthRepository", "signIn failed", ex)
             AuthResult.Error("Unable to sign in securely. Check your connection and try again.")
+        }
+    }
+
+    enum class RemoteSessionStatus { VALID, INVALID, UNAVAILABLE }
+
+    /**
+     * Force-refresh the Firebase ID token when connectivity is available. Only explicit
+     * revoked/disabled/expired-token responses clear local state; network/provider outages keep the
+     * existing offline session so airplane-mode startup does not become a destructive sign-out.
+     */
+    suspend fun validateRemoteSession(): RemoteSessionStatus {
+        val current = firebaseAuth.currentUser
+        if (current == null) {
+            if (session.userId.first() != null) clearLocalAccountState()
+            return RemoteSessionStatus.INVALID
+        }
+
+        return try {
+            current.getIdToken(true).await()
+            RemoteSessionStatus.VALID
+        } catch (_: FirebaseNetworkException) {
+            RemoteSessionStatus.UNAVAILABLE
+        } catch (error: FirebaseAuthException) {
+            if (error.errorCode in setOf(
+                    "ERROR_USER_DISABLED",
+                    "ERROR_USER_NOT_FOUND",
+                    "ERROR_INVALID_USER_TOKEN",
+                    "ERROR_USER_TOKEN_EXPIRED"
+                )
+            ) {
+                firebaseAuth.signOut()
+                clearLocalAccountState()
+                RemoteSessionStatus.INVALID
+            } else {
+                Log.w("AuthRepository", "Firebase session refresh was unavailable", error)
+                RemoteSessionStatus.UNAVAILABLE
+            }
+        } catch (error: Exception) {
+            Log.w("AuthRepository", "Firebase session refresh was unavailable", error)
+            RemoteSessionStatus.UNAVAILABLE
         }
     }
 
