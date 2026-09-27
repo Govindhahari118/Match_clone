@@ -52,8 +52,18 @@ class MainActivity : FragmentActivity() {
     /** Compose-observable so a deep link received by a warm singleTask Activity is not dropped. */
     var pendingDeepLink: String? by mutableStateOf(null)
         private set
+    private var pendingDeepLinkRecipientUid: String? = null
 
-    fun consumeDeepLink(): String? = pendingDeepLink.also { pendingDeepLink = null }
+    fun consumeDeepLink(): String? {
+        val destination = pendingDeepLink
+        val expectedUid = pendingDeepLinkRecipientUid
+        pendingDeepLink = null
+        pendingDeepLinkRecipientUid = null
+        val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        return destination.takeIf {
+            DeepLinkRouteResolver.notificationAccountMatches(expectedUid, currentUid)
+        }
+    }
 
     private var isReady = false
 
@@ -129,6 +139,9 @@ class MainActivity : FragmentActivity() {
             val type = intent?.getStringExtra("notif_type")
             val fromUserId = intent?.getLongExtra("from_user_id", -1L).takeIf { it != null && it > 0 }
             val chatPeerId = intent?.getLongExtra("peer_id", -1L).takeIf { it != null && it > 0 }
+            pendingDeepLinkRecipientUid = intent?.getStringExtra("recipient_uid")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
             pendingDeepLink = DeepLinkRouteResolver.fromNotification(
                 type = type,
                 fromUserId = fromUserId,
@@ -141,6 +154,7 @@ class MainActivity : FragmentActivity() {
         // Navigation route: malformed path values can otherwise bypass typed route assumptions or
         // crash argument parsing. External profile/chat links currently use a positive local id;
         // profile/chat repositories remain the authorization boundary for the destination data.
+        pendingDeepLinkRecipientUid = null
         pendingDeepLink = DeepLinkRouteResolver.fromUri(
             scheme = uri.scheme,
             userInfo = uri.userInfo,
@@ -154,6 +168,7 @@ class MainActivity : FragmentActivity() {
 
     private fun rejectDeepLink(raw: String) {
         pendingDeepLink = null
+        pendingDeepLinkRecipientUid = null
         Log.w("MainActivity", "Rejected malformed or unsupported deep link: ${raw.take(160)}")
     }
 
