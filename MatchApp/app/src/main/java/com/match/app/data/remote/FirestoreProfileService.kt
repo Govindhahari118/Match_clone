@@ -48,7 +48,7 @@ class FirestoreProfileService @Inject constructor(
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
-            "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision"
+            "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision", "matchScore"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
@@ -364,7 +364,6 @@ class FirestoreProfileService @Inject constructor(
         "stealthMode" to e.stealthMode,
         "showHoroscope" to e.showHoroscope,
         "incomeDisclosure" to e.incomeDisclosure,
-        "matchScore" to e.matchScore,
         "updatedAt" to System.currentTimeMillis()
     )
 
@@ -460,7 +459,8 @@ class FirestoreProfileService @Inject constructor(
         incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
         subscriptionExpiry = (data["subscriptionExpiry"] as? Number)?.toLong() ?: 0L,
-        matchScore = (data["matchScore"] as? Number)?.toFloat() ?: 0f,
+        // Compatibility is pairwise and recomputed; a historical public matchScore is ignored.
+        matchScore = 0f,
         username = data["username"] as? String ?: "",
         profileRevision = (data["profileRevision"] as? Number)?.toLong() ?: 0L
     )
