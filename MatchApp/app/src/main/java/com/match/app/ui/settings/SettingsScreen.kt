@@ -33,7 +33,14 @@ import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.ThemePreference
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.AppPalette
+import com.match.app.ui.theme.AppearanceThemeResolver
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -207,7 +214,12 @@ fun SettingsScreen(
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
 
-    val currentPalette = AppPalette.fromKey(appearance.manualThemeKey)
+    val currentPalette = AppPalette.fromProductionKey(appearance.manualThemeKey)
+    val resolvedPalette = AppearanceThemeResolver.resolve(
+        themePreference = appearance.themePreference,
+        manualPaletteKey = appearance.manualThemeKey,
+        profileReligion = user?.religion
+    )
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -229,20 +241,13 @@ fun SettingsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("settings_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = "Settings", onBack = onBack)
         }
     ) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("settings_screen"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(MatreeDesign.spacing.md).testTag("settings_screen"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
         ) {
             Text("Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
@@ -253,7 +258,7 @@ fun SettingsScreen(
                                 Text(user?.displayName?.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column(Modifier.weight(1f)) {
                             Text(user?.displayName ?: "Account", fontWeight = FontWeight.SemiBold)
                             user?.username?.takeIf { it.isNotBlank() }?.let { Text("@$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
@@ -270,7 +275,7 @@ fun SettingsScreen(
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
                     Column(Modifier.weight(1f)) {
                         Text(plan.ifBlank { "FREE" }.replace('_', ' '), fontWeight = FontWeight.SemiBold)
                         Text("Membership status is synchronized from the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -286,7 +291,7 @@ fun SettingsScreen(
                     Text(searchFilterSummary(currentFilter), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = { searchName = ""; saveSearchDialog = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.BookmarkAdd, null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.xs))
                         Text("Save current search")
                     }
                     if (savedSearches.isEmpty()) {
@@ -308,73 +313,81 @@ fun SettingsScreen(
             }
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("App theme", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Theme changes presentation only. Your religion, matching preferences, privacy, verification and pricing do not change.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.themePreference == ThemePreference.AUTOMATIC,
-                        title = "Automatic",
-                        subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let { "Follow my profile religion — $it" }
-                            ?: "Follow my profile religion when available",
-                        onClick = vm::useAutomaticTheme
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.themePreference == ThemePreference.NEUTRAL,
-                        title = "Matree Neutral",
-                        subtitle = "Use the standard Matree appearance",
-                        onClick = vm::useNeutralTheme
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Manual theme", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (appearance.themePreference == ThemePreference.MANUAL) "Selected: ${currentPalette.label}"
-                            else "Choose a visual theme below. Selecting one switches to Manual.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+            MatreeInfoCard {
+                Text("App theme", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Appearance is independent from your declared religion, partner preferences, privacy, verification and pricing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MatreeInlineNotice(
+                    message = "Current visual family: ${resolvedPalette.label}",
+                    tone = MatreeStatusTone.NEUTRAL
+                )
+
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
+                    title = "Automatic",
+                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
+                        "Follow my confirmed profile religion — $it"
+                    } ?: "Use Matree Neutral until a profile religion is available",
+                    onClick = vm::useAutomaticTheme
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
+                    title = "Matree Neutral",
+                    subtitle = "Use the universal Matree visual family",
+                    onClick = vm::useNeutralTheme
+                )
+
+                Text("Manual theme family", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (appearance.themePreference == ThemePreference.MANUAL) {
+                        "Selected: ${currentPalette.label}. This does not alter your profile religion."
+                    } else {
+                        "Choose any supported visual family without changing your actual religion."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    manualReligionPalettes.forEach { palette ->
+                        MatreeChoiceChip(
+                            text = palette.label,
+                            selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
+                            onClick = { vm.useManualTheme(palette) }
                         )
                     }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        manualReligionPalettes.forEach { palette ->
-                            FilterChip(
-                                selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
-                                onClick = { vm.useManualTheme(palette) },
-                                label = { Text(palette.label) },
-                                leadingIcon = { Surface(shape = CircleShape, color = palette.swatch, modifier = Modifier.size(14.dp)) {} }
-                            )
-                        }
-                    }
-                    Text(
-                        "Changing theme takes effect immediately and never changes your declared religion.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    HorizontalDivider()
-                    Text("Display", fontWeight = FontWeight.SemiBold)
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.SYSTEM,
-                        title = "System",
-                        subtitle = "Follow the device light/dark setting",
-                        onClick = { vm.setDisplayMode(DisplayMode.SYSTEM) }
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.LIGHT,
-                        title = "Light",
-                        subtitle = "Always use the light palette",
-                        onClick = { vm.setDisplayMode(DisplayMode.LIGHT) }
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.DARK,
-                        title = "Dark",
-                        subtitle = "Always use the dark palette",
-                        onClick = { vm.setDisplayMode(DisplayMode.DARK) }
-                    )
                 }
+
+                HorizontalDivider()
+                Text("Display mode", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Light/dark behavior is a separate device preference.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.SYSTEM,
+                    title = "System",
+                    subtitle = "Follow the device light/dark setting",
+                    onClick = { vm.setDisplayMode(DisplayMode.SYSTEM) }
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.LIGHT,
+                    title = "Light",
+                    subtitle = "Always use the light palette",
+                    onClick = { vm.setDisplayMode(DisplayMode.LIGHT) }
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.DARK,
+                    title = "Dark",
+                    subtitle = "Always use the dark palette",
+                    onClick = { vm.setDisplayMode(DisplayMode.DARK) }
+                )
             }
 
             Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -416,7 +429,7 @@ fun SettingsScreen(
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Language, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
                     Column(Modifier.weight(1f)) {
                         Text("App language", fontWeight = FontWeight.SemiBold)
                         Text(language.uppercase(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -453,7 +466,7 @@ fun SettingsScreen(
                 } else {
                     Icon(if (profilePaused) Icons.Filled.PlayArrow else Icons.Filled.PauseCircle, null)
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
                 Text(
                     when {
                         lifecycleBusy -> "Updating…"
@@ -477,10 +490,10 @@ fun SettingsScreen(
             ) {
                 if (accountState is SettingsViewModel.AccountState.Deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Filled.DeleteForever, null)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
                 Text(if (accountState is SettingsViewModel.AccountState.Deleting) "Deleting account…" else "Delete account")
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xl))
         }
     }
 
@@ -525,7 +538,7 @@ private fun AppearanceChoiceRow(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         RadioButton(selected = selected, onClick = onClick)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -541,15 +554,15 @@ private fun SettingToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
@@ -560,7 +573,7 @@ private fun SettingInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector
     if (value.isBlank()) return
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
