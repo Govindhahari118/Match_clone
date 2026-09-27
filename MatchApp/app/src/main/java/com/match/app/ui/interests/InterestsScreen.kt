@@ -84,6 +84,15 @@ class InterestsViewModel @Inject constructor(
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not decline this request.") }
     }
 
+    fun withdraw(targetId: Long) = viewModelScope.launch {
+        if (_actions.value.busyId != null) return@launch
+        val me = session.userId.first() ?: return@launch
+        _actions.value = InterestActionState(busyId = targetId)
+        runCatching { social.unlike(me, targetId) }
+            .onSuccess { _actions.value = InterestActionState(message = "Interest withdrawn.") }
+            .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not withdraw this interest.") }
+    }
+
     fun clearMessage() { _actions.update { it.copy(message = null) } }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
@@ -203,7 +212,8 @@ fun InterestsScreen(
                         InterestCard(
                             profile = p, tab = tab, busy = actions.busyId == p.id,
                             onOpen = { onOpenProfile(p.id) }, onKundli = { onCheckKundli(p.id) },
-                            onChat = { onOpenChat(p.id) }, onAccept = { vm.accept(p.id) }, onDecline = { vm.decline(p.id) }
+                            onChat = { onOpenChat(p.id) }, onAccept = { vm.accept(p.id) },
+                            onDecline = { vm.decline(p.id) }, onWithdraw = { vm.withdraw(p.id) }
                         )
                     }
                 }
@@ -224,7 +234,7 @@ private fun InterestStatItem(value: String, label: String, color: Color) {
 private fun InterestCard(
     profile: UserProfile, tab: InterestTab, busy: Boolean,
     onOpen: () -> Unit, onKundli: () -> Unit, onChat: () -> Unit,
-    onAccept: () -> Unit, onDecline: () -> Unit
+    onAccept: () -> Unit, onDecline: () -> Unit, onWithdraw: () -> Unit
 ) {
     val activity = remember(profile.lastActiveAt) { ActivityStatusHelper.from(profile) }
     ElevatedCard(onClick = onOpen, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().testTag("interest_card_${profile.id}")) {
@@ -278,6 +288,18 @@ private fun InterestCard(
                         else Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp)); Text(t("accept", "Accept"))
                     }
+                }
+            } else if (tab == InterestTab.SENT) {
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onWithdraw,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().testTag("interest_withdraw_${profile.id}")
+                ) {
+                    if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Filled.Undo, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Withdraw interest")
                 }
             } else if (tab == InterestTab.MUTUAL) {
                 Spacer(Modifier.height(10.dp))
