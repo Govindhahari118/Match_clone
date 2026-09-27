@@ -3,6 +3,10 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import * as https from "https";
 import { db, requireAppCheck } from "./shared";
+import {
+  isVoidedPaymentStatus,
+  rebuildEntitlementLedger,
+} from "./billingEntitlementPolicy";
 
 const PACKAGE_NAME = "com.match.app";
 const ANDROID_PUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher";
@@ -497,41 +501,26 @@ function paymentGrantMillis(data: FirebaseFirestore.DocumentData): number {
   return 0;
 }
 
-function isVoidedStatus(status: unknown): boolean {
-  return ["VOIDED", "REFUNDED", "CHARGEBACK", "REVOKED", "CANCELED"]
-    .includes(String(status || "").toUpperCase());
-}
-
 function rebuiltEntitlement(
   docs: FirebaseFirestore.QueryDocumentSnapshot[],
   excludedPaymentId: string
 ): { expiresAtMillis: number; entitlementId: string; paymentId: string } {
-  const entries = docs
-    .filter((doc) => doc.id !== excludedPaymentId)
-    .map((doc) => ({ id: doc.id, data: doc.data() }))
-    .filter(({ data }) =>
-      data.provider === "GOOGLE_PLAY" &&
-      !isVoidedStatus(data.status) &&
-      paymentDurationMillis(data) > 0
-    )
-    .map(({ id, data }) => ({
-      id,
-      data,
-      durationMs: paymentDurationMillis(data),
-      grantedAtMillis: paymentGrantMillis(data),
-    }))
-    .sort((a, b) => a.grantedAtMillis - b.grantedAtMillis || a.id.localeCompare(b.id));
-
-  let cursor = 0;
-  let entitlementId = "";
-  let paymentId = "";
-  for (const entry of entries) {
-    const start = Math.max(entry.grantedAtMillis, cursor);
-    cursor = start + entry.durationMs;
-    entitlementId = String(entry.data.entitlementId || entry.data.planId || entry.data.boostId || "");
-    paymentId = entry.id;
-  }
-  return { expiresAtMillis: cursor, entitlementId, paymentId };
+  return rebuildEntitlementLedger(
+    docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        provider: String(data.provider || ""),
+        status: data.status,
+        durationMs: paymentDurationMillis(data),
+        grantedAtMillis: paymentGrantMillis(data),
+        entitlementId: String(
+          data.entitlementId || data.planId || data.boostId || ""
+        ),
+      };
+    }),
+    excludedPaymentId
+  );
 }
 
 /**
@@ -553,7 +542,7 @@ async function reconcileVoidedPurchase(
     const paymentSnap = await tx.get(paymentRef);
     if (!paymentSnap.exists) return "MISSING";
     const payment = paymentSnap.data() || {};
-    if (isVoidedStatus(payment.status)) return "ALREADY_VOIDED";
+    if (isVoidedPaymentStatus(payment.status)) return "ALREADY_VOIDED";
 
     const uid = String(payment.uid || "");
     const entitlementType: EntitlementType =
