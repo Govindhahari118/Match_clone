@@ -213,6 +213,7 @@ fun MatchesScreen(
         }
     }
     val activeCount = remember(ui.filter) { activeFilterCount(ui.filter) }
+    val emptyState = remember(ui.filter) { DiscoveryEmptyStatePolicy.resolve(ui.filter) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -279,9 +280,15 @@ fun MatchesScreen(
                 sortedItems.isEmpty() -> Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     EmptyState(
                         "No profiles found",
-                        "Try widening age, state, language, religion or community preferences.",
-                        if (activeCount > 0) "Clear filters" else null,
-                        if (activeCount > 0) vm::clearFilters else null,
+                        emptyState.message,
+                        emptyState.actionLabel,
+                        when (emptyState.action) {
+                            DiscoveryEmptyState.Action.RESET -> vm::clearFilters
+                            DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO -> {
+                                { vm.setFilter(ui.filter.copy(withPhotoOnly = false)) }
+                            }
+                            DiscoveryEmptyState.Action.NONE -> null
+                        },
                         Icons.Filled.SearchOff
                     )
                 }
