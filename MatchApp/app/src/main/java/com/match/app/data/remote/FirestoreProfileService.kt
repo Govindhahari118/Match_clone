@@ -49,7 +49,7 @@ class FirestoreProfileService @Inject constructor(
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
             "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision", "matchScore",
-            "profileViewCount"
+            "profileViewCount", "createdAt"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
@@ -342,7 +342,6 @@ class FirestoreProfileService @Inject constructor(
         "countryOfResidence" to e.countryOfResidence,
         "visaStatus" to e.visaStatus,
         "willingToRelocate" to e.willingToRelocate,
-        "createdAt" to e.createdAt,
         "ageBucket" to ageBucketFor(e.age),
         "familyValues" to e.familyValues,
         "aboutFamily" to e.aboutFamily,
@@ -423,7 +422,7 @@ class FirestoreProfileService @Inject constructor(
         countryOfResidence = data["countryOfResidence"] as? String ?: "",
         visaStatus = data["visaStatus"] as? String ?: "",
         willingToRelocate = data["willingToRelocate"] as? Boolean ?: false,
-        createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
         lastActiveAt = (data["lastActiveAt"] as? Number)?.toLong() ?: 0L,
         phoneNumber = data["phoneNumber"] as? String ?: "",
         // Incognito is a device-local browsing preference, not remote profile data.
