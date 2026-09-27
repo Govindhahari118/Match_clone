@@ -43,6 +43,7 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.ui.components.MatreeActionCard
 import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.theme.MatreeDesign
 
 /** Production home intentionally exposes only audited journeys. */
@@ -69,38 +70,23 @@ fun HomeLauncherScreen(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 14.dp)
+            .padding(vertical = MatreeDesign.spacing.sm)
             .testTag("home_screen"),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
     ) {
         if (p == null) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(MatreeDesign.radii.large),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Column(
-                    Modifier.padding(MatreeDesign.spacing.lg),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
-                ) {
-                    Text(
-                        "Complete your profile to discover relevant matches",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    MatreePrimaryButton(
-                        text = "Open profile",
-                        onClick = onGoProfile,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            MatreeStatePanel(
+                title = "Complete your profile",
+                message = "Add your core matrimonial details to discover relevant matches.",
+                icon = Icons.Filled.Person,
+                primaryActionLabel = "Open profile",
+                onPrimaryAction = onGoProfile,
+                modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md)
+            )
             return@Column
         }
 
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = MatreeDesign.spacing.md)) {
             Text("Welcome, ${p.displayName}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
                 "Your preferences decide what you see — you can change them anytime.",
@@ -113,8 +99,8 @@ fun HomeLauncherScreen(
 
         HomeSectionTitle("Your activity")
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
         ) {
             HomeActionCard(Icons.Filled.Favorite, "Matches", ui.mutualCount.toString(), Modifier.weight(1f), onGoMatches)
             HomeActionCard(Icons.Filled.AutoAwesome, "Interests", ui.pendingInterests.toString(), Modifier.weight(1f), onGoInterests)
@@ -135,7 +121,7 @@ fun HomeLauncherScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.padding(6.dp))
+                Spacer(Modifier.width(MatreeDesign.spacing.sm))
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (religion == ReligionCategory.HINDU) "Astrology-compatible matches" else "Preference-compatible matches",
@@ -147,7 +133,7 @@ fun HomeLauncherScreen(
                         else
                             "Use values, lifestyle, family and partner preferences without forcing irrelevant astrology fields.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -155,25 +141,25 @@ fun HomeLauncherScreen(
 
         HomeSectionTitle("Essentials")
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 EssentialButton(Icons.Filled.Search, "Discover", Modifier.weight(1f), onGoMatches)
                 EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f), onGoNearby)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 EssentialButton(Icons.Filled.Chat, "Messages", Modifier.weight(1f), onGoMessages)
                 EssentialButton(Icons.Filled.Person, "Profile", Modifier.weight(1f), onGoProfile)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 EssentialButton(Icons.Filled.Verified, "Verification", Modifier.weight(1f), onGoVerification)
                 EssentialButton(Icons.Filled.PrivacyTip, "Privacy", Modifier.weight(1f), onGoPrivacyDash)
             }
             EssentialButton(Icons.Filled.WorkspacePremium, "Membership", Modifier.fillMaxWidth(), onGoPricing)
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.lg))
     }
 }
 
@@ -183,7 +169,7 @@ private fun HomeSectionTitle(text: String) {
         text,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(horizontal = 16.dp)
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md)
     )
 }
 
