@@ -8,6 +8,7 @@ import com.match.app.data.local.dao.PendingMessageDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PendingMessageEntity
 import com.match.app.data.remote.FirebaseStorageService
+import com.match.app.data.repo.ChatOutboxMediaPolicy
 import com.match.app.data.remote.FirestoreChatService
 import com.match.app.security.ChatCrypto
 import dagger.assisted.Assisted
@@ -44,6 +45,9 @@ class MessageRetryWorker @AssistedInject constructor(
                 firestoreChat.sendMessage(msg.clientMessageId, plaintextBody, senderUid, recipientUid, voicePath, imagePath, msg.durationMs.takeIf { it > 0 })
                 if (msg.localMessageId > 0) messageDao.updateStatus(msg.localMessageId, "sent")
                 pendingDao.delete(msg.id)
+                if (msg.type == "IMAGE" || msg.type == "VOICE") {
+                    ChatOutboxMediaPolicy.deleteIfManaged(applicationContext.filesDir, msg.mediaUri)
+                }
             } catch (_: Exception) {
                 pendingDao.incrementRetry(msg.id)
                 if (msg.localMessageId > 0) messageDao.updateStatus(msg.localMessageId, "failed")
