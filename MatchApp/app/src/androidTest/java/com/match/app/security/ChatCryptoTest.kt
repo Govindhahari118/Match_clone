@@ -55,4 +55,23 @@ class ChatCryptoTest {
         val decrypted = ChatCrypto.decrypt(encrypted!!)
         assertEquals("", decrypted)
     }
+
+    @Test
+    fun `storage format is versioned and decryptable`() {
+        val protected = ChatCrypto.encryptForStorage("pending retry body")
+        assertNotNull(protected)
+        assertEquals(true, ChatCrypto.isVersionedStorage(protected!!))
+        assertEquals("pending retry body", ChatCrypto.decryptFromStorage(protected))
+    }
+
+    @Test
+    fun `storage decrypt accepts historical unprefixed ciphertext`() {
+        val legacyCiphertext = ChatCrypto.encrypt("historical encrypted body")
+        assertNotNull(legacyCiphertext)
+        assertEquals(false, ChatCrypto.isVersionedStorage(legacyCiphertext!!))
+        assertEquals(
+            "historical encrypted body",
+            ChatCrypto.decryptFromStorage(legacyCiphertext)
+        )
+    }
 }
