@@ -19,6 +19,9 @@ interface PendingMessageDao {
     @Query("UPDATE pending_messages SET retryCount = retryCount + 1 WHERE id = :id")
     suspend fun incrementRetry(id: Long)
 
+    @Query("UPDATE pending_messages SET body = :body WHERE id = :id")
+    suspend fun updateBody(id: Long, body: String)
+
     @Query("UPDATE pending_messages SET retryCount = 0 WHERE localMessageId = :localMessageId")
     suspend fun resetRetry(localMessageId: Long): Int
 
