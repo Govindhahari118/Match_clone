@@ -100,10 +100,13 @@ internal fun ProvideMatreeDesignTokens(
         LocalRadii provides MatreeRadii(),
         LocalSizes provides MatreeSizes(),
         LocalElevation provides MatreeElevation(),
-        LocalSemanticColors provides if (darkMode) darkSemanticColors() else lightSemanticColors(),
+        LocalSemanticColors provides semanticColorsFor(darkMode),
         content = content
     )
 }
+
+internal fun semanticColorsFor(darkMode: Boolean): MatreeSemanticColors =
+    if (darkMode) darkSemanticColors() else lightSemanticColors()
 
 private fun lightSemanticColors() = MatreeSemanticColors(
     success = Color(0xFF176B45),
