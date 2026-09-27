@@ -26,6 +26,7 @@ export const onUserCreate = functions.firestore
       matrimonyId,
       verificationLevel: 1,
       subscriptionPlan: "FREE",
+      createdAt: Date.now(),
       profileRevision: Number(snap.data()?.profileRevision || 0),
     });
 
