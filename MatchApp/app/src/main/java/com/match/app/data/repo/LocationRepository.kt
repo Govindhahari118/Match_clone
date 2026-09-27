@@ -123,7 +123,11 @@ class LocationRepository @Inject constructor(
             val entry = raw as? Map<String, Any?> ?: return@mapNotNull null
             val uid = entry["uid"] as? String ?: return@mapNotNull null
             val distanceLabel = entry["distanceBucket"] as? String ?: return@mapNotNull null
-            val remote = runCatching { profileService.fetchProfile(uid) }.getOrNull() ?: return@mapNotNull null
+            // The callable authorizes Nearby eligibility, then this second hop must re-authorize
+            // the actual profile read against current Firestore rules. Never revive a blocked,
+            // hidden, stealth/deleting profile from the local Firestore cache.
+            val remote = runCatching { profileService.fetchProfileFromServer(uid) }.getOrNull()
+                ?: return@mapNotNull null
             val cached = cacheRemoteProfile(remote)
             NearbyProfile(
                 userId = cached.id,
