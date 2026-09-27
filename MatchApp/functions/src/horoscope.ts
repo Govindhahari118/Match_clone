@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { accountIsActive } from "./accountStatusPolicy";
 
 function isHindu(religion: unknown): boolean {
   return typeof religion === "string" && religion.trim().toLowerCase() === "hindu";
@@ -35,6 +36,12 @@ export const getSharedHoroscope = functions.https.onCall(async (data, context) =
 
   if (!viewerProfile.exists || !targetProfile.exists) {
     throw new functions.https.HttpsError("not-found", "Profile is unavailable");
+  }
+  if (
+    !accountIsActive(viewerProfile.data()?.accountStatus) ||
+    !accountIsActive(targetProfile.data()?.accountStatus)
+  ) {
+    throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable while an account is not active");
   }
   if (viewerBlocked.exists || targetBlocked.exists || targetPrivacy.data()?.profileHidden === true) {
     throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
