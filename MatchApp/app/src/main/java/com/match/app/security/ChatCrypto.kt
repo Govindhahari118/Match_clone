@@ -12,12 +12,11 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * AES-256-GCM encryption using the Android KeyStore.
  *
- * Keys are created inside the hardware-backed KeyStore — they never leave the
- * secure enclave and are never exposed as raw bytes.  A unique IV is generated
- * for every encrypt call and is prepended to the ciphertext so that decrypt can
- * reconstruct the GCMParameterSpec without any extra storage.
+ * Keys are created inside Android Keystore and are not exported as raw key bytes to app code.
+ * Hardware backing depends on the device/OS configuration. A unique IV is generated for every
+ * encrypt call and is prepended to the ciphertext so decrypt can reconstruct the GCMParameterSpec.
  *
- * Wire format (Base64-encoded):   [12-byte IV][N-byte ciphertext+tag]
+ * Cipher payload (Base64-encoded): [12-byte IV][N-byte ciphertext+tag]
  */
 object ChatCrypto {
 
@@ -29,6 +28,7 @@ object ChatCrypto {
     private const val CIPHER_XFORM = "AES/GCM/NoPadding"
     private const val IV_LENGTH    = 12   // 96-bit IV recommended for GCM
     private const val TAG_LENGTH   = 128  // bits
+    private const val STORAGE_PREFIX = "matree-chat:v1:"
 
     // ── Key management ───────────────────────────────────────────────────────
 
@@ -70,6 +70,22 @@ object ChatCrypto {
 
         Base64.encodeToString(combined, Base64.NO_WRAP)
     }.getOrNull()
+
+    /**
+     * Prefix new local-storage ciphertext so retry/migration code can distinguish protected rows
+     * from historical plaintext pending-outbox rows without guessing.
+     */
+    fun encryptForStorage(plaintext: String): String? =
+        encrypt(plaintext)?.let { STORAGE_PREFIX + it }
+
+    fun isVersionedStorage(value: String): Boolean = value.startsWith(STORAGE_PREFIX)
+
+    /**
+     * Decrypt a value written by [encryptForStorage]. Historical unprefixed ciphertext produced by
+     * older app versions is also accepted so existing encrypted Room rows remain readable.
+     */
+    fun decryptFromStorage(value: String): String? =
+        decrypt(if (isVersionedStorage(value)) value.removePrefix(STORAGE_PREFIX) else value)
 
     /**
      * Decrypt a Base64 string produced by [encrypt].
