@@ -194,15 +194,25 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
             // Sections
             sections.forEach { section ->
                 MatreeInfoCard {
-                        Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(MatreeDesign.spacing.sm))
-                        section.bullets.forEach { bullet ->
-                            Row(Modifier.padding(vertical = 3.dp)) {
-                                Text("•", style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(16.dp))
-                                Text(bullet, style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface)
-                            }
+                    Text(
+                        section.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
+                    section.bullets.forEach { bullet ->
+                        Row(Modifier.padding(vertical = MatreeDesign.spacing.xxs)) {
+                            Text(
+                                "•",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(MatreeDesign.spacing.md)
+                            )
+                            Text(
+                                bullet,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
