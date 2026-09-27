@@ -28,11 +28,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
-import com.match.app.data.local.dao.LikeDao
-import com.match.app.data.local.dao.ShortlistDao
 import com.match.app.data.local.entity.PhotoEntity
+import com.match.app.data.remote.ProfileAnalyticsService
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.PhotoRepository
+import com.match.app.data.repo.ShortlistRepository
+import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
@@ -55,8 +56,9 @@ class ProfileViewModel @Inject constructor(
     private val session: SessionStore,
     private val auth: AuthRepository,
     private val photoRepo: PhotoRepository,
-    private val likeDao: LikeDao,
-    private val shortlistDao: ShortlistDao
+    private val social: SocialRepository,
+    private val shortlistRepo: ShortlistRepository,
+    private val analyticsService: ProfileAnalyticsService
 ) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
@@ -65,18 +67,34 @@ class ProfileViewModel @Inject constructor(
         .flatMapLatest { photoRepo.observe(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val likeCount: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { likeDao.observeIncomingCount(it) }
+    val likeCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            social.observeReceivedInterestsRemote(uid).map { it.size }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val savedCount: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { shortlistDao.observeCount(it) }
+    val savedCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            shortlistRepo.observeSavedIdsRemote(uid).map { it.size }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private val _viewCount = MutableStateFlow(0)
+    val viewCount: StateFlow<Int> = _viewCount.asStateFlow()
 
     init {
         viewModelScope.launch {
             session.userId.collectLatest { id ->
                 _profile.value = id?.let { auth.currentProfile(it) }
+            }
+        }
+        viewModelScope.launch {
+            session.firebaseUid.collectLatest { uid ->
+                _viewCount.value = if (uid.isNullOrBlank()) {
+                    0
+                } else {
+                    runCatching { analyticsService.load().profileViews }.getOrDefault(0)
+                }
             }
         }
     }
@@ -114,6 +132,7 @@ fun ProfileScreen(
 ) {
     val profile by vm.profile.collectAsState()
     val photos by vm.photos.collectAsState()
+    val viewCount by vm.viewCount.collectAsState()
     val likeCount by vm.likeCount.collectAsState()
     val savedCount by vm.savedCount.collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::importPhoto) }
@@ -142,7 +161,7 @@ fun ProfileScreen(
 
         ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
 
-        ProfileStats(p.profileViewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
+        ProfileStats(viewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
         TrustAndVerificationCard(p, photos.isNotEmpty(), onGoVerification)
 
         ProfileSection("Personal details") {
