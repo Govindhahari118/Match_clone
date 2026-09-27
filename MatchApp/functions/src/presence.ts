@@ -1,10 +1,13 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import {
+  activityVisibilityAllows,
+  normalizeActivityVisibility,
+} from "./activityVisibilityPolicy";
 
 const MIN_HEARTBEAT_INTERVAL_MS = 60_000;
 const ONLINE_WINDOW_MS = 5 * 60_000;
-type ActivityVisibility = "everyone" | "interests" | "mutual" | "nobody";
 
 function requireUid(value: unknown, field: string): string {
   const uid = typeof value === "string" ? value.trim() : "";
@@ -12,12 +15,6 @@ function requireUid(value: unknown, field: string): string {
     throw new functions.https.HttpsError("invalid-argument", `Invalid ${field}`);
   }
   return uid;
-}
-
-function visibility(value: unknown): ActivityVisibility {
-  return value === "everyone" || value === "interests" || value === "mutual" || value === "nobody"
-    ? value
-    : "mutual";
 }
 
 async function relationship(viewerUid: string, targetUid: string): Promise<{ interested: boolean; mutual: boolean }> {
@@ -29,15 +26,6 @@ async function relationship(viewerUid: string, targetUid: string): Promise<{ int
     interested: forward.exists || reverse.exists,
     mutual: match.exists || (forward.exists && reverse.exists),
   };
-}
-
-function allowed(choice: ActivityVisibility, state: { interested: boolean; mutual: boolean }): boolean {
-  switch (choice) {
-  case "everyone": return true;
-  case "interests": return state.interested;
-  case "mutual": return state.mutual;
-  case "nobody": return false;
-  }
 }
 
 /**
@@ -108,10 +96,10 @@ export const getMemberPresence = functions.https.onCall(async (data, context) =>
   }
 
   const relation = await relationship(viewerUid, targetUid);
-  const onlineVisibility = visibility(settings.data()?.onlineVisibility);
-  const lastActiveVisibility = visibility(settings.data()?.lastActiveVisibility);
-  const canSeeOnline = allowed(onlineVisibility, relation);
-  const canSeeLastActive = allowed(lastActiveVisibility, relation);
+  const onlineVisibility = normalizeActivityVisibility(settings.data()?.onlineVisibility);
+  const lastActiveVisibility = normalizeActivityVisibility(settings.data()?.lastActiveVisibility);
+  const canSeeOnline = activityVisibilityAllows(onlineVisibility, relation);
+  const canSeeLastActive = activityVisibilityAllows(lastActiveVisibility, relation);
   if (!canSeeOnline && !canSeeLastActive) {
     return { online: false, lastActiveAt: 0 };
   }
