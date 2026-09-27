@@ -20,6 +20,7 @@ import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
 import com.match.app.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.qualifiers.ApplicationContext
