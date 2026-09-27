@@ -41,8 +41,16 @@ import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeProfileHeader
 import com.match.app.ui.components.MatreeProfileSection
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -380,77 +388,110 @@ fun MatchDetailScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(p?.displayName ?: "Profile") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            MatreeTopBar(
+                title = p?.displayName ?: "Profile",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = onKundli, enabled = p?.showHoroscope == true && !ui.blocked) {
                         Icon(Icons.Filled.AutoAwesome, "Check Kundali")
                     }
-                    IconButton(onClick = { showNote = true }, enabled = p != null) { Icon(Icons.Filled.Note, "Private note") }
-                    IconButton(onClick = vm::showReportDialog, enabled = p != null) { Icon(Icons.Filled.Flag, "Report profile") }
+                    IconButton(onClick = { showNote = true }, enabled = p != null) {
+                        Icon(Icons.Filled.Note, "Private note")
+                    }
+                    IconButton(onClick = vm::showReportDialog, enabled = p != null) {
+                        Icon(Icons.Filled.Flag, "Report profile")
+                    }
                 }
             )
         }
     ) { pad ->
         when {
-            ui.loading -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            p == null -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { Text("This profile is unavailable.") }
+            ui.loading -> Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeLoadingState(message = "Loading profile…", rows = 3)
+            }
+            p == null -> Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeStatePanel(
+                    title = "Profile unavailable",
+                    message = "This profile is no longer available with your current relationship or privacy state.",
+                    icon = Icons.Filled.PersonOff,
+                    tone = MatreeStatusTone.WARNING
+                )
+            }
             else -> Column(
-                Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("match_detail_screen"),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(MatreeDesign.spacing.md)
+                    .testTag("match_detail_screen"),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
                 ProfileHero(p, ui.photos)
 
                 if (ui.blocked) {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Text(
-                            "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them.",
-                            modifier = Modifier.padding(14.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
+                    MatreeInlineNotice(
+                        message = "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them.",
+                        icon = Icons.Filled.Block,
+                        tone = MatreeStatusTone.ERROR
+                    )
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = vm::toggleLike, enabled = !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.liked) "Interest sent" else "Send interest")
-                    }
-                    OutlinedButton(onClick = vm::toggleShortlist, enabled = !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.shortlisted) "Saved" else "Shortlist")
-                    }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    MatreePrimaryButton(
+                        text = if (ui.liked) "Interest sent" else "Send interest",
+                        icon = if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send,
+                        onClick = vm::toggleLike,
+                        enabled = !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MatreeSecondaryButton(
+                        text = if (ui.shortlisted) "Saved" else "Shortlist",
+                        icon = if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                        onClick = vm::toggleShortlist,
+                        enabled = !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 if (p.showHoroscope && !ui.blocked) {
-                    OutlinedButton(onClick = onKundli, modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")) {
-                        Icon(Icons.Filled.AutoAwesome, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Check Kundali compatibility")
-                    }
+                    MatreeSecondaryButton(
+                        text = "Check Kundali compatibility",
+                        icon = Icons.Filled.AutoAwesome,
+                        onClick = onKundli,
+                        modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")
+                    )
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onChat, enabled = ui.isMutual && !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.AutoMirrored.Filled.Chat, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.isMutual) "Message" else "Message after match")
-                    }
-                    OutlinedButton(onClick = vm::showContactUnlock, enabled = ui.isMutual && !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Filled.Phone, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Contact")
-                    }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    MatreePrimaryButton(
+                        text = if (ui.isMutual) "Message" else "Message after match",
+                        icon = Icons.AutoMirrored.Filled.Chat,
+                        onClick = onChat,
+                        enabled = ui.isMutual && !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MatreeSecondaryButton(
+                        text = "Contact",
+                        icon = Icons.Filled.Phone,
+                        onClick = vm::showContactUnlock,
+                        enabled = ui.isMutual && !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 if (!ui.isMutual && !ui.blocked) {
-                    Text(
-                        "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MatreeInlineNotice(
+                        message = "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
+                        icon = Icons.Filled.Info
                     )
                 }
 
@@ -466,15 +507,15 @@ fun MatchDetailScreen(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = if (ui.blocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                 ) {
                     Icon(if (ui.blocked) Icons.Filled.LockOpen else Icons.Filled.Block, null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
                     Text(if (ui.blocked) "Unblock member" else "Block member")
                 }
                 TextButton(onClick = vm::showReportDialog, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Flag, null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
                     Text("Report profile")
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
         }
     }
@@ -558,7 +599,7 @@ private fun ScoreRow(label: String, score: Float) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(105.dp), style = MaterialTheme.typography.bodySmall)
         LinearProgressIndicator(progress = { score.coerceIn(0f, 1f) }, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Text("$pct%", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }
