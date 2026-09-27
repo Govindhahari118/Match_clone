@@ -116,6 +116,10 @@ test('clients cannot grant themselves premium or verification', async () => {
     matchScore: 0.99,
     profileRevision: 1,
   }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    profileViewCount: 999999,
+    profileRevision: 1,
+  }));
 });
 
 test('clients cannot create a public global compatibility score', async () => {
@@ -125,6 +129,17 @@ test('clients cannot create a public global compatibility score', async () => {
     displayName: 'Charlie',
     religion: '',
     matchScore: 0.99,
+    profileRevision: 0,
+  }));
+});
+
+test('clients cannot create a public profile view counter', async () => {
+  const db = env.authenticatedContext('dana').firestore();
+  await assertFails(setDoc(doc(db, 'users/dana'), {
+    firebaseUid: 'dana',
+    displayName: 'Dana',
+    religion: '',
+    profileViewCount: 123,
     profileRevision: 0,
   }));
 });
