@@ -46,7 +46,7 @@ class MatreeTelemetry @Inject constructor(
         event(Event.CONTACT_REVEALED, "channel" to safeEnum(channel))
 
     fun messageSent(type: String) =
-        event(Event.MESSAGE_SENT, "message_type" to safeEnum(type))
+        event(Event.MESSAGE_SENT, "media_type" to safeEnum(type))
 
     fun profileHidden() = event(Event.PROFILE_HIDDEN)
     fun memberBlocked() = event(Event.MEMBER_BLOCKED)
@@ -123,7 +123,7 @@ class MatreeTelemetry @Inject constructor(
         INTEREST_SENT("interest_sent", setOf("mutual")),
         INTEREST_ACCEPTED("interest_accepted"),
         CONTACT_REVEALED("contact_revealed", setOf("channel")),
-        MESSAGE_SENT("message_sent", setOf("message_type")),
+        MESSAGE_SENT("message_sent", setOf("media_type")),
         PROFILE_HIDDEN("profile_hidden"),
         MEMBER_BLOCKED("member_blocked"),
         REPORT_SUBMITTED("report_submitted", setOf("reason_category")),
