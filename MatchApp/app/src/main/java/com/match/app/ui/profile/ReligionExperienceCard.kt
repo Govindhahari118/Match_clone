@@ -19,6 +19,10 @@ import androidx.lifecycle.viewModelScope
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ReligionExperiencePreference
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -69,12 +73,9 @@ fun ReligionExperienceCard(
     val effective = preference.effective(profileReligion)
     val declared = ReligionCategory.fromReligion(profileReligion)
 
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    MatreeInfoCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md)
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Religion & discovery", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -92,33 +93,35 @@ fun ReligionExperienceCard(
                 onClick = {},
                 enabled = false,
                 label = { Text(profileReligion.ifBlank { "Not specified" }) },
-                leadingIcon = { Icon(Icons.Filled.Lock, "Protected profile field", Modifier.size(16.dp)) }
+                leadingIcon = { Icon(Icons.Filled.Lock, "Protected profile field", Modifier.size(MatreeDesign.sizes.iconSmall)) }
             )
             Text(
                 "If this was entered incorrectly during onboarding, request a reviewed correction. It cannot be changed by a normal client profile edit.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(onClick = onRequestCorrection, modifier = Modifier.fillMaxWidth()) {
-                Text("Request religion correction")
-            }
+        MatreeSecondaryButton(
+            text = "Request religion correction",
+            onClick = onRequestCorrection,
+            modifier = Modifier.fillMaxWidth()
+        )
 
             HorizontalDivider()
             Text("Discovery communities", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs), verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 ReligionCategory.entries.forEach { category ->
-                    FilterChip(
+                    MatreeChoiceChip(
+                        text = category.label,
                         selected = category in effective,
                         enabled = !preference.locked,
-                        onClick = { vm.toggleLens(category, profileReligion) },
-                        label = { Text(category.label) }
+                        onClick = { vm.toggleLens(category, profileReligion) }
                     )
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(MatreeDesign.spacing.sm))
                 Column(Modifier.weight(1f)) {
                     Text("Restrict discovery to my religion", fontWeight = FontWeight.SemiBold)
                     Text(
@@ -130,11 +133,10 @@ fun ReligionExperienceCard(
                 Switch(checked = preference.locked, onCheckedChange = { vm.setLocked(it, profileReligion) })
             }
 
-            Text(
-                "Visual theme is managed separately in Settings > Appearance and can always be neutral or manually selected.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        Text(
+            "Visual theme is managed separately in Settings > Appearance and can always be neutral or manually selected.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
