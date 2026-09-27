@@ -22,7 +22,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,12 +50,7 @@ fun SignUpScreen(onBack: () -> Unit, vm: SignUpViewModel = hiltViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(t("account_created", "Create account")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                }
-            )
+            MatreeTopBar(title = t("account_created", "Create account"), onBack = onBack)
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { pad ->
@@ -59,8 +59,8 @@ fun SignUpScreen(onBack: () -> Unit, vm: SignUpViewModel = hiltViewModel()) {
                 .padding(pad)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(MatreeDesign.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
         ) {
             Text("Create your secure account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
@@ -69,21 +69,10 @@ fun SignUpScreen(onBack: () -> Unit, vm: SignUpViewModel = hiltViewModel()) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "You must be 18 or older. State, mother tongue, religion, community, education, career and other matching details are collected next and can be changed later.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
+            MatreeInlineNotice(
+                message = "You must be 18 or older. State, mother tongue, religion, community, education, career and other matching details are collected next and can be changed later.",
+                icon = Icons.Filled.Info
+            )
 
             OutlinedTextField(
                 value = email,
@@ -137,40 +126,34 @@ fun SignUpScreen(onBack: () -> Unit, vm: SignUpViewModel = hiltViewModel()) {
                 onSelect = { label -> lookingFor = LookingFor.valueOf(label.uppercase()) }
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xs))
             val age = ageTxt.toIntOrNull() ?: 0
             val ready = email.contains('@') && password.length >= 8 && name.trim().length >= 2 && age in 18..99
-            Button(
+            MatreePrimaryButton(
+                text = if (state.loading) "Creating account…" else "Create account & continue",
+                icon = if (state.loading) null else Icons.Filled.ArrowForward,
                 onClick = { vm.signUp(email, password, name.trim(), age, gender, lookingFor) },
                 enabled = !state.loading && ready,
-                modifier = Modifier.fillMaxWidth().height(52.dp).testTag("signup_submit")
-            ) {
-                if (state.loading) {
-                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Create account & continue")
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Filled.ArrowForward, null, Modifier.size(18.dp))
-                }
-            }
+                modifier = Modifier.fillMaxWidth().testTag("signup_submit")
+            )
             Text(
                 "Creating an account signs you in. The required profile wizard opens immediately afterward before Discover or messaging is available.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.lg))
         }
     }
 }
 
 @Composable
 private fun SegmentedRow(options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
         options.forEach { option ->
-            FilterChip(
+            MatreeChoiceChip(
+                text = option,
                 selected = option == selected,
                 onClick = { onSelect(option) },
-                label = { Text(option) },
                 modifier = Modifier.weight(1f)
             )
         }
