@@ -31,8 +31,16 @@ enum class AppPalette(val label: String, val swatch: Color) {
     COMMUNITY("Community", Color(0xFF6D4C7D));
 
     companion object {
+        val productionThemes: List<AppPalette> = listOf(
+            VIVAH, HINDU, MUSLIM, CHRISTIAN, SIKH, BUDDHIST, JAIN, PARSI
+        )
+
         fun fromKey(key: String?): AppPalette =
             entries.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: VIVAH
+
+        /** Only themes intentionally exposed by the current Matree appearance contract. */
+        fun fromProductionKey(key: String?): AppPalette =
+            productionThemes.firstOrNull { it.name.equals(key, ignoreCase = true) } ?: VIVAH
 
         fun forReligion(category: ReligionCategory): AppPalette = when (category) {
             ReligionCategory.HINDU -> HINDU
@@ -57,14 +65,16 @@ private fun scheme(
     tertiary: Color = Color(0xFF2E7D32),
     lightBackground: Color = Color(0xFFFDF7F7),
     lightSurfaceVariant: Color = Color(0xFFFFF8F6),
+    darkBackground: Color = Color(0xFF0B0B14),
+    darkSurface: Color = Color(0xFF141423),
+    darkSurfaceVariant: Color = Color(0xFF1E1E30),
     dark: Boolean
 ): ColorScheme {
-    val ink   = Color(0xFF0B0B14)
+    val ink   = darkBackground
     val cloud = lightBackground
     val cream = lightSurfaceVariant
     val midGray = Color(0xFF64607A)
-    val darkSurface = Color(0xFF141423)
-    val darkCard    = Color(0xFF1E1E30)
+    val darkCard = darkSurfaceVariant
     return if (dark) darkColorScheme(
         primary = primary, onPrimary = Color.White,
         primaryContainer = onPrimaryContainer, onPrimaryContainer = primaryContainer,
@@ -132,6 +142,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF4F6B5A),
         lightBackground = Color(0xFFF8FAFC),
         lightSurfaceVariant = Color(0xFFF1F5F9),
+        darkBackground = Color(0xFF0E1218),
+        darkSurface = Color(0xFF151B23),
+        darkSurfaceVariant = Color(0xFF1E2732),
         dark = dark
     )
     AppPalette.HINDU -> scheme(
@@ -140,6 +153,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF7C6A00),
         lightBackground = Color(0xFFFFFBF5),
         lightSurfaceVariant = Color(0xFFFFF4E2),
+        darkBackground = Color(0xFF17110B),
+        darkSurface = Color(0xFF211810),
+        darkSurfaceVariant = Color(0xFF2C2116),
         dark = dark
     )
     AppPalette.CHRISTIAN -> scheme(
@@ -148,6 +164,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF476A5A),
         lightBackground = Color(0xFFF7FAFE),
         lightSurfaceVariant = Color(0xFFEDF5FC),
+        darkBackground = Color(0xFF0B131B),
+        darkSurface = Color(0xFF101D29),
+        darkSurfaceVariant = Color(0xFF172838),
         dark = dark
     )
     AppPalette.MUSLIM -> scheme(
@@ -156,6 +175,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF386A74),
         lightBackground = Color(0xFFF7FCFA),
         lightSurfaceVariant = Color(0xFFE9F8F2),
+        darkBackground = Color(0xFF091512),
+        darkSurface = Color(0xFF10211C),
+        darkSurfaceVariant = Color(0xFF173029),
         dark = dark
     )
     AppPalette.SIKH -> scheme(
@@ -164,6 +186,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF735C00),
         lightBackground = Color(0xFFFFFBF3),
         lightSurfaceVariant = Color(0xFFFFF4D8),
+        darkBackground = Color(0xFF151108),
+        darkSurface = Color(0xFF211A0D),
+        darkSurfaceVariant = Color(0xFF2D2412),
         dark = dark
     )
     AppPalette.BUDDHIST -> scheme(
@@ -172,6 +197,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF5C6840),
         lightBackground = Color(0xFFFFF9F2),
         lightSurfaceVariant = Color(0xFFFDEEDC),
+        darkBackground = Color(0xFF17100B),
+        darkSurface = Color(0xFF24170F),
+        darkSurfaceVariant = Color(0xFF302016),
         dark = dark
     )
     AppPalette.JAIN -> scheme(
@@ -180,6 +208,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF52664B),
         lightBackground = Color(0xFFFFFAF8),
         lightSurfaceVariant = Color(0xFFF9ECE8),
+        darkBackground = Color(0xFF160C0F),
+        darkSurface = Color(0xFF231216),
+        darkSurfaceVariant = Color(0xFF30191F),
         dark = dark
     )
     AppPalette.PARSI -> scheme(
@@ -188,6 +219,9 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         tertiary = Color(0xFF4C6658),
         lightBackground = Color(0xFFFFFBF5),
         lightSurfaceVariant = Color(0xFFF4EFE5),
+        darkBackground = Color(0xFF0E1020),
+        darkSurface = Color(0xFF161A2B),
+        darkSurfaceVariant = Color(0xFF20263A),
         dark = dark
     )
     AppPalette.COMMUNITY -> scheme(
