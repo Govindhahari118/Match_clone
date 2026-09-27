@@ -112,6 +112,21 @@ test('clients cannot grant themselves premium or verification', async () => {
   await assertFails(updateDoc(doc(db, 'users/alice'), {
     profileCompletenessUpdatedAt: Date.now(),
   }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    matchScore: 0.99,
+    profileRevision: 1,
+  }));
+});
+
+test('clients cannot create a public global compatibility score', async () => {
+  const db = env.authenticatedContext('charlie').firestore();
+  await assertFails(setDoc(doc(db, 'users/charlie'), {
+    firebaseUid: 'charlie',
+    displayName: 'Charlie',
+    religion: '',
+    matchScore: 0.99,
+    profileRevision: 0,
+  }));
 });
 
 test('owner profile writes require the next monotonic revision', async () => {
