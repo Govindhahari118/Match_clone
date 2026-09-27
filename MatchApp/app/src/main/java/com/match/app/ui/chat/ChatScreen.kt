@@ -43,6 +43,11 @@ import com.match.app.data.repo.ChatRepository
 import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.UserProfile
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -276,12 +281,16 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(36.dp)) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(MatreeDesign.sizes.avatarSmall)
+                        ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(state.peer?.displayName?.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold)
                             }
                         }
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column {
                             Text(state.peer?.displayName ?: "Chat", style = MaterialTheme.typography.titleMedium)
                             Text(
@@ -313,11 +322,17 @@ fun ChatScreen(
         bottomBar = {
             when {
                 state.loading -> Unit
-                state.isBlocked -> StatusBar("You blocked this member. Unblock them to continue the conversation.", MaterialTheme.colorScheme.errorContainer)
-                !state.isMutual -> StatusBar("Messaging is available only after both members accept each other's interest.", MaterialTheme.colorScheme.secondaryContainer)
+                state.isBlocked -> StatusBar(
+                    "You blocked this member. Unblock them to continue the conversation.",
+                    MatreeStatusTone.ERROR
+                )
+                !state.isMutual -> StatusBar(
+                    "Messaging is available only after both members accept each other's interest.",
+                    MatreeStatusTone.WARNING
+                )
                 isRecording -> {
                     Surface(tonalElevation = 2.dp) {
-                        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(MatreeDesign.spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { stopRecorder(delete = true, send = false) }) { Icon(Icons.Filled.Delete, "Cancel recording", tint = MaterialTheme.colorScheme.error) }
                             Text("Recording  %02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             FilledIconButton(onClick = { stopRecorder(delete = false, send = true) }) { Icon(Icons.Filled.Send, "Send voice") }
@@ -329,7 +344,13 @@ fun ChatScreen(
                         Column {
                             state.replyingTo?.let { reply ->
                                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-                                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        Modifier.padding(
+                                            horizontal = MatreeDesign.spacing.sm,
+                                            vertical = MatreeDesign.spacing.xs
+                                        ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Replying to ${if (reply.fromUserId == state.meId) "your message" else state.peer?.displayName.orEmpty()}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                             Text(reply.body.take(80), style = MaterialTheme.typography.bodySmall, maxLines = 1)
@@ -338,7 +359,10 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(MatreeDesign.spacing.xs),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 IconButton(onClick = { imagePicker.launch("image/*") }) { Icon(Icons.Filled.AddPhotoAlternate, "Send image") }
                                 OutlinedTextField(
                                     value = draft,
@@ -347,7 +371,7 @@ fun ChatScreen(
                                     modifier = Modifier.weight(1f).testTag("chat_input"),
                                     maxLines = 4
                                 )
-                                Spacer(Modifier.width(6.dp))
+                                Spacer(Modifier.width(MatreeDesign.spacing.xs))
                                 if (draft.isBlank()) {
                                     FilledIconButton(onClick = ::startRecording) { Icon(Icons.Filled.Mic, "Record voice") }
                                 } else {
@@ -365,23 +389,37 @@ fun ChatScreen(
         }
     ) { padding ->
         when {
-            state.loading -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            state.peer == null -> Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { Text("Conversation unavailable.") }
+            state.loading -> Box(
+                Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeLoadingState(message = "Loading conversation…", rows = 2)
+            }
+            state.peer == null -> Box(
+                Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeStatePanel(
+                    title = "Conversation unavailable",
+                    message = "This conversation can no longer be opened with your current account or relationship state.",
+                    icon = Icons.Filled.Forum,
+                    tone = MatreeStatusTone.WARNING
+                )
+            }
             state.messages.isEmpty() -> {
-                Column(
-                    Modifier.padding(padding).fillMaxSize().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                Box(
+                    Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Forum, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(12.dp))
-                    Text(if (state.isMutual) "Start your conversation" else "Mutual interest required", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (state.isMutual) "Be respectful and avoid sharing sensitive information too early."
-                        else "Both members must accept each other's interest before messages can be sent.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    MatreeStatePanel(
+                        title = if (state.isMutual) "Start your conversation" else "Mutual interest required",
+                        message = if (state.isMutual) {
+                            "Be respectful and avoid sharing sensitive information too early."
+                        } else {
+                            "Both members must accept each other's interest before messages can be sent."
+                        },
+                        icon = Icons.Filled.Forum,
+                        tone = if (state.isMutual) MatreeStatusTone.NEUTRAL else MatreeStatusTone.WARNING
                     )
                 }
             }
@@ -389,18 +427,15 @@ fun ChatScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.padding(padding).fillMaxSize().testTag("chat_list"),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    contentPadding = PaddingValues(MatreeDesign.spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     item("privacy_notice") {
-                        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Text(
-                                "Private match conversation. Local message copies are protected on this device; report or block any misuse.",
-                                Modifier.padding(10.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
+                        MatreeInlineNotice(
+                            message = "Private match conversation. Local message copies are protected on this device; report or block any misuse.",
+                            icon = Icons.Filled.Security,
+                            modifier = Modifier.padding(bottom = MatreeDesign.spacing.xs)
+                        )
                     }
                     items(state.messages, key = { it.id }) { message ->
                         MessageBubble(
@@ -433,10 +468,12 @@ fun ChatScreen(
 }
 
 @Composable
-private fun StatusBar(text: String, color: Color) {
-    Surface(color = color, modifier = Modifier.fillMaxWidth()) {
-        Text(text, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-    }
+private fun StatusBar(text: String, tone: MatreeStatusTone) {
+    MatreeInlineNotice(
+        message = text,
+        tone = tone,
+        modifier = Modifier.padding(MatreeDesign.spacing.xs)
+    )
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -454,7 +491,9 @@ private fun MessageBubble(
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(
-            Modifier.widthIn(max = 290.dp).clip(RoundedCornerShape(16.dp)).background(background)
+            Modifier.widthIn(max = MatreeDesign.sizes.chatBubbleMaxWidth)
+                .clip(RoundedCornerShape(MatreeDesign.radii.card))
+                .background(background)
                 .combinedClickable(
                     onClick = {
                         if (mine && message.status.equals("failed", true)) onRetry()
@@ -462,29 +501,34 @@ private fun MessageBubble(
                     },
                     onLongClick = onLongPress
                 )
-                .padding(10.dp)
+                .padding(MatreeDesign.spacing.sm)
         ) {
             repliedMessage?.let {
-                Surface(shape = RoundedCornerShape(8.dp), color = foreground.copy(alpha = 0.12f)) {
-                    Text(it.body.take(80), Modifier.padding(6.dp), style = MaterialTheme.typography.labelSmall, color = foreground.copy(alpha = 0.85f), maxLines = 1)
+                Surface(shape = RoundedCornerShape(MatreeDesign.radii.small), color = foreground.copy(alpha = 0.12f)) {
+                    Text(it.body.take(80), Modifier.padding(MatreeDesign.spacing.xs), style = MaterialTheme.typography.labelSmall, color = foreground.copy(alpha = 0.85f), maxLines = 1)
                 }
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.xxs))
             }
             when {
                 message.voiceUri != null -> VoiceMessage(message, foreground)
                 message.imageUri != null -> AsyncImage(
                     model = message.imageUri,
                     contentDescription = "Image message",
-                    modifier = Modifier.sizeIn(maxWidth = 240.dp, maxHeight = 320.dp).clip(RoundedCornerShape(10.dp)),
+                    modifier = Modifier
+                        .sizeIn(
+                            maxWidth = MatreeDesign.sizes.chatMediaMaxWidth,
+                            maxHeight = MatreeDesign.sizes.chatMediaMaxHeight
+                        )
+                        .clip(RoundedCornerShape(MatreeDesign.radii.medium)),
                     contentScale = ContentScale.Crop
                 )
                 else -> Text(message.body, color = foreground)
             }
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xxs))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Text(time, fontSize = 10.sp, color = foreground.copy(alpha = 0.65f))
                 if (mine) {
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xxs))
                     val icon = when (message.status.lowercase()) {
                         "read" -> Icons.Filled.DoneAll
                         "failed" -> Icons.Filled.ErrorOutline
@@ -492,7 +536,7 @@ private fun MessageBubble(
                     }
                     Icon(icon, message.status, Modifier.size(13.dp), tint = if (message.status.equals("failed", true)) MaterialTheme.colorScheme.error else foreground.copy(alpha = 0.75f))
                     if (message.status.equals("failed", true)) {
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.xxs))
                         Text(
                             "Tap to retry",
                             style = MaterialTheme.typography.labelSmall,
