@@ -9,6 +9,7 @@ import {
   reserveMatrimonyId,
 } from "./shared";
 import { shouldReassertPublicSuppression } from "./deletionPolicy";
+import { accountIsActive } from "./accountStatusPolicy";
 import {
   calculateProfileCompletenessValue,
   PROFILE_COMPLETENESS_PRIVATE_FIELDS,
@@ -543,9 +544,10 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
   ]);
   if (!viewer.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
   if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-  const viewerStatus = String(viewer.data()?.accountStatus || "ACTIVE").toUpperCase();
-  const targetStatus = String(target.data()?.accountStatus || "ACTIVE").toUpperCase();
-  if (viewerStatus !== "ACTIVE" || targetStatus !== "ACTIVE") {
+  if (
+    !accountIsActive(viewer.data()?.accountStatus) ||
+    !accountIsActive(target.data()?.accountStatus)
+  ) {
     throw new functions.https.HttpsError("failed-precondition", "Profile view is unavailable while an account is not active");
   }
   if (
