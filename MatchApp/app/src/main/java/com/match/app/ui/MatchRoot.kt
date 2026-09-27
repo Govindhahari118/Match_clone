@@ -28,6 +28,7 @@ import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.repo.AppearancePreferenceRepository
+import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.DisplayMode
@@ -62,6 +63,7 @@ object Routes {
 class RootViewModel @Inject constructor(
     private val session: SessionStore,
     private val connectivity: ConnectivityObserver,
+    private val authRepository: AuthRepository,
     userDao: UserDao,
     appearancePreferenceRepository: AppearancePreferenceRepository
 ) : ViewModel() {
@@ -93,7 +95,11 @@ class RootViewModel @Inject constructor(
     fun touchActivity() = viewModelScope.launch { session.touchActivity() }
 
     fun checkSessionExpiry() = viewModelScope.launch {
-        if (session.isSessionExpired()) session.clear()
+        if (session.isSessionExpired()) authRepository.signOut()
+    }
+
+    fun validateRemoteSession() = viewModelScope.launch {
+        authRepository.validateRemoteSession()
     }
 
     private fun UserEntity.isRequiredProfileComplete(): Boolean =
@@ -118,10 +124,14 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
     val systemDark = isSystemInDarkTheme()
+    val isOnline by vm.isOnline.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.checkSessionExpiry()
         vm.touchActivity()
+    }
+    LaunchedEffect(isOnline) {
+        if (isOnline) vm.validateRemoteSession()
     }
 
     val effectivePalette = AppearanceThemeResolver.resolve(
@@ -144,7 +154,6 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 val userId by vm.userId.collectAsState()
                 val onboarded by vm.onboarded.collectAsState()
-                val isOnline by vm.isOnline.collectAsState()
                 val sessionReady by vm.sessionReady.collectAsState()
                 val profileSetupComplete by vm.profileSetupComplete.collectAsState()
                 val loggedIn = userId != null
