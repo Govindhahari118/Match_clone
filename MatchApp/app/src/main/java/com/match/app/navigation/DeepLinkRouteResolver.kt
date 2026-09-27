@@ -32,6 +32,9 @@ object DeepLinkRouteResolver {
         }
     }
 
+    fun notificationAccountMatches(expectedUid: String?, currentUid: String?): Boolean =
+        expectedUid.isNullOrBlank() || (!currentUid.isNullOrBlank() && expectedUid == currentUid)
+
     fun fromNotification(
         type: String?,
         fromUserId: Long?,
