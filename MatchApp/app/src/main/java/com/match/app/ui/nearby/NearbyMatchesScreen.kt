@@ -19,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -27,11 +26,19 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
 import com.match.app.data.repo.LocationRepository
 import com.match.app.data.repo.NearbyProfile
-import com.match.app.ui.components.EmptyState
-import com.match.app.ui.components.MatreeLoadingSkeleton
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProfileCard
+import com.match.app.ui.components.MatreeProfileCardVariant
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -229,14 +236,7 @@ fun NearbyMatchesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Nearby") },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("nearby_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = "Nearby", onBack = onBack)
         }
     ) { padding ->
         val spacing = MatreeDesign.spacing
@@ -246,68 +246,82 @@ fun NearbyMatchesScreen(
             verticalArrangement = Arrangement.spacedBy(spacing.sm)
         ) {
             item {
-                ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.LocationOn, null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Matches near you", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        }
-                        Text(
-                            "Nearby is off by default. Location is collected only in the foreground when you enable or refresh it. Other members receive only a coarse distance range, never your coordinates.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (ui.statusLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        else AssistChip(
+                MatreeHero(
+                    title = "Matches near you",
+                    subtitle = "Nearby is off by default. Location is collected only in the foreground when you enable or refresh it. Other members receive only a coarse distance range, never your coordinates.",
+                    leadingIcon = Icons.Filled.LocationOn
+                ) {
+                    if (ui.statusLoading) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else {
+                        AssistChip(
                             onClick = {},
                             enabled = false,
                             label = { Text(if (ui.sharingLocation) "Nearby sharing is on" else "Nearby sharing is off") },
-                            leadingIcon = { Icon(if (ui.sharingLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff, null, Modifier.size(16.dp)) }
+                            leadingIcon = {
+                                Icon(
+                                    if (ui.sharingLocation) Icons.Filled.LocationOn else Icons.Filled.LocationOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall)
+                                )
+                            }
                         )
-                        if (ui.permissionGranted) {
-                            Text(
-                                if (ui.precisePermission) "Device permission: precise location" else "Device permission: approximate location",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    }
+                    if (ui.permissionGranted) {
+                        Text(
+                            if (ui.precisePermission) "Device permission: precise location" else "Device permission: approximate location",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
             if (!ui.statusLoading && !ui.sharingLocation) {
                 item {
-                    Card(shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Enable Nearby", fontWeight = FontWeight.Bold)
-                            Text(
-                                "Approximate location is enough. Precise is optional. A shared point automatically expires after 24 hours unless you deliberately refresh it.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MatreeInfoCard {
+                        Text("Enable Nearby", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Approximate location is enough. Precise is optional. A shared point automatically expires after 24 hours unless you deliberately refresh it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (ui.permissionGranted) {
+                            MatreePrimaryButton(
+                                text = "Enable Nearby",
+                                icon = Icons.Filled.MyLocation,
+                                onClick = { vm.enableSharing(radius.toInt()) },
+                                enabled = !ui.loading && ui.locationServicesEnabled,
+                                modifier = Modifier.fillMaxWidth().testTag("nearby_enable")
                             )
-                            if (ui.permissionGranted) {
-                                Button(
-                                    onClick = { vm.enableSharing(radius.toInt()) },
-                                    enabled = !ui.loading && ui.locationServicesEnabled,
-                                    modifier = Modifier.fillMaxWidth().testTag("nearby_enable")
-                                ) { Icon(Icons.Filled.MyLocation, null); Spacer(Modifier.width(8.dp)); Text("Enable Nearby") }
-                            } else {
-                                Button(
+                        } else {
+                            MatreePrimaryButton(
+                                text = "Allow location & enable",
+                                icon = Icons.Filled.MyLocation,
+                                onClick = {
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            Manifest.permission.ACCESS_FINE_LOCATION
+                                        )
+                                    )
+                                },
+                                enabled = !ui.loading,
+                                modifier = Modifier.fillMaxWidth().testTag("nearby_enable_location")
+                            )
+                            if (requestedPermission) {
+                                MatreeSecondaryButton(
+                                    text = "Open app settings",
                                     onClick = {
-                                        permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+                                        context.startActivity(
+                                            Intent(
+                                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                Uri.parse("package:${context.packageName}")
+                                            )
+                                        )
                                     },
-                                    enabled = !ui.loading,
-                                    modifier = Modifier.fillMaxWidth().testTag("nearby_enable_location")
-                                ) { Icon(Icons.Filled.MyLocation, null); Spacer(Modifier.width(8.dp)); Text("Allow location & enable") }
-                                if (requestedPermission) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) { Text("Open app settings") }
-                                }
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
                     }
@@ -316,118 +330,109 @@ fun NearbyMatchesScreen(
 
             if (!ui.locationServicesEnabled && ui.permissionGranted) {
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Device location is off. Existing sharing can still be stopped, but enabling or refreshing needs location services.", color = MaterialTheme.colorScheme.onErrorContainer)
-                            OutlinedButton(
-                                onClick = { context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Open location settings") }
+                    MatreeStatePanel(
+                        title = "Device location is off",
+                        message = "Existing sharing can still be stopped, but enabling or refreshing Nearby needs device location services.",
+                        icon = Icons.Filled.LocationOff,
+                        tone = MatreeStatusTone.WARNING,
+                        primaryActionLabel = "Open location settings",
+                        onPrimaryAction = {
+                            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                         }
-                    }
+                    )
                 }
             }
 
             if (ui.sharingLocation) {
                 item {
-                    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Search radius: ${radius.toInt()} km", fontWeight = FontWeight.SemiBold)
-                            Slider(
-                                value = radius,
-                                onValueChange = { radius = it },
-                                onValueChangeFinished = { vm.search(radius.toInt()) },
-                                valueRange = 5f..100f,
-                                steps = 18,
-                                enabled = !ui.loading
+                    MatreeInfoCard {
+                        Text("Search radius: ${radius.toInt()} km", fontWeight = FontWeight.SemiBold)
+                        Slider(
+                            value = radius,
+                            onValueChange = { radius = it },
+                            onValueChangeFinished = { vm.search(radius.toInt()) },
+                            valueRange = 5f..100f,
+                            steps = 18,
+                            enabled = !ui.loading
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("5 km", style = MaterialTheme.typography.labelSmall)
+                            Text("100 km", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                        ) {
+                            MatreePrimaryButton(
+                                text = "Refresh",
+                                icon = Icons.Filled.Refresh,
+                                onClick = { vm.refresh(radius.toInt()) },
+                                enabled = !ui.loading && ui.permissionGranted && ui.locationServicesEnabled,
+                                modifier = Modifier.weight(1f).testTag("nearby_refresh")
                             )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("5 km", style = MaterialTheme.typography.labelSmall)
-                                Text("100 km", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = { vm.refresh(radius.toInt()) },
-                                    enabled = !ui.loading && ui.permissionGranted && ui.locationServicesEnabled,
-                                    modifier = Modifier.weight(1f).testTag("nearby_refresh")
-                                ) { Icon(Icons.Filled.Refresh, null); Spacer(Modifier.width(6.dp)); Text("Refresh") }
-                                OutlinedButton(
-                                    onClick = vm::stopSharing,
-                                    enabled = !ui.loading,
-                                    modifier = Modifier.weight(1f).testTag("nearby_stop_sharing")
-                                ) { Icon(Icons.Filled.LocationOff, "Stop sharing location"); Spacer(Modifier.width(6.dp)); Text("Stop sharing") }
-                            }
-                            Text(
-                                "Sharing expires within 24 hours of your last deliberate refresh.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            MatreeSecondaryButton(
+                                text = "Stop sharing",
+                                icon = Icons.Filled.LocationOff,
+                                onClick = vm::stopSharing,
+                                enabled = !ui.loading,
+                                modifier = Modifier.weight(1f).testTag("nearby_stop_sharing")
                             )
                         }
+                        Text(
+                            "Sharing expires within 24 hours of your last deliberate refresh.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
             ui.error?.let { message ->
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Text(message, Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-                    }
+                    MatreeInlineNotice(
+                        message = message,
+                        icon = Icons.Filled.ErrorOutline,
+                        tone = MatreeStatusTone.ERROR
+                    )
                 }
             }
 
             if (ui.loading) {
                 item {
-                    MatreeLoadingSkeleton(
-                        modifier = Modifier.fillMaxWidth(),
-                        height = MatreeDesign.sizes.avatarHero
-                    )
+                    MatreeLoadingState(message = "Refreshing Nearby…", rows = 2)
                 }
             } else if (ui.sharingLocation && ui.matches.isEmpty() && ui.error == null) {
                 item {
-                    EmptyState(
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.LocationSearching,
+                    MatreeStatePanel(
                         title = "No profiles found within ${radius.toInt()} km",
-                        subtitle = "Try a larger radius or refresh after more eligible profiles are active nearby."
+                        message = "Try a larger radius or refresh after more eligible profiles are active nearby.",
+                        icon = Icons.Filled.LocationSearching
                     )
                 }
             }
 
             if (ui.matches.isNotEmpty()) {
-                item { Text("${ui.matches.size} nearby profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                item {
+                    Text(
+                        "${ui.matches.size} nearby profiles",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 items(ui.matches, key = { it.firebaseUid }) { profile ->
-                    ElevatedCard(onClick = { onOpenProfile(profile.userId) }, shape = RoundedCornerShape(MatreeDesign.radii.card), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (profile.photoUrl.isNotBlank()) {
-                                AsyncImage(
-                                    model = profile.photoUrl,
-                                    contentDescription = "${profile.displayName} profile photo",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(MatreeDesign.sizes.avatarCompact)
-                                )
-                            } else {
-                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(MatreeDesign.sizes.avatarCompact)) {
-                                    Box(contentAlignment = Alignment.Center) { Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold) }
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(profile.displayName, fontWeight = FontWeight.SemiBold)
-                                    if (profile.isVerified) {
-                                        Spacer(Modifier.width(4.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                                Text(
-                                    listOf("${profile.age}", profile.profession, profile.city).filter { it.isNotBlank() }.joinToString(" • "),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(profile.distanceLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                            }
-                            if (profile.isPremium) Icon(Icons.Filled.WorkspacePremium, "Premium", tint = MaterialTheme.colorScheme.tertiary)
-                        }
-                    }
+                    MatreeProfileCard(
+                        name = profile.displayName,
+                        age = profile.age,
+                        onClick = { onOpenProfile(profile.userId) },
+                        variant = MatreeProfileCardVariant.STANDARD,
+                        primaryLine = listOf(profile.profession, profile.city)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" • "),
+                        secondaryLine = profile.distanceLabel,
+                        photoModel = profile.photoUrl.takeIf { it.isNotBlank() },
+                        isVerified = profile.isVerified,
+                        isPremium = profile.isPremium
+                    )
                 }
             }
 
