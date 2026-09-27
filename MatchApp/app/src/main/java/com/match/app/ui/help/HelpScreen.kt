@@ -21,7 +21,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.repo.SupportRepository
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -128,34 +134,19 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(t("help_support", "Help & Support")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("help_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = t("help_support", "Help & Support"), onBack = onBack)
         }
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(20.dp).testTag("help_screen"),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(MatreeDesign.spacing.lg).testTag("help_screen"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
         ) {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("Help that matches the live app", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "These answers describe features currently enforced by the app and backend. For an account-specific issue, submit a support ticket below.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
+            MatreeHero(
+                title = "Help that matches the live app",
+                subtitle = "These answers describe features currently enforced by the app and backend. For an account-specific issue, submit a support ticket below.",
+                leadingIcon = Icons.Filled.SupportAgent
+            )
 
             Text("Frequently asked questions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             FAQS.forEachIndexed { index, faq -> FaqItem(faq, index) }
@@ -168,12 +159,12 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs), verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 SUPPORT_CATEGORIES.forEach { item ->
-                    FilterChip(
+                    MatreeChoiceChip(
+                        text = item,
                         selected = category == item,
-                        onClick = { category = item },
-                        label = { Text(item) }
+                        onClick = { category = item }
                     )
                 }
             }
@@ -189,27 +180,20 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
                 enabled = !submitting
             )
 
-            Button(
+            MatreePrimaryButton(
+                text = if (submitting) "Submitting…" else "Submit support request",
+                icon = if (submitting) null else Icons.Filled.SupportAgent,
                 onClick = { vm.submit(category, supportText.trim()) },
                 enabled = supportText.trim().length >= 10 && !submitting,
                 modifier = Modifier.fillMaxWidth().testTag("submit_support_ticket")
-            ) {
-                if (submitting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    Spacer(Modifier.width(8.dp))
-                } else {
-                    Icon(Icons.Filled.SupportAgent, null)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(if (submitting) "Submitting…" else "Submit support request")
-            }
+            )
 
             Text(
                 "For immediate personal safety or an emergency, contact the appropriate local emergency service. In-app reporting is for platform moderation and is not an emergency service.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xl))
         }
     }
 }
@@ -217,20 +201,18 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
 @Composable
 private fun FaqItem(faq: Faq, index: Int) {
     var expanded by remember { mutableStateOf(false) }
-    ElevatedCard(
-        shape = RoundedCornerShape(14.dp),
+    MatreeInfoCard(
         modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.testTag("faq_$index")
     ) {
-        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(faq.question, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = MaterialTheme.colorScheme.primary)
             }
             AnimatedVisibility(expanded) {
                 Column {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
                     HorizontalDivider()
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
                     Text(faq.answer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
