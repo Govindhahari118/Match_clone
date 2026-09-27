@@ -30,11 +30,22 @@ service cloud.firestore {
              !('religionLocked' in request.resource.data) &&
              !('religionConfirmedAt' in request.resource.data);
     }
+    function validProfileRevisionOnCreate() {
+      return !('profileRevision' in request.resource.data) ||
+             (request.resource.data.profileRevision is int &&
+              request.resource.data.profileRevision == 0);
+    }
+    function validProfileRevisionUpdate() {
+      return request.resource.data.profileRevision is int &&
+             request.resource.data.profileRevision ==
+               resource.data.get('profileRevision', 0) + 1;
+    }
     function safeUserCreate() {
       return hasNoPrivateProfileFields() &&
              validReligionValue(request.resource.data) &&
              unconfirmedReligionOnCreate() &&
              noClientReligionAuthorityOnCreate() &&
+             validProfileRevisionOnCreate() &&
              (!('isPremium' in request.resource.data) || request.resource.data.isPremium == false) &&
              (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) &&
              (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') &&
@@ -88,7 +99,11 @@ service cloud.firestore {
          !profileHiddenFrom(userId, request.auth.uid) &&
          (resource.data.stealthMode != true || explicitInterestFrom(userId, request.auth.uid))));
       allow create: if isOwner(userId) && safeUserCreate();
-      allow update: if isOwner(userId) && hasNoPrivateProfileFields() && userServerFieldsUnchanged() && validReligionValue(request.resource.data);
+      allow update: if isOwner(userId) &&
+        hasNoPrivateProfileFields() &&
+        userServerFieldsUnchanged() &&
+        validReligionValue(request.resource.data) &&
+        validProfileRevisionUpdate();
       allow delete: if false;
     }
     match /userPrivate/{userId} {
