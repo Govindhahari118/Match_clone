@@ -202,19 +202,34 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
 private fun FaqItem(faq: Faq, index: Int) {
     var expanded by remember { mutableStateOf(false) }
     MatreeInfoCard(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.testTag("faq_$index")
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .testTag("faq_$index")
     ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(faq.question, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = MaterialTheme.colorScheme.primary)
-            }
-            AnimatedVisibility(expanded) {
-                Column {
-                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
-                    Text(faq.answer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                faq.question,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        AnimatedVisibility(expanded) {
+            Column {
+                Spacer(Modifier.height(MatreeDesign.spacing.sm))
+                HorizontalDivider()
+                Spacer(Modifier.height(MatreeDesign.spacing.sm))
+                Text(
+                    faq.answer,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
