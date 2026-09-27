@@ -67,6 +67,22 @@ win over earlier exploratory text; security/privacy invariants are never weakene
 - pricing claims narrowed to actual server-enforced membership duration/contact quotas and
   Google-Play-backed restore/verification behavior
 - profile-view notification trigger now binds the Firestore event context used in its deterministic ID
+- Matree design tokens, canonical profile-card components and religion-aware/Neutral palette matrix are
+  implemented with independent Automatic/Neutral/Manual appearance and device light/dark/system mode
+- account appearance preference sync is cross-device and cannot mutate canonical religion
+- supported production locale authority is centralized; incomplete prototype translation packs are removed
+  rather than advertised as translated UI
+- Room migration coverage now spans every registered supported migration hop and runs as a dedicated
+  emulator-backed Production CI job
+- deletion policy now has regression coverage for large-account batching, partial failure/retry and the
+  invariant that a publicly deleted profile is never recreated during resume
+- operations Functions now include least-privilege role resolution, support/moderation lifecycle,
+  privacy-safe queue metrics, audit events and payment reconciliation views with RBAC tests
+- Play purchase reconciliation covers void/refund and entitlement-expiry handling in repository code
+- deep-link routing is extracted into a tested policy and handles cold/warm notification destinations
+- privacy-safe product telemetry/Crashlytics boundaries are explicit and contract-tested
+- chat local storage now uses versioned Android-Keystore-backed ciphertext for new Room/outbox message
+  bodies; legacy pending plaintext is migrated in-place before retry instead of being retained in clear
 
 ## Exact-head evidence
 
@@ -81,8 +97,9 @@ Mandatory CI jobs:
 
 1. production-integrity source gate + Android unit tests + lint + debug build + non-production
    release/R8 validation + evidence artifact
-2. Firebase Functions lint + build/typecheck + production dependency audit + evidence artifact
-3. Firestore + Storage emulator security-rules tests + evidence artifact
+2. emulator-backed Room migration matrix across every registered supported migration hop
+3. Firebase Functions lint + build/typecheck + production dependency audit + evidence artifact
+4. Firestore + Storage emulator security-rules tests + evidence artifact
 
 ## Remaining repository verification before release
 
@@ -91,9 +108,10 @@ corresponding code path exists:
 
 - execute the full two-user/two-device matrix for interests, chat, notification/deep-link, block,
   privacy-revocation, discovery, payment recovery and deletion
-- execute large-account deletion/retry verification with >500 related records and forced partial failure
-- prove Room upgrade migrations from every actually supported historical production DB version;
-  destructive migration remains debug-only
+- supplement the automated large-account deletion/retry coverage with production-like data-volume
+  evidence and forced infrastructure/provider failure drills
+- supplement the registered Room migration matrix with real historical production database fixtures
+  where such released database versions actually exist; destructive migration remains debug-only
 - finish physical-device/process-death/network-chaos evidence for supported Android versions/OEMs
 - verify all BETA/provider-backed routes against production provider state before promotion
 - add verified HTTPS App Links only after the real production domain and Digital Asset Links file exist
