@@ -83,6 +83,16 @@ win over earlier exploratory text; security/privacy invariants are never weakene
 - privacy-safe product telemetry/Crashlytics boundaries are explicit and contract-tested
 - chat local storage now uses versioned Android-Keystore-backed ciphertext for new Room/outbox message
   bodies; legacy pending plaintext is migrated in-place before retry instead of being retained in clear
+- profile completeness is now backend-calculated from the same 20-field wizard contract; clients
+  cannot author the authoritative aggregate, while DOB/income inputs remain in owner-private data
+- declined interests are server-authoritative and cannot be immediately recreated by the sender;
+  recipient initiation is the explicit path that can reopen the pair
+- discovery hard filters now evaluate private astrology/income inputs only inside the trusted callable
+  and respect horoscope/income disclosure settings without returning those private values
+- activity filtering now reads server-only presence only when the target's last-active visibility
+  permits that viewer; unknown activity is no longer fabricated as "Active recently"
+- the unauthorised client-side "Recently active" sort was removed because discovery does not expose
+  precise presence timestamps
 
 ## Exact-head evidence
 
