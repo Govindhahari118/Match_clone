@@ -30,6 +30,15 @@ import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.remote.MemberPrivacyRelation
 import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -216,35 +225,19 @@ fun PrivacyDashboardScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Privacy & visibility") },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("privacy_dash_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = "Privacy & visibility", onBack = onBack)
         }
     ) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("privacy_dashboard_screen"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(MatreeDesign.spacing.md).testTag("privacy_dashboard_screen"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
         ) {
-            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Your privacy choices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            "Visibility is enforced by server rules and permission-checked functions across profiles, activity, discovery, Nearby and contact reveal.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            MatreeHero(
+                title = "Your privacy choices",
+                subtitle = "Visibility is enforced by server rules and permission-checked functions across profiles, activity, discovery, Nearby and contact reveal.",
+                leadingIcon = Icons.Filled.Shield
+            )
 
             PrivacyToggleCard(
                 icon = Icons.Filled.VisibilityOff,
@@ -282,11 +275,10 @@ fun PrivacyDashboardScreen(
                 onCheckedChange = vm::setHoroscopeVisible
             )
 
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            MatreeInfoCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.CurrencyRupee, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column {
                             Text("Income visibility", fontWeight = FontWeight.SemiBold)
                             Text("Choose whether your income band is shown through permitted profile views.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -295,11 +287,11 @@ fun PrivacyDashboardScreen(
                     val current = user?.incomeDisclosure ?: "range"
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("range" to "Show range", "hidden" to "Hide").forEach { (value, label) ->
-                            FilterChip(
+                            MatreeChoiceChip(
+                                text = label,
                                 selected = current.equals(value, true),
                                 onClick = { vm.setIncomeDisclosure(value) },
-                                enabled = user != null && !saving,
-                                label = { Text(label) }
+                                enabled = user != null && !saving
                             )
                         }
                     }
