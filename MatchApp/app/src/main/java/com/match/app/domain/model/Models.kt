@@ -94,12 +94,20 @@ data class UserProfile(
     val username: String = ""
 )
 
+data class CompatibilityFactor(
+    val key: String,
+    val score: Float,
+    val configuredWeight: Float
+)
+
 data class MatchResult(
     val user: UserProfile,
     val questionnaireScore: Float,
     val astrologyScore: Float,
     val combinedScore: Float,
-    val mode: MatchMode
+    val mode: MatchMode,
+    val formulaVersion: String = "",
+    val factors: List<CompatibilityFactor> = emptyList()
 ) {
     val displayScore: Int get() = (primary() * 100f).toInt()
     fun primary(): Float = when (mode) {
