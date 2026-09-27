@@ -173,6 +173,13 @@ class AuthRepository @Inject constructor(
             Log.e("AuthRepository", "Unable to clear account-scoped Room cache", ex)
         }
         clearPrivateMediaCaches()
+        runCatching {
+            val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE)
+                as? android.app.NotificationManager
+            manager?.cancelAll()
+        }.onFailure { error ->
+            Log.w("AuthRepository", "Unable to clear account-scoped system notifications", error)
+        }
         session.clear()
     }
 
