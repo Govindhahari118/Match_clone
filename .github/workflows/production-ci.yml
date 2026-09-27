@@ -119,7 +119,7 @@ jobs:
             "emulator" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
-            "system-images;android-30;google_apis;x86_64"
+            "system-images;android-35;google_apis;x86_64"
       - name: Run supported Room upgrades on emulator
         shell: bash
         run: |
@@ -128,13 +128,13 @@ jobs:
           mkdir -p "$ANDROID_AVD_HOME"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --force \
-            --name matree-ci-api30 \
-            --package "system-images;android-30;google_apis;x86_64"
+            --name matree-ci-api35 \
+            --package "system-images;android-35;google_apis;x86_64"
           "$ANDROID_HOME/emulator/emulator" -list-avds
-          test -f "$ANDROID_AVD_HOME/matree-ci-api30.ini"
+          test -f "$ANDROID_AVD_HOME/matree-ci-api35.ini"
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm || true; fi
           "$ANDROID_HOME/emulator/emulator" \
-            -avd matree-ci-api30 \
+            -avd matree-ci-api35 \
             -no-window \
             -no-audio \
             -no-boot-anim \
