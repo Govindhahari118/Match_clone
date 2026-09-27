@@ -45,55 +45,35 @@ object ActivityStatusHelper {
         }
     }
 
-    /** Completeness score (0–100) used for sorting and profile nudges. */
-    fun profileCompleteness(p: UserProfile): Int {
-        var score = 0
-        if (p.displayName.isNotBlank()) score += 8
-        if (p.bio.isNotBlank()) score += 6
-        if (p.city.isNotBlank()) score += 4
-        if (p.primaryPhotoPath != null || p.photoUrl.isNotBlank()) score += 12
-        if (p.hasQuestionnaire) score += 10
-        if (p.religion.isNotBlank()) score += 3
-        if (p.caste.isNotBlank()) score += 2
-        if (p.education.isNotBlank()) score += 3
-        if (p.profession.isNotBlank()) score += 3
-        if (p.incomeBand.isNotBlank()) score += 2
-        if (p.heightCm > 0) score += 2
-        if (p.maritalStatus.isNotBlank()) score += 3
-        if (p.motherTongue.isNotBlank()) score += 2
-        if (p.dateOfBirth.isNotBlank()) score += 4
-        if (p.rasi.isNotBlank()) score += 3
-        if (p.nakshatra.isNotBlank()) score += 3
-        if (p.weight > 0f) score += 2
-        if (p.employer.isNotBlank()) score += 3
-        if (p.familyType.isNotBlank()) score += 2
-        if (p.fitnessActivities.isNotBlank()) score += 2
-        if (p.voiceBioUrl.isNotBlank()) score += 4
-        if (p.manglik.isNotBlank()) score += 2
-        if (p.phoneNumber.isNotBlank()) score += 5
-        if (p.verificationLevel >= 2) score += 6
-        if (p.matrimonyId.isNotBlank()) score += 4
-        return score.coerceIn(0, 100)
-    }
+    /**
+     * Display the backend-authoritative aggregate. The server stores it as 0..1 using the same
+     * 20-field contract as onboarding; UI must not invent a second weighted score.
+     */
+    fun profileCompleteness(p: UserProfile): Int =
+        (p.profileCompleteness.coerceIn(0f, 1f) * 100f).toInt().coerceIn(0, 100)
 
+    /** Same 20 source checks used by the backend profileCompletenessPolicy. */
     fun completenessItems(p: UserProfile): List<Pair<String, Boolean>> = listOf(
-        "Profile photo" to (p.primaryPhotoPath != null || p.photoUrl.isNotBlank()),
-        "Questionnaire" to p.hasQuestionnaire,
-        "Bio" to p.bio.isNotBlank(),
-        "City" to p.city.isNotBlank(),
+        "Username" to p.username.isNotBlank(),
+        "Name" to p.displayName.isNotBlank(),
         "Date of birth" to p.dateOfBirth.isNotBlank(),
-        "Rasi / Nakshatra" to (p.rasi.isNotBlank() && p.nakshatra.isNotBlank()),
+        "State" to p.state.isNotBlank(),
+        "City" to p.city.isNotBlank(),
+        "Mother tongue" to p.motherTongue.isNotBlank(),
+        "Bio" to p.bio.isNotBlank(),
         "Religion" to p.religion.isNotBlank(),
         "Education" to p.education.isNotBlank(),
         "Profession" to p.profession.isNotBlank(),
-        "Employer" to p.employer.isNotBlank(),
-        "Income" to p.incomeBand.isNotBlank(),
-        "Height & weight" to (p.heightCm > 0 && p.weight > 0f),
-        "Mother tongue" to p.motherTongue.isNotBlank(),
+        "Height" to (p.heightCm > 0),
         "Marital status" to p.maritalStatus.isNotBlank(),
         "Family type" to p.familyType.isNotBlank(),
-        "Voice bio" to p.voiceBioUrl.isNotBlank(),
-        "Phone number" to p.phoneNumber.isNotBlank(),
-        "ID verification" to (p.verificationLevel >= 2)
+        "Family values" to p.familyValues.isNotBlank(),
+        "Diet" to p.diet.isNotBlank(),
+        "Country" to p.countryOfResidence.isNotBlank(),
+        "Income band" to p.incomeBand.isNotBlank(),
+        "Employer" to p.employer.isNotBlank(),
+        "Family details" to p.aboutFamily.isNotBlank(),
+        "Languages" to p.spokenLanguages.isNotEmpty()
     )
+
 }
