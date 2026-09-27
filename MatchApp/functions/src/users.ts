@@ -25,6 +25,7 @@ export const onUserCreate = functions.firestore
       matrimonyId,
       verificationLevel: 1,
       subscriptionPlan: "FREE",
+      profileRevision: Number(snap.data()?.profileRevision || 0),
     });
 
     await db.collection("profileAnalytics").doc(uid).set({
