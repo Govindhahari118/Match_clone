@@ -57,7 +57,7 @@ class MatchDatabaseMigrationTest {
     @Test
     fun migrationChainIsContiguousAndDeclaresTheSupportedBoundary() {
         assertEquals(13, Migrations.OLDEST_SUPPORTED_VERSION)
-        assertEquals(22, Migrations.CURRENT_VERSION)
+        assertEquals(23, Migrations.CURRENT_VERSION)
         assertEquals(
             Migrations.CURRENT_VERSION - Migrations.OLDEST_SUPPORTED_VERSION,
             Migrations.ALL.size
@@ -128,7 +128,8 @@ class MatchDatabaseMigrationTest {
             "username",
             "faithTradition",
             "faithSubTradition",
-            "faithInstitution"
+            "faithInstitution",
+            "profileRevision"
         ).forEach { column ->
             assertTrue("users." + column + " missing after migration", column in userColumns)
         }
