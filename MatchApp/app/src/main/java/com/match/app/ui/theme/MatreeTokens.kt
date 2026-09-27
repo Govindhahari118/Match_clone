@@ -37,9 +37,13 @@ data class MatreeSizes(
     val iconSmall: Dp = 16.dp,
     val icon: Dp = 24.dp,
     val iconLarge: Dp = 32.dp,
+    val avatarSmall: Dp = 40.dp,
     val avatarCompact: Dp = 56.dp,
     val avatarStandard: Dp = 76.dp,
     val avatarHero: Dp = 104.dp,
+    val chatBubbleMaxWidth: Dp = 300.dp,
+    val chatMediaMaxWidth: Dp = 240.dp,
+    val chatMediaMaxHeight: Dp = 320.dp,
     val bottomNavigation: Dp = 80.dp
 )
 
