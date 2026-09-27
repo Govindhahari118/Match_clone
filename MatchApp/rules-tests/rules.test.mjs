@@ -108,6 +108,10 @@ test('clients cannot grant themselves premium or verification', async () => {
   await assertFails(updateDoc(doc(db, 'users/alice'), { isPremium: true }));
   await assertFails(updateDoc(doc(db, 'users/alice'), { isVerified: true }));
   await assertFails(updateDoc(doc(db, 'users/alice'), { verificationLevel: 5 }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), { profileCompleteness: 1 }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    profileCompletenessUpdatedAt: Date.now(),
+  }));
 });
 
 test('profile deletion must go through the server account-erasure workflow', async () => {
