@@ -32,9 +32,13 @@ class ChatRepository @Inject constructor(
 ) {
     companion object { private const val MAX_PLAINTEXT_LENGTH = 3000 }
 
-    /** Local Room copies are encrypted at rest with a device-local Android Keystore key. */
+    /**
+     * New local Room copies use versioned Android-Keystore-backed ciphertext. Historical rows that
+     * predate the storage prefix remain readable: encrypted legacy rows are decrypted, while old
+     * plaintext rows are displayed only for migration compatibility and are never created anew.
+     */
     fun thread(me: Long, peer: Long): Flow<List<MessageEntity>> = dao.observeThread(me, peer).map { list ->
-        list.map { msg -> ChatCrypto.decrypt(msg.body)?.let { msg.copy(body = it) } ?: msg }
+        list.map { msg -> ChatCrypto.decryptFromStorage(msg.body)?.let { msg.copy(body = it) } ?: msg }
     }
     fun unread(me: Long): Flow<Int> = dao.observeUnread(me)
 
@@ -45,7 +49,7 @@ class ChatRepository @Inject constructor(
         val trimmed = body.trim()
         if (trimmed.isEmpty() || trimmed.length > MAX_PLAINTEXT_LENGTH) return@withContext
         val clientId = UUID.randomUUID().toString().replace("-", "_")
-        val encrypted = ChatCrypto.encrypt(trimmed) ?: trimmed
+        val encrypted = protectBody(trimmed)
         val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "TEXT", trimmed, "", 0)
     }
@@ -54,14 +58,14 @@ class ChatRepository @Inject constructor(
         require(durationMs in 500..5 * 60 * 1000L) { "Invalid voice duration" }
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(voiceUri, clientId, "m4a")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Voice message", voiceUri = persisted, voiceDurationMs = durationMs, clientMessageId = clientId, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = protectBody("Voice message"), voiceUri = persisted, voiceDurationMs = durationMs, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "VOICE", "Voice message", persisted, durationMs)
     }
 
     suspend fun sendImage(me: Long, peer: Long, imageUri: String) = withContext(Dispatchers.IO) {
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(imageUri, clientId, "jpg")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Image", imageUri = persisted, clientMessageId = clientId, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = protectBody("Image"), imageUri = persisted, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "IMAGE", "Image", persisted, 0)
     }
 
@@ -98,9 +102,14 @@ class ChatRepository @Inject constructor(
 
     private suspend fun queue(me: Long, peer: Long, localId: Long, clientId: String, type: String, body: String, mediaUri: String, durationMs: Long) {
         dao.updateStatus(localId, "failed")
-        pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = body, localMessageId = localId, clientMessageId = clientId, type = type, mediaUri = mediaUri, durationMs = durationMs))
+        val protectedBody = protectBody(body)
+        pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = protectedBody, localMessageId = localId, clientMessageId = clientId, type = type, mediaUri = mediaUri, durationMs = durationMs))
         MessageRetryWorker.enqueue(context)
     }
+
+    private fun protectBody(plaintext: String): String =
+        ChatCrypto.encryptForStorage(plaintext)
+            ?: throw IllegalStateException("Secure local message storage is unavailable")
 
     private fun persistOutboxMedia(source: String, clientId: String, ext: String): String {
         val dir = File(context.filesDir, "chat_outbox").apply { mkdirs() }
@@ -169,11 +178,7 @@ class ChatRepository @Inject constructor(
                     val imageLocal = remote.imageUri?.let { storage.downloadChatMedia(it).getOrNull() }
                     if (remote.voiceUri != null && voiceLocal == null) return@forEach
                     if (remote.imageUri != null && imageLocal == null) return@forEach
-                    val localBody = if (remote.voiceUri == null && remote.imageUri == null) {
-                        ChatCrypto.encrypt(remote.body) ?: remote.body
-                    } else {
-                        remote.body
-                    }
+                    val localBody = ChatCrypto.encryptForStorage(remote.body) ?: return@forEach
                     dao.insert(
                         MessageEntity(
                             fromUserId = peer,
