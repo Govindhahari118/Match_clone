@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { declinedInterestAllowsNewRequest } from "./interestPolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -66,6 +67,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       targetSnap,
       outgoingSnap,
       reverseSnap,
+      responseSnap,
       usageSnap,
       senderBlock,
       targetBlock,
@@ -76,6 +78,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(targetRef),
       tx.get(outgoingRef),
       tx.get(reverseRef),
+      tx.get(responseRef),
       tx.get(usageRef),
       tx.get(senderBlockRef),
       tx.get(targetBlockRef),
@@ -99,6 +102,13 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
+    }
+
+    if (!declinedInterestAllowsNewRequest(responseSnap.data()?.status, reverseSnap.exists)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Interest cannot be sent to this member"
+      );
     }
 
     if (outgoingSnap.exists) {
