@@ -276,156 +276,135 @@ fun PrivacyDashboardScreen(
             )
 
             MatreeInfoCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.CurrencyRupee, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
-                        Column {
-                            Text("Income visibility", fontWeight = FontWeight.SemiBold)
-                            Text("Choose whether your income band is shown through permitted profile views.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.CurrencyRupee, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column {
+                        Text("Income visibility", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Choose whether your income band is shown through permitted profile views.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    val current = user?.incomeDisclosure ?: "range"
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("range" to "Show range", "hidden" to "Hide").forEach { (value, label) ->
-                            MatreeChoiceChip(
-                                text = label,
-                                selected = current.equals(value, true),
-                                onClick = { vm.setIncomeDisclosure(value) },
-                                enabled = user != null && !saving
-                            )
-                        }
+                }
+                val current = user?.incomeDisclosure ?: "range"
+                Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    listOf("range" to "Show range", "hidden" to "Hide").forEach { (value, label) ->
+                        MatreeChoiceChip(
+                            text = label,
+                            selected = current.equals(value, true),
+                            onClick = { vm.setIncomeDisclosure(value) },
+                            enabled = user != null && !saving
+                        )
                     }
                 }
             }
 
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.PhoneLocked, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Who can reveal my contact?", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Contact access always requires a mutual match and server authorization. Selected people lets you grant phone/WhatsApp access member by member.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+            MatreeInfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.PhoneLocked, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Who can reveal my contact?", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Contact access always requires a mutual match and server authorization. Selected people lets you grant phone/WhatsApp access member by member.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    ContactVisibility.entries.forEach { option ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = contactVisibility == option,
-                                onClick = { vm.setContactVisibility(option) },
-                                enabled = !saving
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                when (option) {
-                                    ContactVisibility.MUTUAL_MATCHES -> "All mutual matches"
-                                    ContactVisibility.SELECTED_PEOPLE -> "Selected people only"
-                                    ContactVisibility.NOBODY -> "Nobody"
-                                }
-                            )
-                        }
+                }
+                ContactVisibility.entries.forEach { option ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = contactVisibility == option,
+                            onClick = { vm.setContactVisibility(option) },
+                            enabled = !saving
+                        )
+                        Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                        Text(
+                            when (option) {
+                                ContactVisibility.MUTUAL_MATCHES -> "All mutual matches"
+                                ContactVisibility.SELECTED_PEOPLE -> "Selected people only"
+                                ContactVisibility.NOBODY -> "Nobody"
+                            }
+                        )
                     }
-                    if (contactVisibility == ContactVisibility.SELECTED_PEOPLE) {
-                        FilledTonalButton(
-                            onClick = { manageVisibility = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Filled.Contacts, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Choose people & contact methods")
-                        }
-                    }
+                }
+                if (contactVisibility == ContactVisibility.SELECTED_PEOPLE) {
+                    MatreeSecondaryButton(
+                        text = "Choose people & contact methods",
+                        icon = Icons.Filled.Contacts,
+                        onClick = { manageVisibility = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
             val profileHiddenCount = members.count { it.profileHidden }
             val contactHiddenCount = members.count { it.contactHidden }
             val selectedContactCount = members.count { it.phoneGranted || it.whatsappGranted }
-            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.PersonOff, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Member-specific privacy", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "$profileHiddenCount profile exceptions • $contactHiddenCount contact exceptions • $selectedContactCount selected contact grants",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Text(
-                        "Selected members can be hidden from your profile/contact, or explicitly granted phone/WhatsApp access when Selected people mode is active. Blocking remains a stronger two-way interaction boundary.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(
-                        onClick = { manageVisibility = true },
-                        modifier = Modifier.fillMaxWidth().testTag("manage_visibility_exceptions")
-                    ) {
-                        Icon(Icons.Filled.ManageAccounts, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Manage member privacy")
+            MatreeInfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.PersonOff, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Member-specific privacy", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "$profileHiddenCount profile exceptions • $contactHiddenCount contact exceptions • $selectedContactCount selected contact grants",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
+                Text(
+                    "Selected members can be hidden from your profile/contact, or explicitly granted phone/WhatsApp access when Selected people mode is active. Blocking remains a stronger two-way interaction boundary.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MatreePrimaryButton(
+                    text = "Manage member privacy",
+                    icon = Icons.Filled.ManageAccounts,
+                    onClick = { manageVisibility = true },
+                    modifier = Modifier.fillMaxWidth().testTag("manage_visibility_exceptions")
+                )
             }
 
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Profile photos", fontWeight = FontWeight.SemiBold)
-                    }
-                    Text(
-                        "Profile photos follow profile visibility. A member excluded from your profile cannot fetch protected profile media through the app.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            MatreeInlineNotice(
+                message = "Profile photos follow profile visibility. A member excluded from your profile cannot fetch protected profile media through the app.",
+                icon = Icons.Filled.PhotoCamera
+            )
 
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Block, null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Block & report", fontWeight = FontWeight.SemiBold)
-                    }
-                    Text(
-                        "Blocking closes profile, interest, match and chat access. Privacy exceptions only control what that member can see.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            MatreeInlineNotice(
+                message = "Blocking closes profile, interest, match and chat access. Privacy exceptions only control what that member can see.",
+                icon = Icons.Filled.Block,
+                tone = MatreeStatusTone.WARNING
+            )
 
             HorizontalDivider()
             Text("Account data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Account deletion is available in Settings. The authenticated deletion flow removes server data before the local session is cleared.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.ManageAccounts, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Open account settings")
+            MatreeInfoCard {
+                Text(
+                    "Account deletion is available in Settings. The authenticated deletion flow removes server data before the local session is cleared.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MatreeSecondaryButton(
+                    text = "Open account settings",
+                    icon = Icons.Filled.ManageAccounts,
+                    onClick = onGoSettings,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             if (saving) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Saving privacy setting…", style = MaterialTheme.typography.bodySmall)
-                }
+                MatreeInlineNotice(
+                    message = "Saving privacy setting…",
+                    icon = Icons.Filled.Sync,
+                    tone = MatreeStatusTone.NEUTRAL
+                )
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xl))
         }
     }
 }
@@ -439,22 +418,28 @@ private fun ActivityVisibilityCard(
     enabled: Boolean,
     onSelected: (ActivityVisibility) -> Unit
 ) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(title, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            ActivityVisibility.entries.forEach { option ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = selected == option, onClick = { onSelected(option) }, enabled = enabled)
-                    Spacer(Modifier.width(6.dp))
-                    Text(option.label, style = MaterialTheme.typography.bodyMedium)
-                }
+        }
+        ActivityVisibility.entries.forEach { option ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = selected == option,
+                    onClick = { onSelected(option) },
+                    enabled = enabled
+                )
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(option.label, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -561,15 +546,19 @@ private fun PrivacyToggleCard(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
             Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
         }
     }
