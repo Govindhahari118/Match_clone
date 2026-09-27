@@ -224,7 +224,7 @@ test('chat thread requires server-created mutual interests and stops after a blo
 
   await seedInterest('bob', 'alice');
   await assertSucceeds(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-  await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m1'), {
+  await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0001'), {
     body: 'hello', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
     voiceUri: null, imageUri: null, voiceDurationMs: null,
@@ -235,7 +235,7 @@ test('chat thread requires server-created mutual interests and stops after a blo
       blockedUid: 'alice', blockedAt: Date.now(),
     });
   });
-  await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/m2'), {
+  await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0002'), {
     body: 'blocked', sentAt: Date.now(), isRead: false,
     fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
     voiceUri: null, imageUri: null, voiceDurationMs: null,
