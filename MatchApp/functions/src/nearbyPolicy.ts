@@ -1,11 +1,12 @@
+import { accountIsActive } from "./accountStatusPolicy";
+
 export function nearbyAccountIsActive(accountStatus: unknown): boolean {
-  const status = typeof accountStatus === "string" ? accountStatus.trim().toUpperCase() : "";
-  return status === "" || status === "ACTIVE";
+  return accountIsActive(accountStatus);
 }
 
 export function nearbyAccountIsDiscoverable(
   accountStatus: unknown,
   stealthMode: unknown
 ): boolean {
-  return nearbyAccountIsActive(accountStatus) && stealthMode !== true;
+  return accountIsActive(accountStatus) && stealthMode !== true;
 }
