@@ -119,27 +119,38 @@ jobs:
             "emulator" \
             "platforms;android-36" \
             "build-tools;36.0.0" \
-            "system-images;android-35;google_apis;x86_64"
+            "system-images;android-30;google_apis;x86_64"
       - name: Run supported Room upgrades on emulator
         shell: bash
         run: |
           set -euo pipefail
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
             --force \
-            --name matree-ci-api35 \
-            --package "system-images;android-35;google_apis;x86_64"
+            --name matree-ci-api30 \
+            --package "system-images;android-30;google_apis;x86_64"
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm || true; fi
           "$ANDROID_HOME/emulator/emulator" \
-            -avd matree-ci-api35 \
+            -avd matree-ci-api30 \
             -no-window \
             -no-audio \
             -no-boot-anim \
             -no-snapshot \
+            -accel on \
             -gpu swiftshader_indirect \
+            -cores 2 \
+            -memory 2048 \
             -camera-back none \
             -camera-front none >/tmp/matree-emulator.log 2>&1 &
           ADB="$ANDROID_HOME/platform-tools/adb"
-          "$ADB" wait-for-device
-          timeout 240 bash -c 'until [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done'
+          if ! timeout 120 "$ADB" wait-for-device; then
+            cat /tmp/matree-emulator.log || true
+            exit 1
+          fi
+          if ! timeout 180 bash -c 'until [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 5; done'; then
+            cat /tmp/matree-emulator.log || true
+            "$ADB" devices -l || true
+            exit 1
+          fi
           "$ADB" shell input keyevent 82 || true
           ./gradlew --no-daemon connectedDebugAndroidTest \
             -Pandroid.testInstrumentationRunnerArguments.class=com.match.app.data.local.MatchDatabaseMigrationTest
