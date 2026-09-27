@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { declinedInterestAllowsNewRequest } from "./interestPolicy";
+import { accountIsActive } from "./accountStatusPolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -97,6 +98,12 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
 
     const sender = senderSnap.data() || {};
     const target = targetSnap.data() || {};
+    if (!accountIsActive(sender.accountStatus) || !accountIsActive(target.accountStatus)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Interest is unavailable while an account is not active"
+      );
+    }
     if (!genderCompatible(sender, target)) {
       throw new functions.https.HttpsError("failed-precondition", "This profile is outside mutual partner preferences");
     }
