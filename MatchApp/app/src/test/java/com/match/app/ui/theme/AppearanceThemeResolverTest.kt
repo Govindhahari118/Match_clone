@@ -1,10 +1,25 @@
 package com.match.app.ui.theme
 
+import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.ThemePreference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppearanceThemeResolverTest {
+
+    @Test
+    fun `system display mode follows device without changing theme family`() {
+        assertTrue(AppearanceThemeResolver.resolveDarkMode(DisplayMode.SYSTEM, systemDark = true))
+        assertFalse(AppearanceThemeResolver.resolveDarkMode(DisplayMode.SYSTEM, systemDark = false))
+    }
+
+    @Test
+    fun `explicit display modes ignore device dark setting`() {
+        assertFalse(AppearanceThemeResolver.resolveDarkMode(DisplayMode.LIGHT, systemDark = true))
+        assertTrue(AppearanceThemeResolver.resolveDarkMode(DisplayMode.DARK, systemDark = false))
+    }
 
     @Test
     fun `automatic theme follows canonical profile religion`() {
