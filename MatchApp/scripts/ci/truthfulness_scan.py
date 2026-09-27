@@ -20,6 +20,23 @@ I18N_LEGACY_RULES = [
     ("corrupted UTF-8/mojibake", re.compile(r"â‚¹|â€”|â†[‘’“”]|Â©|Ã°|Å¸|Â")),
 ]
 
+# These surfaces are explicitly HIDDEN/UNAVAILABLE in the production route inventory. Their source
+# files may remain for future audited promotion, but the production shell/deep-link resolver must not
+# expose them accidentally.
+PRODUCTION_ROUTE_SURFACES = {
+    ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app" / "ui" / "main" / "MainShell.kt",
+    ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app" / "navigation" / "DeepLinkRouteResolver.kt",
+}
+HIDDEN_ROUTE_IDENTIFIERS = [
+    "AIInsights", "ProfileAnalytics", "AssistedMatchmaking", "BackgroundCheck",
+    "BioGenerator", "BoostScreen", "Circles", "CommunityBrowse", "Counselling",
+    "CompatibilityDeepDive", "SwipeDiscovery", "EventsScreen", "FamilyPortal",
+    "GuidesScreen", "AdvancedHoroscope", "LikesScreen", "VirtualMeet", "Muhurat",
+    "NriDiscovery", "PhotoEditor", "Referral", "Regions", "DailyRewards",
+    "SafetyCenter", "SecondMarriage", "SecureCall", "SuccessStories", "Testimonials",
+    "RelationshipTimeline", "VideoProfile", "WeddingPlanner",
+]
+
 
 def source_files():
     for root in SCAN_ROOTS:
@@ -52,6 +69,14 @@ def main() -> int:
                     findings.append(
                         f"{path.relative_to(ROOT)}:{line_no}: interactive empty onClick: {line.strip()}"
                     )
+
+            if path in PRODUCTION_ROUTE_SURFACES:
+                for identifier in HIDDEN_ROUTE_IDENTIFIERS:
+                    if identifier in line:
+                        findings.append(
+                            f"{path.relative_to(ROOT)}:{line_no}: hidden production route exposure "
+                            f"({identifier}): {line.strip()}"
+                        )
 
     if findings:
         print("Production integrity scan FAILED")
