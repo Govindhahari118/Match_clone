@@ -55,38 +55,12 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   }
 
   const matchId = [uid, targetUid].sort().join("_");
-  const [outgoingBlock, incomingBlock, requesterRelation, targetRelation, targetSettings, contactGrant] = await Promise.all([
-    db.collection("blocks").doc(uid).collection("blocked").doc(targetUid).get(),
-    db.collection("blocks").doc(targetUid).collection("blocked").doc(uid).get(),
-    relationRef(uid, targetUid).get(),
-    relationRef(targetUid, uid).get(),
-    db.collection("privacySettings").doc(targetUid).get(),
-    grantRef(targetUid, uid).get(),
-  ]);
-
-  if (outgoingBlock.exists || incomingBlock.exists) {
-    throw new functions.https.HttpsError("permission-denied", "Contact is unavailable for this member");
-  }
-  if (requesterRelation.data()?.profileHidden === true || targetRelation.data()?.profileHidden === true) {
-    throw new functions.https.HttpsError("permission-denied", "Contact is unavailable while profile visibility is restricted");
-  }
-  if (targetRelation.data()?.contactHidden === true) {
-    throw new functions.https.HttpsError("permission-denied", "This member has hidden their contact from you");
-  }
-
-  const visibility = String(targetSettings.data()?.contactVisibility || "selected_people");
-  if (visibility === "nobody") {
-    throw new functions.https.HttpsError("permission-denied", "This member is not sharing contact details");
-  }
-  if (visibility === "selected_people") {
-    const grant = contactGrant.data() || {};
-    const allowed = contactType === "whatsapp" ? grant.whatsappAllowed === true : grant.phoneAllowed === true;
-    if (!contactGrant.exists || !allowed) {
-      throw new functions.https.HttpsError("permission-denied", "This member has not shared this contact method with you");
-    }
-  } else if (visibility !== "mutual_matches") {
-    throw new functions.https.HttpsError("permission-denied", "This member's contact privacy setting is unavailable");
-  }
+  const outgoingBlockRef = db.collection("blocks").doc(uid).collection("blocked").doc(targetUid);
+  const incomingBlockRef = db.collection("blocks").doc(targetUid).collection("blocked").doc(uid);
+  const requesterRelationRef = relationRef(uid, targetUid);
+  const targetRelationRef = relationRef(targetUid, uid);
+  const targetSettingsRef = db.collection("privacySettings").doc(targetUid);
+  const contactGrantRef = grantRef(targetUid, uid);
 
   const userRef = db.collection("users").doc(uid);
   const targetRef = db.collection("users").doc(targetUid);
@@ -95,8 +69,30 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   const usageRef = db.collection("subscriptions").doc(uid).collection("usage").doc("current");
 
   return db.runTransaction(async (tx) => {
-    const [userSnap, targetSnap, targetPrivateSnap, matchSnap, usageSnap] = await Promise.all([
-      tx.get(userRef), tx.get(targetRef), tx.get(privateRef), tx.get(matchRef), tx.get(usageRef),
+    const [
+      userSnap,
+      targetSnap,
+      targetPrivateSnap,
+      matchSnap,
+      usageSnap,
+      outgoingBlock,
+      incomingBlock,
+      requesterRelation,
+      targetRelation,
+      targetSettings,
+      contactGrant,
+    ] = await Promise.all([
+      tx.get(userRef),
+      tx.get(targetRef),
+      tx.get(privateRef),
+      tx.get(matchRef),
+      tx.get(usageRef),
+      tx.get(outgoingBlockRef),
+      tx.get(incomingBlockRef),
+      tx.get(requesterRelationRef),
+      tx.get(targetRelationRef),
+      tx.get(targetSettingsRef),
+      tx.get(contactGrantRef),
     ]);
     if (!userSnap.exists) throw new functions.https.HttpsError("not-found", "User profile not found");
     if (!targetSnap.exists) throw new functions.https.HttpsError("not-found", "Target profile not found");
@@ -107,6 +103,37 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError("failed-precondition", "Contact is unavailable while an account is not active");
     }
     if (!matchSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    if (outgoingBlock.exists || incomingBlock.exists) {
+      throw new functions.https.HttpsError("permission-denied", "Contact is unavailable for this member");
+    }
+    if (requesterRelation.data()?.profileHidden === true || targetRelation.data()?.profileHidden === true) {
+      throw new functions.https.HttpsError("permission-denied", "Contact is unavailable while profile visibility is restricted");
+    }
+    if (targetRelation.data()?.contactHidden === true) {
+      throw new functions.https.HttpsError("permission-denied", "This member has hidden their contact from you");
+    }
+
+    const visibility = String(targetSettings.data()?.contactVisibility || "selected_people");
+    if (visibility === "nobody") {
+      throw new functions.https.HttpsError("permission-denied", "This member is not sharing contact details");
+    }
+    if (visibility === "selected_people") {
+      const grantData = contactGrant.data() || {};
+      const allowed = contactType === "whatsapp" ?
+        grantData.whatsappAllowed === true :
+        grantData.phoneAllowed === true;
+      if (!contactGrant.exists || !allowed) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This member has not shared this contact method with you"
+        );
+      }
+    } else if (visibility !== "mutual_matches") {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This member's contact privacy setting is unavailable"
+      );
+    }
 
     const user = userSnap.data() || {};
     const planId = String(user.subscriptionPlan || user.premiumPlan || "FREE");
