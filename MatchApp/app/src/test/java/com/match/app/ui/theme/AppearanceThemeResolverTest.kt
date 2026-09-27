@@ -24,6 +24,18 @@ class AppearanceThemeResolverTest {
     }
 
     @Test
+    fun `legacy unsupported manual palette falls back to Matree Neutral`() {
+        assertEquals(
+            AppPalette.VIVAH,
+            AppearanceThemeResolver.resolve(ThemePreference.MANUAL, "OCEAN", "Hindu")
+        )
+        assertEquals(
+            AppPalette.VIVAH,
+            AppearanceThemeResolver.resolve(ThemePreference.MANUAL, "TELUGU", "Muslim")
+        )
+    }
+
+    @Test
     fun `automatic theme never invents a religion for missing or other profile value`() {
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", null))
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", ""))
