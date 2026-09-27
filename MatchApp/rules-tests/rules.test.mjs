@@ -120,6 +120,10 @@ test('clients cannot grant themselves premium or verification', async () => {
     profileViewCount: 999999,
     profileRevision: 1,
   }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    createdAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    profileRevision: 1,
+  }));
 });
 
 test('clients cannot create a public global compatibility score', async () => {
@@ -140,6 +144,17 @@ test('clients cannot create a public profile view counter', async () => {
     displayName: 'Dana',
     religion: '',
     profileViewCount: 123,
+    profileRevision: 0,
+  }));
+});
+
+test('clients cannot choose public profile creation time', async () => {
+  const db = env.authenticatedContext('erin').firestore();
+  await assertFails(setDoc(doc(db, 'users/erin'), {
+    firebaseUid: 'erin',
+    displayName: 'Erin',
+    religion: '',
+    createdAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
     profileRevision: 0,
   }));
 });
