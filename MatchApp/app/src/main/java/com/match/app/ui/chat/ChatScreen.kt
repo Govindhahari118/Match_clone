@@ -113,9 +113,16 @@ class ChatViewModel @Inject constructor(
         val peer = peerIdFlow.value ?: return@launch
         val trimmed = body.trim()
         if (trimmed.isBlank()) return@launch
-        chat.send(me, peer, trimmed, _state.value.replyingTo?.id)
-        _state.update { it.copy(replyingTo = null, error = null) }
-        analytics.logMessageSent()
+        runCatching { chat.send(me, peer, trimmed, _state.value.replyingTo?.id) }
+            .onSuccess {
+                _state.update { it.copy(replyingTo = null, error = null) }
+                analytics.logMessageSent()
+            }
+            .onFailure { error ->
+                _state.update {
+                    it.copy(error = error.message ?: "Message could not be stored securely.")
+                }
+            }
     }
 
     fun sendImage(uri: String) = viewModelScope.launch {
