@@ -166,6 +166,64 @@ export const migrateLegacyPublicVisibilityFields = functions.pubsub
   });
 
 
+/**
+ * Removes obsolete global compatibility values. Compatibility is viewer/candidate-specific and is
+ * recomputed from current inputs; a single public profile-level score is neither authoritative nor
+ * meaningful across viewers.
+ */
+export const migrateLegacyDerivedProfileFields = functions.pubsub
+  .schedule("45 4 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("derivedProfileFieldsV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    const batch = db.batch();
+    let migrated = 0;
+    for (const doc of page.docs) {
+      if (doc.data().matchScore !== undefined) {
+        batch.update(doc.ref, {
+          matchScore: admin.firestore.FieldValue.delete(),
+          profileRevision: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        migrated += 1;
+      }
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    batch.set(stateRef, {
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migrated: admin.firestore.FieldValue.increment(migrated),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    functions.logger.info("Legacy derived profile field migration page completed", {
+      scanned: page.size,
+      migrated,
+      cursor: lastId,
+    });
+    return null;
+  });
+
 const PROTECTED_MEDIA_FIELDS = ["photoUrl", "videoUrl", "voiceBioUrl"] as const;
 
 /**
