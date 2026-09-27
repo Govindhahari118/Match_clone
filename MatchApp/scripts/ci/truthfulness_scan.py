@@ -37,6 +37,33 @@ HIDDEN_ROUTE_IDENTIFIERS = [
     "RelationshipTimeline", "VideoProfile", "WeddingPlanner",
 ]
 
+# Reachable v1 surfaces must consume Material/Matree semantic colors. Literal UI colors would bypass
+# religion-aware/Neutral families and can produce incorrect dark-mode contrast. Theme definitions and
+# debug previews intentionally own raw palette values and are not included here.
+_REACHABLE_UI_RELATIVE = [
+    "ui/MatchRoot.kt",
+    "ui/auth/SignInScreen.kt", "ui/auth/SignUpScreen.kt",
+    "ui/onboarding/OnboardingScreen.kt", "ui/onboarding/ProfileWizardScreen.kt",
+    "ui/main/MainShell.kt", "ui/main/HomeLauncherScreen.kt", "ui/main/HomeScreen.kt",
+    "ui/matches/MatchesScreen.kt", "ui/nearby/NearbyMatchesScreen.kt",
+    "ui/interests/InterestsScreen.kt", "ui/shortlist/ShortlistScreen.kt",
+    "ui/chat/ChatListScreen.kt", "ui/chat/ChatScreen.kt",
+    "ui/questionnaire/QuestionnaireScreen.kt",
+    "ui/profile/ProfileScreen.kt", "ui/profile/ReligionExperienceCard.kt",
+    "ui/detail/MatchDetailScreen.kt", "ui/settings/SettingsScreen.kt",
+    "ui/language/LanguageSelectionScreen.kt", "ui/notifications/NotificationsScreen.kt",
+    "ui/whoviewed/WhoViewedScreen.kt", "ui/kundli/KundliScreen.kt",
+    "ui/pricing/PricingScreen.kt", "ui/verification/VerificationScreen.kt",
+    "ui/privacy/PrivacyDashboardScreen.kt", "ui/help/HelpScreen.kt",
+    "ui/legal/LegalScreen.kt", "ui/biodata/BiodataScreen.kt",
+]
+UI_JAVA_ROOT = ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app"
+PRODUCTION_THEME_SURFACES = {UI_JAVA_ROOT / rel for rel in _REACHABLE_UI_RELATIVE}
+THEME_LITERAL_COLOR = re.compile(
+    r"(?<!android\.graphics\.)\bColor\s*\(\s*0x[0-9A-Fa-f]+|"
+    r"\bColor\.(?:White|Black|Red|Green|Blue|Yellow|Gray|DarkGray|LightGray|Magenta|Cyan)"
+)
+
 
 def source_files():
     for root in SCAN_ROOTS:
@@ -77,6 +104,12 @@ def main() -> int:
                             f"{path.relative_to(ROOT)}:{line_no}: hidden production route exposure "
                             f"({identifier}): {line.strip()}"
                         )
+
+            if path in PRODUCTION_THEME_SURFACES and THEME_LITERAL_COLOR.search(line):
+                findings.append(
+                    f"{path.relative_to(ROOT)}:{line_no}: hard-coded production UI color "
+                    f"bypasses Matree theme: {line.strip()}"
+                )
 
     if findings:
         print("Production integrity scan FAILED")
