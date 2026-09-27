@@ -154,28 +154,38 @@ fun QuestionnaireScreen(vm: QuestionnaireViewModel = hiltViewModel()) {
 @Composable
 private fun LikertRow(prompt: String, value: Int?, onChange: (Int) -> Unit) {
     MatreeInfoCard {
-            Text(prompt, style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(MatreeDesign.spacing.xs))
-            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
-                (1..5).forEach { v ->
-                    MatreeChoiceChip(text = v.toString(), selected = value == v, onClick = { onChange(v) })
-                }
-                Spacer(Modifier.weight(1f))
-                Text("1 = Low · 5 = High", style = MaterialTheme.typography.labelSmall)
+        Text(prompt, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+            (1..5).forEach { v ->
+                MatreeChoiceChip(
+                    text = v.toString(),
+                    selected = value == v,
+                    onClick = { onChange(v) }
+                )
             }
+            Spacer(Modifier.weight(1f))
+            Text("1 = Low · 5 = High", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
 @Composable
-private fun InterestRow(prompt: String, options: List<String>, chosen: Set<String>, onToggle: (String) -> Unit) {
-    Card(shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(prompt, style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(MatreeDesign.spacing.xs))
-            FlowRowPolyfill(options) { opt ->
-                MatreeChoiceChip(text = opt, selected = opt in chosen, onClick = { onToggle(opt) })
-            }
+private fun InterestRow(
+    prompt: String,
+    options: List<String>,
+    chosen: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    MatreeInfoCard {
+        Text(prompt, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        FlowRowPolyfill(options) { opt ->
+            MatreeChoiceChip(
+                text = opt,
+                selected = opt in chosen,
+                onClick = { onToggle(opt) }
+            )
         }
     }
 }
