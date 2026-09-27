@@ -533,14 +533,21 @@ export const recordProfileView = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("invalid-argument", "A valid target profile is required");
   }
 
-  const [target, viewerBlocked, targetBlocked, targetPrivacy, viewerPrivacy] = await Promise.all([
+  const [viewer, target, viewerBlocked, targetBlocked, targetPrivacy, viewerPrivacy] = await Promise.all([
+    db.collection("users").doc(viewerUid).get(),
     db.collection("users").doc(viewedUid).get(),
     db.collection("blocks").doc(viewerUid).collection("blocked").doc(viewedUid).get(),
     db.collection("blocks").doc(viewedUid).collection("blocked").doc(viewerUid).get(),
     db.collection("privacyRelations").doc(viewedUid).collection("members").doc(viewerUid).get(),
     db.collection("privacyRelations").doc(viewerUid).collection("members").doc(viewedUid).get(),
   ]);
+  if (!viewer.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
   if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+  const viewerStatus = String(viewer.data()?.accountStatus || "ACTIVE").toUpperCase();
+  const targetStatus = String(target.data()?.accountStatus || "ACTIVE").toUpperCase();
+  if (viewerStatus !== "ACTIVE" || targetStatus !== "ACTIVE") {
+    throw new functions.https.HttpsError("failed-precondition", "Profile view is unavailable while an account is not active");
+  }
   if (
     target.data()?.stealthMode === true ||
     viewerBlocked.exists ||
