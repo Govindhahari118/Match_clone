@@ -106,25 +106,34 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
     throw new functions.https.HttpsError("invalid-argument", "Choose a valid report reason");
   }
 
-  const target = await db.collection("users").doc(targetUid).get();
-  if (!target.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-
+  const targetRef = db.collection("users").doc(targetUid);
   const reportRef = db.collection("profileReports").doc(stableId(reporterUid, targetUid, dayKey()));
-  const existing = await reportRef.get();
-  if (existing.exists) return { success: true, alreadySubmitted: true };
+  const created = await db.runTransaction(async (tx) => {
+    const [target, existing] = await Promise.all([
+      tx.get(targetRef),
+      tx.get(reportRef),
+    ]);
+    if (!target.exists) {
+      throw new functions.https.HttpsError("not-found", "Profile not found");
+    }
+    if (existing.exists) return false;
 
-  await reportRef.set({
-    reporterUid,
-    targetUid,
-    reason,
-    details: details || null,
-    status: "OPEN",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    tx.create(reportRef, {
+      reporterUid,
+      targetUid,
+      reason,
+      details: details || null,
+      status: "OPEN",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
   });
 
-  functions.logger.info("Profile report submitted", { reporterUid, targetUid, reason });
-  return { success: true, alreadySubmitted: false };
+  if (created) {
+    functions.logger.info("Profile report submitted", { reporterUid, targetUid, reason });
+  }
+  return { success: true, alreadySubmitted: !created };
 });
 
 const SUPPORT_CATEGORIES = new Set([
