@@ -48,7 +48,8 @@ class FirestoreProfileService @Inject constructor(
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
-            "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision", "matchScore"
+            "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision", "matchScore",
+            "profileViewCount"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
