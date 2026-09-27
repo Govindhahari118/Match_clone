@@ -39,8 +39,13 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
-import com.match.app.ui.components.LoadingState
+import com.match.app.ui.components.MatreeActionCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProgressCard
+import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeProfileSection
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -139,9 +144,10 @@ fun ProfileScreen(
 
     val p = profile
     if (p == null) {
-        LoadingState(
-            modifier = Modifier.fillMaxSize().testTag("profile_loading"),
-            message = "Loading your profile…"
+        MatreeLoadingState(
+            modifier = Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl).testTag("profile_loading"),
+            message = "Loading your profile…",
+            rows = 3
         )
         return
     }
@@ -217,15 +223,24 @@ fun ProfileScreen(
         PhotosSection(photos, picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, vm = vm)
 
         Column(Modifier.padding(horizontal = spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
-            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
-                Icon(Icons.Filled.PrivacyTip, null); Spacer(Modifier.size(8.dp)); Text("Privacy & visibility")
-            }
-            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight)) {
-                Icon(Icons.Filled.Description, null); Spacer(Modifier.size(8.dp)); Text("View biodata")
-            }
-            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_settings")) {
-                Icon(Icons.Filled.Settings, null); Spacer(Modifier.size(8.dp)); Text("Settings")
-            }
+            MatreePrimaryButton(
+                text = "Privacy & visibility",
+                icon = Icons.Filled.PrivacyTip,
+                onClick = onGoPrivacy,
+                modifier = Modifier.fillMaxWidth()
+            )
+            MatreeSecondaryButton(
+                text = "View biodata",
+                icon = Icons.Filled.Description,
+                onClick = onGoBiodata,
+                modifier = Modifier.fillMaxWidth()
+            )
+            MatreeSecondaryButton(
+                text = "Settings",
+                icon = Icons.Filled.Settings,
+                onClick = onGoSettings,
+                modifier = Modifier.fillMaxWidth().testTag("btn_settings")
+            )
             OutlinedButton(
                 onClick = vm::signOut,
                 modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_sign_out"),
@@ -291,7 +306,10 @@ private fun ProfileHero(p: UserProfile, photos: List<PhotoEntity>) {
 
 @Composable
 private fun ProfileStats(views: Int, likes: Int, saved: Int, onViews: () -> Unit, onLikes: () -> Unit, onSaved: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+    ) {
         StatCard(Icons.Filled.Visibility, "Views", views.toString(), Modifier.weight(1f), onViews)
         StatCard(Icons.Filled.Favorite, "Interests", likes.toString(), Modifier.weight(1f), onLikes)
         StatCard(Icons.Filled.Bookmark, "Saved", saved.toString(), Modifier.weight(1f), onSaved)
@@ -300,8 +318,8 @@ private fun ProfileStats(views: Int, likes: Int, saved: Int, onViews: () -> Unit
 
 @Composable
 private fun StatCard(icon: ImageVector, label: String, value: String, modifier: Modifier, onClick: () -> Unit) {
-    ElevatedCard(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.fillMaxWidth().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    MatreeActionCard(onClick = onClick, modifier = modifier) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Text(value, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }
@@ -316,24 +334,34 @@ private fun TrustAndVerificationCard(p: UserProfile, hasPhoto: Boolean, onVerify
         "Identity verified" to p.isVerified
     )
     val complete = checks.count { it.second }
-    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+    ) {
+        MatreeProgressCard(
+            title = "Trust & verification",
+            progress = complete / checks.size.toFloat(),
+            supportingText = "Only completed server-backed checks count here.",
+            valueLabel = "$complete/${checks.size}"
+        )
+        checks.forEach { (label, done) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.size(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Trust & verification", fontWeight = FontWeight.Bold)
-                    Text("Only completed server-backed checks count here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("$complete/${checks.size}", fontWeight = FontWeight.Bold)
+                Icon(
+                    if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                    tint = if (done) MatreeDesign.colors.success else MaterialTheme.colorScheme.outline
+                )
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(label, style = MaterialTheme.typography.bodySmall)
             }
-            Spacer(Modifier.height(10.dp)); LinearProgressIndicator(progress = { complete / checks.size.toFloat() }, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(8.dp))
-            checks.forEach { (label, done) ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Icon(if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked, null, Modifier.size(16.dp), tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-                    Spacer(Modifier.size(7.dp)); Text(label, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (!p.isVerified) { Spacer(Modifier.height(8.dp)); Button(onClick = onVerify, modifier = Modifier.fillMaxWidth()) { Text("Continue verification") } }
+        }
+        if (!p.isVerified) {
+            MatreePrimaryButton(
+                text = "Continue verification",
+                onClick = onVerify,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -357,16 +385,17 @@ private fun InfoRow(icon: ImageVector, text: String) {
 
 @Composable
 private fun PhotosSection(photos: List<PhotoEntity>, picker: () -> Unit, vm: ProfileViewModel) {
-    Column(Modifier.padding(horizontal = 16.dp)) {
+    Column(Modifier.padding(horizontal = MatreeDesign.spacing.md)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Photos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = picker, modifier = Modifier.testTag("btn_add_photo")) { Icon(Icons.Filled.AddAPhoto, null, Modifier.size(16.dp)); Spacer(Modifier.size(4.dp)); Text("Add") }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
         if (photos.isEmpty()) {
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.PhotoCamera, null); Text("Add clear recent photos to improve trust.", style = MaterialTheme.typography.bodySmall) }
-            }
+            MatreeInlineNotice(
+                message = "Add clear recent photos to improve trust.",
+                icon = Icons.Filled.PhotoCamera
+            )
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
