@@ -114,6 +114,26 @@ test('clients cannot grant themselves premium or verification', async () => {
   }));
 });
 
+test('owner profile writes require the next monotonic revision', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'No revision',
+  }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    displayName: 'Alice S.',
+    profileRevision: 1,
+  }));
+  await assertFails(updateDoc(doc(db, 'users/alice'), {
+    city: 'Stale revision',
+    profileRevision: 1,
+  }));
+  await assertSucceeds(updateDoc(doc(db, 'users/alice'), {
+    city: 'Secunderabad',
+    profileRevision: 2,
+  }));
+});
+
 test('profile deletion must go through the server account-erasure workflow', async () => {
   const db = env.authenticatedContext('alice').firestore();
   await assertFails(deleteDoc(doc(db, 'users/alice')));
