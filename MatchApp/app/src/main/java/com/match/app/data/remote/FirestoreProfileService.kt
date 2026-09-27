@@ -35,7 +35,8 @@ class FirestoreProfileService @Inject constructor(
             "isPremium", "isVerified", "matrimonyId", "verificationLevel",
             "subscriptionPlan", "subscriptionExpiry", "premiumPlan", "premiumUntil",
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
-            "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus"
+            "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
+            "profileCompleteness", "profileCompletenessUpdatedAt"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
@@ -279,7 +280,6 @@ class FirestoreProfileService @Inject constructor(
         "fitnessActivities" to e.fitnessActivities,
         "photoUrl" to e.photoUrl,
         "voiceBioUrl" to e.voiceBioUrl,
-        "profileCompleteness" to e.profileCompleteness,
         // stealthMode remains public because Firestore/Storage rules must be able to enforce it.
         "stealthMode" to e.stealthMode,
         "showHoroscope" to e.showHoroscope,
