@@ -96,6 +96,14 @@ test('message attachments must belong to the same thread and one media type', as
   ));
 
   await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_wrong_object_123'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/different_message_123.jpg',
+    },
+  ));
+
+  await assertFails(setDoc(
     doc(alice, 'chats/thread1/messages/client_bad_two_media'),
     {
       ...base,
@@ -148,6 +156,11 @@ test('only recipient may acknowledge delivery and read state', async () => {
   const bobMessage = doc(bob, 'chats/thread1/messages/client_1234567890');
 
   await assertFails(updateDoc(aliceMessage, { deliveredAt: serverTimestamp() }));
+  await assertFails(updateDoc(bobMessage, { readAt: serverTimestamp() }));
+  await assertFails(updateDoc(bobMessage, {
+    isRead: true,
+    readAt: serverTimestamp(),
+  }));
   await assertSucceeds(updateDoc(bobMessage, { deliveredAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(bobMessage, {
     isRead: true,
