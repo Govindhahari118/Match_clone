@@ -2,7 +2,6 @@ package com.match.app.ui.auth
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,9 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -34,7 +30,10 @@ import androidx.credentials.exceptions.NoCredentialException
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,31 +83,17 @@ fun SignInScreen(
                 .testTag("signin_screen"),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color(0xFFE91E63), Color(0xFF880E4F))))
-                    .padding(vertical = 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        Modifier.size(72.dp).clip(RoundedCornerShape(22.dp)).background(Color.White.copy(0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Filled.Favorite, null, Modifier.size(40.dp), tint = Color.White)
-                    }
-                    Text("Matree", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                    Text(
-                        t("ai_picks_for_you", "Find someone who truly fits."),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(0.85f)
-                    )
-                }
-            }
+            MatreeHero(
+                title = "Matree",
+                subtitle = t("ai_picks_for_you", "Find someone who truly fits."),
+                leadingIcon = Icons.Filled.Favorite,
+                modifier = Modifier.padding(MatreeDesign.spacing.md)
+            )
 
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 28.dp, bottom = 24.dp),
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = MatreeDesign.spacing.lg)
+                    .padding(top = MatreeDesign.spacing.lg, bottom = MatreeDesign.spacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 OutlinedTextField(
@@ -119,7 +104,7 @@ fun SignInScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth().testTag("signin_email")
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.sm))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it.take(128) },
@@ -134,15 +119,13 @@ fun SignInScreen(
                     },
                     modifier = Modifier.fillMaxWidth().testTag("signin_password")
                 )
-                Spacer(Modifier.height(24.dp))
-                Button(
+                Spacer(Modifier.height(MatreeDesign.spacing.xl))
+                MatreePrimaryButton(
+                    text = if (state.loading) "Signing in…" else t("sign_in", "Sign in"),
                     onClick = { vm.signIn(email, password) },
                     enabled = !state.loading && email.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("signin_submit")
-                ) {
-                    if (state.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else Text(t("sign_in", "Sign in"), style = MaterialTheme.typography.titleMedium)
-                }
+                    modifier = Modifier.fillMaxWidth().testTag("signin_submit")
+                )
 
                 TextButton(
                     onClick = { forgotEmail = email; showForgotDialog = true },
@@ -152,13 +135,13 @@ fun SignInScreen(
                 }
 
                 if (googleWebClientId.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(MatreeDesign.spacing.xs))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         HorizontalDivider(Modifier.weight(1f))
                         Text("  ${t("or", "OR")}  ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider(Modifier.weight(1f))
                     }
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(MatreeDesign.spacing.md))
                     OutlinedButton(
                         onClick = {
                             scope.launch {
@@ -198,11 +181,11 @@ fun SignInScreen(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.md))
                 TextButton(onClick = onGoSignUp, modifier = Modifier.fillMaxWidth().testTag("signin_go_signup")) {
                     Text(t("already_account", "New here? Create an account"))
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.xl))
             }
         }
     }
