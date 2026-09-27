@@ -271,13 +271,31 @@ export const respondContactAccess = functions.https.onCall(async (data, context)
   const requestRef = contactRequestRef(requesterUid, targetUid);
   const grant = grantRef(targetUid, requesterUid);
   return db.runTransaction(async (tx) => {
-    const [requestSnap, outgoingBlock, incomingBlock, targetSettings] = await Promise.all([
+    const [
+      targetProfile,
+      requesterProfile,
+      requestSnap,
+      outgoingBlock,
+      incomingBlock,
+      targetSettings,
+    ] = await Promise.all([
+      tx.get(db.collection("users").doc(targetUid)),
+      tx.get(db.collection("users").doc(requesterUid)),
       tx.get(requestRef),
       tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
       tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
       tx.get(db.collection("privacySettings").doc(targetUid)),
     ]);
 
+    if (!targetProfile.exists || !requesterProfile.exists) {
+      throw new functions.https.HttpsError("not-found", "Profile not found");
+    }
+    if (
+      !accountIsActive(targetProfile.data()?.accountStatus) ||
+      !accountIsActive(requesterProfile.data()?.accountStatus)
+    ) {
+      throw new functions.https.HttpsError("failed-precondition", "Contact request is unavailable while an account is not active");
+    }
     if (!requestSnap.exists || requestSnap.data()?.targetUid !== targetUid ||
         requestSnap.data()?.requesterUid !== requesterUid) {
       throw new functions.https.HttpsError("not-found", "Contact request not found");
