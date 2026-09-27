@@ -102,6 +102,45 @@ function preferenceFor(type: string): "interests" | "matches" | "messages" | "sy
   return "system";
 }
 
+async function relationshipEventStillVisible(
+  eventRef: FirebaseFirestore.DocumentReference,
+  uidA: string,
+  uidB: string
+): Promise<boolean> {
+  const [event, blockAB, blockBA, privacyAB, privacyBA] = await Promise.all([
+    eventRef.get(),
+    db.collection("blocks").doc(uidA).collection("blocked").doc(uidB).get(),
+    db.collection("blocks").doc(uidB).collection("blocked").doc(uidA).get(),
+    db.collection("privacyRelations").doc(uidA).collection("members").doc(uidB).get(),
+    db.collection("privacyRelations").doc(uidB).collection("members").doc(uidA).get(),
+  ]);
+  return event.exists &&
+    !blockAB.exists &&
+    !blockBA.exists &&
+    privacyAB.data()?.profileHidden !== true &&
+    privacyBA.data()?.profileHidden !== true;
+}
+
+async function chatNotificationStillAllowed(
+  threadId: string,
+  fromUid: string,
+  toUid: string
+): Promise<boolean> {
+  const [thread, blockAB, blockBA] = await Promise.all([
+    db.collection("chats").doc(threadId).get(),
+    db.collection("blocks").doc(fromUid).collection("blocked").doc(toUid).get(),
+    db.collection("blocks").doc(toUid).collection("blocked").doc(fromUid).get(),
+  ]);
+  const participants = thread.data()?.participantUids;
+  return thread.exists &&
+    Array.isArray(participants) &&
+    participants.length === 2 &&
+    participants.includes(fromUid) &&
+    participants.includes(toUid) &&
+    !blockAB.exists &&
+    !blockBA.exists;
+}
+
 async function deliverPersistedNotification(
   notificationId: string,
   payload: NotificationPayload,
@@ -134,6 +173,7 @@ export const onInterestCreated = functions.firestore
     const fromUid = data.fromUid as string;
     const toUid = data.toUid as string;
     if (!fromUid || !toUid) return;
+    if (!await relationshipEventStillVisible(snap.ref, fromUid, toUid)) return;
 
     await deliverPersistedNotification(
       `interest_${context.params.interestId}_${toUid}`,
@@ -159,6 +199,7 @@ export const onMatchCreated = functions.firestore
     if (!users || users.length !== 2) return;
 
     const [uid1, uid2] = users;
+    if (!await relationshipEventStillVisible(snap.ref, uid1, uid2)) return;
     await Promise.allSettled([
       deliverPersistedNotification(
         `match_${context.params.matchId}_${uid1}`,
@@ -198,6 +239,11 @@ export const onNewMessage = functions.firestore
     const fromFirebaseUid = data.fromFirebaseUid as string | undefined;
     const toFirebaseUid = data.toFirebaseUid as string | undefined;
     if (!fromFirebaseUid || !toFirebaseUid) return;
+    if (!await chatNotificationStillAllowed(
+      context.params.threadId,
+      fromFirebaseUid,
+      toFirebaseUid
+    )) return;
 
     await deliverPersistedNotification(
       `message_${context.params.threadId}_${context.params.messageId}_${toFirebaseUid}`,
