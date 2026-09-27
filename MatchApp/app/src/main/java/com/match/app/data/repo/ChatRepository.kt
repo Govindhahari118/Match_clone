@@ -95,6 +95,9 @@ class ChatRepository @Inject constructor(
             }
             firestoreChat.sendMessage(clientId, body, myUid, peerUid, voicePath, imagePath, durationMs.takeIf { it > 0 })
             dao.updateStatus(localId, "sent")
+            if (type == "IMAGE" || type == "VOICE") {
+                ChatOutboxMediaPolicy.deleteIfManaged(context.filesDir, mediaUri)
+            }
         } catch (_: Exception) {
             queue(me, peer, localId, clientId, type, body, mediaUri, durationMs)
         }
