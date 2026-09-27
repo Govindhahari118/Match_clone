@@ -62,7 +62,7 @@ data class MatchesUi(
 )
 
 enum class DiscoverySort(val label: String) {
-    BEST("Best match"), ACTIVE("Recently active"), NEWEST("Newest"), AGE_LOW("Age: low to high"), AGE_HIGH("Age: high to low")
+    BEST("Best match"), NEWEST("Newest"), AGE_LOW("Age: low to high"), AGE_HIGH("Age: high to low")
 }
 
 @HiltViewModel
@@ -207,7 +207,6 @@ fun MatchesScreen(
     val sortedItems = remember(ui.items, sort) {
         when (sort) {
             DiscoverySort.BEST -> ui.items
-            DiscoverySort.ACTIVE -> ui.items.sortedByDescending { it.user.lastActiveAt }
             DiscoverySort.NEWEST -> ui.items.sortedByDescending { it.user.createdAt }
             DiscoverySort.AGE_LOW -> ui.items.sortedBy { it.user.age }
             DiscoverySort.AGE_HIGH -> ui.items.sortedByDescending { it.user.age }
