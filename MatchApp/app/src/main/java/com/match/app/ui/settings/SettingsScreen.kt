@@ -319,9 +319,9 @@ fun SettingsScreen(
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             MatreeInfoCard {
-                Text("Matree theme", fontWeight = FontWeight.SemiBold)
+                Text("Theme", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Matree Signature is the flagship default for everyone. Religion-inspired themes are optional personal appearance choices.",
+                    "Choose a visual family for Matree. Appearance changes presentation only; it never changes identity, matching, trust or authorization.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -329,6 +329,49 @@ fun SettingsScreen(
                     message = "Current visual family: ${resolvedPalette.label}",
                     tone = MatreeStatusTone.NEUTRAL
                 )
+
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
+                    title = "Automatic",
+                    subtitle = "Follow my confirmed profile religion.",
+                    onClick = {
+                        themePreview = null
+                        vm.useAutomaticTheme()
+                    }
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
+                    title = "Matree Neutral",
+                    subtitle = "Use the universal Matree visual family.",
+                    onClick = {
+                        themePreview = null
+                        vm.useNeutralTheme()
+                    }
+                )
+
+                HorizontalDivider()
+                Text("Manual", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Choose any supported visual family independently of your profile religion. Tap a family to preview it, then apply it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    manualReligionPalettes.forEach { palette ->
+                        MatreeChoiceChip(
+                            text = palette.label,
+                            selected = themePreview == palette || (
+                                themePreview == null &&
+                                    appearance.themePreference == ThemePreference.MANUAL &&
+                                    currentPalette == palette
+                            ),
+                            onClick = { themePreview = palette }
+                        )
+                    }
+                }
 
                 MatreeThemeFamilyPreviewCard(
                     palette = previewPalette,
@@ -362,50 +405,9 @@ fun SettingsScreen(
                     }
                 }
 
-                AppearanceChoiceRow(
-                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
-                    title = "Matree Signature",
-                    subtitle = "Premium universal matrimonial design — the default for every user",
-                    onClick = {
-                        themePreview = null
-                        vm.useNeutralTheme()
-                    }
-                )
-
-                HorizontalDivider()
-                Text("Religion-inspired themes (optional)", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Choose one only if you personally prefer its visual style. Theme choice never changes your religion, profile, matches, recommendations, privacy, verification or pricing.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
-                ) {
-                    manualReligionPalettes.forEach { palette ->
-                        MatreeChoiceChip(
-                            text = palette.label,
-                            selected = themePreview == palette || (
-                                themePreview == null &&
-                                    appearance.themePreference == ThemePreference.MANUAL &&
-                                    currentPalette == palette
-                            ),
-                            onClick = { themePreview = palette }
-                        )
-                    }
-                }
-
-                AppearanceChoiceRow(
-                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
-                    title = "Match my profile religion",
-                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
-                        "Optional automatic mode — use the $it visual family when supported"
-                    } ?: "Optional automatic mode — Signature remains active until a supported profile religion is available",
-                    onClick = {
-                        themePreview = null
-                        vm.useAutomaticTheme()
-                    }
+                MatreeInlineNotice(
+                    message = "Changing visual theme does not change your profile religion.",
+                    tone = MatreeStatusTone.NEUTRAL
                 )
 
                 HorizontalDivider()
