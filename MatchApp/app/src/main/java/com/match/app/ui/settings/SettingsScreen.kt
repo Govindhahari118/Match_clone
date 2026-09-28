@@ -38,6 +38,7 @@ import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.components.MatreeThemeFamilyPreviewCard
 import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatreeDesign
@@ -323,6 +324,11 @@ fun SettingsScreen(
                 MatreeInlineNotice(
                     message = "Current visual family: ${resolvedPalette.label}",
                     tone = MatreeStatusTone.NEUTRAL
+                )
+
+                MatreeThemeFamilyPreviewCard(
+                    palette = resolvedPalette,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 AppearanceChoiceRow(
