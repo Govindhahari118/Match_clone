@@ -9,8 +9,8 @@ enum class ThemePreference(val storageKey: String) {
     companion object {
         /**
          * The old "AUTOMATIC" value was previously also the product default, so it cannot prove
-         * explicit consent to a religion-derived visual theme. Under the Signature-first contract
-         * it safely migrates to NEUTRAL. New explicit opt-in is persisted as PROFILE_RELIGION.
+         * explicit consent to a religion-derived visual theme. Under the Neutral-first contract
+         * it safely migrates to NEUTRAL. New explicit Automatic selection is persisted as PROFILE_RELIGION.
          */
         fun fromStorage(value: String?): ThemePreference = when (value.orEmpty().trim().uppercase()) {
             "PROFILE_RELIGION" -> AUTOMATIC
