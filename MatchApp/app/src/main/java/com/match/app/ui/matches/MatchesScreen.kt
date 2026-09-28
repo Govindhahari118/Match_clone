@@ -304,9 +304,11 @@ fun MatchesScreen(
                         icon = Icons.Filled.SearchOff,
                         primaryActionLabel = emptyState.actionLabel,
                         onPrimaryAction = when (emptyState.action) {
-                            DiscoveryEmptyState.Action.RESET -> vm::clearFilters
+                            DiscoveryEmptyState.Action.RESET -> {
+                                { vm.clearFilters(); Unit }
+                            }
                             DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO -> {
-                                { vm.setFilter(ui.filter.copy(withPhotoOnly = false)) }
+                                { vm.setFilter(ui.filter.copy(withPhotoOnly = false)); Unit }
                             }
                             DiscoveryEmptyState.Action.NONE -> null
                         }
