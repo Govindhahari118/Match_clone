@@ -17,10 +17,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,21 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 
+data class BiodataShareOptions(
+    val includeCommunity: Boolean = false,
+    val includeIncome: Boolean = false,
+    val includeAstrology: Boolean = false,
+    val includeFamily: Boolean = false,
+    val includeAboutMe: Boolean = false
+)
+
+data class BiodataPdfColors(
+    val title: Int,
+    val header: Int,
+    val body: Int,
+    val divider: Int
+)
+
 @HiltViewModel
 class BiodataViewModel @Inject constructor(
     private val session: SessionStore,
@@ -58,7 +75,13 @@ class BiodataViewModel @Inject constructor(
         .map { id -> id?.let { auth.currentProfile(it) } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    fun exportPdf(context: Context, p: UserProfile, templateName: String): File {
+    fun exportPdf(
+        context: Context,
+        p: UserProfile,
+        templateName: String,
+        options: BiodataShareOptions,
+        colors: BiodataPdfColors
+    ): File {
         val pdfDoc = PdfDocument()
         val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
         val page = pdfDoc.startPage(pageInfo)
@@ -67,19 +90,19 @@ class BiodataViewModel @Inject constructor(
         val titlePaint = Paint().apply {
             textSize = 22f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = android.graphics.Color.rgb(139, 26, 26)
+            color = colors.title
         }
         val headerPaint = Paint().apply {
             textSize = 14f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = android.graphics.Color.rgb(50, 50, 50)
+            color = colors.header
         }
         val bodyPaint = Paint().apply {
             textSize = 12f
-            color = android.graphics.Color.rgb(80, 80, 80)
+            color = colors.body
         }
         val linePaint = Paint().apply {
-            color = android.graphics.Color.rgb(184, 134, 11)
+            color = colors.divider
             strokeWidth = 1.5f
         }
 
@@ -110,30 +133,46 @@ class BiodataViewModel @Inject constructor(
             "Marital Status" to p.maritalStatus,
             "Height" to "${p.heightCm} cm"
         )
-        section("Community",
-            "Religion" to p.religion,
-            "Mother Tongue" to p.motherTongue,
-            "Caste" to p.caste,
-            "Sub-Caste" to p.subCaste,
-            "Gothra" to p.gothra
-        )
-        section("Education & Career",
-            "Education" to p.education,
-            "Profession" to p.profession,
-            "Income" to p.incomeBand
+        if (options.includeCommunity) {
+            section("Community",
+                "Religion" to p.religion,
+                "Mother Tongue" to p.motherTongue,
+                "Caste" to p.caste,
+                "Sub-Caste" to p.subCaste,
+                "Gothra" to p.gothra
+            )
+        }
+        section(
+            "Education & Career",
+            *buildList {
+                add("Education" to p.education)
+                add("Profession" to p.profession)
+                if (options.includeIncome) add("Income" to p.incomeBand)
+            }.toTypedArray()
         )
         section("Location",
             "City" to p.city,
             "State" to p.state
         )
-        if (p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank()) {
+        if (
+            options.includeAstrology &&
+            (p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank())
+        ) {
             section("Astrology",
                 "Rasi" to p.rasi,
                 "Nakshatra" to p.nakshatra,
                 "Manglik" to p.manglik
             )
         }
-        if (p.bio.isNotBlank()) {
+        if (options.includeFamily) {
+            section("Family Details",
+                "Father's Occupation" to p.fatherOccupation,
+                "Mother's Occupation" to p.motherOccupation,
+                "Siblings" to p.siblings.takeIf { it > 0 }?.toString().orEmpty(),
+                "Family Type" to p.familyType
+            )
+        }
+        if (options.includeAboutMe && p.bio.isNotBlank()) {
             section("About Me", "Bio" to p.bio)
         }
 
@@ -152,9 +191,27 @@ fun BiodataScreen(
     vm: BiodataViewModel = hiltViewModel()
 ) {
     val profile by vm.profile.collectAsState()
-    var selectedTemplate by remember { mutableStateOf(0) }
+    var selectedTemplate by rememberSaveable { mutableStateOf(0) }
+    var includeCommunity by rememberSaveable { mutableStateOf(false) }
+    var includeIncome by rememberSaveable { mutableStateOf(false) }
+    var includeAstrology by rememberSaveable { mutableStateOf(false) }
+    var includeFamily by rememberSaveable { mutableStateOf(false) }
+    var includeAboutMe by rememberSaveable { mutableStateOf(false) }
     val templates = listOf("Classic", "Modern", "Minimal")
     val context = LocalContext.current
+    val shareOptions = BiodataShareOptions(
+        includeCommunity = includeCommunity,
+        includeIncome = includeIncome,
+        includeAstrology = includeAstrology,
+        includeFamily = includeFamily,
+        includeAboutMe = includeAboutMe
+    )
+    val pdfColors = BiodataPdfColors(
+        title = MaterialTheme.colorScheme.primary.toArgb(),
+        header = MaterialTheme.colorScheme.onSurface.toArgb(),
+        body = MaterialTheme.colorScheme.onSurfaceVariant.toArgb(),
+        divider = MaterialTheme.colorScheme.secondary.toArgb()
+    )
 
     Scaffold(
         topBar = {
@@ -175,7 +232,7 @@ fun BiodataScreen(
 
             // ── Template selector ────────────────────────────────────────
             Text(t("choose_template", "Choose template"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 templates.forEachIndexed { idx, name ->
                     MatreeChoiceChip(
                         text = name,
@@ -187,14 +244,31 @@ fun BiodataScreen(
                 }
             }
 
+            Text("Include in biodata", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Optional personal details are excluded by default. Include only what you want in the generated PDF.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+            ) {
+                MatreeChoiceChip("Community", includeCommunity, { includeCommunity = !includeCommunity })
+                MatreeChoiceChip("Income", includeIncome, { includeIncome = !includeIncome })
+                MatreeChoiceChip("Astrology", includeAstrology, { includeAstrology = !includeAstrology })
+                MatreeChoiceChip("Family", includeFamily, { includeFamily = !includeFamily })
+                MatreeChoiceChip("About me", includeAboutMe, { includeAboutMe = !includeAboutMe })
+            }
+
             // ── Biodata preview ──────────────────────────────────────────
             Text(t("preview", "Preview"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
             profile?.let { p ->
                 when (selectedTemplate) {
-                    0 -> ClassicBiodata(p)
-                    1 -> ModernBiodata(p)
-                    else -> MinimalBiodata(p)
+                    0 -> ClassicBiodata(p, shareOptions)
+                    1 -> ModernBiodata(p, shareOptions)
+                    else -> MinimalBiodata(p, shareOptions)
                 }
             } ?: run {
                 MatreeLoadingState(message = "Loading biodata preview…", rows = 2)
@@ -206,7 +280,7 @@ fun BiodataScreen(
                 OutlinedButton(
                     onClick = {
                         profile?.let { p ->
-                            val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate])
+                            val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate], shareOptions, pdfColors)
                             val uri = FileProvider.getUriForFile(
                                 context, "${context.packageName}.provider", pdfFile
                             )
@@ -226,7 +300,7 @@ fun BiodataScreen(
                 Button(
                     onClick = {
                         profile?.let { p ->
-                            val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate])
+                            val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate], shareOptions, pdfColors)
                             val uri = FileProvider.getUriForFile(
                                 context, "${context.packageName}.provider", pdfFile
                             )
@@ -259,7 +333,7 @@ fun BiodataScreen(
             OutlinedButton(
                 onClick = {
                     profile?.let { p ->
-                        val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate])
+                        val pdfFile = vm.exportPdf(context, p, templates[selectedTemplate], shareOptions, pdfColors)
                         val uri = FileProvider.getUriForFile(
                             context, "${context.packageName}.provider", pdfFile
                         )
