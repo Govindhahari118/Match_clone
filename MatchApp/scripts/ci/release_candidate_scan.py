@@ -11,6 +11,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 APP = ROOT / "app"
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 
+# Dependency-owned exported services that Android/Google libraries intentionally expose only
+# behind signature/system permissions. Keep this allowlist exact and fail closed on any drift.
+ALLOWED_EXPORTED_COMPONENTS = {
+    "com.google.android.gms.auth.api.signin.RevocationBoundService":
+        "com.google.android.gms.auth.api.signin.permission.REVOCATION_NOTIFICATION",
+    "androidx.work.impl.background.systemjob.SystemJobService":
+        "android.permission.BIND_JOB_SERVICE",
+}
+
 def require(ok: bool, message: str, failures: list[str]) -> None:
     if not ok:
         failures.append(message)
@@ -33,8 +42,18 @@ def manifest_checks(path: pathlib.Path, failures: list[str]) -> None:
             "android:usesCleartextTraffic must be false", failures)
     for node in list(app.findall("service")) + list(app.findall("provider")):
         name = node.get(ANDROID + "name", "<unnamed>")
-        require(node.get(ANDROID + "exported") != "true",
-                f"service/provider unexpectedly exported: {name}", failures)
+        exported = node.get(ANDROID + "exported") == "true"
+        if not exported:
+            continue
+        required_permission = ALLOWED_EXPORTED_COMPONENTS.get(name)
+        if required_permission is not None:
+            require(
+                node.get(ANDROID + "permission") == required_permission,
+                f"allowed exported component permission changed: {name}",
+                failures,
+            )
+            continue
+        failures.append(f"service/provider unexpectedly exported: {name}")
 
 def main() -> int:
     parser = argparse.ArgumentParser()
