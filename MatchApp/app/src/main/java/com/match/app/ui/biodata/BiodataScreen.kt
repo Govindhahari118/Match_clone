@@ -778,8 +778,7 @@ private fun MinimalBiodata(p: UserProfile, options: BiodataShareOptions) {
                 }
                 if (options.includeFamily) {
                     add(
-                        "Family",
-                        buildString {
+                        "Family" to buildString {
                             append(p.familyType.ifBlank { "Not provided" })
                             p.siblings.takeIf { it > 0 }?.let { append(" · ").append(it).append(" sibling(s)") }
                         }
