@@ -39,11 +39,11 @@ data class MatreeVisualFamily(
 private val visualFamilies = mapOf(
     AppPalette.VIVAH to MatreeVisualFamily(
         palette = AppPalette.VIVAH,
-        displayName = "Matree Signature",
-        shortDescription = "Warm ivory, deep plum and champagne-inspired matrimonial elegance",
+        displayName = "Matree Neutral",
+        shortDescription = "Warm ivory, deep plum and restrained gold matrimonial elegance",
         heroEyebrow = "MATREE",
-        heroTitle = "A beautiful beginning, designed around what matters",
-        heroSubtitle = "Matree's flagship matrimonial experience: warm, refined and focused on real preferences, trust and meaningful connection.",
+        heroTitle = "Meaningful connections, beautifully presented",
+        heroSubtitle = "A universal Matree experience: warm, refined, inclusive and focused on real preferences, trust and meaningful connection.",
         motif = MatreeMotif.NEUTRAL,
         accent = Color(0xFF6E2F4B),
         accentSecondary = Color(0xFFB8897E),
