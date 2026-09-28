@@ -23,7 +23,6 @@ import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.match.app.data.local.dao.UserDao
-import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -49,9 +48,10 @@ sealed class PhoneVerifState {
 @HiltViewModel
 class PhoneVerificationViewModel @Inject constructor(
     private val session: SessionStore,
-    private val userDao: UserDao,
-    private val firestoreProfile: FirestoreProfileService
+    private val userDao: UserDao
 ) : ViewModel() {
+
+    private val functions = com.google.firebase.functions.FirebaseFunctions.getInstance()
 
     private val _state = MutableStateFlow<PhoneVerifState>(PhoneVerifState.Idle)
     val state: StateFlow<PhoneVerifState> = _state
@@ -70,12 +70,9 @@ class PhoneVerificationViewModel @Inject constructor(
                 viewModelScope.launch {
                     try {
                         val currentUser = FirebaseAuth.getInstance().currentUser
-                        if (currentUser != null) {
-                            currentUser.linkWithCredential(credential).await()
-                        } else {
-                            FirebaseAuth.getInstance().signInWithCredential(credential).await()
-                        }
-                        markPhoneVerified(fullPhone)
+                            ?: error("Sign in to your existing account before verifying a phone number")
+                        currentUser.linkWithCredential(credential).await()
+                        confirmPhoneVerified()
                         _state.value = PhoneVerifState.Verified
                     } catch (e: Exception) {
                         _state.value = PhoneVerifState.Error(e.message ?: "Verification failed")
@@ -109,12 +106,9 @@ class PhoneVerificationViewModel @Inject constructor(
             try {
                 val credential = PhoneAuthProvider.getCredential(verificationId, otp)
                 val currentUser = FirebaseAuth.getInstance().currentUser
-                if (currentUser != null) {
-                    currentUser.linkWithCredential(credential).await()
-                } else {
-                    FirebaseAuth.getInstance().signInWithCredential(credential).await()
-                }
-                markPhoneVerified("")
+                    ?: error("Sign in to your existing account before verifying a phone number")
+                currentUser.linkWithCredential(credential).await()
+                confirmPhoneVerified()
                 _state.value = PhoneVerifState.Verified
             } catch (e: Exception) {
                 _state.value = PhoneVerifState.Error(e.message ?: "Invalid OTP")
@@ -122,19 +116,23 @@ class PhoneVerificationViewModel @Inject constructor(
         }
     }
 
-    private suspend fun markPhoneVerified(phone: String) {
+    private suspend fun confirmPhoneVerified() {
+        val authUser = FirebaseAuth.getInstance().currentUser
+            ?: error("Signed-in account is required")
+        val result = functions.getHttpsCallable("confirmPhoneVerification")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        val confirmedPhone = (payload["phoneNumber"] as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?: authUser.phoneNumber.orEmpty()
+        require(confirmedPhone.isNotBlank()) { "Phone verification could not be confirmed" }
+
         val userId = session.userId.first() ?: return
         val user = userDao.findById(userId) ?: return
-        userDao.update(user.copy(isVerified = true, phoneNumber = phone.ifBlank { user.phoneNumber }))
-        // Sync verification status to Firestore
-        if (user.firebaseUid.isNotBlank()) {
-            try {
-                firestoreProfile.updateFields(user.firebaseUid, mapOf(
-                    "isVerified" to true,
-                    "phoneNumber" to phone.ifBlank { user.phoneNumber }
-                ))
-            } catch (_: Exception) {}
-        }
+        // A phone signal is not identity/KYC verification. Never elevate isVerified here.
+        userDao.update(user.copy(phoneNumber = confirmedPhone))
     }
 
     fun reset() { _state.value = PhoneVerifState.Idle }
@@ -214,7 +212,7 @@ fun PhoneVerificationScreen(
                             tint = MaterialTheme.colorScheme.primary)
                         Text("Phone verified!", style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("Your account is now verified.",
+                        Text("Your phone number is verified. Identity verification is separate.",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)

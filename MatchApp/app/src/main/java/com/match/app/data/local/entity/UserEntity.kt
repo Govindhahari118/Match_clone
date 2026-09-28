@@ -96,5 +96,7 @@ data class UserEntity(
     val subscriptionPlan: String = "FREE",
     val subscriptionExpiry: Long = 0L,
     val matchScore: Float = 0f,
-    val username: String = ""
+    val username: String = "",
+    /** Optimistic-concurrency revision of the canonical Firestore profile. */
+    val profileRevision: Long = 0L
 )

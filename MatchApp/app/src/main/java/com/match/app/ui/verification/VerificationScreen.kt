@@ -32,7 +32,15 @@ import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProgressCard
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -218,48 +226,31 @@ fun VerificationScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(t("trust_verification", "Trust & Verification")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("verification_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
+            MatreeTopBar(
+                title = t("trust_verification", "Trust & Verification"),
+                onBack = onBack
             )
         }
     ) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(MatreeDesign.spacing.lg)
                 .testTag("verification_screen"),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
         ) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(t("trust_progress", "Verification progress"), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(12.dp))
-                    Text("$passed/${checks.size}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("real account checks completed", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(progress = { passed.toFloat() / checks.size }, modifier = Modifier.fillMaxWidth().height(8.dp))
-                }
-            }
-
+            MatreeProgressCard(
+                title = t("trust_progress", "Verification progress"),
+                progress = passed.toFloat() / checks.size,
+                supportingText = "Real account checks completed",
+                valueLabel = "$passed/${checks.size}"
+            )
             Text(t("verification_checklist", "Verification Checklist"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             checks.forEach { item -> VerificationRow(item.icon, item.title, item.description, item.done) }
 
-            Card(shape = RoundedCornerShape(16.dp)) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Filled.PrivacyTip, "Private verification document", tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        "Your raw ID file is stored in a protected KYC path and is not readable as profile media. Other members see only the final verification result.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
+            MatreeInlineNotice(
+                message = "Your raw ID file is stored in a protected KYC path and is not readable as profile media. Other members see only the final verification result.",
+                icon = Icons.Filled.PrivacyTip
+            )
 
             when (ui.verificationStatus) {
                 VerificationStatus.PENDING -> StatusCard(
@@ -291,14 +282,12 @@ fun VerificationScreen(
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Aadhaar", "Passport", "PAN Card", "Voter ID").forEach { docType ->
-                        FilterChip(
+                        MatreeChoiceChip(
+                            text = docType,
                             selected = selectedDocType == docType,
                             onClick = { selectedDocType = docType },
                             enabled = !submitting,
-                            label = { Text(docType) },
-                            leadingIcon = if (selectedDocType == docType) {
-                                { Icon(Icons.Filled.Check, "Selected", Modifier.size(16.dp)) }
-                            } else null
+                            icon = if (selectedDocType == docType) Icons.Filled.Check else null
                         )
                     }
                 }
@@ -309,7 +298,7 @@ fun VerificationScreen(
                     modifier = Modifier.fillMaxWidth().testTag("verification_choose_document")
                 ) {
                     Icon(Icons.Filled.AttachFile, "Choose verification document")
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
                     Text(if (selectedDocument == null) "Choose image or PDF" else "Document selected")
                 }
                 selectedDocument?.let { uri ->
@@ -320,70 +309,41 @@ fun VerificationScreen(
                     )
                 }
 
-                Button(
+                MatreePrimaryButton(
+                    text = if (submitting) "Uploading & validating…" else t("submit_verification", "Submit for Verification"),
+                    icon = if (submitting) null else Icons.Filled.Upload,
                     onClick = { vm.submitVerification(selectedDocType, selectedDocument) },
                     enabled = !submitting && selectedDocument != null,
-                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("verification_request_btn")
-                ) {
-                    if (submitting) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Uploading & validating…")
-                    } else {
-                        Icon(Icons.Filled.Upload, "Submit verification document")
-                        Spacer(Modifier.width(8.dp))
-                        Text(t("submit_verification", "Submit for Verification"))
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
+                    modifier = Modifier.fillMaxWidth().testTag("verification_request_btn")
+                )            }
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
         }
     }
 }
 
 @Composable
 private fun StatusCard(icon: ImageVector, title: String, message: String, isError: Boolean = false) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                icon,
-                null,
-                Modifier.size(24.dp),
-                tint = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Text(message, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
+    MatreeInlineNotice(
+        message = "$title — $message",
+        icon = icon,
+        tone = if (isError) MatreeStatusTone.ERROR else MatreeStatusTone.SUCCESS
+    )
 }
 
 @Composable
 private fun VerificationRow(icon: ImageVector, title: String, description: String, done: Boolean) {
-    ElevatedCard(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
                 shape = RoundedCornerShape(50),
                 color = if (done) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(MatreeDesign.sizes.avatarSmall)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(icon, null, Modifier.size(20.dp), tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

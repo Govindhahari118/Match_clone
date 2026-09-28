@@ -17,7 +17,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.i18n.SupportedUiLocales
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -33,10 +37,7 @@ private data class LangEntry(val code: String, val label: String, val native: St
 private val SUPPORTED_LANGUAGES = listOf(
     LangEntry("en", "English", "English"),
     LangEntry("te", "Telugu", "తెలుగు"),
-    LangEntry("hi", "Hindi", "हिन्दी"),
-    LangEntry("ta", "Tamil", "தமிழ்"),
-    LangEntry("kn", "Kannada", "ಕನ್ನಡ"),
-    LangEntry("mr", "Marathi", "मराठी")
+    LangEntry("hi", "Hindi", "हिन्दी")
 )
 
 @HiltViewModel
@@ -46,7 +47,7 @@ class LanguageSelectionViewModel @Inject constructor(
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
 
     fun setLanguage(code: String) = viewModelScope.launch {
-        if (SUPPORTED_LANGUAGES.any { it.code == code }) session.setUiLanguage(code)
+        if (code in SupportedUiLocales.codes) session.setUiLanguage(code)
     }
 }
 
@@ -60,27 +61,20 @@ fun LanguageSelectionScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(t("app_language", "App Language")) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("lang_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = t("app_language", "App Language"), onBack = onBack)
         }
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize().testTag("lang_select_screen"),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(bottom = MatreeDesign.spacing.xl)
         ) {
             item {
                 Text(
-                    "Available languages",
+                    t("available_languages", "Available languages"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                    modifier = Modifier.padding(horizontal = MatreeDesign.spacing.lg, vertical = MatreeDesign.spacing.sm)
                 )
             }
             items(SUPPORTED_LANGUAGES, key = { it.code }) { lang ->
@@ -94,12 +88,18 @@ fun LanguageSelectionScreen(
                 )
             }
             item {
-                HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                Text(
-                    "More languages will appear only after translation and layout QA is complete.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                HorizontalDivider(
+                    Modifier.padding(
+                        horizontal = MatreeDesign.spacing.lg,
+                        vertical = MatreeDesign.spacing.xs
+                    )
+                )
+                MatreeInlineNotice(
+                    message = t(
+                        "more_languages_after_qa",
+                        "More languages will appear only after translation and layout QA is complete."
+                    ),
+                    modifier = Modifier.padding(horizontal = MatreeDesign.spacing.lg)
                 )
             }
         }
@@ -115,7 +115,7 @@ private fun LangRow(lang: LangEntry, selected: Boolean, onClick: () -> Unit) {
         else MaterialTheme.colorScheme.surface
     ) {
         Row(
-            Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            Modifier.padding(horizontal = MatreeDesign.spacing.lg, vertical = MatreeDesign.spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
@@ -123,7 +123,7 @@ private fun LangRow(lang: LangEntry, selected: Boolean, onClick: () -> Unit) {
                 Text(lang.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (selected) {
-                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MatreeDesign.sizes.icon))
             }
         }
     }

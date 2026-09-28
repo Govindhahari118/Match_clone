@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db } from "./shared";
+import { protectedObjectIdentity } from "./protectedMediaMigrationPolicy";
 
 const PAGE_SIZE = 250;
 const PRIVATE_PROFILE_FIELDS = [
@@ -159,6 +160,195 @@ export const migrateLegacyPublicVisibilityFields = functions.pubsub
     functions.logger.info("Legacy public visibility migration page completed", {
       scanned: page.size,
       migrated: migratedProfiles,
+      cursor: lastId,
+    });
+    return null;
+  });
+
+
+/**
+ * Replaces client-authored legacy creation timestamps with Firestore's immutable document creation
+ * time. Discovery uses this field only as a recency tie-breaker, so it must not be a ranking input
+ * that an owner can move forward.
+ */
+export const migrateLegacyProfileCreationTime = functions.pubsub
+  .schedule("30 4 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("profileCreationTimeV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    const batch = db.batch();
+    let migrated = 0;
+    for (const doc of page.docs) {
+      const authoritativeCreatedAt = doc.createTime.toMillis();
+      const currentCreatedAt = Number(doc.data().createdAt || 0);
+      if (!Number.isFinite(currentCreatedAt) || currentCreatedAt !== authoritativeCreatedAt) {
+        batch.update(doc.ref, {
+          createdAt: authoritativeCreatedAt,
+          profileRevision: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        migrated += 1;
+      }
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    batch.set(stateRef, {
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migrated: admin.firestore.FieldValue.increment(migrated),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    functions.logger.info("Authoritative profile creation-time migration page completed", {
+      scanned: page.size,
+      migrated,
+      cursor: lastId,
+    });
+    return null;
+  });
+
+/**
+ * Removes obsolete global compatibility values. Compatibility is viewer/candidate-specific and is
+ * recomputed from current inputs; a single public profile-level score is neither authoritative nor
+ * meaningful across viewers.
+ */
+export const migrateLegacyDerivedProfileFields = functions.pubsub
+  .schedule("45 4 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("derivedProfileFieldsV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    const batch = db.batch();
+    let migrated = 0;
+    for (const doc of page.docs) {
+      if (doc.data().matchScore !== undefined) {
+        batch.update(doc.ref, {
+          matchScore: admin.firestore.FieldValue.delete(),
+          profileRevision: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        migrated += 1;
+      }
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    batch.set(stateRef, {
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migrated: admin.firestore.FieldValue.increment(migrated),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    functions.logger.info("Legacy derived profile field migration page completed", {
+      scanned: page.size,
+      migrated,
+      cursor: lastId,
+    });
+    return null;
+  });
+
+const PROTECTED_MEDIA_FIELDS = ["photoUrl", "videoUrl", "voiceBioUrl"] as const;
+
+/**
+ * Replaces legacy Firebase HTTPS download-token/profile-media references with authenticated
+ * object identity. Only owner-scoped paths under the expected media root are migrated. Advancing
+ * profileRevision invalidates stale clients that still hold the old bearer-token URL.
+ */
+export const migrateLegacyProtectedMediaReferences = functions.pubsub
+  .schedule("15 4 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const stateRef = db.collection("systemMigrations").doc("protectedMediaIdentityV1");
+    const state = await stateRef.get();
+    const cursor = typeof state.data()?.cursor === "string" ? String(state.data()?.cursor) : "";
+
+    let query: FirebaseFirestore.Query = db.collection("users")
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor) query = query.startAfter(cursor);
+
+    const page = await query.get();
+    if (page.empty) {
+      await stateRef.set({
+        cursor: "",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return null;
+    }
+
+    const batch = db.batch();
+    let migratedProfiles = 0;
+    let migratedReferences = 0;
+    for (const doc of page.docs) {
+      const data = doc.data();
+      const updates: Record<string, unknown> = {};
+      for (const field of PROTECTED_MEDIA_FIELDS) {
+        const next = protectedObjectIdentity(data[field], doc.id, field);
+        if (next && next !== data[field]) {
+          updates[field] = next;
+          migratedReferences += 1;
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        updates.profileRevision = admin.firestore.FieldValue.increment(1);
+        updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        batch.update(doc.ref, updates);
+        migratedProfiles += 1;
+      }
+    }
+
+    const lastId = page.docs[page.docs.length - 1].id;
+    batch.set(stateRef, {
+      cursor: lastId,
+      scanned: admin.firestore.FieldValue.increment(page.size),
+      migratedProfiles: admin.firestore.FieldValue.increment(migratedProfiles),
+      migratedReferences: admin.firestore.FieldValue.increment(migratedReferences),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await batch.commit();
+
+    functions.logger.info("Legacy protected media migration page completed", {
+      scanned: page.size,
+      migratedProfiles,
+      migratedReferences,
       cursor: lastId,
     });
     return null;

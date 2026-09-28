@@ -60,3 +60,55 @@ test('owner cannot create a grant for self or a disabled grant', async () => {
     grantedAt: Date.now(), updatedAt: Date.now(),
   }));
 });
+
+
+test('contact request state is readable only by participants and server-written only', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'contactRequests/alice_bob'), {
+      requesterUid: 'alice',
+      targetUid: 'bob',
+      status: 'PENDING',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const carol = env.authenticatedContext('carol').firestore();
+
+  await assertSucceeds(getDoc(doc(alice, 'contactRequests/alice_bob')));
+  await assertSucceeds(getDoc(doc(bob, 'contactRequests/alice_bob')));
+  await assertFails(getDoc(doc(carol, 'contactRequests/alice_bob')));
+
+  await assertFails(setDoc(doc(alice, 'contactRequests/alice_bob'), {
+    requesterUid: 'alice',
+    targetUid: 'bob',
+    status: 'APPROVED',
+  }));
+  await assertFails(setDoc(doc(bob, 'contactRequests/alice_bob'), {
+    requesterUid: 'alice',
+    targetUid: 'bob',
+    status: 'APPROVED',
+  }));
+});
+
+test('block revokes participant read access to contact request state', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'contactRequests/alice_bob'), {
+      requesterUid: 'alice',
+      targetUid: 'bob',
+      status: 'PENDING',
+    });
+    await setDoc(doc(db, 'blocks/bob/blocked/alice'), {
+      blockedUid: 'alice',
+      blockedAt: Date.now(),
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(alice, 'contactRequests/alice_bob')));
+  await assertFails(getDoc(doc(bob, 'contactRequests/alice_bob')));
+});

@@ -522,7 +522,7 @@ private fun PresetDetailView(
                     if (filterParts.isNotEmpty()) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(filterParts) { part ->
-                                SuggestionChip(onClick = {}, label = { Text(part, style = MaterialTheme.typography.labelSmall) })
+                                SuggestionChip(onClick = {}, enabled = false, label = { Text(part, style = MaterialTheme.typography.labelSmall) })
                             }
                         }
                     }

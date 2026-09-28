@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -29,7 +28,11 @@ import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FirestoreChatService
 import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -141,44 +144,47 @@ fun ChatListScreen(
                     }
                 },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(24.dp)
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = MatreeDesign.spacing.sm, vertical = MatreeDesign.spacing.xs),
+                shape = RoundedCornerShape(MatreeDesign.radii.large)
             )
 
             if (conversations.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Icon(Icons.Filled.Forum, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                        Text(t("no_conversations_yet", "No conversations yet"), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Messaging opens after a mutual interest. Start from the Mutual tab in Interests.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(t("chat_safety_tips", "Chat safety tips"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                listOf(
-                                    "Never share passwords, OTPs or financial credentials",
-                                    "Verify the person before meeting",
-                                    "Meet first in a public place",
-                                    "Block and report suspicious behavior"
-                                ).forEach { tip -> Text("• $tip", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            }
-                        }
-                    }
+                Column(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
+                ) {
+                    MatreeStatePanel(
+                        title = t("no_conversations_yet", "No conversations yet"),
+                        message = "Messaging opens after a mutual interest. Start from the Mutual tab in Interests.",
+                        icon = Icons.Filled.Forum
+                    )
+                    MatreeInlineNotice(
+                        message = "Chat safely: never share passwords, OTPs or financial credentials; verify the person and meet first in a public place.",
+                        icon = Icons.Filled.Security,
+                        tone = MatreeStatusTone.WARNING
+                    )
                 }
             } else if (filtered.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No conversations match your search.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MatreeStatePanel(
+                        title = "No matching conversations",
+                        message = "No conversations match your current search.",
+                        icon = Icons.Filled.SearchOff
+                    )
                 }
             } else {
-                LazyColumn(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), modifier = Modifier.fillMaxSize().testTag("chat_list")) {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        horizontal = MatreeDesign.spacing.xs,
+                        vertical = MatreeDesign.spacing.xxs
+                    ),
+                    modifier = Modifier.fillMaxSize().testTag("chat_list")
+                ) {
                     items(filtered, key = { it.peerFirebaseUid }) { conversation ->
                         ConversationRow(conversation) { onOpenChat(conversation.peerId) }
                     }
@@ -195,42 +201,44 @@ private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
     val time = remember(conv.lastAt, locale) { messageTime(conv.lastAt, locale) }
     val activity = remember(conv.lastActiveAt) { ActivityStatusHelper.from(conv.lastActiveAt) }
 
-    ElevatedCard(onClick = onClick, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("conv_card_${conv.peerId}")) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+    ElevatedCard(
+        onClick = onClick,
+        shape = RoundedCornerShape(MatreeDesign.radii.card),
+        modifier = Modifier.fillMaxWidth()
+            .padding(vertical = MatreeDesign.spacing.xxs)
+            .testTag("conv_card_${conv.peerId}")
+    ) {
+        Row(Modifier.padding(MatreeDesign.spacing.md), verticalAlignment = Alignment.CenterVertically) {
             Box {
-                val avatarColors = remember(conv.peerId) {
-                    val palette = listOf(
-                        listOf(Color(0xFFE91E63), Color(0xFFFF5722)), listOf(Color(0xFF9C27B0), Color(0xFF3F51B5)),
-                        listOf(Color(0xFF009688), Color(0xFF4CAF50)), listOf(Color(0xFF1976D2), Color(0xFF00BCD4)),
-                        listOf(Color(0xFF795548), Color(0xFF607D8B))
-                    )
-                    palette[(conv.peerId % palette.size).toInt()]
-                }
+                val avatarColors = listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                )
                 Box(
-                    Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(avatarColors)),
+                    Modifier.size(MatreeDesign.sizes.avatarCompact).clip(RoundedCornerShape(MatreeDesign.radii.card)).background(Brush.linearGradient(avatarColors)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(conv.peerName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(conv.peerName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
                 if (conv.showLastActive && activity.isOnline) {
                     Surface(
-                        shape = CircleShape, color = Color(0xFF2E7D32),
+                        shape = CircleShape, color = MatreeDesign.colors.online,
                         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
                         modifier = Modifier.align(Alignment.BottomEnd).size(14.dp)
                     ) {}
                 }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(conv.peerName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (conv.isVerified) { Spacer(Modifier.width(4.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary) }
+                    if (conv.isVerified) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(15.dp), tint = MatreeDesign.colors.verified) }
                     if (time.isNotBlank()) { Spacer(Modifier.width(8.dp)); Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 if (conv.username.isNotBlank()) Text("@${conv.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 Text(conv.lastMessage.ifBlank { "Conversation started" }, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (conv.showLastActive) {
-                    Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outline)
+                    Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline)
                 }
             }
         }

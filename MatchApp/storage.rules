@@ -38,9 +38,19 @@ service firebase.storage {
       return chatMember(threadId, request.auth.uid) &&
         !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
     }
-    function validChatMedia() {
+    function validChatMedia(threadId) {
       return request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 &&
-        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('audio/.*'));
+        request.resource.metadata.keys().hasOnly(['senderUid','recipientUid','threadId','kind']) &&
+        request.resource.metadata.senderUid == request.auth.uid &&
+        request.resource.metadata.threadId == threadId &&
+        request.resource.metadata.recipientUid in chatParticipants(threadId) &&
+        request.resource.metadata.recipientUid != request.auth.uid &&
+        (
+          (request.resource.metadata.kind == 'image' &&
+            request.resource.contentType.matches('image/.*')) ||
+          (request.resource.metadata.kind == 'voice' &&
+            request.resource.contentType.matches('audio/.*'))
+        );
     }
 
     match /photos/{uid}/{allPaths=**} {
@@ -70,11 +80,11 @@ service firebase.storage {
     }
     match /chat-media/{threadId}/{fileName} {
       allow read: if signedIn() && chatUsable(threadId);
-      allow create: if signedIn() && chatUsable(threadId) && validChatMedia();
+      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId);
       allow update: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid &&
         request.resource.metadata.senderUid == request.auth.uid &&
-        validChatMedia();
+        validChatMedia(threadId);
       allow delete: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid;
     }

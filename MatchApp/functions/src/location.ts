@@ -1,6 +1,10 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import {
+  nearbyAccountIsActive,
+  nearbyAccountIsDiscoverable,
+} from "./nearbyPolicy";
 
 const GEOHASH_ALPHABET = "0123456789bcdefghjkmnpqrstuvwxyz";
 // Nearby represents current proximity, not a historical location. A user must refresh at least
@@ -169,6 +173,9 @@ export const updateMyLocation = functions.https.onCall(async (data, context) => 
   const location = normalizedLocation(data);
   const profile = await db.collection("users").doc(uid).get();
   if (!profile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+  if (!nearbyAccountIsActive(profile.data()?.accountStatus)) {
+    throw new functions.https.HttpsError("failed-precondition", "Nearby is unavailable while this account is not active");
+  }
 
   const now = Date.now();
   const expiresAtMillis = now + LOCATION_MAX_AGE_MS;
@@ -206,6 +213,9 @@ export const nearbyProfiles = functions
       db.collection("blocks").doc(uid).collection("blocked").get(),
     ]);
     if (!viewerProfile.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
+    if (!nearbyAccountIsActive(viewerProfile.data()?.accountStatus)) {
+      throw new functions.https.HttpsError("failed-precondition", "Nearby is unavailable while this account is not active");
+    }
     if (!viewerLocation.exists) throw new functions.https.HttpsError("failed-precondition", "Enable Nearby first");
 
     const viewerLocationData = viewerLocation.data() || {};
@@ -269,7 +279,8 @@ export const nearbyProfiles = functions
       if (privacyRelations[i].exists && privacyRelations[i].data()?.profileHidden === true) continue;
       if (viewerPrivacyRelations[i].exists && viewerPrivacyRelations[i].data()?.profileHidden === true) continue;
       const candidate = profiles[i].data() || {};
-      if (candidate.stealthMode === true || !mutuallyCompatible(viewer, candidate)) continue;
+      if (!nearbyAccountIsDiscoverable(candidate.accountStatus, candidate.stealthMode)) continue;
+      if (!mutuallyCompatible(viewer, candidate)) continue;
       result.push({
         uid: distanceEntries[i].uid,
         distanceBucket: distanceBucket(distanceEntries[i].distanceKm),

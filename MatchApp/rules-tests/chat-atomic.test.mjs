@@ -5,7 +5,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const projectId = 'matchapp-chat-atomic-test';
 let env;
@@ -71,4 +71,119 @@ test('first-message batch is denied when either member blocked the other', async
   });
   const alice = env.authenticatedContext('alice').firestore();
   await assertFails(firstMessageBatch(alice).commit());
+});
+
+
+test('message attachments must belong to the same thread and one media type', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  const base = {
+    body: 'attachment',
+    sentAt: Date.now(),
+    isRead: false,
+    fromFirebaseUid: 'alice',
+    toFirebaseUid: 'bob',
+  };
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_other_thread'),
+    {
+      ...base,
+      imageUri: 'chat-media/another-thread/client_1234567890123456.jpg',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_wrong_object_123'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/different_message_123.jpg',
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_two_media'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/client_1234567890123456.jpg',
+      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
+      voiceDurationMs: 1200,
+    },
+  ));
+
+  await assertFails(setDoc(
+    doc(alice, 'chats/thread1/messages/client_bad_voice_duration'),
+    {
+      ...base,
+      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
+      voiceDurationMs: 100,
+    },
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(alice, 'chats/thread1/messages/client_good_image_123456'),
+    {
+      ...base,
+      imageUri: 'chat-media/thread1/client_good_image_123456.jpg',
+    },
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(alice, 'chats/thread1/messages/client_good_voice_123456'),
+    {
+      ...base,
+      voiceUri: 'chat-media/thread1/client_good_voice_123456.m4a',
+      voiceDurationMs: 1200,
+    },
+  ));
+});
+
+test('empty chat bodies are rejected at the rules boundary', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(firstMessageBatch(alice, '').commit());
+});
+
+test('only recipient may acknowledge delivery and read state', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  const aliceMessage = doc(alice, 'chats/thread1/messages/client_1234567890');
+  const bobMessage = doc(bob, 'chats/thread1/messages/client_1234567890');
+
+  await assertFails(updateDoc(aliceMessage, { deliveredAt: serverTimestamp() }));
+  await assertFails(updateDoc(bobMessage, { readAt: serverTimestamp() }));
+  await assertFails(updateDoc(bobMessage, {
+    isRead: true,
+    readAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(bobMessage, { deliveredAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(bobMessage, {
+    isRead: true,
+    readAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(bobMessage, { isRead: false }));
+});
+
+test('block revokes recipient receipt updates immediately', async () => {
+  await seedUsersAndMutual();
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'blocks/alice/blocked/bob'), {
+      blockedUid: 'bob',
+      blockedAt: Date.now(),
+    });
+  });
+
+  await assertFails(updateDoc(
+    doc(bob, 'chats/thread1/messages/client_1234567890'),
+    { deliveredAt: serverTimestamp() },
+  ));
 });

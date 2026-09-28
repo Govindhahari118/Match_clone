@@ -23,7 +23,7 @@ import com.match.app.domain.model.UserProfile
 
 /**
  * Profile completeness progress bar — shown on ProfileScreen and HomeScreen.
- * Drives users to complete their profiles (proven 3x engagement boost on Shaadi/BharatMatrimony).
+ * Helps members understand which profile sections are still incomplete.
  */
 @Composable
 fun ProfileCompletenessBar(

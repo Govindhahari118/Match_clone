@@ -23,7 +23,12 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.domain.profile.ReligionFieldDefinition
 import com.match.app.domain.profile.ReligionProfileSchemas
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 /** One shared 8-step profile flow for members across India and abroad. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,15 +54,9 @@ fun ProfileWizardScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("${t("step", "Step")} ${step + 1} / 8") },
-                navigationIcon = {
-                    if (step > 0) {
-                        IconButton(onClick = vm::previousStep) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                        }
-                    }
-                }
+            MatreeTopBar(
+                title = "${t("step", "Step")} ${step + 1} / 8",
+                onBack = if (step > 0) vm::previousStep else null
             )
         }
     ) { pad ->
@@ -71,7 +70,7 @@ fun ProfileWizardScreen(
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
+                    .padding(MatreeDesign.spacing.md)
             ) {
                 AnimatedContent(targetState = step, label = "wizard_step") { currentStep ->
                     when (currentStep) {
@@ -88,38 +87,32 @@ fun ProfileWizardScreen(
             }
 
             Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Modifier.fillMaxWidth().padding(MatreeDesign.spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
                 if (step in 1..6) {
-                    OutlinedButton(onClick = vm::skipStep, modifier = Modifier.weight(1f)) {
-                        Text(t("skip", "Skip for now"))
-                    }
+                    MatreeSecondaryButton(
+                        text = t("skip", "Skip for now"),
+                        onClick = vm::skipStep,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 if (step < 7) {
-                    Button(onClick = vm::nextStep, enabled = !saving, modifier = Modifier.weight(1f)) {
-                        Text(t("next", "Next"))
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp))
-                    }
+                    MatreePrimaryButton(
+                        text = t("next", "Next"),
+                        icon = Icons.AutoMirrored.Filled.ArrowForward,
+                        onClick = vm::nextStep,
+                        enabled = !saving,
+                        modifier = Modifier.weight(1f)
+                    )
                 } else {
-                    Button(
+                    MatreePrimaryButton(
+                        text = if (saving) "Saving…" else t("complete_profile", "Complete Profile"),
+                        icon = if (saving) null else Icons.Filled.Check,
                         onClick = { vm.finish(onComplete) },
                         enabled = !saving,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (saving) {
-                            CircularProgressIndicator(
-                                Modifier.size(18.dp), strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (saving) "Saving…" else t("complete_profile", "Complete Profile"), fontWeight = FontWeight.Bold)
-                    }
-                }
+                    )                }
             }
         }
     }
@@ -148,10 +141,10 @@ fun ProfileWizardScreen(
 
 @Composable
 private fun SectionHeader(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xxs)) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
     }
 }
 
@@ -220,7 +213,7 @@ private fun SuggestionChips(values: List<String>, selected: String, onSelected: 
 @Composable
 private fun StepIdentityLocation(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Identity & location", "The app is the same for everyone. Your state and language only personalize your profile; partner discovery preferences remain separate.")
         OutlinedTextField(
             value = s.username,
@@ -244,7 +237,7 @@ private fun StepCommunity(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
     val religionCategory = ReligionCategory.fromReligion(s.religion)
     val schema = remember(s.religion) { ReligionProfileSchemas.forReligion(s.religion) }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Religion & community", "Choose what describes you. Nothing here is inferred from your state, language, surname or location.")
         ChoiceField("Religion", s.religion, IndiaProfileCatalog.religions, { vm.update(s.copy(religion = it)) }, required = true)
         Text("Common community choices", style = MaterialTheme.typography.labelLarge)
@@ -273,7 +266,7 @@ private fun StepCommunity(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepEducationCareer(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Education & career", "Add the information people commonly use while filtering profiles.")
         ChoiceField("Highest education", s.education, IndiaProfileCatalog.educationLevels, { vm.update(s.copy(education = it)) }, required = true)
         OutlinedTextField(s.educationField, { vm.update(s.copy(educationField = it.take(100))) }, label = { Text("Field of study") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -290,7 +283,7 @@ private fun StepEducationCareer(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepPhysicalRelationship(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Personal details", "These fields improve filters while keeping the profile structure consistent across communities.")
         OutlinedTextField(if (s.heightCm > 0) s.heightCm.toString() else "", { vm.update(s.copy(heightCm = it.toIntOrNull() ?: 0)) }, label = { Text("Height (cm) *") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(if (s.weight > 0f) s.weight.toString() else "", { vm.update(s.copy(weight = it.toFloatOrNull() ?: 0f)) }, label = { Text("Weight (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -307,7 +300,7 @@ private fun StepPhysicalRelationship(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepFamily(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Family background", "Optional details can help families understand one another before connecting.")
         ChoiceField("Native state", s.nativeState, IndiaProfileCatalog.statesAndUnionTerritories, { vm.update(s.copy(nativeState = it)) })
         ChoiceField("Family type", s.familyType, IndiaProfileCatalog.familyTypes, { vm.update(s.copy(familyType = it)) })
@@ -323,7 +316,7 @@ private fun StepFamily(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepLifestyle(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Lifestyle & interests", "Add only what you are comfortable sharing.")
         ChoiceField("Diet", s.diet, IndiaProfileCatalog.diets, { vm.update(s.copy(diet = it)) })
         ChoiceField("Smoking", s.smoking, IndiaProfileCatalog.habitOptions, { vm.update(s.copy(smoking = it)) })
@@ -338,14 +331,14 @@ private fun StepLifestyle(vm: ProfileWizardViewModel) {
 @Composable
 private fun StepResidence(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Residence & NRI", "Works for members in India and overseas without creating a separate app experience.")
         ChoiceField("Country of residence", s.countryOfResidence, IndiaProfileCatalog.countriesCommon, { vm.update(s.copy(countryOfResidence = it)) }, required = true)
         OutlinedTextField(s.citizenship, { vm.update(s.copy(citizenship = it.take(80))) }, label = { Text("Citizenship") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         ChoiceField("Residential / visa category", s.residentialStatus, IndiaProfileCatalog.residentialStatuses, { vm.update(s.copy(residentialStatus = it, visaStatus = it)) })
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = s.willingToRelocate, onCheckedChange = { vm.update(s.copy(willingToRelocate = it)) })
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column {
                 Text("Open to relocation", fontWeight = FontWeight.Medium)
                 Text("Show this preference to improve matching.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -358,7 +351,7 @@ private fun StepResidence(vm: ProfileWizardViewModel) {
 private fun StepAstrology(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
     val isHindu = ReligionCategory.fromReligion(s.religion) == ReligionCategory.HINDU
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         if (isHindu) {
             SectionHeader("Astrology / Kundali", "Optional. Used only where relevant to your selected profile and privacy settings.")
             OutlinedTextField(s.rasi, { vm.update(s.copy(rasi = it.take(80))) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -369,12 +362,9 @@ private fun StepAstrology(vm: ProfileWizardViewModel) {
         }
         OutlinedTextField(s.birthTime, { vm.update(s.copy(birthTime = it.take(5))) }, label = { Text("Birth time (HH:MM, 24h)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(s.birthPlace, { vm.update(s.copy(birthPlace = it.take(100))) }, label = { Text("Birth place") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Card(shape = RoundedCornerShape(14.dp)) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.PrivacyTip, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text("Exact birth details stay private. Compatibility features use only data allowed by your privacy choices.", style = MaterialTheme.typography.bodySmall)
-            }
-        }
+        MatreeInlineNotice(
+            message = "Exact birth details stay private. Compatibility features use only data allowed by your privacy choices.",
+            icon = Icons.Filled.PrivacyTip
+        )
     }
 }

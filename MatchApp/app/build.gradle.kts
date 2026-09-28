@@ -87,6 +87,12 @@ kotlin {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.incremental", "true")
+    arg("room.generateKotlin", "true")
+}
+
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 

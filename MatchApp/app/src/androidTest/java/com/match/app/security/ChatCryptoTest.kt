@@ -15,7 +15,7 @@ import org.junit.Test
 class ChatCryptoTest {
 
     @Test
-    fun `encrypt returns non-null Base64 string`() {
+    fun encryptReturnsNonNullBase64String() {
         val plain = "Hello, World!"
         val encrypted = ChatCrypto.encrypt(plain)
         assertNotNull("Encrypt should not return null", encrypted)
@@ -23,7 +23,7 @@ class ChatCryptoTest {
     }
 
     @Test
-    fun `decrypt reverses encrypt`() {
+    fun decryptReversesEncrypt() {
         val original = "Matrimony test message — with Ùnicode: हिन्दी, తెలుగు"
         val encrypted = ChatCrypto.encrypt(original)
         assertNotNull(encrypted)
@@ -32,13 +32,13 @@ class ChatCryptoTest {
     }
 
     @Test
-    fun `decrypt returns null for garbage input`() {
+    fun decryptReturnsNullForGarbageInput() {
         val result = ChatCrypto.decrypt("not-a-valid-base64-cipher")
         assertNull("Garbage input should return null", result)
     }
 
     @Test
-    fun `encrypt produces different ciphertexts for same plaintext`() {
+    fun encryptProducesDifferentCiphertextsForSamePlaintext() {
         val plain = "Same input"
         val a = ChatCrypto.encrypt(plain)
         val b = ChatCrypto.encrypt(plain)
@@ -49,10 +49,29 @@ class ChatCryptoTest {
     }
 
     @Test
-    fun `empty string round-trip`() {
+    fun emptyStringRoundTrip() {
         val encrypted = ChatCrypto.encrypt("")
         assertNotNull(encrypted)
         val decrypted = ChatCrypto.decrypt(encrypted!!)
         assertEquals("", decrypted)
+    }
+
+    @Test
+    fun storageFormatIsVersionedAndDecryptable() {
+        val protected = ChatCrypto.encryptForStorage("pending retry body")
+        assertNotNull(protected)
+        assertEquals(true, ChatCrypto.isVersionedStorage(protected!!))
+        assertEquals("pending retry body", ChatCrypto.decryptFromStorage(protected))
+    }
+
+    @Test
+    fun storageDecryptAcceptsHistoricalUnprefixedCiphertext() {
+        val legacyCiphertext = ChatCrypto.encrypt("historical encrypted body")
+        assertNotNull(legacyCiphertext)
+        assertEquals(false, ChatCrypto.isVersionedStorage(legacyCiphertext!!))
+        assertEquals(
+            "historical encrypted body",
+            ChatCrypto.decryptFromStorage(legacyCiphertext)
+        )
     }
 }

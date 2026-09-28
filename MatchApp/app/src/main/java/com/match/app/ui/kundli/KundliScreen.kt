@@ -25,6 +25,14 @@ import com.match.app.core.matching.Astrology
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.KundliRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreeMatchSignal
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -164,18 +172,19 @@ fun KundliScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (targetId == null) "Kundali" else "Kundali comparison") },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("kundli_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
+            MatreeTopBar(
+                title = if (targetId == null) "Kundali" else "Kundali comparison",
+                onBack = onBack
             )
         }
     ) { pad ->
         when {
-            ui.loading -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            ui.loading -> Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeLoadingState(message = "Loading Kundali…", rows = 2)
+            }
             targetId == null -> OwnAstrologyContent(ui, Modifier.padding(pad))
             else -> PairCompatibilityContent(ui, Modifier.padding(pad))
         }
@@ -185,16 +194,17 @@ fun KundliScreen(
 @Composable
 private fun OwnAstrologyContent(ui: KundliUi, modifier: Modifier) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp).testTag("kundli_screen"),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(MatreeDesign.spacing.lg)
+            .testTag("kundli_screen"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
     ) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(132.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.AutoAwesome, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.primary)
-            }
-        }
-        Text("Your astrology profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        MatreeHero(
+            title = "Your astrology profile",
+            subtitle = "Astrology is shown only when it is applicable and enough information is available.",
+            leadingIcon = Icons.Filled.AutoAwesome
+        )
         if (ui.myRasi.isNotBlank()) FactCard("Rasi", ui.myRasi)
         if (ui.myNakshatra.isNotBlank()) FactCard("Nakshatra", ui.myNakshatra)
         ui.message?.let { InfoCard(it) }
@@ -205,9 +215,11 @@ private fun OwnAstrologyContent(ui: KundliUi, modifier: Modifier) {
 @Composable
 private fun PairCompatibilityContent(ui: KundliUi, modifier: Modifier) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp).testTag("kundli_pair_screen"),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(MatreeDesign.spacing.lg)
+            .testTag("kundli_pair_screen"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
     ) {
         Text(
             if (ui.targetName.isBlank()) "Compatibility" else "${ui.myName} & ${ui.targetName}",
@@ -217,17 +229,11 @@ private fun PairCompatibilityContent(ui: KundliUi, modifier: Modifier) {
         )
 
         ui.astrologyScore?.let { score ->
-            val pct = (score.coerceIn(0f, 1f) * 100).toInt()
-            ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Star, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(8.dp))
-                    Text("$pct%", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("Rasi / Nakshatra compatibility signal", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(progress = { score.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                }
-            }
+            MatreeMatchSignal(
+                label = "Rasi / Nakshatra compatibility signal",
+                score = score,
+                supportingText = "A decision-support signal from the shared horoscope information; not a prediction or guarantee."
+            )
         }
 
         if (ui.myRasi.isNotBlank() || ui.myNakshatra.isNotBlank()) {
@@ -243,19 +249,17 @@ private fun PairCompatibilityContent(ui: KundliUi, modifier: Modifier) {
 
 @Composable
 private fun ProfileAstrologyCard(name: String, rasi: String, nakshatra: String) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            if (rasi.isNotBlank()) Text("Rasi: $rasi")
-            if (nakshatra.isNotBlank()) Text("Nakshatra: $nakshatra")
-        }
+    MatreeInfoCard {
+        Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        if (rasi.isNotBlank()) Text("Rasi: $rasi")
+        if (nakshatra.isNotBlank()) Text("Nakshatra: $nakshatra")
     }
 }
 
 @Composable
 private fun FactCard(label: String, value: String) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, fontWeight = FontWeight.SemiBold)
         }
@@ -264,11 +268,9 @@ private fun FactCard(label: String, value: String) {
 
 @Composable
 private fun InfoCard(message: String) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Icon(Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            Spacer(Modifier.width(8.dp))
-            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-        }
-    }
+    MatreeInlineNotice(
+        message = message,
+        icon = Icons.Filled.Info,
+        tone = MatreeStatusTone.NEUTRAL
+    )
 }

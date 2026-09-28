@@ -28,16 +28,26 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
-import com.match.app.data.local.dao.LikeDao
-import com.match.app.data.local.dao.ShortlistDao
 import com.match.app.data.local.entity.PhotoEntity
+import com.match.app.data.remote.ProfileAnalyticsService
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.PhotoRepository
+import com.match.app.data.repo.ShortlistRepository
+import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
+import com.match.app.ui.components.MatreeActionCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProgressCard
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeProfileSection
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -51,8 +61,9 @@ class ProfileViewModel @Inject constructor(
     private val session: SessionStore,
     private val auth: AuthRepository,
     private val photoRepo: PhotoRepository,
-    private val likeDao: LikeDao,
-    private val shortlistDao: ShortlistDao
+    private val social: SocialRepository,
+    private val shortlistRepo: ShortlistRepository,
+    private val analyticsService: ProfileAnalyticsService
 ) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
@@ -61,18 +72,34 @@ class ProfileViewModel @Inject constructor(
         .flatMapLatest { photoRepo.observe(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val likeCount: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { likeDao.observeIncomingCount(it) }
+    val likeCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            social.observeReceivedInterestsRemote(uid).map { it.size }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val savedCount: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { shortlistDao.observeCount(it) }
+    val savedCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid ->
+            shortlistRepo.observeSavedIdsRemote(uid).map { it.size }
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private val _viewCount = MutableStateFlow(0)
+    val viewCount: StateFlow<Int> = _viewCount.asStateFlow()
 
     init {
         viewModelScope.launch {
             session.userId.collectLatest { id ->
                 _profile.value = id?.let { auth.currentProfile(it) }
+            }
+        }
+        viewModelScope.launch {
+            session.firebaseUid.collectLatest { uid ->
+                _viewCount.value = if (uid.isNullOrBlank()) {
+                    0
+                } else {
+                    runCatching { analyticsService.load().profileViews }.getOrDefault(0)
+                }
             }
         }
     }
@@ -110,33 +137,37 @@ fun ProfileScreen(
 ) {
     val profile by vm.profile.collectAsState()
     val photos by vm.photos.collectAsState()
+    val viewCount by vm.viewCount.collectAsState()
     val likeCount by vm.likeCount.collectAsState()
     val savedCount by vm.savedCount.collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::importPhoto) }
 
     val p = profile
     if (p == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.testTag("profile_loading"))
-        }
+        MatreeLoadingState(
+            modifier = Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl).testTag("profile_loading"),
+            message = "Loading your profile…",
+            rows = 3
+        )
         return
     }
 
+    val spacing = MatreeDesign.spacing
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("profile_screen"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
-        ProfileHero(p)
+        ProfileHero(p, photos)
 
         ProfileCompletenessBar(
             profile = p,
             onComplete = onGoSettings,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.md)
         )
 
         ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
 
-        ProfileStats(p.profileViewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
+        ProfileStats(viewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
         TrustAndVerificationCard(p, photos.isNotEmpty(), onGoVerification)
 
         ProfileSection("Personal details") {
@@ -182,7 +213,7 @@ fun ProfileScreen(
             InfoRow(Icons.Filled.Restaurant, p.diet)
             if (p.hobbies.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, label = { Text(hobby) }) }
+                    p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, enabled = false, label = { Text(hobby) }) }
                 }
             }
         }
@@ -191,25 +222,34 @@ fun ProfileScreen(
 
         PhotosSection(photos, picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, vm = vm)
 
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onGoPrivacy, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                Icon(Icons.Filled.PrivacyTip, null); Spacer(Modifier.size(8.dp)); Text("Privacy & visibility")
-            }
-            OutlinedButton(onClick = onGoBiodata, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                Icon(Icons.Filled.Description, null); Spacer(Modifier.size(8.dp)); Text("View biodata")
-            }
-            OutlinedButton(onClick = onGoSettings, modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_settings")) {
-                Icon(Icons.Filled.Settings, null); Spacer(Modifier.size(8.dp)); Text("Settings")
-            }
+        Column(Modifier.padding(horizontal = spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+            MatreePrimaryButton(
+                text = "Privacy & visibility",
+                icon = Icons.Filled.PrivacyTip,
+                onClick = onGoPrivacy,
+                modifier = Modifier.fillMaxWidth()
+            )
+            MatreeSecondaryButton(
+                text = "View biodata",
+                icon = Icons.Filled.Description,
+                onClick = onGoBiodata,
+                modifier = Modifier.fillMaxWidth()
+            )
+            MatreeSecondaryButton(
+                text = "Settings",
+                icon = Icons.Filled.Settings,
+                onClick = onGoSettings,
+                modifier = Modifier.fillMaxWidth().testTag("btn_settings")
+            )
             OutlinedButton(
                 onClick = vm::signOut,
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("btn_sign_out"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = MatreeDesign.sizes.buttonHeight).testTag("btn_sign_out"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ExitToApp, null); Spacer(Modifier.size(8.dp)); Text("Sign out")
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(spacing.xxl))
     }
 }
 
@@ -217,29 +257,59 @@ private fun labeled(label: String, value: String): String =
     if (value.isBlank()) "" else "${label.removeSuffix(" (optional)")}: $value"
 
 @Composable
-private fun ProfileHero(p: UserProfile) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(84.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(p.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+private fun ProfileHero(p: UserProfile, photos: List<PhotoEntity>) {
+    val photoModels = remember(p.id, p.photoUrl, p.primaryPhotoPath, photos) {
+        buildList<Any> {
+            photos
+                .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
+                .forEach { photo ->
+                    add(
+                        if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) {
+                            photo.path
+                        } else {
+                            File(photo.path)
+                        }
+                    )
+                }
+            if (isEmpty()) {
+                when {
+                    p.photoUrl.startsWith("https://") || p.photoUrl.startsWith("http://") ->
+                        add(p.photoUrl)
+                    !p.primaryPhotoPath.isNullOrBlank() ->
+                        add(File(p.primaryPhotoPath))
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(p.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                if (p.isVerified) { Spacer(Modifier.size(5.dp)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
-            }
-            Text(listOf(p.age.takeIf { it > 0 }?.toString().orEmpty(), p.city, p.profession).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodyMedium)
-            Text(listOf(p.religion, p.caste).filter { it.isNotBlank() }.joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(p.matrimonyId.ifBlank { "Profile ID: M${p.id}" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         }
     }
+
+    MatreeProfileHeader(
+        name = p.displayName,
+        age = p.age.takeIf { it > 0 },
+        username = p.username,
+        photoModels = photoModels,
+        primaryLine = listOf(p.city, p.state, p.profession)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        secondaryLine = listOf(p.religion, p.caste, p.motherTongue)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        isVerified = p.isVerified,
+        isPremium = p.isPremium
+    )
+    Text(
+        p.matrimonyId.ifBlank { "Profile ID: M" + p.id },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.outline,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md)
+    )
 }
 
 @Composable
 private fun ProfileStats(views: Int, likes: Int, saved: Int, onViews: () -> Unit, onLikes: () -> Unit, onSaved: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+        horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+    ) {
         StatCard(Icons.Filled.Visibility, "Views", views.toString(), Modifier.weight(1f), onViews)
         StatCard(Icons.Filled.Favorite, "Interests", likes.toString(), Modifier.weight(1f), onLikes)
         StatCard(Icons.Filled.Bookmark, "Saved", saved.toString(), Modifier.weight(1f), onSaved)
@@ -248,8 +318,8 @@ private fun ProfileStats(views: Int, likes: Int, saved: Int, onViews: () -> Unit
 
 @Composable
 private fun StatCard(icon: ImageVector, label: String, value: String, modifier: Modifier, onClick: () -> Unit) {
-    ElevatedCard(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.fillMaxWidth().padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    MatreeActionCard(onClick = onClick, modifier = modifier) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Text(value, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall)
         }
     }
@@ -264,35 +334,45 @@ private fun TrustAndVerificationCard(p: UserProfile, hasPhoto: Boolean, onVerify
         "Identity verified" to p.isVerified
     )
     val complete = checks.count { it.second }
-    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+    ) {
+        MatreeProgressCard(
+            title = "Trust & verification",
+            progress = complete / checks.size.toFloat(),
+            supportingText = "Only completed server-backed checks count here.",
+            valueLabel = "$complete/${checks.size}"
+        )
+        checks.forEach { (label, done) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Shield, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.size(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Trust & verification", fontWeight = FontWeight.Bold)
-                    Text("Only completed server-backed checks count here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("$complete/${checks.size}", fontWeight = FontWeight.Bold)
+                Icon(
+                    if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                    tint = if (done) MatreeDesign.colors.success else MaterialTheme.colorScheme.outline
+                )
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(label, style = MaterialTheme.typography.bodySmall)
             }
-            Spacer(Modifier.height(10.dp)); LinearProgressIndicator(progress = { complete / checks.size.toFloat() }, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(8.dp))
-            checks.forEach { (label, done) ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Icon(if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked, null, Modifier.size(16.dp), tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-                    Spacer(Modifier.size(7.dp)); Text(label, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (!p.isVerified) { Spacer(Modifier.height(8.dp)); Button(onClick = onVerify, modifier = Modifier.fillMaxWidth()) { Text("Continue verification") } }
+        }
+        if (!p.isVerified) {
+            MatreePrimaryButton(
+                text = "Continue verification",
+                onClick = onVerify,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 @Composable
 private fun ProfileSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold); Spacer(Modifier.height(8.dp)); content()
-        }
-    }
+    MatreeProfileSection(
+        title = title,
+        modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md),
+        content = content
+    )
 }
 
 @Composable
@@ -305,16 +385,17 @@ private fun InfoRow(icon: ImageVector, text: String) {
 
 @Composable
 private fun PhotosSection(photos: List<PhotoEntity>, picker: () -> Unit, vm: ProfileViewModel) {
-    Column(Modifier.padding(horizontal = 16.dp)) {
+    Column(Modifier.padding(horizontal = MatreeDesign.spacing.md)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Photos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = picker, modifier = Modifier.testTag("btn_add_photo")) { Icon(Icons.Filled.AddAPhoto, null, Modifier.size(16.dp)); Spacer(Modifier.size(4.dp)); Text("Add") }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
         if (photos.isEmpty()) {
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Filled.PhotoCamera, null); Text("Add clear recent photos to improve trust.", style = MaterialTheme.typography.bodySmall) }
-            }
+            MatreeInlineNotice(
+                message = "Add clear recent photos to improve trust.",
+                icon = Icons.Filled.PhotoCamera
+            )
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),

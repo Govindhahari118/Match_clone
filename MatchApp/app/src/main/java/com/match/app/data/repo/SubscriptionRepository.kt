@@ -19,7 +19,6 @@ class SubscriptionRepository @Inject constructor(
     private val userDao: UserDao,
     private val session: SessionStore
 ) {
-    data class CheckoutOrder(val id: String, val planId: String, val amount: Int, val currency: String)
     data class PlayEntitlement(
         val entitlementType: String,
         val entitlementId: String,
@@ -64,39 +63,6 @@ class SubscriptionRepository @Inject constructor(
             syncPremiumStatusFromServer()
         }
         entitlement
-    }
-
-    /**
-     * Retained for a future direct-distribution or explicitly eligible alternative-billing build.
-     * The Play Store production UI does not call this path.
-     */
-    suspend fun createRazorpayOrder(planId: String): Result<CheckoutOrder> = runCatching {
-        val result = functions.getHttpsCallable("createRazorpayOrder")
-            .call(mapOf("planId" to planId)).await()
-        @Suppress("UNCHECKED_CAST")
-        val data = result.data as? Map<String, Any?> ?: error("Invalid order response")
-        CheckoutOrder(
-            id = data["id"] as? String ?: error("Missing order id"),
-            planId = data["planId"] as? String ?: error("Missing plan id"),
-            amount = (data["amount"] as? Number)?.toInt() ?: error("Missing amount"),
-            currency = data["currency"] as? String ?: error("Missing currency")
-        )
-    }
-
-    suspend fun verifyAndActivatePremium(
-        orderId: String,
-        paymentId: String,
-        signature: String
-    ): Result<Long> = runCatching {
-        require(orderId.startsWith("order_") && paymentId.startsWith("pay_") && signature.isNotBlank())
-        val result = functions.getHttpsCallable("verifyRazorpayPayment")
-            .call(mapOf("orderId" to orderId, "paymentId" to paymentId, "signature" to signature)).await()
-        @Suppress("UNCHECKED_CAST")
-        val data = result.data as? Map<String, Any?>
-        val premiumUntil = (data?.get("premiumUntil") as? Number)?.toLong()
-            ?: error("Missing entitlement expiry")
-        syncPremiumStatusFromServer()
-        premiumUntil
     }
 
     fun observePremiumStatus(): Flow<Boolean> = callbackFlow {

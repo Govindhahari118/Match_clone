@@ -247,7 +247,8 @@ fun SecondMarriageScreen(
                 }
             }
 
-            // ── Counselling CTA ──────────────────────────────────────────
+            // Counselling is a provider-backed request flow. Do not advertise a free or
+            // immediately bookable session until real provider availability and pricing exist.
             item {
                 ElevatedCard(
                     shape = RoundedCornerShape(18.dp),
@@ -256,28 +257,29 @@ fun SecondMarriageScreen(
                         containerColor = Color(0xFF4A148C).copy(alpha = 0.06f)
                     )
                 ) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Psychology, null, Modifier.size(24.dp),
-                                tint = Color(0xFF4A148C))
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text("Free Pre-Marriage Counselling",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold, color = Color(0xFF4A148C))
-                                Text("Speak to a relationship counsellor before you decide",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Button(
-                            onClick = {},
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A148C))
-                        ) {
-                            Icon(Icons.Filled.CalendarMonth, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(t("book_free_session", "Book Free Session"))
+                    Row(
+                        Modifier.padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Psychology,
+                            null,
+                            Modifier.size(24.dp),
+                            tint = Color(0xFF4A148C)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                "Counselling support",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4A148C)
+                            )
+                            Text(
+                                "Counselling requests are confirmed only after real provider availability, schedule and pricing are established.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

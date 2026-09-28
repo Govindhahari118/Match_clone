@@ -62,10 +62,20 @@ class ShortlistRepository @Inject constructor(
 
     private suspend fun hydrate(uid: String): UserEntity? {
         if (uid.isBlank()) return null
-        userDao.findByFirebaseUid(uid)?.let { return it }
-        val remote = runCatching { firestoreProfile.fetchProfile(uid) }
-            .onFailure { Log.w("ShortlistRepository", "Unable to hydrate shortlisted profile $uid", it) }
+        val remote = runCatching { firestoreProfile.fetchProfileFromServer(uid) }
+            .onFailure { Log.w("ShortlistRepository", "Shortlisted profile is no longer readable: $uid", it) }
             .getOrNull() ?: return null
+        val existing = userDao.findByFirebaseUid(uid)
+        if (existing != null) {
+            val merged = remote.copy(
+                id = existing.id,
+                email = existing.email,
+                passwordHash = existing.passwordHash,
+                isSeed = false
+            )
+            userDao.update(merged)
+            return merged
+        }
         val cached = remote.copy(
             email = "${remote.firebaseUid}@cache.invalid",
             passwordHash = "",

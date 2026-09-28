@@ -1,7 +1,8 @@
 package com.match.app.data.remote
 
-import com.google.firebase.firestore.FieldValue
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -10,17 +11,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Firestore service for blocked users.
+ * Read service for blocked users plus trusted callable mutations.
  *
- * Collection: `blocks/{blockerUid}/blocked/{blockedUid}`.
- * Creating the protected block record is the only client mutation. Trusted Cloud Functions
- * cascade relationship cleanup because clients are intentionally forbidden from deleting
- * authoritative interests/matches themselves.
+ * Collection: blocks/{blockerUid}/blocked/{blockedUid}
+ * Blocking is server-authoritative because the same transaction must revoke relationship state.
  */
 @Singleton
 class FirestoreBlockService @Inject constructor() {
 
+    private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
     private fun blockedCol(blockerUid: String) =
         db.collection("blocks").document(blockerUid).collection("blocked")
@@ -28,17 +29,21 @@ class FirestoreBlockService @Inject constructor() {
     suspend fun block(blockerUid: String, blockedUid: String) {
         require(blockerUid.isNotBlank() && blockedUid.isNotBlank()) { "Missing account identity" }
         require(blockerUid != blockedUid) { "You cannot block yourself" }
-        blockedCol(blockerUid).document(blockedUid).set(
-            mapOf(
-                "blockedUid" to blockedUid,
-                "blockedAt" to FieldValue.serverTimestamp()
-            )
-        ).await()
+        require(auth.currentUser?.uid == blockerUid) { "Block owner does not match signed-in account" }
+
+        functions.getHttpsCallable("blockUser")
+            .call(mapOf("targetUid" to blockedUid))
+            .await()
     }
 
     suspend fun unblock(blockerUid: String, blockedUid: String) {
         require(blockerUid.isNotBlank() && blockedUid.isNotBlank()) { "Missing account identity" }
-        blockedCol(blockerUid).document(blockedUid).delete().await()
+        require(blockerUid != blockedUid) { "You cannot unblock yourself" }
+        require(auth.currentUser?.uid == blockerUid) { "Block owner does not match signed-in account" }
+
+        functions.getHttpsCallable("unblockUser")
+            .call(mapOf("targetUid" to blockedUid))
+            .await()
     }
 
     suspend fun isBlocked(blockerUid: String, blockedUid: String): Boolean {
@@ -53,7 +58,10 @@ class FirestoreBlockService @Inject constructor() {
             return@callbackFlow
         }
         val reg = blockedCol(blockerUid).addSnapshotListener { snap, err ->
-            if (err != null) { close(err); return@addSnapshotListener }
+            if (err != null) {
+                close(err)
+                return@addSnapshotListener
+            }
             val uids = snap?.documents?.mapNotNull { it.getString("blockedUid") } ?: emptyList()
             trySend(uids)
         }

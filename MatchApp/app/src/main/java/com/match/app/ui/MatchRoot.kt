@@ -27,9 +27,10 @@ import androidx.navigation.compose.rememberNavController
 import com.match.app.core.network.ConnectivityObserver
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AppearancePreferenceRepository
+import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
-import com.match.app.domain.model.DisplayMode
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -61,11 +62,13 @@ object Routes {
 class RootViewModel @Inject constructor(
     private val session: SessionStore,
     private val connectivity: ConnectivityObserver,
-    userDao: UserDao
+    private val authRepository: AuthRepository,
+    userDao: UserDao,
+    appearancePreferenceRepository: AppearancePreferenceRepository
 ) : ViewModel() {
     val userId = session.userId.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val onboarded = session.onboarded.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val appearance = session.appearancePreference
+    val appearance = appearancePreferenceRepository.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val isOnline = connectivity.isOnline.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -91,7 +94,11 @@ class RootViewModel @Inject constructor(
     fun touchActivity() = viewModelScope.launch { session.touchActivity() }
 
     fun checkSessionExpiry() = viewModelScope.launch {
-        if (session.isSessionExpired()) session.clear()
+        if (session.isSessionExpired()) authRepository.signOut()
+    }
+
+    fun validateRemoteSession() = viewModelScope.launch {
+        authRepository.validateRemoteSession()
     }
 
     private fun UserEntity.isRequiredProfileComplete(): Boolean =
@@ -116,10 +123,14 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
     val systemDark = isSystemInDarkTheme()
+    val isOnline by vm.isOnline.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.checkSessionExpiry()
         vm.touchActivity()
+    }
+    LaunchedEffect(isOnline) {
+        if (isOnline) vm.validateRemoteSession()
     }
 
     val effectivePalette = AppearanceThemeResolver.resolve(
@@ -127,11 +138,10 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         manualPaletteKey = appearance.manualThemeKey,
         profileReligion = currentUser?.religion
     )
-    val darkMode = when (appearance.displayMode) {
-        DisplayMode.SYSTEM -> systemDark
-        DisplayMode.LIGHT -> false
-        DisplayMode.DARK -> true
-    }
+    val darkMode = AppearanceThemeResolver.resolveDarkMode(
+        displayMode = appearance.displayMode,
+        systemDark = systemDark
+    )
 
     val layoutDir = if (uiLanguage in setOf("ar", "ur")) LayoutDirection.Rtl else LayoutDirection.Ltr
     MatchTheme(darkMode = darkMode, palette = effectivePalette) {
@@ -142,7 +152,6 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 val userId by vm.userId.collectAsState()
                 val onboarded by vm.onboarded.collectAsState()
-                val isOnline by vm.isOnline.collectAsState()
                 val sessionReady by vm.sessionReady.collectAsState()
                 val profileSetupComplete by vm.profileSetupComplete.collectAsState()
                 val loggedIn = userId != null
@@ -157,16 +166,19 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                             Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.errorContainer)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(
+                                    horizontal = com.match.app.ui.theme.MatreeDesign.spacing.md,
+                                    vertical = com.match.app.ui.theme.MatreeDesign.spacing.xs
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 Icons.Filled.CloudOff, null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(com.match.app.ui.theme.MatreeDesign.sizes.iconSmall),
                                 tint = MaterialTheme.colorScheme.onErrorContainer
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(com.match.app.ui.theme.MatreeDesign.spacing.xs))
                             Text(
                                 "You're offline — some features may be limited",
                                 style = MaterialTheme.typography.labelMedium,

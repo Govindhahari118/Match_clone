@@ -3,15 +3,20 @@ package com.match.app
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.match.app.core.config.RemoteConfigManager
 import com.match.app.service.MatchFcmService
+import com.match.app.ui.common.ProtectedFirebaseStorageFetcher
+import com.match.app.ui.common.ProtectedFirebaseStorageKeyer
+import com.match.app.ui.common.ProtectedFirebaseStorageMapper
 import com.match.app.worker.DailyMatchDigestWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
 @HiltAndroidApp
-class AppEntry : Application(), Configuration.Provider {
+class AppEntry : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -23,6 +28,16 @@ class AppEntry : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
+        .components {
+            // Protected Firebase Storage models are resolved by the authenticated SDK before
+            // rendering. Ordinary HTTPS/content/file models continue through Coil defaults.
+            add(ProtectedFirebaseStorageMapper())
+            add(ProtectedFirebaseStorageKeyer())
+            add(ProtectedFirebaseStorageFetcher.Factory(this@AppEntry))
+        }
+        .build()
 
     override fun onCreate() {
         super.onCreate()

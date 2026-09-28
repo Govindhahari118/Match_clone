@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 /**
  * Reusable empty state placeholder for screens that have no data.
@@ -30,16 +31,16 @@ fun EmptyState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(MatreeDesign.spacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
             icon, contentDescription = null,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(MatreeDesign.sizes.avatarCompact),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.md))
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
@@ -48,7 +49,7 @@ fun EmptyState(
             color = MaterialTheme.colorScheme.onSurface
         )
         if (subtitle != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xs))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
@@ -57,7 +58,7 @@ fun EmptyState(
             )
         }
         if (actionLabel != null && onAction != null) {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.lg))
             OutlinedButton(onClick = onAction) {
                 Text(actionLabel)
             }
@@ -105,16 +106,16 @@ fun ErrorState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(MatreeDesign.spacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
             Icons.Filled.ErrorOutline, contentDescription = null,
-            modifier = Modifier.size(56.dp),
+            modifier = Modifier.size(MatreeDesign.sizes.avatarCompact),
             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(MatreeDesign.spacing.md))
         Text(
             message,
             style = MaterialTheme.typography.bodyLarge,
@@ -122,7 +123,7 @@ fun ErrorState(
             color = MaterialTheme.colorScheme.onSurface
         )
         if (onRetry != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
             FilledTonalButton(onClick = onRetry) {
                 Text(t("retry", "Retry"))
             }
@@ -156,13 +157,13 @@ fun LoadingState(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(MatreeDesign.spacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         CircularProgressIndicator()
         if (message != null) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
             Text(
                 message,
                 style = MaterialTheme.typography.bodyMedium,

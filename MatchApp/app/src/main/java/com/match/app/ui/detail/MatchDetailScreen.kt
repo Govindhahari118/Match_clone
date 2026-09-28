@@ -22,14 +22,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.match.app.core.analytics.AnalyticsManager
-import com.match.app.core.matching.Astrology
-import com.match.app.core.matching.CombinedMatcher
-import com.match.app.core.matching.Vectors
+import com.match.app.core.matching.MatchScorer
 import com.match.app.data.local.Vec
 import com.match.app.data.local.dao.QuestionnaireDao
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.PhotoEntity
 import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.repo.ShortlistRepository
@@ -38,9 +37,20 @@ import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.data.repo.SupportRepository
 import com.match.app.data.repo.WhoViewedRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeProfileHeader
+import com.match.app.ui.components.MatreeProfileSection
+import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -57,6 +67,9 @@ data class DetailUi(
     val qScore: Float = 0f,
     val astroScore: Float = 0f,
     val combinedScore: Float = 0f,
+    val compatibilityFactors: List<CompatibilityFactor> = emptyList(),
+    val compatibilityFormulaVersion: String = "",
+    val compatibilityAgePenalty: Float = 0f,
     val privateNote: String = "",
     val meIsPremium: Boolean = false,
     val showContactUnlock: Boolean = false,
@@ -80,6 +93,7 @@ class MatchDetailViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val qDao: QuestionnaireDao,
+    private val kundliRepo: KundliRepository,
     private val photoRepo: PhotoRepository,
     private val analytics: AnalyticsManager,
     private val noteRepo: NoteRepository,
@@ -127,29 +141,55 @@ class MatchDetailViewModel @Inject constructor(
         runCatching { whoViewed.record(meId, userId) }
         analytics.logProfileView(userId)
 
-        val seeker = userDao.findById(meId)
-        val target = userDao.findById(userId)
-        if (seeker != null && target != null) {
+        if (me != null) {
             val seekerQ = qDao.forUser(meId)
             val targetQ = qDao.forUser(userId)
-            val qScore = if (seekerQ != null && targetQ != null) {
-                Vectors.questionnaireScore(
-                    Vec.decode(seekerQ.selfVector), Vec.decode(seekerQ.partnerVector),
-                    Vec.decode(targetQ.selfVector), Vec.decode(targetQ.partnerVector)
+            var scorerMe = me.copy(
+                selfVector = seekerQ?.let { Vec.decode(it.selfVector) },
+                partnerVector = seekerQ?.let { Vec.decode(it.partnerVector) }
+            )
+            var scorerTarget = profile.copy(
+                selfVector = targetQ?.let { Vec.decode(it.selfVector) },
+                partnerVector = targetQ?.let { Vec.decode(it.partnerVector) },
+                // Peer-private astrology must never come from stale Room/profile cache.
+                rasi = "",
+                nakshatra = ""
+            )
+
+            if (profile.showHoroscope && profile.firebaseUid.isNotBlank()) {
+                val shared = kundliRepo.getSharedHoroscope(profile.firebaseUid).getOrNull()
+                if (shared?.available == true) {
+                    scorerMe = scorerMe.copy(
+                        rasi = shared.myRasi,
+                        nakshatra = shared.myNakshatra
+                    )
+                    scorerTarget = scorerTarget.copy(
+                        rasi = shared.targetRasi,
+                        nakshatra = shared.targetNakshatra
+                    )
+                } else {
+                    scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+                }
+            } else {
+                scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+            }
+
+            val result = MatchScorer.explain(scorerMe, scorerTarget)
+            val factors = result.factors.map {
+                CompatibilityFactor(
+                    key = it.key,
+                    score = it.score,
+                    configuredWeight = it.configuredWeight
                 )
-            } else 0f
-            val astro = if (
-                profile.showHoroscope && ReligionCategory.fromReligion(profile.religion) == ReligionCategory.HINDU &&
-                seeker.rasi.isNotBlank() && seeker.nakshatra.isNotBlank() &&
-                target.rasi.isNotBlank() && target.nakshatra.isNotBlank()
-            ) {
-                Astrology.score(seeker.rasi, seeker.nakshatra, target.rasi, target.nakshatra)
-            } else 0f
+            }
             _ui.update {
                 it.copy(
-                    qScore = qScore,
-                    astroScore = astro,
-                    combinedScore = CombinedMatcher.combine(qScore, astro)
+                    qScore = result.factors.firstOrNull { factor -> factor.key == "questionnaire" }?.score ?: 0f,
+                    astroScore = result.factors.firstOrNull { factor -> factor.key == "astrology" }?.score ?: 0f,
+                    combinedScore = result.percentage.toFloat() / 100f,
+                    compatibilityFactors = factors,
+                    compatibilityFormulaVersion = result.formulaVersion,
+                    compatibilityAgePenalty = result.agePenalty
                 )
             }
         }
@@ -348,77 +388,110 @@ fun MatchDetailScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text(p?.displayName ?: "Profile") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+            MatreeTopBar(
+                title = p?.displayName ?: "Profile",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = onKundli, enabled = p?.showHoroscope == true && !ui.blocked) {
                         Icon(Icons.Filled.AutoAwesome, "Check Kundali")
                     }
-                    IconButton(onClick = { showNote = true }, enabled = p != null) { Icon(Icons.Filled.Note, "Private note") }
-                    IconButton(onClick = vm::showReportDialog, enabled = p != null) { Icon(Icons.Filled.Flag, "Report profile") }
+                    IconButton(onClick = { showNote = true }, enabled = p != null) {
+                        Icon(Icons.Filled.Note, "Private note")
+                    }
+                    IconButton(onClick = vm::showReportDialog, enabled = p != null) {
+                        Icon(Icons.Filled.Flag, "Report profile")
+                    }
                 }
             )
         }
     ) { pad ->
         when {
-            ui.loading -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            p == null -> Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { Text("This profile is unavailable.") }
+            ui.loading -> Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeLoadingState(message = "Loading profile…", rows = 3)
+            }
+            p == null -> Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                MatreeStatePanel(
+                    title = "Profile unavailable",
+                    message = "This profile is no longer available with your current relationship or privacy state.",
+                    icon = Icons.Filled.PersonOff,
+                    tone = MatreeStatusTone.WARNING
+                )
+            }
             else -> Column(
-                Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("match_detail_screen"),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(MatreeDesign.spacing.md)
+                    .testTag("match_detail_screen"),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
                 ProfileHero(p, ui.photos)
 
                 if (ui.blocked) {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Text(
-                            "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them.",
-                            modifier = Modifier.padding(14.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
+                    MatreeInlineNotice(
+                        message = "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them.",
+                        icon = Icons.Filled.Block,
+                        tone = MatreeStatusTone.ERROR
+                    )
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = vm::toggleLike, enabled = !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.liked) "Interest sent" else "Send interest")
-                    }
-                    OutlinedButton(onClick = vm::toggleShortlist, enabled = !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.shortlisted) "Saved" else "Shortlist")
-                    }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    MatreePrimaryButton(
+                        text = if (ui.liked) "Interest sent" else "Send interest",
+                        icon = if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send,
+                        onClick = vm::toggleLike,
+                        enabled = !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MatreeSecondaryButton(
+                        text = if (ui.shortlisted) "Saved" else "Shortlist",
+                        icon = if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                        onClick = vm::toggleShortlist,
+                        enabled = !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 if (p.showHoroscope && !ui.blocked) {
-                    OutlinedButton(onClick = onKundli, modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")) {
-                        Icon(Icons.Filled.AutoAwesome, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Check Kundali compatibility")
-                    }
+                    MatreeSecondaryButton(
+                        text = "Check Kundali compatibility",
+                        icon = Icons.Filled.AutoAwesome,
+                        onClick = onKundli,
+                        modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")
+                    )
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onChat, enabled = ui.isMutual && !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.AutoMirrored.Filled.Chat, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (ui.isMutual) "Message" else "Message after match")
-                    }
-                    OutlinedButton(onClick = vm::showContactUnlock, enabled = ui.isMutual && !ui.blocked, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Filled.Phone, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Contact")
-                    }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    MatreePrimaryButton(
+                        text = if (ui.isMutual) "Message" else "Message after match",
+                        icon = Icons.AutoMirrored.Filled.Chat,
+                        onClick = onChat,
+                        enabled = ui.isMutual && !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
+                    MatreeSecondaryButton(
+                        text = "Contact",
+                        icon = Icons.Filled.Phone,
+                        onClick = vm::showContactUnlock,
+                        enabled = ui.isMutual && !ui.blocked,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 if (!ui.isMutual && !ui.blocked) {
-                    Text(
-                        "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MatreeInlineNotice(
+                        message = "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
+                        icon = Icons.Filled.Info
                     )
                 }
 
@@ -434,15 +507,15 @@ fun MatchDetailScreen(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = if (ui.blocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                 ) {
                     Icon(if (ui.blocked) Icons.Filled.LockOpen else Icons.Filled.Block, null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
                     Text(if (ui.blocked) "Unblock member" else "Block member")
                 }
                 TextButton(onClick = vm::showReportDialog, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Flag, null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
                     Text("Report profile")
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
         }
     }
@@ -450,58 +523,68 @@ fun MatchDetailScreen(
 
 @Composable
 private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
-    val primary = photos.firstOrNull { it.isPrimary } ?: photos.firstOrNull()
-    val model: Any? = when {
-        primary != null && (primary.path.startsWith("https://") || primary.path.startsWith("http://")) -> primary.path
-        primary != null -> File(primary.path)
-        profile.photoUrl.startsWith("https://") || profile.photoUrl.startsWith("http://") -> profile.photoUrl
-        !profile.primaryPhotoPath.isNullOrBlank() -> File(profile.primaryPhotoPath)
-        else -> null
-    }
-
-    ElevatedCard(shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (model != null) {
-                AsyncImage(
-                    model = model,
-                    contentDescription = "${profile.displayName} profile photo",
-                    modifier = Modifier.fillMaxWidth().height(300.dp),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Surface(modifier = Modifier.fillMaxWidth().height(180.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
-                    }
+    val photoModels = remember(profile.id, profile.photoUrl, profile.primaryPhotoPath, photos) {
+        buildList<Any> {
+            photos
+                .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
+                .forEach { photo ->
+                    add(
+                        if (photo.path.startsWith("https://") || photo.path.startsWith("http://")) {
+                            photo.path
+                        } else {
+                            File(photo.path)
+                        }
+                    )
                 }
-            }
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${profile.displayName}, ${profile.age}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (profile.isVerified) {
-                        Spacer(Modifier.width(5.dp))
-                        Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
-                    }
+            if (isEmpty()) {
+                when {
+                    profile.photoUrl.startsWith("https://") || profile.photoUrl.startsWith("http://") ->
+                        add(profile.photoUrl)
+                    !profile.primaryPhotoPath.isNullOrBlank() ->
+                        add(File(profile.primaryPhotoPath))
                 }
-                Text(listOf(profile.city, profile.profession).filter { it.isNotBlank() }.joinToString(" • "))
-                Text(
-                    listOf(profile.religion, profile.motherTongue).filter { it.isNotBlank() }.joinToString(" • "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
+
+    MatreeProfileHeader(
+        name = profile.displayName,
+        age = profile.age.takeIf { it > 0 },
+        username = profile.username,
+        photoModels = photoModels,
+        primaryLine = listOf(profile.city, profile.profession)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        secondaryLine = listOf(profile.religion, profile.motherTongue)
+            .filter { it.isNotBlank() }
+            .joinToString(" • "),
+        isVerified = profile.isVerified,
+        isPremium = profile.isPremium
+    )
 }
 
 @Composable
 private fun ActualCompatibilityCard(ui: DetailUi) {
-    val available = ui.qScore > 0f || ui.astroScore > 0f
-    if (!available) return
+    if (ui.compatibilityFactors.isEmpty()) return
     SectionCard("Compatibility") {
-        if (ui.qScore > 0f) ScoreRow("Questionnaire", ui.qScore)
-        if (ui.astroScore > 0f) ScoreRow("Astrology", ui.astroScore)
-        ScoreRow("Combined", ui.combinedScore)
+        ui.compatibilityFactors.forEach { factor ->
+            val label = when (factor.key) {
+                "questionnaire" -> "Questionnaire"
+                "astrology" -> "Astrology"
+                "demographics_lifestyle" -> "Profile fit"
+                "mutual_trust" -> "Mutual trust"
+                else -> factor.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+            }
+            ScoreRow(label, factor.score)
+        }
+        if (ui.compatibilityAgePenalty > 0f) {
+            Text(
+                "Age-gap adjustment: −${(ui.compatibilityAgePenalty * 100).toInt()} percentage points",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        ScoreRow("Overall", ui.combinedScore)
         Text(
             "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship.",
             style = MaterialTheme.typography.labelSmall,
@@ -516,7 +599,7 @@ private fun ScoreRow(label: String, score: Float) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.width(105.dp), style = MaterialTheme.typography.bodySmall)
         LinearProgressIndicator(progress = { score.coerceIn(0f, 1f) }, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Text("$pct%", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }
@@ -552,10 +635,5 @@ private fun Fact(label: String, value: String) {
 
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            content()
-        }
-    }
+    MatreeProfileSection(title = title, content = content)
 }

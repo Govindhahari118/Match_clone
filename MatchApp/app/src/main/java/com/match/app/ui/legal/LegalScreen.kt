@@ -9,11 +9,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 // ── Content definitions ─────────────────────────────────────────────────────
 
@@ -115,15 +119,16 @@ private val SECURITY = listOf(
 )
 
 private val REFUNDS = listOf(
-    LegalSection("Eligibility", listOf(
-        "Refunds are available within 7 days of plan activation.",
-        "Only the original payment method can receive refunds."
+    LegalSection("Purchase channel", listOf(
+        "Refund and cancellation eligibility depends on the purchase channel, product state, and the policy that applies to that purchase.",
+        "For Google Play purchases, the current Google Play purchase/subscription and refund process remains authoritative."
     )),
-    LegalSection("How to Request", listOf(
-        "Email support@matrimonyconnect.com with your order ID and the reason for cancellation."
+    LegalSection("Support", listOf(
+        "Use the in-app support flow with the relevant order or purchase reference when you need billing help.",
+        "Matree does not promise a universal refund window unless that exact policy is displayed for the product and purchase channel."
     )),
-    LegalSection("Exceptions", listOf(
-        "Refunds may not be granted after 7 days, or if the plan was purchased through a partner marketplace."
+    LegalSection("Entitlement changes", listOf(
+        "Verified refunds, cancellations, expiries and chargebacks update server-owned entitlement state and are reconciled across devices."
     ))
 )
 
@@ -143,7 +148,7 @@ private fun subtitleFor(type: String) = when (type) {
     "privacy" -> "MatrimonyConnect is built around trust. This policy explains what data we collect, why we collect it, and how you control your privacy."
     "guidelines" -> "MatrimonyConnect is built for serious, respectful matchmaking. These guidelines protect everyone on the platform."
     "security" -> "We take security seriously. This page outlines basic practices and how to report security issues responsibly."
-    "refunds" -> "All paid plans include a 7-day money-back guarantee. If you are not satisfied, contact support within 7 days."
+    "refunds" -> "Refund and cancellation terms depend on the real purchase channel and the policy shown for that product."
     else -> ""
 }
 
@@ -167,73 +172,57 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("legal_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = title, onBack = onBack)
         }
     ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(20.dp).testTag("legal_screen_$type"),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(MatreeDesign.spacing.lg).testTag("legal_screen_$type"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.lg)
         ) {
-            // Header card
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                modifier = Modifier.fillMaxWidth()
+            MatreeHero(
+                title = title,
+                subtitle = subtitle
             ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(subtitle, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Spacer(Modifier.height(8.dp))
-                    Text(t("effective_date", "Effective March 10, 2026"), style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
-                }
+                Text(
+                    t("effective_date", "Effective March 10, 2026"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // Sections
             sections.forEach { section ->
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(18.dp)) {
-                        Text(section.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(10.dp))
-                        section.bullets.forEach { bullet ->
-                            Row(Modifier.padding(vertical = 3.dp)) {
-                                Text("•", style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary, modifier = Modifier.width(16.dp))
-                                Text(bullet, style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface)
-                            }
+                MatreeInfoCard {
+                    Text(
+                        section.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(MatreeDesign.spacing.sm))
+                    section.bullets.forEach { bullet ->
+                        Row(Modifier.padding(vertical = MatreeDesign.spacing.xxs)) {
+                            Text(
+                                "•",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(MatreeDesign.spacing.md)
+                            )
+                            Text(
+                                bullet,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
             }
 
             // Contact footer
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "© 2026 MatrimonyConnect. All rights reserved.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-            Spacer(Modifier.height(16.dp))
+            MatreeInlineNotice(
+                message = "© 2026 MatrimonyConnect. All rights reserved."
+            )
+            Spacer(Modifier.height(MatreeDesign.spacing.md))
         }
     }
 }

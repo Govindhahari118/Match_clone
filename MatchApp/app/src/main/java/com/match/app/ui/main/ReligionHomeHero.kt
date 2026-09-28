@@ -2,17 +2,7 @@ package com.match.app.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,22 +13,15 @@ import androidx.compose.material.icons.filled.Diversity3
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.TempleHindu
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,6 +29,9 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ReligionExperiencePreference
+import com.match.app.ui.theme.AppPalette
+import com.match.app.ui.theme.MatreeDesign
+import com.match.app.ui.theme.colorSchemeFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -67,7 +53,6 @@ class ReligionHomeViewModel @Inject constructor(
         MatchFilter()
     )
 
-    /** Keep Home and Discover on the same persisted filter source of truth. */
     fun open(category: ReligionCategory, navigate: () -> Unit) = viewModelScope.launch {
         session.setFilter(currentFilter.value.copy(religion = category.label))
         navigate()
@@ -77,17 +62,47 @@ class ReligionHomeViewModel @Inject constructor(
 private data class ReligionCardStyle(
     val category: ReligionCategory,
     val icon: ImageVector,
-    val start: Color,
-    val end: Color,
+    val palette: AppPalette,
     val subtitle: String
 )
 
-private val religionStyles = listOf(
-    ReligionCardStyle(ReligionCategory.HINDU, Icons.Filled.TempleHindu, Color(0xFFC76B00), Color(0xFF8C4A3A), "Community, caste & astrology preferences"),
-    ReligionCardStyle(ReligionCategory.CHRISTIAN, Icons.Filled.Church, Color(0xFF315E8A), Color(0xFF79536B), "Denomination, values & family preferences"),
-    ReligionCardStyle(ReligionCategory.MUSLIM, Icons.Filled.Mosque, Color(0xFF17705A), Color(0xFF78613A), "Community, values & family preferences"),
-    ReligionCardStyle(ReligionCategory.OTHER, Icons.Filled.Diversity3, Color(0xFF6D4C7D), Color(0xFF8B5E66), "Explore compatible communities with flexibility")
+private val religionStyles = mapOf(
+    ReligionCategory.HINDU to ReligionCardStyle(
+        ReligionCategory.HINDU, Icons.Filled.TempleHindu, AppPalette.HINDU,
+        "Community, caste and astrology preferences"
+    ),
+    ReligionCategory.CHRISTIAN to ReligionCardStyle(
+        ReligionCategory.CHRISTIAN, Icons.Filled.Church, AppPalette.CHRISTIAN,
+        "Denomination, values and family preferences"
+    ),
+    ReligionCategory.MUSLIM to ReligionCardStyle(
+        ReligionCategory.MUSLIM, Icons.Filled.Mosque, AppPalette.MUSLIM,
+        "Community, values and family preferences"
+    ),
+    ReligionCategory.SIKH to ReligionCardStyle(
+        ReligionCategory.SIKH, Icons.Filled.Diversity3, AppPalette.SIKH,
+        "Community, values and family preferences"
+    ),
+    ReligionCategory.BUDDHIST to ReligionCardStyle(
+        ReligionCategory.BUDDHIST, Icons.Filled.Diversity3, AppPalette.BUDDHIST,
+        "Tradition, values and family preferences"
+    ),
+    ReligionCategory.JAIN to ReligionCardStyle(
+        ReligionCategory.JAIN, Icons.Filled.Diversity3, AppPalette.JAIN,
+        "Community, values and family preferences"
+    ),
+    ReligionCategory.PARSI to ReligionCardStyle(
+        ReligionCategory.PARSI, Icons.Filled.Diversity3, AppPalette.PARSI,
+        "Community, values and family preferences"
+    ),
+    ReligionCategory.OTHER to ReligionCardStyle(
+        ReligionCategory.OTHER, Icons.Filled.Diversity3, AppPalette.VIVAH,
+        "Explore compatible communities with flexibility"
+    )
 )
+
+private fun religionStyle(category: ReligionCategory): ReligionCardStyle =
+    religionStyles[category] ?: religionStyles.getValue(ReligionCategory.OTHER)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -100,10 +115,11 @@ fun ReligionHomeHero(
     val effective = preference.effective(profileReligion)
     val profileCategory = ReligionCategory.fromReligion(profileReligion)
     val primary = if (preference.locked) profileCategory else effective.singleOrNull()
+    val spacing = MatreeDesign.spacing
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = spacing.md),
+        verticalArrangement = Arrangement.spacedBy(spacing.sm)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -117,51 +133,84 @@ fun ReligionHomeHero(
             }
             if (preference.locked) {
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                    Icon(Icons.Filled.Lock, "Religion locked", Modifier.padding(8.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = "Religion discovery locked",
+                        modifier = Modifier.padding(spacing.xs).size(MatreeDesign.sizes.iconSmall),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
 
         if (primary != null) {
-            val style = religionStyles.first { it.category == primary }
+            val style = religionStyle(primary)
             LargeReligionCard(style) { vm.open(style.category, onOpenMatches) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(spacing.xs),
+                verticalArrangement = Arrangement.spacedBy(spacing.xs)
+            ) {
                 ReligionCategory.entries.filter { it != primary }.forEach { category ->
-                    val styleAlt = religionStyles.first { it.category == category }
+                    val alternative = religionStyle(category)
                     Surface(
-                        modifier = Modifier.clickable(enabled = !preference.locked) { vm.open(category, onOpenMatches) },
-                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable(enabled = !preference.locked) {
+                            vm.open(category, onOpenMatches)
+                        },
+                        shape = RoundedCornerShape(percent = 50),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(styleAlt.icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.size(6.dp))
-                            Text(styleAlt.category.label, style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            Modifier.padding(horizontal = spacing.sm, vertical = spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                alternative.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.size(spacing.xs))
+                            Text(alternative.category.label, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
             }
         } else {
             val visible = if (effective.isEmpty()) ReligionCategory.entries.toSet() else effective
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                religionStyles.filter { it.category in visible }.chunked(2).forEach { rowStyles ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        rowStyles.forEach { style ->
-                            CompactReligionCard(style, Modifier.weight(1f)) { vm.open(style.category, onOpenMatches) }
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
+                ReligionCategory.entries
+                    .filter { it in visible }
+                    .map(::religionStyle)
+                    .chunked(2)
+                    .forEach { rowStyles ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing.xs)) {
+                            rowStyles.forEach { style ->
+                                CompactReligionCard(style, Modifier.weight(1f)) {
+                                    vm.open(style.category, onOpenMatches)
+                                }
+                            }
+                            if (rowStyles.size == 1) Spacer(Modifier.weight(1f))
                         }
-                        if (rowStyles.size == 1) Spacer(Modifier.weight(1f))
                     }
-                }
             }
         }
 
-        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)) {
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.size(8.dp))
+        Surface(
+            shape = RoundedCornerShape(MatreeDesign.radii.medium),
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(spacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.size(spacing.xs))
                 Text(
-                    if (primary == ReligionCategory.HINDU) "Special Home can rank compatible profiles using Rasi, Nakshatra and Kundali preferences."
-                    else "Special Home focuses on partner preferences, values and lifestyle compatibility for your selected community.",
+                    if (primary == ReligionCategory.HINDU) {
+                        "Special Home can use applicable Rasi, Nakshatra and Kundali preferences when you choose them."
+                    } else {
+                        "Special Home focuses on partner preferences, values and lifestyle compatibility for your selected community."
+                    },
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -171,26 +220,79 @@ fun ReligionHomeHero(
 
 @Composable
 private fun LargeReligionCard(style: ReligionCardStyle, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().height(190.dp), onClick = onClick, shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = Color.Transparent)) {
-        Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.linearGradient(listOf(style.start, style.end))).padding(22.dp)) {
-            Icon(style.icon, null, Modifier.size(54.dp), tint = Color.White.copy(alpha = 0.95f))
+    val preview = colorSchemeFor(style.palette, dark = false)
+    val spacing = MatreeDesign.spacing
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.display + MatreeDesign.spacing.xxl),
+        onClick = onClick,
+        shape = RoundedCornerShape(MatreeDesign.radii.hero),
+        colors = CardDefaults.cardColors(containerColor = preview.surface.copy(alpha = 0f))
+    ) {
+        Box(
+            Modifier.fillMaxSize()
+                .background(Brush.linearGradient(listOf(preview.primary, preview.primary.copy(alpha = 0.78f))))
+                .padding(spacing.xl)
+        ) {
+            Icon(
+                style.icon,
+                contentDescription = null,
+                modifier = Modifier.size(MatreeDesign.sizes.avatarCompact),
+                tint = preview.onPrimary
+            )
             Column(Modifier.align(Alignment.BottomStart)) {
-                Text("${style.category.label} Matches", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text(style.subtitle, color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "${style.category.label} Matches",
+                    color = preview.onPrimary,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(style.subtitle, color = preview.onPrimary.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium)
             }
-            Icon(Icons.Filled.ArrowForward, "Open", Modifier.align(Alignment.BottomEnd), tint = Color.White)
+            Icon(
+                Icons.Filled.ArrowForward,
+                contentDescription = "Open ${style.category.label} matches",
+                modifier = Modifier.align(Alignment.BottomEnd),
+                tint = preview.onPrimary
+            )
         }
     }
 }
 
 @Composable
-private fun CompactReligionCard(style: ReligionCardStyle, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier.height(155.dp), onClick = onClick, shape = RoundedCornerShape(22.dp)) {
-        Box(Modifier.fillMaxWidth().height(155.dp).background(Brush.linearGradient(listOf(style.start, style.end))).padding(16.dp)) {
-            Icon(style.icon, null, Modifier.size(36.dp), tint = Color.White)
+private fun CompactReligionCard(
+    style: ReligionCardStyle,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    val preview = colorSchemeFor(style.palette, dark = false)
+    val spacing = MatreeDesign.spacing
+    Card(
+        modifier = modifier.height(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.display),
+        onClick = onClick,
+        shape = RoundedCornerShape(MatreeDesign.radii.large),
+        colors = CardDefaults.cardColors(containerColor = preview.surface.copy(alpha = 0f))
+    ) {
+        Box(
+            Modifier.fillMaxSize()
+                .background(Brush.linearGradient(listOf(preview.primary, preview.primary.copy(alpha = 0.78f))))
+                .padding(spacing.md)
+        ) {
+            Icon(
+                style.icon,
+                contentDescription = null,
+                modifier = Modifier.size(MatreeDesign.sizes.iconLarge),
+                tint = preview.onPrimary
+            )
             Column(Modifier.align(Alignment.BottomStart)) {
-                Text(style.category.label, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Explore matches", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium)
+                Text(
+                    style.category.label,
+                    color = preview.onPrimary,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("Explore matches", color = preview.onPrimary.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium)
             }
         }
     }

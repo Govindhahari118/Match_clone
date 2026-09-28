@@ -56,6 +56,7 @@ import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
 import com.match.app.ui.verification.VerificationScreen
 import com.match.app.ui.whoviewed.WhoViewedScreen
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -173,27 +174,38 @@ private fun AppDrawer(
         ))
     )
 
-    ModalDrawerSheet(drawerShape = RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)) {
+    ModalDrawerSheet(
+        drawerShape = RoundedCornerShape(
+            topEnd = MatreeDesign.radii.large,
+            bottomEnd = MatreeDesign.radii.large
+        )
+    ) {
         Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(20.dp),
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(MatreeDesign.spacing.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MatreeDesign.sizes.touchTarget)) {
                 Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.onPrimary) }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
-                Text("MatrimonyConnect", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Matree", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Menu", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close menu") }
         }
 
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = MatreeDesign.spacing.xs)) {
             sections.forEach { section ->
                 item {
                     Text(section.title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp))
+                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(
+                            start = MatreeDesign.spacing.lg,
+                            top = MatreeDesign.spacing.md,
+                            bottom = MatreeDesign.spacing.xxs
+                        ))
                 }
                 items(section.items) { item ->
                     val selected = currentRoute == item.route
@@ -201,11 +213,14 @@ private fun AppDrawer(
                     val foreground = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     Row(
                         Modifier.fillMaxWidth().background(background).clickable { onNavigate(item.route); onClose() }
-                            .padding(horizontal = 20.dp, vertical = 11.dp),
+                            .padding(
+                                horizontal = MatreeDesign.spacing.lg,
+                                vertical = MatreeDesign.spacing.sm
+                            ),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(item.icon, null, tint = foreground, modifier = Modifier.size(21.dp))
-                        Spacer(Modifier.width(13.dp))
+                        Icon(item.icon, null, tint = foreground, modifier = Modifier.size(MatreeDesign.sizes.icon))
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column(Modifier.weight(1f)) {
                             Text(item.label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = foreground)
                             Text(item.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -214,7 +229,7 @@ private fun AppDrawer(
                     }
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
+            item { Spacer(Modifier.height(MatreeDesign.spacing.xl)) }
         }
     }
 }
@@ -232,8 +247,13 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val scope = rememberCoroutineScope()
 
     val activity = LocalContext.current as? MainActivity
-    LaunchedEffect(Unit) {
-        activity?.consumeDeepLink()?.let { destination -> nav.navigate(destination) { launchSingleTop = true } }
+    val pendingDeepLink = activity?.pendingDeepLink
+    LaunchedEffect(pendingDeepLink) {
+        if (pendingDeepLink != null) {
+            activity?.consumeDeepLink()?.let { destination ->
+                nav.navigate(destination) { launchSingleTop = true }
+            }
+        }
     }
 
     val showBottomBar = currentRoute in setOf(
@@ -262,12 +282,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
             topBar = {
                 if (showBottomBar) {
                     val pageTitle = when (currentRoute) {
-                        MainRoutes.HOME -> "MatrimonyConnect"
+                        MainRoutes.HOME -> "Matree"
                         MainRoutes.MATCHES -> "Discover"
                         MainRoutes.INTERESTS -> "Interests"
                         MainRoutes.CHAT_LIST -> "Messages"
                         MainRoutes.PROFILE -> "My Profile"
-                        else -> "MatrimonyConnect"
+                        else -> "Matree"
                     }
                     TopAppBar(
                         title = { Text(pageTitle, fontWeight = FontWeight.Bold) },
@@ -287,7 +307,11 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
             },
             bottomBar = {
                 if (showBottomBar) {
-                    NavigationBar(modifier = Modifier.testTag("bottom_bar")) {
+                    NavigationBar(
+                        modifier = Modifier
+                            .heightIn(min = MatreeDesign.sizes.bottomNavigation)
+                            .testTag("bottom_bar")
+                    ) {
                         TABS.forEach { tab ->
                             val selected = current?.hierarchy?.any { it.route == tab.route } == true
                             NavigationBarItem(
@@ -318,23 +342,16 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     HomeLauncherScreen(
                         onGoMatches = { nav.navigate(MainRoutes.MATCHES) },
                         onGoQuiz = { nav.navigate(MainRoutes.QUIZ) },
-                        onGoStories = {},
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoRegions = { nav.navigate(MainRoutes.MATCHES) },
-                        onGoCircles = {},
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
                         onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
-                        onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
-                        onGoFamily = { nav.navigate(MainRoutes.PROFILE) },
-                        onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
-                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) },
-                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) }
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }

@@ -14,4 +14,7 @@ interface ProfileViewDao {
 
     @Query("SELECT COUNT(*) FROM profile_views WHERE profileId = :me")
     fun observeViewCount(me: Long): Flow<Int>
+
+    @Query("DELETE FROM profile_views WHERE profileId = :profileId")
+    suspend fun deleteForProfile(profileId: Long)
 }

@@ -51,19 +51,40 @@ class WhoViewedRepository @Inject constructor(
 
         runCatching { profileViewService.fetchViewerUids(myUid) }
             .onSuccess { viewerUids ->
-                viewerUids.forEach { viewerUid ->
+                // Cloud history is authoritative. Rebuild only from viewer profiles that still pass
+                // a forced server read so block/privacy/account suppression cannot survive in Room.
+                dao.deleteForProfile(me)
+                viewerUids.distinct().forEach { viewerUid ->
                     if (viewerUid == myUid) return@forEach
-                    var viewer = userDao.findByFirebaseUid(viewerUid)
-                    if (viewer == null) {
-                        val remote = runCatching { profileService.fetchProfile(viewerUid) }.getOrNull()
-                        if (remote != null) {
-                            val localId = runCatching { userDao.insert(remote) }.getOrNull()
-                            viewer = if (localId != null) userDao.findById(localId) else userDao.findByFirebaseUid(viewerUid)
-                        }
+                    val remote = runCatching { profileService.fetchProfileFromServer(viewerUid) }
+                        .getOrNull() ?: return@forEach
+                    val existing = userDao.findByFirebaseUid(viewerUid)
+                    val viewer = if (existing != null) {
+                        val merged = remote.copy(
+                            id = existing.id,
+                            email = existing.email,
+                            passwordHash = existing.passwordHash,
+                            isSeed = false
+                        )
+                        userDao.update(merged)
+                        merged
+                    } else {
+                        val cached = remote.copy(
+                            email = "${remote.firebaseUid}@cache.invalid",
+                            passwordHash = "",
+                            isSeed = false
+                        )
+                        val localId = runCatching { userDao.insert(cached) }.getOrNull()
+                            ?: return@forEach
+                        cached.copy(id = localId)
                     }
-                    viewer?.let {
-                        dao.record(ProfileViewEntity(viewerId = it.id, profileId = me, viewedAt = System.currentTimeMillis()))
-                    }
+                    dao.record(
+                        ProfileViewEntity(
+                            viewerId = viewer.id,
+                            profileId = me,
+                            viewedAt = System.currentTimeMillis()
+                        )
+                    )
                 }
             }
             .onFailure { Log.w("WhoViewedRepository", "Failed to refresh cloud profile views", it) }

@@ -18,18 +18,29 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
+import com.match.app.data.repo.NotificationPreferenceRepository
+import com.match.app.data.repo.NotificationPreferences
 import com.match.app.data.repo.SavedSearchRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.DisplayMode
 import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.ThemePreference
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.AppPalette
+import com.match.app.ui.theme.AppearanceThemeResolver
+import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -50,14 +61,19 @@ class SettingsViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val authRepo: AuthRepository,
-    private val savedSearchRepo: SavedSearchRepository
+    private val savedSearchRepo: SavedSearchRepository,
+    private val notificationPreferenceRepo: NotificationPreferenceRepository,
+    private val appearancePreferenceRepo: AppearancePreferenceRepository,
+    private val telemetry: MatreeTelemetry
 ) : ViewModel() {
-    val appearance = session.appearancePreference
+    val appearance = appearancePreferenceRepo.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
+    val notificationPreferences = notificationPreferenceRepo.observe()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, NotificationPreferences())
 
     val user: StateFlow<UserEntity?> = session.userId
         .flatMapLatest { id -> if (id == null) flowOf(null) else userDao.observeById(id) }
@@ -80,13 +96,43 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
-    fun useAutomaticTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.AUTOMATIC) }
-    fun useNeutralTheme() = viewModelScope.launch { session.setThemePreference(ThemePreference.NEUTRAL) }
-    fun useManualTheme(value: AppPalette) = viewModelScope.launch {
-        session.setThemePreference(ThemePreference.MANUAL, value.name)
+    private val _profilePaused = MutableStateFlow(false)
+    val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
+    private val _lifecycleBusy = MutableStateFlow(false)
+    val lifecycleBusy: StateFlow<Boolean> = _lifecycleBusy.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _profilePaused.value = authRepo.getMatrimonyPaused()
+        }
+    }
+
+    fun useAutomaticTheme() = updateTheme(ThemePreference.AUTOMATIC)
+    fun useNeutralTheme() = updateTheme(ThemePreference.NEUTRAL)
+    fun useManualTheme(value: AppPalette) = updateTheme(ThemePreference.MANUAL, value.name)
+
+    private fun updateTheme(preference: ThemePreference, manualThemeKey: String? = null) = viewModelScope.launch {
+        runCatching { appearancePreferenceRepo.setThemePreference(preference, manualThemeKey) }
+            .onSuccess {
+                val paletteKey = when (preference) {
+                    ThemePreference.AUTOMATIC -> "AUTOMATIC"
+                    ThemePreference.NEUTRAL -> "VIVAH"
+                    ThemePreference.MANUAL -> manualThemeKey ?: "VIVAH"
+                }
+                telemetry.themeChanged(preference.name, paletteKey)
+            }
+            .onFailure {
+                _searchMessage.value =
+                    "Theme changed on this device. Account sync will retry when the connection is available."
+            }
     }
     fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
+
+    fun setNotificationPreference(key: String, enabled: Boolean) = viewModelScope.launch {
+        runCatching { notificationPreferenceRepo.update(key, enabled) }
+            .onFailure { _searchMessage.value = "Could not update notification preference." }
+    }
 
     fun saveCurrentSearch(name: String) = viewModelScope.launch {
         val id = session.userId.first() ?: return@launch
@@ -106,6 +152,23 @@ class SettingsViewModel @Inject constructor(
 
     fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
+
+    fun setProfilePaused(paused: Boolean) = viewModelScope.launch {
+        if (_lifecycleBusy.value) return@launch
+        _lifecycleBusy.value = true
+        val result = authRepo.setMatrimonyPaused(paused)
+        result.onSuccess { actual ->
+            _profilePaused.value = actual
+            _searchMessage.value = if (actual) {
+                "Matrimony profile paused. You are hidden from new discovery."
+            } else {
+                "Matrimony profile resumed. Current privacy and eligibility rules apply."
+            }
+        }.onFailure {
+            _searchMessage.value = it.message ?: "Could not update matrimony visibility."
+        }
+        _lifecycleBusy.value = false
+    }
 
     fun deleteAccount() = viewModelScope.launch {
         val id = session.userId.first()
@@ -141,14 +204,22 @@ fun SettingsScreen(
     val language by vm.uiLanguage.collectAsState()
     val accountState by vm.accountState.collectAsState()
     val currentFilter by vm.currentFilter.collectAsState()
+    val notificationPreferences by vm.notificationPreferences.collectAsState()
     val savedSearches by vm.savedSearches.collectAsState()
     val searchMessage by vm.searchMessage.collectAsState()
+    val profilePaused by vm.profilePaused.collectAsState()
+    val lifecycleBusy by vm.lifecycleBusy.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
 
-    val currentPalette = AppPalette.fromKey(appearance.manualThemeKey)
+    val currentPalette = AppPalette.fromProductionKey(appearance.manualThemeKey)
+    val resolvedPalette = AppearanceThemeResolver.resolve(
+        themePreference = appearance.themePreference,
+        manualPaletteKey = appearance.manualThemeKey,
+        profileReligion = user?.religion
+    )
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -170,20 +241,13 @@ fun SettingsScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("settings_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                }
-            )
+            MatreeTopBar(title = "Settings", onBack = onBack)
         }
     ) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("settings_screen"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(MatreeDesign.spacing.md).testTag("settings_screen"),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
         ) {
             Text("Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
@@ -194,7 +258,7 @@ fun SettingsScreen(
                                 Text(user?.displayName?.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column(Modifier.weight(1f)) {
                             Text(user?.displayName ?: "Account", fontWeight = FontWeight.SemiBold)
                             user?.username?.takeIf { it.isNotBlank() }?.let { Text("@$it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
@@ -203,7 +267,7 @@ fun SettingsScreen(
                         if (user?.isVerified == true) Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary)
                     }
                     user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
-                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { user?.id?.let { id -> "M$id" } ?: "" }.orEmpty())
+                    SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { "Being assigned" }.orEmpty())
                 }
             }
 
@@ -211,7 +275,7 @@ fun SettingsScreen(
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
                     Column(Modifier.weight(1f)) {
                         Text(plan.ifBlank { "FREE" }.replace('_', ' '), fontWeight = FontWeight.SemiBold)
                         Text("Membership status is synchronized from the server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -227,7 +291,7 @@ fun SettingsScreen(
                     Text(searchFilterSummary(currentFilter), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = { searchName = ""; saveSearchDialog = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.BookmarkAdd, null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(MatreeDesign.spacing.xs))
                         Text("Save current search")
                     }
                     if (savedSearches.isEmpty()) {
@@ -249,80 +313,123 @@ fun SettingsScreen(
             }
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("App theme", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Theme changes presentation only. Your religion, matching preferences, privacy, verification and pricing do not change.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.themePreference == ThemePreference.AUTOMATIC,
-                        title = "Automatic",
-                        subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let { "Follow my profile religion — $it" }
-                            ?: "Follow my profile religion when available",
-                        onClick = vm::useAutomaticTheme
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.themePreference == ThemePreference.NEUTRAL,
-                        title = "Matree Neutral",
-                        subtitle = "Use the standard Matree appearance",
-                        onClick = vm::useNeutralTheme
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Manual theme", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (appearance.themePreference == ThemePreference.MANUAL) "Selected: ${currentPalette.label}"
-                            else "Choose a visual theme below. Selecting one switches to Manual.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+            MatreeInfoCard {
+                Text("App theme", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Appearance is independent from your declared religion, partner preferences, privacy, verification and pricing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MatreeInlineNotice(
+                    message = "Current visual family: ${resolvedPalette.label}",
+                    tone = MatreeStatusTone.NEUTRAL
+                )
+
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
+                    title = "Automatic",
+                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
+                        "Follow my confirmed profile religion — $it"
+                    } ?: "Use Matree Neutral until a profile religion is available",
+                    onClick = vm::useAutomaticTheme
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
+                    title = "Matree Neutral",
+                    subtitle = "Use the universal Matree visual family",
+                    onClick = vm::useNeutralTheme
+                )
+
+                Text("Manual theme family", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (appearance.themePreference == ThemePreference.MANUAL) {
+                        "Selected: ${currentPalette.label}. This does not alter your profile religion."
+                    } else {
+                        "Choose any supported visual family without changing your actual religion."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    manualReligionPalettes.forEach { palette ->
+                        MatreeChoiceChip(
+                            text = palette.label,
+                            selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
+                            onClick = { vm.useManualTheme(palette) }
                         )
                     }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        manualReligionPalettes.forEach { palette ->
-                            FilterChip(
-                                selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
-                                onClick = { vm.useManualTheme(palette) },
-                                label = { Text(palette.label) },
-                                leadingIcon = { Surface(shape = CircleShape, color = palette.swatch, modifier = Modifier.size(14.dp)) {} }
-                            )
-                        }
-                    }
-                    Text(
-                        "Changing theme takes effect immediately and never changes your declared religion.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    HorizontalDivider()
-                    Text("Display", fontWeight = FontWeight.SemiBold)
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.SYSTEM,
-                        title = "System",
-                        subtitle = "Follow the device light/dark setting",
-                        onClick = { vm.setDisplayMode(DisplayMode.SYSTEM) }
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.LIGHT,
-                        title = "Light",
-                        subtitle = "Always use the light palette",
-                        onClick = { vm.setDisplayMode(DisplayMode.LIGHT) }
-                    )
-                    AppearanceChoiceRow(
-                        selected = appearance.displayMode == DisplayMode.DARK,
-                        title = "Dark",
-                        subtitle = "Always use the dark palette",
-                        onClick = { vm.setDisplayMode(DisplayMode.DARK) }
-                    )
                 }
+
+                HorizontalDivider()
+                Text("Display mode", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Light/dark behavior is a separate device preference.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.SYSTEM,
+                    title = "System",
+                    subtitle = "Follow the device light/dark setting",
+                    onClick = { vm.setDisplayMode(DisplayMode.SYSTEM) }
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.LIGHT,
+                    title = "Light",
+                    subtitle = "Always use the light palette",
+                    onClick = { vm.setDisplayMode(DisplayMode.LIGHT) }
+                )
+                AppearanceChoiceRow(
+                    selected = appearance.displayMode == DisplayMode.DARK,
+                    title = "Dark",
+                    subtitle = "Always use the dark palette",
+                    onClick = { vm.setDisplayMode(DisplayMode.DARK) }
+                )
             }
+
+            Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Choose which real account events may send a push notification. Notification history remains available in the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            SettingToggle(
+                icon = Icons.Filled.PersonAdd,
+                title = "Interests",
+                subtitle = "New interest requests and related updates.",
+                checked = notificationPreferences.interests,
+                onCheckedChange = { vm.setNotificationPreference("interests", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Favorite,
+                title = "Matches",
+                subtitle = "Mutual-match notifications.",
+                checked = notificationPreferences.matches,
+                onCheckedChange = { vm.setNotificationPreference("matches", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Forum,
+                title = "Messages",
+                subtitle = "New-message notifications.",
+                checked = notificationPreferences.messages,
+                onCheckedChange = { vm.setNotificationPreference("messages", it) }
+            )
+            SettingToggle(
+                icon = Icons.Filled.Notifications,
+                title = "Account & system",
+                subtitle = "Verification, safety, subscription and service updates.",
+                checked = notificationPreferences.system,
+                onCheckedChange = { vm.setNotificationPreference("system", it) }
+            )
 
             Text("Language & security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Language, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
                     Column(Modifier.weight(1f)) {
                         Text("App language", fontWeight = FontWeight.SemiBold)
                         Text(language.uppercase(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -339,7 +446,37 @@ fun SettingsScreen(
             )
 
             HorizontalDivider()
-            Text("Account deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Matrimony visibility", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                if (profilePaused) {
+                    "Your profile is paused and excluded from new discovery. Messages, shortlist, preferences and account history are preserved."
+                } else {
+                    "Pause your matrimony profile without deleting your account. You can resume later."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { vm.setProfilePaused(!profilePaused) },
+                enabled = !lifecycleBusy && accountState !is SettingsViewModel.AccountState.Deleting,
+                modifier = Modifier.fillMaxWidth().testTag("settings_pause_profile")
+            ) {
+                if (lifecycleBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(if (profilePaused) Icons.Filled.PlayArrow else Icons.Filled.PauseCircle, null)
+                }
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(
+                    when {
+                        lifecycleBusy -> "Updating…"
+                        profilePaused -> "Resume matrimony profile"
+                        else -> "Pause matrimony profile"
+                    }
+                )
+            }
+
+            Text("Permanent deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Permanently delete your account and start the authenticated server cleanup flow. This action cannot be undone.",
                 style = MaterialTheme.typography.bodySmall,
@@ -353,10 +490,10 @@ fun SettingsScreen(
             ) {
                 if (accountState is SettingsViewModel.AccountState.Deleting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Filled.DeleteForever, null)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
                 Text(if (accountState is SettingsViewModel.AccountState.Deleting) "Deleting account…" else "Delete account")
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(MatreeDesign.spacing.xl))
         }
     }
 
@@ -401,7 +538,7 @@ private fun AppearanceChoiceRow(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         RadioButton(selected = selected, onClick = onClick)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -417,15 +554,15 @@ private fun SettingToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
             Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
@@ -436,7 +573,7 @@ private fun SettingInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector
     if (value.isBlank()) return
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MatreeDesign.spacing.xs))
         Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(80.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }

@@ -23,7 +23,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.match.app.ui.components.MatreeChoiceChip
+import com.match.app.ui.components.MatreeInfoCard
+import com.match.app.ui.components.MatreeLoadingState
+import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 data class QuizState(
     val loading: Boolean = true,
@@ -90,12 +95,15 @@ fun QuestionnaireScreen(vm: QuestionnaireViewModel = hiltViewModel()) {
 
     Scaffold(snackbarHost = { SnackbarHost(snack) }) { pad ->
         if (s.loading) {
-            Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            Box(
+                Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
+                contentAlignment = Alignment.Center
+            ) { MatreeLoadingState(message = "Loading questionnaire…", rows = 3) }
             return@Scaffold
         }
         LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(MatreeDesign.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm),
             modifier = Modifier.padding(pad).fillMaxSize().testTag("quiz_screen")
         ) {
             item {
@@ -127,50 +135,57 @@ fun QuestionnaireScreen(vm: QuestionnaireViewModel = hiltViewModel()) {
             }
 
             item {
-                Button(
+                MatreePrimaryButton(
+                    text = if (s.saving) "Saving…" else if (s.saved) t("update_answers", "Update answers") else t("save_answers", "Save answers"),
                     onClick = vm::save,
                     enabled = !s.saving,
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("quiz_save")
-                ) {
-                    if (s.saving) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else Text(if (s.saved) t("update_answers", "Update answers") else t("save_answers", "Save answers"))
-                }
-                Spacer(Modifier.height(24.dp))
+                    modifier = Modifier.fillMaxWidth().testTag("quiz_save")
+                )
+                Spacer(Modifier.height(MatreeDesign.spacing.xl))
             }
         }
     }
 }
 
 @Composable private fun SectionHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = MatreeDesign.spacing.xs))
 }
 
 @Composable
 private fun LikertRow(prompt: String, value: Int?, onChange: (Int) -> Unit) {
-    Card(shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(prompt, style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..5).forEach { v ->
-                    FilterChip(selected = value == v, onClick = { onChange(v) }, label = { Text(v.toString()) })
-                }
-                Spacer(Modifier.weight(1f))
-                Text("1 = Low · 5 = High", style = MaterialTheme.typography.labelSmall)
+    MatreeInfoCard {
+        Text(prompt, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+            (1..5).forEach { v ->
+                MatreeChoiceChip(
+                    text = v.toString(),
+                    selected = value == v,
+                    onClick = { onChange(v) }
+                )
             }
+            Spacer(Modifier.weight(1f))
+            Text("1 = Low · 5 = High", style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
 @Composable
-private fun InterestRow(prompt: String, options: List<String>, chosen: Set<String>, onToggle: (String) -> Unit) {
-    Card(shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(prompt, style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(8.dp))
-            FlowRowPolyfill(options) { opt ->
-                FilterChip(selected = opt in chosen, onClick = { onToggle(opt) }, label = { Text(opt) })
-            }
+private fun InterestRow(
+    prompt: String,
+    options: List<String>,
+    chosen: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    MatreeInfoCard {
+        Text(prompt, style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        FlowRowPolyfill(options) { opt ->
+            MatreeChoiceChip(
+                text = opt,
+                selected = opt in chosen,
+                onClick = { onToggle(opt) }
+            )
         }
     }
 }
@@ -178,9 +193,9 @@ private fun InterestRow(prompt: String, options: List<String>, chosen: Set<Strin
 /** Small polyfill — wraps chips across multiple rows using a simple column of rows. */
 @Composable
 private fun <T> FlowRowPolyfill(items: List<T>, itemsPerRow: Int = 3, content: @Composable (T) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
         items.chunked(itemsPerRow).forEach { chunk ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 chunk.forEach { content(it) }
             }
         }

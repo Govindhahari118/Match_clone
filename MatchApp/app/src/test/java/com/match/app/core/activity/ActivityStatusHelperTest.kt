@@ -1,5 +1,8 @@
 package com.match.app.core.activity
 
+import com.match.app.domain.model.Gender
+import com.match.app.domain.model.LookingFor
+import com.match.app.domain.model.UserProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -29,5 +32,31 @@ class ActivityStatusHelperTest {
         val status = ActivityStatusHelper.from(now - 120 * 86_400_000L, now)
         assertEquals("Inactive", status.label)
         assertFalse(status.isRecent)
+    }
+
+    @Test fun `missing activity is never presented as recent`() {
+        val status = ActivityStatusHelper.from(0L, now)
+        assertEquals("Activity unavailable", status.label)
+        assertFalse(status.isOnline)
+        assertFalse(status.isRecent)
+    }
+
+    @Test fun `profile completeness displays server aggregate instead of legacy weights`() {
+        val profile = UserProfile(
+            id = 1,
+            email = "owner@example.test",
+            displayName = "Owner",
+            age = 30,
+            gender = Gender.FEMALE,
+            lookingFor = LookingFor.MALE,
+            city = "Hyderabad",
+            bio = "",
+            rasi = "",
+            nakshatra = "",
+            hasQuestionnaire = false,
+            profileCompleteness = 0.65f
+        )
+
+        assertEquals(65, ActivityStatusHelper.profileCompleteness(profile))
     }
 }

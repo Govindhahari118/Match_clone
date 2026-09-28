@@ -32,9 +32,13 @@ class ChatRepository @Inject constructor(
 ) {
     companion object { private const val MAX_PLAINTEXT_LENGTH = 3000 }
 
-    /** Local Room copies are encrypted at rest with a device-local Android Keystore key. */
+    /**
+     * New local Room copies use versioned Android-Keystore-backed ciphertext. Historical rows that
+     * predate the storage prefix remain readable: encrypted legacy rows are decrypted, while old
+     * plaintext rows are displayed only for migration compatibility and are never created anew.
+     */
     fun thread(me: Long, peer: Long): Flow<List<MessageEntity>> = dao.observeThread(me, peer).map { list ->
-        list.map { msg -> ChatCrypto.decrypt(msg.body)?.let { msg.copy(body = it) } ?: msg }
+        list.map { msg -> ChatCrypto.decryptFromStorage(msg.body)?.let { msg.copy(body = it) } ?: msg }
     }
     fun unread(me: Long): Flow<Int> = dao.observeUnread(me)
 
@@ -45,8 +49,8 @@ class ChatRepository @Inject constructor(
         val trimmed = body.trim()
         if (trimmed.isEmpty() || trimmed.length > MAX_PLAINTEXT_LENGTH) return@withContext
         val clientId = UUID.randomUUID().toString().replace("-", "_")
-        val encrypted = ChatCrypto.encrypt(trimmed) ?: trimmed
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, status = "sending"))
+        val encrypted = protectBody(trimmed)
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = encrypted, replyToId = replyToId, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "TEXT", trimmed, "", 0)
     }
 
@@ -54,14 +58,14 @@ class ChatRepository @Inject constructor(
         require(durationMs in 500..5 * 60 * 1000L) { "Invalid voice duration" }
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(voiceUri, clientId, "m4a")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Voice message", voiceUri = persisted, voiceDurationMs = durationMs, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = protectBody("Voice message"), voiceUri = persisted, voiceDurationMs = durationMs, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "VOICE", "Voice message", persisted, durationMs)
     }
 
     suspend fun sendImage(me: Long, peer: Long, imageUri: String) = withContext(Dispatchers.IO) {
         val clientId = UUID.randomUUID().toString().replace("-", "_")
         val persisted = persistOutboxMedia(imageUri, clientId, "jpg")
-        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = "Image", imageUri = persisted, status = "sending"))
+        val localId = dao.insert(MessageEntity(fromUserId = me, toUserId = peer, body = protectBody("Image"), imageUri = persisted, clientMessageId = clientId, status = "sending"))
         sendOrQueue(me, peer, localId, clientId, "IMAGE", "Image", persisted, 0)
     }
 
@@ -91,6 +95,9 @@ class ChatRepository @Inject constructor(
             }
             firestoreChat.sendMessage(clientId, body, myUid, peerUid, voicePath, imagePath, durationMs.takeIf { it > 0 })
             dao.updateStatus(localId, "sent")
+            if (type == "IMAGE" || type == "VOICE") {
+                ChatOutboxMediaPolicy.deleteIfManaged(context.filesDir, mediaUri)
+            }
         } catch (_: Exception) {
             queue(me, peer, localId, clientId, type, body, mediaUri, durationMs)
         }
@@ -98,9 +105,14 @@ class ChatRepository @Inject constructor(
 
     private suspend fun queue(me: Long, peer: Long, localId: Long, clientId: String, type: String, body: String, mediaUri: String, durationMs: Long) {
         dao.updateStatus(localId, "failed")
-        pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = body, localMessageId = localId, clientMessageId = clientId, type = type, mediaUri = mediaUri, durationMs = durationMs))
+        val protectedBody = protectBody(body)
+        pendingDao.insert(PendingMessageEntity(fromUserId = me, toUserId = peer, body = protectedBody, localMessageId = localId, clientMessageId = clientId, type = type, mediaUri = mediaUri, durationMs = durationMs))
         MessageRetryWorker.enqueue(context)
     }
+
+    private fun protectBody(plaintext: String): String =
+        ChatCrypto.encryptForStorage(plaintext)
+            ?: throw IllegalStateException("Secure local message storage is unavailable")
 
     private fun persistOutboxMedia(source: String, clientId: String, ext: String): String {
         val dir = File(context.filesDir, "chat_outbox").apply { mkdirs() }
@@ -119,6 +131,18 @@ class ChatRepository @Inject constructor(
         return target.absolutePath
     }
 
+    suspend fun retryFailed(message: MessageEntity) = withContext(Dispatchers.IO) {
+        require(message.id > 0 && message.clientMessageId.isNotBlank()) {
+            "Message is not retryable"
+        }
+        val reset = pendingDao.resetRetry(message.id)
+        require(reset > 0) {
+            "This failed message is no longer in the durable outbox"
+        }
+        dao.updateStatus(message.id, "sending")
+        MessageRetryWorker.enqueue(context)
+    }
+
     suspend fun markRead(me: Long, peer: Long) = withContext(Dispatchers.IO) {
         dao.markRead(me, peer)
         val myUid = userDao.findById(me)?.firebaseUid.orEmpty()
@@ -132,14 +156,32 @@ class ChatRepository @Inject constructor(
         if (myUid.isBlank() || peerUid.isBlank()) return@withContext
         runCatching {
             firestoreChat.observeThread(myUid, peerUid).collect { remoteMessages ->
+                val deliveryAcks = mutableListOf<String>()
                 remoteMessages.forEach { remote ->
+                    if (remote.fromFirebaseUid == myUid && remote.toFirebaseUid == peerUid) {
+                        val status = when {
+                            remote.readAt != null || remote.isRead -> "read"
+                            remote.deliveredAt != null -> "delivered"
+                            else -> "sent"
+                        }
+                        dao.updateRemoteStatus(remote.id, status, remote.readAt ?: 0L)
+                        return@forEach
+                    }
+
                     if (remote.fromFirebaseUid != peerUid || remote.toFirebaseUid != myUid) return@forEach
-                    if (dao.countBySentAt(peer, me, remote.sentAt) > 0) return@forEach
+                    if (remote.deliveredAt == null) deliveryAcks += remote.id
+
+                    val incomingStatus = if (remote.readAt != null || remote.isRead) "read" else "delivered"
+                    if (dao.countByClientMessageId(remote.id) > 0) {
+                        dao.updateRemoteStatus(remote.id, incomingStatus, remote.readAt ?: 0L)
+                        return@forEach
+                    }
+
                     val voiceLocal = remote.voiceUri?.let { storage.downloadChatMedia(it).getOrNull() }
                     val imageLocal = remote.imageUri?.let { storage.downloadChatMedia(it).getOrNull() }
                     if (remote.voiceUri != null && voiceLocal == null) return@forEach
                     if (remote.imageUri != null && imageLocal == null) return@forEach
-                    val localBody = if (remote.voiceUri == null && remote.imageUri == null) ChatCrypto.encrypt(remote.body) ?: remote.body else remote.body
+                    val localBody = ChatCrypto.encryptForStorage(remote.body) ?: return@forEach
                     dao.insert(
                         MessageEntity(
                             fromUserId = peer,
@@ -149,10 +191,14 @@ class ChatRepository @Inject constructor(
                             imageUri = imageLocal,
                             voiceDurationMs = remote.voiceDurationMs,
                             sentAt = remote.sentAt,
-                            readAt = if (remote.isRead) System.currentTimeMillis() else null,
-                            status = if (remote.isRead) "read" else "delivered"
+                            readAt = remote.readAt,
+                            clientMessageId = remote.id,
+                            status = incomingStatus
                         )
                     )
+                }
+                if (deliveryAcks.isNotEmpty()) {
+                    runCatching { firestoreChat.acknowledgeDelivered(myUid, peerUid, deliveryAcks) }
                 }
             }
         }

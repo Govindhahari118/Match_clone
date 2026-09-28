@@ -21,8 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -36,35 +34,33 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
+import com.match.app.ui.components.MatreeHero
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 private data class OnboardPage(
     val icon: ImageVector,
     val title: String,
     val body: String,
     val bullets: List<String>,
-    val iconTint: Color,
-    val bgColor: Color,
     val tag: String
 )
 
 private val PAGES = listOf(
     OnboardPage(
         icon = Icons.Filled.Favorite,
-        title = "Welcome to Match",
-        body = "India's most trusted matrimony app. Discover people who truly fit your life, values and dreams.",
-        bullets = listOf("50,000+ happy couples", "10 Lakh+ verified profiles", "200+ communities"),
-        iconTint = Color(0xFFE91E63),
-        bgColor = Color(0xFFFCE4EC),
+        title = "Welcome to Matree",
+        body = "Build a genuine matrimony profile, set your preferences and discover eligible people with clear privacy controls.",
+        bullets = listOf("Real profile and activity states", "Granular verification signals", "Privacy and safety controls"),
         tag = "ob_welcome"
     ),
     OnboardPage(
         icon = Icons.Filled.Groups,
         title = "Community Matching",
-        body = "Search across 200+ Indian communities — Hindu, Muslim, Christian, Sikh, Jain and more.",
-        bullets = listOf("Religion & caste filters", "Mother tongue preferences", "Regional match discovery"),
-        iconTint = Color(0xFF7B1FA2),
-        bgColor = Color(0xFFF3E5F5),
+        body = "Search across supported Indian religions, communities, languages and locations using the preferences that matter to you.",
+        bullets = listOf("Religion & community filters where applicable", "Mother tongue preferences", "Regional match discovery"),
         tag = "ob_community"
     ),
     OnboardPage(
@@ -72,26 +68,20 @@ private val PAGES = listOf(
         title = "Compatibility Quiz",
         body = "Answer 15 questions about yourself and your ideal partner. Our algorithm finds your best matches.",
         bullets = listOf("Personality-driven matching", "Values & lifestyle alignment", "Partner preferences"),
-        iconTint = Color(0xFF1976D2),
-        bgColor = Color(0xFFE3F2FD),
         tag = "ob_quiz"
     ),
     OnboardPage(
-        icon = Icons.Filled.AutoAwesome,
-        title = "Astrology Compatibility",
-        body = "Rasi, Nakshatra and Gana — ancient wisdom meets modern matching for a deeper connection.",
-        bullets = listOf("Kundli compatibility report", "Rasi & Nakshatra matching", "Gana compatibility"),
-        iconTint = Color(0xFFFF8F00),
-        bgColor = Color(0xFFFFF8E1),
-        tag = "ob_astro"
+        icon = Icons.Filled.Tune,
+        title = "Your Preferences, Your Control",
+        body = "Set mandatory criteria separately from preferences so discovery can respect what truly matters to you.",
+        bullets = listOf("Mandatory filters stay strict", "Preferences influence ordering", "No silent filter relaxation"),
+        tag = "ob_preferences"
     ),
     OnboardPage(
         icon = Icons.Filled.VerifiedUser,
         title = "Safe & Trusted",
-        body = "Every profile is manually reviewed. Your privacy is our priority — 100% secure matchmaking.",
-        bullets = listOf("100% mobile-verified profiles", "Govt ID verification available", "Screenshot protection"),
-        iconTint = Color(0xFF2E7D32),
-        bgColor = Color(0xFFE8F5E9),
+        body = "Use verification signals, block/report controls and privacy settings to make informed decisions while connecting.",
+        bullets = listOf("Verification status shown separately", "Identity verification where completed", "Block, report and privacy controls"),
         tag = "ob_trust"
     )
 )
@@ -137,48 +127,48 @@ fun OnboardingScreen(onDone: () -> Unit, vm: OnboardingViewModel = hiltViewModel
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(32.dp)
+                    .padding(MatreeDesign.spacing.xxl)
                     .testTag(p.tag),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = p.bgColor,
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(130.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(p.icon, null, Modifier.size(60.dp), tint = p.iconTint)
+                        Icon(p.icon, null, Modifier.size(60.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.xl))
                 Text(
                     p.title,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.sm))
                 Text(
                     p.body,
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(MatreeDesign.spacing.lg))
                 // Bullet points
                 Column(
                     Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(p.bgColor)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .clip(RoundedCornerShape(MatreeDesign.radii.card))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(MatreeDesign.spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     p.bullets.forEach { bullet ->
                         Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Surface(shape = CircleShape, color = p.iconTint, modifier = Modifier.size(6.dp)) {}
-                            Text(bullet, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = p.iconTint)
+                            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(MatreeDesign.spacing.xs)) {}
+                            Text(bullet, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         }
                     }
                 }
@@ -186,14 +176,14 @@ fun OnboardingScreen(onDone: () -> Unit, vm: OnboardingViewModel = hiltViewModel
         }
 
         // ── Page indicator dots ────────────────────────────────────────
-        Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(bottom = MatreeDesign.spacing.sm), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             repeat(PAGES.size) { idx ->
                 Box(
                     Modifier
                         .size(if (idx == pager.currentPage) 28.dp else 8.dp, 8.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(MatreeDesign.radii.small))
                         .background(
-                            if (idx == pager.currentPage) currentPage.iconTint
+                            if (idx == pager.currentPage) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
                         )
                 )
@@ -205,35 +195,35 @@ fun OnboardingScreen(onDone: () -> Unit, vm: OnboardingViewModel = hiltViewModel
             "${pager.currentPage + 1} ${t("of", "of")} ${PAGES.size}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = MatreeDesign.spacing.xs)
         )
 
-        // ── Navigation buttons ────────────────────────────────────────
+        // Navigation
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = MatreeDesign.spacing.xl, vertical = MatreeDesign.spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
         ) {
             if (!isLast) {
-                OutlinedButton(
+                MatreeSecondaryButton(
+                    text = t("skip", "Skip"),
                     onClick = { vm.complete(); onDone() },
                     modifier = Modifier.weight(1f).testTag("ob_skip")
-                ) { Text(t("skip", "Skip")) }
-            }
-            Button(
-                onClick = {
-                    if (isLast) { vm.complete(); onDone() }
-                    else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
-                },
-                modifier = Modifier.weight(if (isLast) 2f else 1f).testTag("ob_next"),
-                colors = ButtonDefaults.buttonColors(containerColor = currentPage.iconTint)
-            ) {
-                Text(
-                    if (isLast) t("get_started", "Get started") else t("next", "Next"),
-                    fontWeight = FontWeight.SemiBold
                 )
             }
+            MatreePrimaryButton(
+                text = if (isLast) t("get_started", "Get started") else t("next", "Next"),
+                onClick = {
+                    if (isLast) {
+                        vm.complete()
+                        onDone()
+                    } else {
+                        scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
+                    }
+                },
+                modifier = Modifier.weight(if (isLast) 2f else 1f).testTag("ob_next")
+            )
         }
     }
 }
@@ -242,32 +232,12 @@ fun OnboardingScreen(onDone: () -> Unit, vm: OnboardingViewModel = hiltViewModel
 private data class LangOption(val code: String, val nativeName: String, val flag: String)
 
 private val ONBOARD_LANGUAGES = listOf(
-    LangOption("en", "English", "🇺🇸"),
+    LangOption("en", "English", "🇮🇳"),
     LangOption("hi", "हिन्दी", "🇮🇳"),
     LangOption("te", "తెలుగు", "🇮🇳"),
     LangOption("ta", "தமிழ்", "🇮🇳"),
     LangOption("kn", "ಕನ್ನಡ", "🇮🇳"),
     LangOption("mr", "मराठी", "🇮🇳"),
-    LangOption("bn", "বাংলা", "🇮🇳"),
-    LangOption("gu", "ગુજરાતી", "🇮🇳"),
-    LangOption("ml", "മലയാളം", "🇮🇳"),
-    LangOption("pa", "ਪੰਜਾਬੀ", "🇮🇳"),
-    LangOption("ur", "اردو", "🇵🇰"),
-    LangOption("ar", "العربية", "🇸🇦"),
-    LangOption("zh", "中文", "🇨🇳"),
-    LangOption("ja", "日本語", "🇯🇵"),
-    LangOption("ko", "한국어", "🇰🇷"),
-    LangOption("de", "Deutsch", "🇩🇪"),
-    LangOption("fr", "Français", "🇫🇷"),
-    LangOption("es", "Español", "🇪🇸"),
-    LangOption("pt", "Português", "🇧🇷"),
-    LangOption("ru", "Русский", "🇷🇺"),
-    LangOption("it", "Italiano", "🇮🇹"),
-    LangOption("id", "Indonesia", "🇮🇩"),
-    LangOption("tr", "Türkçe", "🇹🇷"),
-    LangOption("vi", "Tiếng Việt", "🇻🇳"),
-    LangOption("th", "ภาษาไทย", "🇹🇭"),
-    LangOption("sw", "Kiswahili", "🇰🇪"),
 )
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -284,38 +254,26 @@ private fun LanguagePickerPage(
             .testTag("ob_lang_picker"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer)
-                    )
-                )
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("🌐", style = MaterialTheme.typography.displaySmall)
-                Text("Choose your language", style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
-                Text("You can change this anytime in Settings", style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(0.8f), textAlign = TextAlign.Center)
-            }
-        }
+        MatreeHero(
+            title = "Choose your language",
+            subtitle = "You can change this anytime in Settings",
+            modifier = Modifier.padding(MatreeDesign.spacing.md)
+        )
 
         // Language grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.weight(1f).padding(
+                horizontal = MatreeDesign.spacing.sm,
+                vertical = MatreeDesign.spacing.xs
+            ),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
         ) {
             items(ONBOARD_LANGUAGES) { lang ->
                 val selected = lang.code == selectedCode
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(MatreeDesign.radii.card),
                     color = if (selected) MaterialTheme.colorScheme.primaryContainer
                             else MaterialTheme.colorScheme.surfaceVariant,
                     border = if (selected)
@@ -327,7 +285,7 @@ private fun LanguagePickerPage(
                         .testTag("ob_lang_${lang.code}")
                 ) {
                     Column(
-                        Modifier.padding(10.dp),
+                        Modifier.padding(MatreeDesign.spacing.sm),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
@@ -344,17 +302,14 @@ private fun LanguagePickerPage(
             }
         }
 
-        // Continue button
-        Button(
+        MatreePrimaryButton(
+            text = "Continue",
             onClick = onContinue,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-                .height(52.dp)
-                .testTag("ob_lang_continue"),
-        ) {
-            Text("Continue →", fontWeight = FontWeight.SemiBold)
-        }
+                .padding(horizontal = MatreeDesign.spacing.xl, vertical = MatreeDesign.spacing.md)
+                .testTag("ob_lang_continue")
+        )
     }
 }
 

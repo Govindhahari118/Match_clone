@@ -1,6 +1,8 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { declinedInterestAllowsNewRequest } from "./interestPolicy";
+import { accountIsActive } from "./accountStatusPolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -36,10 +38,6 @@ function genderCompatible(
   return accepts(sender.lookingFor, target.gender) && accepts(target.lookingFor, sender.gender);
 }
 
-/**
- * Send an interest from the authenticated account. All relationship, privacy, quota and match
- * mutations are server-authoritative so a modified Android client cannot bypass the free plan.
- */
 export const sendInterest = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const senderUid = context.auth?.uid;
@@ -70,6 +68,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       targetSnap,
       outgoingSnap,
       reverseSnap,
+      responseSnap,
       usageSnap,
       senderBlock,
       targetBlock,
@@ -80,6 +79,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(targetRef),
       tx.get(outgoingRef),
       tx.get(reverseRef),
+      tx.get(responseRef),
       tx.get(usageRef),
       tx.get(senderBlockRef),
       tx.get(targetBlockRef),
@@ -98,12 +98,24 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
 
     const sender = senderSnap.data() || {};
     const target = targetSnap.data() || {};
+    if (!accountIsActive(sender.accountStatus) || !accountIsActive(target.accountStatus)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Interest is unavailable while an account is not active"
+      );
+    }
     if (!genderCompatible(sender, target)) {
       throw new functions.https.HttpsError("failed-precondition", "This profile is outside mutual partner preferences");
     }
-    // A stealth member can still respond to someone who explicitly contacted them first.
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
+    }
+
+    if (!declinedInterestAllowsNewRequest(responseSnap.data()?.status, reverseSnap.exists)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Interest cannot be sent to this member"
+      );
     }
 
     if (outgoingSnap.exists) {
@@ -153,7 +165,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   });
 });
 
-/** Sender withdraws only their own outgoing interest; an existing mutual match is ended atomically. */
+/** Withdraw only a still-pending outgoing interest. */
 export const withdrawInterest = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const senderUid = context.auth?.uid;
@@ -162,26 +174,31 @@ export const withdrawInterest = functions.https.onCall(async (data, context) => 
   if (targetUid === senderUid) throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
 
   const outgoingRef = db.collection("interests").doc(`${senderUid}_${targetUid}`);
+  const reverseRef = db.collection("interests").doc(`${targetUid}_${senderUid}`);
   const matchRef = db.collection("matches").doc(matchId(senderUid, targetUid));
 
   await db.runTransaction(async (tx) => {
-    const outgoing = await tx.get(outgoingRef);
+    const [outgoing, reverse, match] = await Promise.all([
+      tx.get(outgoingRef),
+      tx.get(reverseRef),
+      tx.get(matchRef),
+    ]);
     if (!outgoing.exists) return;
     if (outgoing.data()?.fromUid !== senderUid || outgoing.data()?.toUid !== targetUid) {
       throw new functions.https.HttpsError("permission-denied", "Interest does not belong to this account");
     }
+    if (reverse.exists || match.exists) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "A mutual match cannot be withdrawn as a pending interest"
+      );
+    }
     tx.delete(outgoingRef);
-    tx.delete(matchRef);
   });
 
   return { success: true };
 });
 
-/**
- * Decline a pending incoming interest without blocking the sender.
- * Only the authenticated recipient may decline, and an already-mutual relationship must use
- * a separate unmatch flow rather than silently deleting one side of a match.
- */
 export const declineInterest = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const recipientUid = context.auth?.uid;
