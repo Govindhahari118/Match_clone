@@ -44,6 +44,7 @@ import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
+import com.match.app.ui.theme.colorSchemeFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -61,6 +62,7 @@ data class BiodataShareOptions(
 
 data class BiodataPdfColors(
     val title: Int,
+    val onTitle: Int,
     val header: Int,
     val body: Int,
     val divider: Int
@@ -87,10 +89,12 @@ class BiodataViewModel @Inject constructor(
         val page = pdfDoc.startPage(pageInfo)
         val canvas = page.canvas
 
+        val modernLayout = templateName.equals("Modern", ignoreCase = true)
+        val minimalLayout = templateName.equals("Minimal", ignoreCase = true)
         val titlePaint = Paint().apply {
-            textSize = 22f
+            textSize = if (minimalLayout) 18f else 22f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = colors.title
+            color = if (modernLayout) colors.onTitle else colors.title
         }
         val headerPaint = Paint().apply {
             textSize = 14f
@@ -103,14 +107,28 @@ class BiodataViewModel @Inject constructor(
         }
         val linePaint = Paint().apply {
             color = colors.divider
-            strokeWidth = 1.5f
+            strokeWidth = if (minimalLayout) 0.8f else 1.5f
         }
 
         var y = 60f
-        canvas.drawText("Matrimonial Biodata — $templateName", 40f, y, titlePaint)
-        y += 6f
-        canvas.drawLine(40f, y, 555f, y, linePaint)
-        y += 30f
+        if (modernLayout) {
+            val headerBackground = Paint().apply { color = colors.title }
+            canvas.drawRoundRect(30f, 24f, 565f, 96f, 16f, 16f, headerBackground)
+            canvas.drawText("Matrimonial Biodata", 48f, 60f, titlePaint)
+            val templatePaint = Paint(bodyPaint).apply {
+                color = colors.onTitle
+                textSize = 11f
+            }
+            canvas.drawText("Modern • $templateName", 48f, 82f, templatePaint)
+            y = 122f
+        } else {
+            canvas.drawText("Matrimonial Biodata — $templateName", 40f, y, titlePaint)
+            y += 6f
+            if (!minimalLayout) {
+                canvas.drawLine(40f, y, 555f, y, linePaint)
+            }
+            y += if (minimalLayout) 20f else 30f
+        }
 
         fun section(title: String, vararg fields: Pair<String, String>) {
             canvas.drawText(title, 40f, y, headerPaint)
@@ -206,11 +224,15 @@ fun BiodataScreen(
         includeFamily = includeFamily,
         includeAboutMe = includeAboutMe
     )
+    // Export uses the selected visual family's light palette so print remains readable even
+    // when the in-app display mode is Dark.
+    val printScheme = colorSchemeFor(MatreeDesign.visual.palette, dark = false)
     val pdfColors = BiodataPdfColors(
-        title = MaterialTheme.colorScheme.primary.toArgb(),
-        header = MaterialTheme.colorScheme.onSurface.toArgb(),
-        body = MaterialTheme.colorScheme.onSurfaceVariant.toArgb(),
-        divider = MaterialTheme.colorScheme.secondary.toArgb()
+        title = printScheme.primary.toArgb(),
+        onTitle = printScheme.onPrimary.toArgb(),
+        header = printScheme.primary.toArgb(),
+        body = printScheme.onSurfaceVariant.toArgb(),
+        divider = printScheme.secondary.toArgb()
     )
 
     Scaffold(
