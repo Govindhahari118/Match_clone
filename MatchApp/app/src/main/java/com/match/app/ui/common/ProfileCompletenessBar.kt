@@ -14,12 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.match.app.core.activity.ActivityStatusHelper
 import com.match.app.domain.model.UserProfile
+import com.match.app.ui.theme.MatreeDesign
 
 /**
  * Profile completeness progress bar — shown on ProfileScreen and HomeScreen.
@@ -38,10 +38,10 @@ fun ProfileCompletenessBar(
     val animPct by animateFloatAsState(pct, animationSpec = tween(800), label = "completeness")
 
     val (barColor, label) = when {
-        score >= 90 -> Color(0xFF2E7D32) to "Excellent!"
-        score >= 70 -> Color(0xFF1976D2) to "Looking good"
-        score >= 50 -> Color(0xFFF57C00) to "Getting there"
-        else        -> Color(0xFFE53935) to "Incomplete"
+        score >= 90 -> MatreeDesign.colors.success to "Excellent!"
+        score >= 70 -> MatreeDesign.colors.verified to "Looking good"
+        score >= 50 -> MatreeDesign.colors.warning to "Getting there"
+        else        -> MaterialTheme.colorScheme.error to "Incomplete"
     }
 
     Card(
@@ -120,8 +120,12 @@ fun ActivityStatusChip(
     val status = remember(lastActiveAt) { ActivityStatusHelper.from(lastActiveAt) }
     if (!status.isRecent) return
 
-    val dotColor = if (status.isOnline) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
-    val bgColor  = if (status.isOnline) Color(0xFF4CAF50).copy(alpha = 0.12f) else Color(0xFF9E9E9E).copy(alpha = 0.10f)
+    val dotColor = if (status.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline
+    val bgColor = if (status.isOnline) {
+        MatreeDesign.colors.successContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
 
     Row(
         modifier = modifier
@@ -138,7 +142,7 @@ fun ActivityStatusChip(
         Text(
             status.label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (status.isOnline) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (status.isOnline) MatreeDesign.colors.success else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
