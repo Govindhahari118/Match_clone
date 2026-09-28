@@ -31,6 +31,7 @@ import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
+import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
 import com.match.app.ui.i18n.LocalI18n
@@ -38,6 +39,7 @@ import com.match.app.ui.i18n.rememberI18nCatalog
 import com.match.app.ui.main.MainShell
 import com.match.app.ui.onboarding.OnboardingScreen
 import com.match.app.ui.onboarding.ProfileWizardScreen
+import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatchTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -120,6 +122,11 @@ class RootViewModel @Inject constructor(
 fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val appearance by vm.appearance.collectAsState()
     val currentUser by vm.currentUser.collectAsState()
+    val userId by vm.userId.collectAsState()
+    val onboarded by vm.onboarded.collectAsState()
+    val sessionReady by vm.sessionReady.collectAsState()
+    val profileSetupComplete by vm.profileSetupComplete.collectAsState()
+    val loggedIn = userId != null
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
     val systemDark = isSystemInDarkTheme()
@@ -133,11 +140,28 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
         if (isOnline) vm.validateRemoteSession()
     }
 
-    val effectivePalette = AppearanceThemeResolver.resolve(
-        themePreference = appearance.themePreference,
-        manualPaletteKey = appearance.manualThemeKey,
-        profileReligion = currentUser?.religion
-    )
+    val effectivePalette = when {
+        // Intro/onboarding and incomplete profile setup stay visually stable and universal.
+        !sessionReady || !onboarded || (loggedIn && !profileSetupComplete) -> AppPalette.VIVAH
+
+        // Signed-out auth may honor only an explicit stored manual appearance. Automatic cannot
+        // derive identity without an authenticated confirmed profile.
+        !loggedIn -> if (appearance.themePreference == ThemePreference.MANUAL) {
+            AppearanceThemeResolver.resolve(
+                themePreference = ThemePreference.MANUAL,
+                manualPaletteKey = appearance.manualThemeKey,
+                profileReligion = null
+            )
+        } else {
+            AppPalette.VIVAH
+        }
+
+        else -> AppearanceThemeResolver.resolve(
+            themePreference = appearance.themePreference,
+            manualPaletteKey = appearance.manualThemeKey,
+            profileReligion = currentUser?.religion
+        )
+    }
     val darkMode = AppearanceThemeResolver.resolveDarkMode(
         displayMode = appearance.displayMode,
         systemDark = systemDark
@@ -150,12 +174,6 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
             androidx.compose.ui.platform.LocalLayoutDirection provides layoutDir
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                val userId by vm.userId.collectAsState()
-                val onboarded by vm.onboarded.collectAsState()
-                val sessionReady by vm.sessionReady.collectAsState()
-                val profileSetupComplete by vm.profileSetupComplete.collectAsState()
-                val loggedIn = userId != null
-
                 Column(Modifier.fillMaxSize()) {
                     AnimatedVisibility(
                         visible = !isOnline,
