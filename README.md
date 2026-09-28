@@ -1,19 +1,21 @@
 # Matrimony App
 
-Full-stack matrimony platform with a Next.js web app, Node/Express API, PostgreSQL, Redis, and a mobile placeholder.
+Full-stack matrimony platform with a Next.js web app, Node/Express API, PostgreSQL, Redis, and a native Android UI foundation.
 
 ## Current Project Snapshot
 
-- Monorepo-style layout under `match/` with separate `frontend` and `backend` apps
+- Monorepo-style layout under `match/` with separate `frontend`, `backend`, and native Android modules
 - Local developer lifecycle automated with PowerShell scripts in `scripts/`
 - Database access through Prisma (`backend/prisma`)
 - Real-time messaging using Socket.IO
 - API surface includes auth, profiles, matching, chat, interactions, shortlists, reviews, media, verification, and admin flows
+- Native Android design-system foundation under `mobile/android` with semantic theming and religion-specific appearance families
 
 ## Tech Stack
 
 - Frontend: Next.js 16, React 19, Tailwind CSS 4
 - Backend: Node.js, Express 5, Prisma, Socket.IO
+- Android: Kotlin, Jetpack Compose, Material 3 behavior with Matree semantic design tokens
 - Database: PostgreSQL 15
 - Cache/real-time support: Redis 7
 - Tooling: Docker Compose, PowerShell automation scripts
@@ -24,7 +26,8 @@ Full-stack matrimony platform with a Next.js web app, Node/Express API, PostgreS
 match/
 |- backend/              # Express API + Prisma
 |- frontend/             # Next.js web app (App Router)
-|- mobile/               # React Native/Expo placeholder
+|- mobile/
+|  \- android/           # Native Android / Jetpack Compose implementation
 |- docs/                 # Product + API docs
 |- scripts/              # dev-up/dev-down/dev-status scripts
 |- runtime/              # generated logs + PID files
@@ -59,13 +62,28 @@ match/
 - `/api/verification`
 - Health check: `/health`
 
+### Native Android Foundation
+
+The `mobile/android` module now includes:
+
+- Default/Universal, Hindu, Muslim, Christian, and Sikh appearance families
+- explicit safe-neutral slots for Buddhist, Jain, Parsi, and Other pending approved canonical visual references
+- semantic color/gradient/radius/spacing/elevation/typography tokens
+- reusable navigation, button, card, input, chip/tab/filter, media, dialog, sheet, snackbar, and state components
+- edge-to-edge layout, safe insets, IME handling, RTL-ready start/end layout, adaptive content width, and scalable typography
+- persistent appearance preference separated from saved profile religion
+- theme gallery previews and contrast/reference-safety unit tests
+
+See `mobile/android/README.md` and `mobile/android/DESIGN_SYSTEM.md`.
+
 ## Prerequisites
 
 - Docker Desktop running
 - Node.js 20+
 - npm
+- Android Studio + JDK 17 for the Android module
 
-## Quick Start (Recommended)
+## Quick Start (Web/API)
 
 From `match/`:
 
@@ -116,5 +134,5 @@ Note: `docker-compose.yml` also defines an optional `api` service mapped to `500
 
 ## Notes
 
-- `mobile/` is currently a starter placeholder (Expo init instructions only).
+- The Android module is a production UI/UX foundation and intentionally does not invent member/profile data. Connect existing authenticated backend repositories before rendering real profiles, match results, verification, or activity.
 - `frontend/README.md` is still the default Next.js scaffold doc; this file is the primary root guide.
