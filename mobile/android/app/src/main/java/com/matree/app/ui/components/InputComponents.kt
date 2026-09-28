@@ -1,12 +1,10 @@
 package com.matree.app.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,19 +13,20 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -186,9 +185,13 @@ fun MatreeTabs(
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (labels.isEmpty()) return
+
     val tokens = MatreeTheme.tokens
+    val safeSelectedIndex = selectedIndex.coerceIn(labels.indices)
+
     TabRow(
-        selectedTabIndex = selectedIndex.coerceIn(labels.indices),
+        selectedTabIndex = safeSelectedIndex,
         modifier = modifier.fillMaxWidth(),
         containerColor = tokens.colors.surfacePrimary,
         contentColor = tokens.colors.actionPrimary,
@@ -196,7 +199,7 @@ fun MatreeTabs(
     ) {
         labels.forEachIndexed { index, label ->
             Tab(
-                selected = selectedIndex == index,
+                selected = safeSelectedIndex == index,
                 onClick = { onSelected(index) },
                 modifier = Modifier.heightIn(min = 48.dp),
                 text = {
@@ -282,13 +285,14 @@ fun MatreeMenu(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MatreeTooltip(
     text: String,
     content: @Composable () -> Unit,
 ) {
     TooltipBox(
-        positionProvider = androidx.compose.material3.TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(text) } },
         state = rememberTooltipState(),
     ) {
