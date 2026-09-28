@@ -66,7 +66,10 @@ UI_JAVA_ROOT = ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app"
 PRODUCTION_THEME_SURFACES = {UI_JAVA_ROOT / rel for rel in _REACHABLE_UI_RELATIVE}
 THEME_LITERAL_COLOR = re.compile(
     r"(?<!android\.graphics\.)\bColor\s*\(\s*0x[0-9A-Fa-f]+|"
-    r"\bColor\.(?:White|Black|Red|Green|Blue|Yellow|Gray|DarkGray|LightGray|Magenta|Cyan)"
+    r"\bColor\.(?:White|Black|Red|Green|Blue|Yellow|Gray|DarkGray|LightGray|Magenta|Cyan|Transparent)"
+)
+ANDROID_GRAPHICS_LITERAL_COLOR = re.compile(
+    r"\bandroid\.graphics\.Color\.(?:rgb|argb)\s*\("
 )
 
 APPEARANCE_SETTINGS_SURFACE = (
@@ -123,7 +126,9 @@ def main() -> int:
                             f"({identifier}): {line.strip()}"
                         )
 
-            if path in PRODUCTION_THEME_SURFACES and THEME_LITERAL_COLOR.search(line):
+            if path in PRODUCTION_THEME_SURFACES and (
+                THEME_LITERAL_COLOR.search(line) or ANDROID_GRAPHICS_LITERAL_COLOR.search(line)
+            ):
                 findings.append(
                     f"{path.relative_to(ROOT)}:{line_no}: hard-coded production UI color "
                     f"bypasses Matree theme: {line.strip()}"
