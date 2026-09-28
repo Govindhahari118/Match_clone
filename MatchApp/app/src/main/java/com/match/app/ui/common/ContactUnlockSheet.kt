@@ -10,8 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +53,7 @@ fun ContactUnlockSheet(
         ) {
             Box(
                 Modifier.size(64.dp).background(
-                    Brush.radialGradient(listOf(Color(0xFFE91E63), Color(0xFFFF5722))),
+                    MaterialTheme.colorScheme.primary,
                     CircleShape
                 ),
                 contentAlignment = Alignment.Center
@@ -63,7 +61,7 @@ fun ContactUnlockSheet(
                 Icon(
                     if (revealedPhone.isNotBlank()) Icons.Filled.Phone else Icons.Filled.Lock,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
