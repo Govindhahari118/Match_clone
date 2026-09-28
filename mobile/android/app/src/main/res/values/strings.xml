@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Matree</string>
+    <string name="search">Search</string>
+    <string name="matches">Matches</string>
+    <string name="messages">Messages</string>
+    <string name="profile">Profile</string>
+    <string name="settings">Settings</string>
+    <string name="appearance">Appearance</string>
+    <string name="appearance_subtitle">Choose how Matree looks on this device. This does not change profile religion.</string>
+    <string name="no_profiles_title">No profiles to show yet</string>
+    <string name="no_profiles_body">Adjust your search filters or check again after new profiles become available.</string>
+    <string name="no_matches_title">No matches yet</string>
+    <string name="no_matches_body">Your matches will appear here when the matching service returns eligible profiles.</string>
+    <string name="no_messages_title">No conversations yet</string>
+    <string name="no_messages_body">Conversations will appear here after a real interaction starts.</string>
+    <string name="retry">Retry</string>
+    <string name="offline_title">You are offline</string>
+    <string name="offline_body">Reconnect to the internet and try again.</string>
+    <string name="generic_error_title">Something went wrong</string>
+    <string name="generic_error_body">We could not load this content.</string>
+    <string name="reference_required">Reference set required</string>
+    <string name="reference_required_body">This appearance remains neutral until its approved canonical visual references are added.</string>
+</resources>
