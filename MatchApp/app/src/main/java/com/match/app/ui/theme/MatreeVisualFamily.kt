@@ -33,7 +33,7 @@ data class MatreeVisualFamily(
     val accentSecondary: Color,
     val ornament: Color,
     val ornamentAlpha: Float,
-    val valueWords: List<String>
+    val visualKeywords: List<String>
 )
 
 private val visualFamilies = mapOf(
@@ -49,7 +49,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFB8897E),
         ornament = Color(0xFFD7B98E),
         ornamentAlpha = 0.30f,
-        valueWords = listOf("Trust", "Family", "Compatibility", "Respect")
+        visualKeywords = listOf("Warm", "Refined", "Modern", "Welcoming")
     ),
     AppPalette.HINDU to MatreeVisualFamily(
         palette = AppPalette.HINDU,
@@ -63,7 +63,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFD7261E),
         ornament = Color(0xFFD4AF37),
         ornamentAlpha = 0.30f,
-        valueWords = listOf("Family", "Values", "Compatibility", "Togetherness")
+        visualKeywords = listOf("Saffron", "Marigold", "Gold", "Heritage")
     ),
     AppPalette.MUSLIM to MatreeVisualFamily(
         palette = AppPalette.MUSLIM,
@@ -77,7 +77,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFF1E7F62),
         ornament = Color(0xFFD4AF37),
         ornamentAlpha = 0.28f,
-        valueWords = listOf("Faith", "Family", "Values", "Respect")
+        visualKeywords = listOf("Emerald", "Teal", "Gold", "Geometry")
     ),
     AppPalette.CHRISTIAN to MatreeVisualFamily(
         palette = AppPalette.CHRISTIAN,
@@ -91,7 +91,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFF6A8ED8),
         ornament = Color(0xFFD4AF37),
         ornamentAlpha = 0.25f,
-        valueWords = listOf("Faith", "Family", "Purpose", "Trust")
+        visualKeywords = listOf("White", "Blue", "Gold", "Light")
     ),
     AppPalette.SIKH to MatreeVisualFamily(
         palette = AppPalette.SIKH,
@@ -105,7 +105,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFFF8A00),
         ornament = Color(0xFF0B2D5B),
         ornamentAlpha = 0.22f,
-        valueWords = listOf("Family", "Seva", "Values", "Togetherness")
+        visualKeywords = listOf("Gold", "Saffron", "Navy", "Heritage")
     ),
     AppPalette.BUDDHIST to MatreeVisualFamily(
         palette = AppPalette.BUDDHIST,
@@ -119,7 +119,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFF3B4C6),
         ornament = Color(0xFF8BAE8F),
         ornamentAlpha = 0.24f,
-        valueWords = listOf("Compassion", "Mindfulness", "Harmony", "Togetherness")
+        visualKeywords = listOf("Saffron", "Lotus", "Earth", "Calm")
     ),
     AppPalette.JAIN to MatreeVisualFamily(
         palette = AppPalette.JAIN,
@@ -133,7 +133,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFD4AF7C),
         ornament = Color(0xFFD4AF7C),
         ornamentAlpha = 0.23f,
-        valueWords = listOf("Values", "Simplicity", "Respect", "Togetherness")
+        visualKeywords = listOf("Ivory", "Gold", "Sage", "Symmetry")
     ),
     AppPalette.PARSI to MatreeVisualFamily(
         palette = AppPalette.PARSI,
@@ -147,7 +147,7 @@ private val visualFamilies = mapOf(
         accentSecondary = Color(0xFFC9A96B),
         ornament = Color(0xFF1E3A5F),
         ornamentAlpha = 0.22f,
-        valueWords = listOf("Culture", "Family", "Heritage", "Companionship")
+        visualKeywords = listOf("Teal", "Gold", "Navy", "Deco")
     )
 )
 

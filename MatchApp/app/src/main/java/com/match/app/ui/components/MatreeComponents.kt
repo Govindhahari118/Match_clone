@@ -163,14 +163,6 @@ fun MatreeVisualHero(
                     style = MaterialTheme.typography.bodyMedium,
                     color = scheme.onSurfaceVariant
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    visual.valueWords.take(4).forEach { word ->
-                        MatreeStatusChip(word)
-                    }
-                }
                 if (actionLabel != null && onAction != null) {
                     MatreePrimaryButton(
                         text = actionLabel,
@@ -236,7 +228,7 @@ fun MatreeThemeFamilyPreviewCard(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
-                    visual.valueWords.take(3).forEach { word ->
+                    visual.visualKeywords.take(3).forEach { word ->
                         Surface(
                             shape = RoundedCornerShape(percent = 50),
                             color = preview.surfaceVariant
