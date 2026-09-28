@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Fail closed on repository-controlled Android release configuration regressions."""
+from __future__ import annotations
+import argparse
+import pathlib
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+APP = ROOT / "app"
+ANDROID = "{http://schemas.android.com/apk/res/android}"
+
+def require(ok: bool, message: str, failures: list[str]) -> None:
+    if not ok:
+        failures.append(message)
+
+def text(path: pathlib.Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+def manifest_checks(path: pathlib.Path, failures: list[str]) -> None:
+    root = ET.parse(path).getroot()
+    perms = {x.get(ANDROID + "name") for x in root.findall("uses-permission")}
+    require("android.permission.ACCESS_BACKGROUND_LOCATION" not in perms,
+            "release must not request background location", failures)
+    app = root.find("application")
+    require(app is not None, "application element missing", failures)
+    if app is None:
+        return
+    require(app.get(ANDROID + "allowBackup") == "false",
+            "android:allowBackup must be false", failures)
+    require(app.get(ANDROID + "usesCleartextTraffic") == "false",
+            "android:usesCleartextTraffic must be false", failures)
+    for node in list(app.findall("service")) + list(app.findall("provider")):
+        name = node.get(ANDROID + "name", "<unnamed>")
+        require(node.get(ANDROID + "exported") != "true",
+                f"service/provider unexpectedly exported: {name}", failures)
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--merged-manifest", type=pathlib.Path)
+    args = parser.parse_args()
+    failures: list[str] = []
+
+    gradle = text(APP / "build.gradle.kts")
+    require(re.search(r'compileSdk\s*=\s*36\b', gradle) is not None, "compileSdk must be 36", failures)
+    require(re.search(r'targetSdk\s*=\s*36\b', gradle) is not None, "targetSdk must be 36", failures)
+    require(re.search(r'minSdk\s*=\s*24\b', gradle) is not None, "minimum supported API contract changed", failures)
+    release = gradle.split("release {", 1)[1].split("\n        }", 1)[0] if "release {" in gradle else ""
+    require("isMinifyEnabled = true" in release, "release minification must remain enabled", failures)
+    require("isShrinkResources = true" in release, "release resource shrinking must remain enabled", failures)
+
+    manifest_checks(APP / "src/main/AndroidManifest.xml", failures)
+    if args.merged_manifest:
+        require(args.merged_manifest.exists(), f"merged release manifest missing: {args.merged_manifest}", failures)
+        if args.merged_manifest.exists():
+            manifest_checks(args.merged_manifest, failures)
+
+    network = text(APP / "src/main/res/xml/network_security_config.xml")
+    require('cleartextTrafficPermitted="false"' in network, "production network config must deny cleartext", failures)
+
+    release_appcheck = text(APP / "src/release/java/com/match/app/AppCheckProviderInstaller.kt")
+    require("PlayIntegrityAppCheckProviderFactory" in release_appcheck,
+            "release App Check must use Play Integrity", failures)
+    require("DebugAppCheckProviderFactory" not in release_appcheck,
+            "debug App Check provider leaked into release source set", failures)
+
+    gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
+    local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
+    ignore = gitignore + "\n" + local_gitignore
+    require("keystore.properties" in ignore, "keystore.properties must be ignored", failures)
+
+    prod_roots = [APP / "src/main", ROOT / "functions/src"]
+    forbidden = [
+        ("emulator endpoint", re.compile(r"\b10\.0\.2\.2\b")),
+        ("localhost endpoint", re.compile(r"https?://(?:localhost|127\.0\.0\.1)\b", re.I)),
+        ("hard-coded OTP bypass", re.compile(r"(?:otp|verification).{0,40}(?:bypass|hardcoded)", re.I)),
+        ("fake payment success", re.compile(r"fake.{0,20}(?:payment|purchase).{0,20}success", re.I)),
+    ]
+    for base in prod_roots:
+        if not base.exists():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file() or p.suffix.lower() not in {".kt", ".java", ".ts", ".js", ".xml", ".json"}:
+                continue
+            data = text(p)
+            for label, pattern in forbidden:
+                if pattern.search(data):
+                    failures.append(f"{p.relative_to(ROOT)}: {label}")
+
+    if failures:
+        print("Release candidate repository scan FAILED")
+        for item in failures:
+            print(f"- {item}")
+        return 1
+    print("Release candidate repository scan passed.")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
