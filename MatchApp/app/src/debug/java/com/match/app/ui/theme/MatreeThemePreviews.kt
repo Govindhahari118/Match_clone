@@ -12,12 +12,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeProgressCard
 import com.match.app.ui.components.MatreeProfileCard
+import com.match.app.ui.components.MatreeProfileHeader
 import com.match.app.ui.components.MatreeProfileCardVariant
 import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeTextButton
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusChip
 import com.match.app.ui.components.MatreeStatusTone
@@ -37,6 +41,16 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                 MatreeVisualHero(
                     actionLabel = "Discover profiles",
                     onAction = {}
+                )
+                MatreeProfileHeader(
+                    name = "Theme preview",
+                    age = 29,
+                    photoModels = emptyList(),
+                    username = "preview",
+                    primaryLine = "Hyderabad • Product professional",
+                    secondaryLine = "Debug catalog identity only",
+                    isVerified = true,
+                    isPremium = true
                 )
                 MatreeProfileCard(
                     name = "Theme preview",
@@ -66,7 +80,16 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    MatreeTextButton(
+                        text = "Details",
+                        onClick = {}
+                    )
                 }
+                MatreeChoiceChip(
+                    text = "Selected filter",
+                    selected = true,
+                    onClick = {}
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                     MatreeStatusChip("Verified", MatreeStatusTone.VERIFIED)
                     MatreeStatusChip("Premium", MatreeStatusTone.PREMIUM)
@@ -82,22 +105,34 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                     message = "Privacy and safety semantics stay stable across religion themes.",
                     tone = MatreeStatusTone.WARNING
                 )
+                MatreeInlineNotice(
+                    message = "Representative success state.",
+                    tone = MatreeStatusTone.SUCCESS
+                )
+                MatreeInlineNotice(
+                    message = "Representative error state.",
+                    tone = MatreeStatusTone.ERROR
+                )
                 MatreeStatePanel(
                     title = "No results",
                     message = "Representative empty state for theme QA."
+                )
+                MatreeLoadingState(
+                    message = "Loading representative theme content",
+                    rows = 2
                 )
             }
         }
     }
 }
 
-@Preview(name = "Signature Light", showBackground = true, widthDp = 390)
+@Preview(name = "Neutral Light", showBackground = true, widthDp = 390)
 @Composable
-private fun SignatureLightPreview() = ThemeCatalogPreview(AppPalette.VIVAH, dark = false)
+private fun NeutralLightPreview() = ThemeCatalogPreview(AppPalette.VIVAH, dark = false)
 
-@Preview(name = "Signature Dark", showBackground = true, widthDp = 390)
+@Preview(name = "Neutral Dark", showBackground = true, widthDp = 390)
 @Composable
-private fun SignatureDarkPreview() = ThemeCatalogPreview(AppPalette.VIVAH, dark = true)
+private fun NeutralDarkPreview() = ThemeCatalogPreview(AppPalette.VIVAH, dark = true)
 
 @Preview(name = "Hindu Light", showBackground = true, widthDp = 390)
 @Composable
