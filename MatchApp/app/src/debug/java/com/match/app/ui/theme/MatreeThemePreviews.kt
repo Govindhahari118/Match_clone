@@ -21,6 +21,7 @@ import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusChip
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeVisualHero
 
 /**
  * Debug/design-time catalog only. The preview identity and data never enter the release source set.
@@ -33,6 +34,10 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                 modifier = Modifier.padding(MatreeDesign.spacing.md),
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
             ) {
+                MatreeVisualHero(
+                    actionLabel = "Discover profiles",
+                    onAction = {}
+                )
                 MatreeProfileCard(
                     name = "Theme preview",
                     age = 29,
