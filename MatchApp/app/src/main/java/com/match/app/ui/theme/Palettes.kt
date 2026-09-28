@@ -8,7 +8,7 @@ import com.match.app.domain.model.ReligionCategory
 
 /**
  * Brand palettes available to the user. Religion palettes are optional visual
- * treatments only; the default remains the premium Matree Signature matrimonial theme.
+ * treatments only; the default remains the premium universal Matree Neutral matrimonial theme.
  * They intentionally avoid sacred text/symbols so the experience stays tasteful
  * and inclusive while still feeling culturally distinct.
  */
@@ -20,7 +20,7 @@ enum class AppPalette(val label: String, val swatch: Color) {
     MONO    ("Mono",     Color(0xFF424242)),
     GLACIER ("Glacier",  Color(0xFF4FC3F7)),
     TELUGU  ("Telugu",   Color(0xFFD4A017)),
-    VIVAH   ("Matree Signature", Color(0xFF6E2F4B)),
+    VIVAH   ("Matree Neutral", Color(0xFF6E2F4B)),
     HINDU   ("Hindu",    Color(0xFFFF8A00)),
     CHRISTIAN("Christian", Color(0xFF1E4DB7)),
     MUSLIM  ("Muslim",   Color(0xFF0B6B53)),
