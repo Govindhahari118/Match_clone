@@ -184,7 +184,7 @@ class BiodataViewModel @Inject constructor(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BiodataScreen(
     onBack: () -> Unit = {},
@@ -381,115 +381,160 @@ fun BiodataScreen(
 
 // ── Classic Biodata Template ─────────────────────────────────────────────────
 @Composable
-private fun ClassicBiodata(p: UserProfile) {
+private fun ClassicBiodata(p: UserProfile, options: BiodataShareOptions) {
     val accent = MaterialTheme.colorScheme.primary
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(MatreeDesign.radii.card),
         border = BorderStroke(2.dp, accent.copy(alpha = 0.3f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-            // Header bar
             Box(
-                Modifier.fillMaxWidth().background(accent).padding(16.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(accent)
+                    .padding(MatreeDesign.spacing.md),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("✦ Matrimonial Biodata ✦",
+                    Text(
+                        "✦ Matrimonial Biodata ✦",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                    Text(p.displayName,
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimary)
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Text(
+                        p.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
                 }
             }
 
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Photo placeholder
+            Column(
+                Modifier.padding(MatreeDesign.spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+            ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Surface(
                         shape = CircleShape,
                         color = accent.copy(alpha = 0.1f),
                         border = BorderStroke(2.dp, accent),
-                        modifier = Modifier.size(80.dp)
+                        modifier = Modifier.size(MatreeDesign.sizes.avatarStandard)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(p.displayName.first().uppercase(),
+                            Text(
+                                p.displayName.firstOrNull()?.uppercase() ?: "?",
                                 style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold, color = accent)
+                                fontWeight = FontWeight.Bold,
+                                color = accent
+                            )
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
 
-                // Sections
-                BiodataSection("Personal Details", accent, listOf(
-                    "Name" to p.displayName,
-                    "Age" to "${p.age} years",
-                    "Date of Birth" to p.dateOfBirth.ifBlank { "Not provided" },
-                    "Height" to if (p.heightCm > 0) "${p.heightCm} cm" else "—",
-                    "Complexion" to p.complexion.ifBlank { "Not provided" },
-                    "Marital Status" to p.maritalStatus.ifBlank { "Not provided" }
-                ))
-                Spacer(Modifier.height(8.dp))
+                BiodataSection(
+                    "Personal Details",
+                    accent,
+                    listOf(
+                        "Name" to p.displayName,
+                        "Age" to "${p.age} years",
+                        "Height" to if (p.heightCm > 0) "${p.heightCm} cm" else "Not provided",
+                        "Marital Status" to p.maritalStatus.ifBlank { "Not provided" }
+                    )
+                )
 
-                BiodataSection("Community", accent, listOf(
-                    "Religion" to p.religion.ifBlank { "Not provided" },
-                    "Mother Tongue" to p.motherTongue.ifBlank { "Not provided" },
-                    "Community / Caste" to p.caste.ifBlank { "Not provided" },
-                    "Sub-Community" to p.subCaste.ifBlank { "Not provided" }
-                ))
-                Spacer(Modifier.height(8.dp))
-                if (p.gothra.isNotBlank() || p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank()) {
-                    BiodataSection("Astrology", accent, listOf(
-                        "Gotra / Gothra" to p.gothra.ifBlank { "Not provided" },
-                        "Rasi (Moon Sign)" to p.rasi.ifBlank { "Not provided" },
-                        "Nakshatra (Star)" to p.nakshatra.ifBlank { "Not provided" },
-                        "Manglik" to p.manglik.ifBlank { "Not provided" }
-                    ))
-                    Spacer(Modifier.height(8.dp))
+                if (options.includeCommunity) {
+                    BiodataSection(
+                        "Community",
+                        accent,
+                        listOf(
+                            "Religion" to p.religion.ifBlank { "Not provided" },
+                            "Mother Tongue" to p.motherTongue.ifBlank { "Not provided" },
+                            "Community / Caste" to p.caste.ifBlank { "Not provided" },
+                            "Sub-Community" to p.subCaste.ifBlank { "Not provided" },
+                            "Gotra / Gothra" to p.gothra.ifBlank { "Not provided" }
+                        )
+                    )
                 }
 
-                BiodataSection("Educational & Professional", accent, listOf(
-                    "Education" to p.education.ifBlank { "—" },
-                    "Profession" to p.profession.ifBlank { "—" },
-                    "Annual Income" to p.incomeBand.ifBlank { "—" },
-                    "Mother Tongue" to p.motherTongue.ifBlank { "—" }
-                ))
-                Spacer(Modifier.height(8.dp))
+                if (
+                    options.includeAstrology &&
+                    (p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank())
+                ) {
+                    BiodataSection(
+                        "Astrology",
+                        accent,
+                        listOf(
+                            "Rasi (Moon Sign)" to p.rasi.ifBlank { "Not provided" },
+                            "Nakshatra (Star)" to p.nakshatra.ifBlank { "Not provided" },
+                            "Manglik" to p.manglik.ifBlank { "Not provided" }
+                        )
+                    )
+                }
 
-                BiodataSection("Location Details", accent, listOf(
-                    "City" to p.city.ifBlank { "—" },
-                    "State" to p.state.ifBlank { "—" },
-                    "Native Place" to p.nativeState.ifBlank { "Not provided" },
-                    "Residential Status" to p.residentialStatus.ifBlank { "Not provided" }
-                ))
-                Spacer(Modifier.height(8.dp))
+                BiodataSection(
+                    "Education & Career",
+                    accent,
+                    buildList {
+                        add("Education" to p.education.ifBlank { "Not provided" })
+                        add("Profession" to p.profession.ifBlank { "Not provided" })
+                        if (options.includeIncome) {
+                            add("Annual Income" to p.incomeBand.ifBlank { "Not disclosed" })
+                        }
+                    }
+                )
 
-                BiodataSection("Family Details", accent, listOf(
-                    "Father's Occupation" to p.fatherOccupation.ifBlank { "—" },
-                    "Mother's Occupation" to p.motherOccupation.ifBlank { "—" },
-                    "Siblings" to if (p.siblings > 0) "${p.siblings}" else "—",
-                    "Family Type" to p.familyType.ifBlank { "—" }
-                ))
-                Spacer(Modifier.height(8.dp))
+                BiodataSection(
+                    "Location",
+                    accent,
+                    listOf(
+                        "City" to p.city.ifBlank { "Not provided" },
+                        "State" to p.state.ifBlank { "Not provided" }
+                    )
+                )
 
-                if (p.bio.isNotBlank()) {
-                    Text("About Me", style = MaterialTheme.typography.labelLarge,
-                        color = accent, fontWeight = FontWeight.SemiBold)
-                    Surface(shape = RoundedCornerShape(8.dp), color = accent.copy(alpha = 0.06f),
-                        modifier = Modifier.fillMaxWidth()) {
-                        Text(p.bio, style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(10.dp))
+                if (options.includeFamily) {
+                    BiodataSection(
+                        "Family Details",
+                        accent,
+                        listOf(
+                            "Father's Occupation" to p.fatherOccupation.ifBlank { "Not provided" },
+                            "Mother's Occupation" to p.motherOccupation.ifBlank { "Not provided" },
+                            "Siblings" to p.siblings.takeIf { it > 0 }?.toString().orEmpty().ifBlank { "Not provided" },
+                            "Family Type" to p.familyType.ifBlank { "Not provided" }
+                        )
+                    )
+                }
+
+                if (options.includeAboutMe && p.bio.isNotBlank()) {
+                    Text(
+                        "About Me",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(MatreeDesign.radii.small),
+                        color = accent.copy(alpha = 0.06f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            p.bio,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(MatreeDesign.spacing.sm)
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = accent.copy(alpha = 0.2f))
-                Text("Generated by Matree",
+                Text(
+                    "Generated by Matree",
                     style = MaterialTheme.typography.labelSmall,
                     color = accent.copy(alpha = 0.5f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -512,9 +557,9 @@ private fun BiodataSection(title: String, accentColor: Color, fields: List<Pair<
 
 // ── Modern Biodata Template ──────────────────────────────────────────────────
 @Composable
-private fun ModernBiodata(p: UserProfile) {
+private fun ModernBiodata(p: UserProfile, options: BiodataShareOptions) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(MatreeDesign.radii.card),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
@@ -525,48 +570,115 @@ private fun ModernBiodata(p: UserProfile) {
                 color = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Box(Modifier.fillMaxWidth().padding(MatreeDesign.spacing.lg)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
-                        modifier = Modifier.size(60.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(MatreeDesign.spacing.lg),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                        modifier = Modifier.size(MatreeDesign.sizes.avatarCompact)
+                    ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(p.displayName.first().uppercase(),
+                            Text(
+                                p.displayName.firstOrNull()?.uppercase() ?: "?",
                                 style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
                         }
                     }
-                    Spacer(Modifier.width(14.dp))
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
                     Column {
-                        Text(p.displayName, style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                        Text("${p.age} yrs · ${p.city}", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                        Text(
+                            p.displayName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Text(
+                            "${p.age} yrs · ${p.city}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
                         if (p.isVerified) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Verified, null, Modifier.size(14.dp), tint = MatreeDesign.colors.verified)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Verified Profile", style = MaterialTheme.typography.labelSmall,
-                                    color = MatreeDesign.colors.verified)
+                                Icon(
+                                    Icons.Filled.Verified,
+                                    contentDescription = "Verified",
+                                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(Modifier.width(MatreeDesign.spacing.xxs))
+                                Text(
+                                    "Verified",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
                             }
                         }
                     }
                 }
             }
-            }
+
             Column(
                 Modifier.padding(MatreeDesign.spacing.md),
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
-                ModernInfoRow(Icons.Filled.Person,    "Personal",  "${p.age} yrs · ${p.maritalStatus.ifBlank { "Not provided" }} · ${if (p.heightCm > 0) "${p.heightCm}cm" else ""}")
-                ModernInfoRow(Icons.Filled.TempleHindu,"Religion", "${p.religion.ifBlank { "—" }} · ${p.caste.ifBlank { "—" }} · ${p.rasi.ifBlank { "—" }}")
-                ModernInfoRow(Icons.Filled.School,    "Education", "${p.education.ifBlank { "—" }} · ${p.profession.ifBlank { "—" }}")
-                ModernInfoRow(Icons.Filled.AttachMoney,"Income",   p.incomeBand.ifBlank { "Not disclosed" })
-                ModernInfoRow(Icons.Filled.LocationOn, "Location", "${p.city.ifBlank { "—" }}, ${p.state.ifBlank { "Not provided" }}")
-                ModernInfoRow(Icons.Filled.Group,     "Family",   "${p.familyType.ifBlank { "Not provided" }} · Father: ${p.fatherOccupation.ifBlank { "—" }}")
-                if (p.bio.isNotBlank()) {
+                ModernInfoRow(
+                    Icons.Filled.Person,
+                    "Personal",
+                    "${p.age} yrs · ${p.maritalStatus.ifBlank { "Not provided" }} · ${if (p.heightCm > 0) "${p.heightCm} cm" else "Height not provided"}"
+                )
+                ModernInfoRow(
+                    Icons.Filled.School,
+                    "Education",
+                    "${p.education.ifBlank { "Not provided" }} · ${p.profession.ifBlank { "Not provided" }}"
+                )
+                ModernInfoRow(
+                    Icons.Filled.LocationOn,
+                    "Location",
+                    "${p.city.ifBlank { "Not provided" }}, ${p.state.ifBlank { "Not provided" }}"
+                )
+
+                if (options.includeCommunity) {
+                    ModernInfoRow(
+                        Icons.Filled.Diversity3,
+                        "Community",
+                        "${p.religion.ifBlank { "Not provided" }} · ${p.caste.ifBlank { "Not provided" }} · ${p.motherTongue.ifBlank { "Not provided" }}"
+                    )
+                }
+                if (
+                    options.includeAstrology &&
+                    (p.rasi.isNotBlank() || p.nakshatra.isNotBlank() || p.manglik.isNotBlank())
+                ) {
+                    ModernInfoRow(
+                        Icons.Filled.AutoAwesome,
+                        "Astrology",
+                        "${p.rasi.ifBlank { "Not provided" }} · ${p.nakshatra.ifBlank { "Not provided" }} · ${p.manglik.ifBlank { "Not provided" }}"
+                    )
+                }
+                if (options.includeIncome) {
+                    ModernInfoRow(
+                        Icons.Filled.AttachMoney,
+                        "Income",
+                        p.incomeBand.ifBlank { "Not disclosed" }
+                    )
+                }
+                if (options.includeFamily) {
+                    ModernInfoRow(
+                        Icons.Filled.Group,
+                        "Family",
+                        "${p.familyType.ifBlank { "Not provided" }} · Father: ${p.fatherOccupation.ifBlank { "Not provided" }}"
+                    )
+                }
+                if (options.includeAboutMe && p.bio.isNotBlank()) {
                     HorizontalDivider()
-                    Text(p.bio, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        p.bio,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -589,50 +701,95 @@ private fun ModernInfoRow(icon: ImageVector, label: String, value: String) {
 
 // ── Minimal Biodata Template ─────────────────────────────────────────────────
 @Composable
-private fun MinimalBiodata(p: UserProfile) {
+private fun MinimalBiodata(p: UserProfile, options: BiodataShareOptions) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(MatreeDesign.radii.card),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier.padding(MatreeDesign.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+        ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(p.displayName, style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold)
-                    Text("${p.age} · ${p.profession.ifBlank { "Not provided" }} · ${p.city}",
+                    Text(
+                        p.displayName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${p.age} · ${p.profession.ifBlank { "Not provided" }} · ${p.city.ifBlank { "Not provided" }}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(50.dp)) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(MatreeDesign.sizes.touchTarget)
+                ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(p.displayName.first().uppercase(),
+                        Text(
+                            p.displayName.firstOrNull()?.uppercase() ?: "?",
                             style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
+
             HorizontalDivider()
-            listOf(
-                "Religion / Caste" to "${p.religion.ifBlank { "—" }} / ${p.caste.ifBlank { "—" }}",
-                "Rasi / Nakshatra" to "${p.rasi.ifBlank { "—" }} / ${p.nakshatra.ifBlank { "—" }}",
-                "Education" to p.education.ifBlank { "—" },
-                "Income" to p.incomeBand.ifBlank { "Not disclosed" },
-                "Family" to "${p.familyType.ifBlank { "Nuclear" }} family · ${p.siblings} sibling(s)"
-            ).forEach { (k, v) ->
-                Row(Modifier.fillMaxWidth()) {
-                    Text("$k:", style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium, modifier = Modifier.width(130.dp))
-                    Text(v, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val rows = buildList {
+                add("Education" to p.education.ifBlank { "Not provided" })
+                add("Location" to "${p.city.ifBlank { "Not provided" }}, ${p.state.ifBlank { "Not provided" }}")
+                if (options.includeCommunity) {
+                    add("Community" to "${p.religion.ifBlank { "Not provided" }} / ${p.caste.ifBlank { "Not provided" }}")
+                }
+                if (options.includeAstrology) {
+                    val astrology = listOf(p.rasi, p.nakshatra, p.manglik).filter { it.isNotBlank() }
+                    if (astrology.isNotEmpty()) add("Astrology" to astrology.joinToString(" / "))
+                }
+                if (options.includeIncome) {
+                    add("Income" to p.incomeBand.ifBlank { "Not disclosed" })
+                }
+                if (options.includeFamily) {
+                    add(
+                        "Family",
+                        buildString {
+                            append(p.familyType.ifBlank { "Not provided" })
+                            p.siblings.takeIf { it > 0 }?.let { append(" · ").append(it).append(" sibling(s)") }
+                        }
+                    )
                 }
             }
-            if (p.bio.isNotBlank()) {
+            rows.forEach { (label, value) ->
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        "$label:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.width(130.dp)
+                    )
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (options.includeAboutMe && p.bio.isNotBlank()) {
                 HorizontalDivider()
-                Text(p.bio, style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    p.bio,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
+
