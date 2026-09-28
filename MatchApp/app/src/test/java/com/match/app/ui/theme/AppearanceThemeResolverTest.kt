@@ -39,7 +39,7 @@ class AppearanceThemeResolverTest {
     }
 
     @Test
-    fun `legacy unsupported manual palette falls back to Matree Neutral`() {
+    fun `legacy unsupported manual palette falls back to Matree Signature`() {
         assertEquals(
             AppPalette.VIVAH,
             AppearanceThemeResolver.resolve(ThemePreference.MANUAL, "OCEAN", "Hindu")
@@ -56,4 +56,14 @@ class AppearanceThemeResolverTest {
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", ""))
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", "Prefer not to say"))
     }
+    @Test
+    fun `unspecified appearance defaults to Matree Signature instead of religion automatic`() {
+        assertEquals(ThemePreference.NEUTRAL, com.match.app.domain.model.AppearancePreference().themePreference)
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage(null))
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage("unsupported"))
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage("AUTOMATIC"))
+        assertEquals(ThemePreference.AUTOMATIC, ThemePreference.fromStorage("PROFILE_RELIGION"))
+        assertEquals("PROFILE_RELIGION", ThemePreference.AUTOMATIC.storageKey)
+    }
+
 }

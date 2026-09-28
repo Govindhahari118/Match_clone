@@ -36,8 +36,11 @@ import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.components.MatreeThemeFamilyPreviewCard
 import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatreeDesign
@@ -213,6 +216,7 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
+    var themePreview by remember { mutableStateOf<AppPalette?>(null) }
 
     val currentPalette = AppPalette.fromProductionKey(appearance.manualThemeKey)
     val resolvedPalette = AppearanceThemeResolver.resolve(
@@ -220,6 +224,7 @@ fun SettingsScreen(
         manualPaletteKey = appearance.manualThemeKey,
         profileReligion = user?.religion
     )
+    val previewPalette = themePreview ?: resolvedPalette
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -314,9 +319,9 @@ fun SettingsScreen(
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             MatreeInfoCard {
-                Text("App theme", fontWeight = FontWeight.SemiBold)
+                Text("Matree theme", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Appearance is independent from your declared religion, partner preferences, privacy, verification and pricing.",
+                    "Matree Signature is the flagship default for everyone. Religion-inspired themes are optional personal appearance choices.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -325,28 +330,52 @@ fun SettingsScreen(
                     tone = MatreeStatusTone.NEUTRAL
                 )
 
-                AppearanceChoiceRow(
-                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
-                    title = "Automatic",
-                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
-                        "Follow my confirmed profile religion — $it"
-                    } ?: "Use Matree Neutral until a profile religion is available",
-                    onClick = vm::useAutomaticTheme
-                )
-                AppearanceChoiceRow(
-                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
-                    title = "Matree Neutral",
-                    subtitle = "Use the universal Matree visual family",
-                    onClick = vm::useNeutralTheme
+                MatreeThemeFamilyPreviewCard(
+                    palette = previewPalette,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Manual theme family", fontWeight = FontWeight.SemiBold)
+                if (themePreview != null) {
+                    MatreeInlineNotice(
+                        message = "Previewing ${previewPalette.label}. Apply it only if you want this appearance across Matree.",
+                        tone = MatreeStatusTone.NEUTRAL
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                    ) {
+                        MatreeSecondaryButton(
+                            text = "Cancel",
+                            onClick = { themePreview = null },
+                            modifier = Modifier.weight(1f)
+                        )
+                        MatreePrimaryButton(
+                            text = "Apply theme",
+                            onClick = {
+                                themePreview?.let { selected ->
+                                    vm.useManualTheme(selected)
+                                    themePreview = null
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.NEUTRAL,
+                    title = "Matree Signature",
+                    subtitle = "Premium universal matrimonial design — the default for every user",
+                    onClick = {
+                        themePreview = null
+                        vm.useNeutralTheme()
+                    }
+                )
+
+                HorizontalDivider()
+                Text("Religion-inspired themes (optional)", fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (appearance.themePreference == ThemePreference.MANUAL) {
-                        "Selected: ${currentPalette.label}. This does not alter your profile religion."
-                    } else {
-                        "Choose any supported visual family without changing your actual religion."
-                    },
+                    "Choose one only if you personally prefer its visual style. Theme choice never changes your religion, profile, matches, recommendations, privacy, verification or pricing.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -357,16 +386,32 @@ fun SettingsScreen(
                     manualReligionPalettes.forEach { palette ->
                         MatreeChoiceChip(
                             text = palette.label,
-                            selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
-                            onClick = { vm.useManualTheme(palette) }
+                            selected = themePreview == palette || (
+                                themePreview == null &&
+                                    appearance.themePreference == ThemePreference.MANUAL &&
+                                    currentPalette == palette
+                            ),
+                            onClick = { themePreview = palette }
                         )
                     }
                 }
 
+                AppearanceChoiceRow(
+                    selected = appearance.themePreference == ThemePreference.AUTOMATIC,
+                    title = "Match my profile religion",
+                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
+                        "Optional automatic mode — use the $it visual family when supported"
+                    } ?: "Optional automatic mode — Signature remains active until a supported profile religion is available",
+                    onClick = {
+                        themePreview = null
+                        vm.useAutomaticTheme()
+                    }
+                )
+
                 HorizontalDivider()
                 Text("Display mode", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Light/dark behavior is a separate device preference.",
+                    "Light and dark mode are independent from the selected visual family.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -389,7 +434,6 @@ fun SettingsScreen(
                     onClick = { vm.setDisplayMode(DisplayMode.DARK) }
                 )
             }
-
             Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Choose which real account events may send a push notification. Notification history remains available in the app.",

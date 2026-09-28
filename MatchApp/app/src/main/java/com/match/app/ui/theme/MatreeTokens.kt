@@ -79,6 +79,7 @@ private val LocalRadii = staticCompositionLocalOf { MatreeRadii() }
 private val LocalSizes = staticCompositionLocalOf { MatreeSizes() }
 private val LocalElevation = staticCompositionLocalOf { MatreeElevation() }
 private val LocalSemanticColors = staticCompositionLocalOf { lightSemanticColors() }
+private val LocalVisualFamily = staticCompositionLocalOf { visualFamilyFor(AppPalette.VIVAH) }
 
 object MatreeDesign {
     val spacing: MatreeSpacing @Composable get() = LocalSpacing.current
@@ -86,6 +87,7 @@ object MatreeDesign {
     val sizes: MatreeSizes @Composable get() = LocalSizes.current
     val elevation: MatreeElevation @Composable get() = LocalElevation.current
     val colors: MatreeSemanticColors @Composable get() = LocalSemanticColors.current
+    val visual: MatreeVisualFamily @Composable get() = LocalVisualFamily.current
 
     const val profilePhotoAspectRatio: Float = 4f / 5f
 }
@@ -93,6 +95,7 @@ object MatreeDesign {
 @Composable
 internal fun ProvideMatreeDesignTokens(
     darkMode: Boolean,
+    palette: AppPalette,
     content: @Composable () -> Unit
 ) {
     CompositionLocalProvider(
@@ -101,6 +104,7 @@ internal fun ProvideMatreeDesignTokens(
         LocalSizes provides MatreeSizes(),
         LocalElevation provides MatreeElevation(),
         LocalSemanticColors provides semanticColorsFor(darkMode),
+        LocalVisualFamily provides visualFamilyFor(palette),
         content = content
     )
 }

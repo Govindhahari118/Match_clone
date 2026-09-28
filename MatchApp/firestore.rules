@@ -303,7 +303,7 @@ service cloud.firestore {
       allow create, update: if isOwner(uid) &&
         request.resource.data.keys().hasOnly(['themePreference','manualThemeKey','updatedAt']) &&
         request.resource.data.themePreference is string &&
-        request.resource.data.themePreference in ['AUTOMATIC','NEUTRAL','MANUAL'] &&
+        request.resource.data.themePreference in ['PROFILE_RELIGION','AUTOMATIC','NEUTRAL','MANUAL'] &&
         request.resource.data.manualThemeKey is string &&
         request.resource.data.manualThemeKey in [
           'VIVAH','HINDU','MUSLIM','CHRISTIAN','SIKH','BUDDHIST','JAIN','PARSI'
