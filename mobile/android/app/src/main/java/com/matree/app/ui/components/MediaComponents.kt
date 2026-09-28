@@ -11,6 +11,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import com.matree.app.design.MatreeTheme
 
 /**
@@ -32,7 +33,7 @@ fun MatreeImageCard(
         shape = RoundedCornerShape(tokens.radii.card),
         colors = CardDefaults.cardColors(containerColor = tokens.colors.surfaceSubtle),
         border = BorderStroke(
-            width = androidx.compose.ui.unit.dp(1f),
+            width = 1.dp,
             color = tokens.colors.borderSubtle,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = tokens.elevation.low),
