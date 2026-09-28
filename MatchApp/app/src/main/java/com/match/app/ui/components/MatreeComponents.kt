@@ -353,6 +353,27 @@ fun MatreeSecondaryButton(
 }
 
 @Composable
+fun MatreeTextButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.defaultMinSize(minHeight = MatreeDesign.sizes.touchTarget)
+    ) {
+        icon?.let {
+            Icon(it, contentDescription = null, modifier = Modifier.size(MatreeDesign.sizes.iconSmall))
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
+        }
+        Text(text)
+    }
+}
+
+@Composable
 fun MatreeStatusChip(
     text: String,
     tone: MatreeStatusTone = MatreeStatusTone.NEUTRAL,
