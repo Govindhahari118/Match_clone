@@ -1,7 +1,6 @@
 package com.match.app.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -11,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.unit.dp
 import com.match.app.ui.theme.MatreeDesign
 import com.match.app.ui.theme.MatreeMotif
 import kotlin.math.min
@@ -153,5 +151,5 @@ fun MatreeThemeOrnament(
 
 @Composable
 fun MatreeThemeOrnamentIcon(modifier: Modifier = Modifier) {
-    MatreeThemeOrnament(modifier = modifier.size(72.dp))
+    MatreeThemeOrnament(modifier = modifier.size(MatreeDesign.sizes.avatarStandard))
 }
