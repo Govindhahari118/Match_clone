@@ -21,13 +21,19 @@ class MatreePaletteTest {
     )
 
     @Test
-    fun `Matree Signature is warm premium and matrimonial`() {
+    fun `Matree Neutral is warm premium and matrimonial`() {
         val scheme = colorSchemeFor(AppPalette.VIVAH, dark = false)
 
         assertEquals(Color(0xFF6E2F4B), scheme.primary)
         assertEquals(Color(0xFFFFF9F6), scheme.background)
         assertEquals(Color.White, scheme.surface)
         assertEquals(Color(0xFFF8EEE9), scheme.surfaceVariant)
+    }
+
+    @Test
+    fun `interaction tokens satisfy minimum touch target`() {
+        assertTrue(MatreeSizes().touchTarget.value >= 48f)
+        assertTrue(MatreeSizes().buttonHeight.value >= 48f)
     }
 
     @Test
