@@ -4,7 +4,7 @@
 
 Matree uses one Android product with a premium universal default plus seven optional religion-inspired presentation families:
 
-- Matree Signature — default for every new/unspecified appearance preference
+- Matree Neutral — default for every new/unspecified appearance preference
 - Hindu
 - Muslim
 - Christian
@@ -13,7 +13,7 @@ Matree uses one Android product with a premium universal default plus seven opti
 - Jain
 - Parsi
 
-The internal compatibility key for Matree Signature remains `VIVAH` / `NEUTRAL` so existing stored preferences do not need a destructive migration.
+The internal compatibility key for Matree Neutral remains `VIVAH` / `NEUTRAL` so existing stored preferences do not need a destructive migration.
 
 Appearance is presentation-only. It never changes canonical profile religion, partner preferences, eligibility, ranking, pricing, verification, privacy, blocking, messaging, contact access or account lifecycle.
 
@@ -24,13 +24,19 @@ Appearance has two independent dimensions:
 1. Visual family.
 2. Display mode: System, Light or Dark.
 
-Fresh installs and missing/unsupported appearance preferences resolve to Matree Signature. Religion-inspired themes are never selected merely because a profile contains a religion. Legacy stored `AUTOMATIC` values also normalize to Signature because the old contract used Automatic as a default and therefore could not prove explicit opt-in.
+Fresh installs and missing/unsupported appearance preferences resolve to Matree Neutral. Religion-inspired themes are never selected merely because a profile contains a religion. Legacy stored `AUTOMATIC` values normalize to Neutral because the old contract used Automatic as a default and therefore could not prove an explicit selection.
 
-Users can explicitly choose any religion-inspired theme. Settings previews a religion theme first and applies it only after the user taps **Apply theme**. Users may also explicitly enable **Match my profile religion**, which is an optional automatic mode that follows the confirmed profile religion when supported. Missing/unsupported/Other values fall back to Matree Signature.
+Settings exposes the production contract directly:
+
+- **Automatic** — follow the confirmed profile religion when supported; missing/unsupported/Other resolves to Neutral.
+- **Matree Neutral** — use the universal premium Matree family.
+- **Manual** — choose any supported religion-inspired visual family independently of profile religion, preview it first, then apply it.
+
+Display mode remains a separate System / Light / Dark choice. Theme selection never writes profile religion.
 
 Theme selection does not mutate the member profile or matchmaking state. Availability or monetization rules may be added later without changing this presentation architecture.
 
-## Flagship Matree Signature
+## Matree Neutral
 
 The default is intentionally the strongest general matrimonial design rather than a generic fallback:
 
@@ -67,7 +73,7 @@ Rich concept-board photography is not embedded as wallpaper in functional screen
 
 `AppearanceThemeResolver` resolves one `AppPalette` at the app root. `MatchTheme` provides Material 3 colors plus `MatreeVisualFamily` through centralized Matree design tokens. Screens do not fork into separate religion-specific implementations.
 
-`ThemePreference.NEUTRAL` is retained as the stable enum for Matree Signature. `ThemePreference.MANUAL` represents an explicitly selected religion-inspired family. `ThemePreference.AUTOMATIC` exists only as an explicit user opt-in to profile-religion following and is persisted as `PROFILE_RELIGION`; the legacy `AUTOMATIC` storage value migrates to Signature.
+`ThemePreference.NEUTRAL` is the universal family. `ThemePreference.MANUAL` represents an explicitly selected religion-inspired family. `ThemePreference.AUTOMATIC` follows confirmed profile religion and is persisted as `PROFILE_RELIGION`; the legacy `AUTOMATIC` storage value migrates to Neutral. The internal palette key `VIVAH` is retained only for storage compatibility and resolves to the user-facing Matree Neutral family.
 
 ## Accessibility, semantics and truthfulness
 
@@ -75,7 +81,7 @@ Rich concept-board photography is not embedded as wallpaper in functional screen
 - light and dark variants exist for every production family;
 - primary-action contrast is unit-tested;
 - semantic success/warning/error/verified/premium meaning stays stable across themes;
-- unsupported manual palette keys fall back to Matree Signature;
+- unsupported manual palette keys fall back to Matree Neutral;
 - production UI never invents match percentages, verification, premium status, activity, community, religious observance, horoscope compatibility, proximity or other member facts;
 - theme choice is never used as evidence of religious identity.
 
