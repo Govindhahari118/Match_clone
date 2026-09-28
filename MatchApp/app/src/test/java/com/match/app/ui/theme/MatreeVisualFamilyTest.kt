@@ -20,6 +20,13 @@ class MatreeVisualFamilyTest {
     }
 
     @Test
+    fun `universal production family is named Matree Neutral`() {
+        assertEquals("Matree Neutral", AppPalette.VIVAH.label)
+        assertEquals("Matree Neutral", visualFamilyFor(AppPalette.VIVAH).displayName)
+        assertEquals(MatreeMotif.NEUTRAL, visualFamilyFor(AppPalette.VIVAH).motif)
+    }
+
+    @Test
     fun `religion families do not collapse to the neutral motif`() {
         production.filter { it != AppPalette.VIVAH }.forEach { palette ->
             assertNotEquals(MatreeMotif.NEUTRAL, visualFamilyFor(palette).motif)
