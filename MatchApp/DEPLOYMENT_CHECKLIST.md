@@ -34,7 +34,7 @@ This checklist describes the current production architecture on canonical `main`
 Use a production Firebase project separate from development/staging.
 
 - [ ] Add the production Android app/package and download its `google-services.json` outside source control where appropriate for the release process.
-- [ ] Enable Firebase Authentication providers actually used by the app (Email/Password and Google if offered in production UI).
+- [ ] Enable Firebase Authentication providers actually used by the app (Phone, Email/Password, and Google if offered in production UI).
 - [ ] Configure authorized domains and Google Sign-In SHA-1/SHA-256 fingerprints for release signing.
 - [ ] Create Firestore in production mode.
 - [ ] Deploy `firestore.rules` and `firestore.indexes.json`.
@@ -56,10 +56,12 @@ Use a production Firebase project separate from development/staging.
 
 - [x] Firebase Auth is the password authority; Room is not an offline password database.
 - [x] Server-confirmed account erasure is required before the client reports success.
+- [ ] Test phone OTP signup/login, resend/expiry/provider abuse limits and auto-verification on release devices.
 - [ ] Test email sign-up/sign-in/reset on two physical devices.
 - [ ] Test Google sign-in/linking on release credentials if Google login is exposed.
-- [ ] Test disabled/deleted accounts cannot regain access from local cache.
-- [ ] Test sign-out token cleanup and re-login token registration.
+- [ ] Test disabled/restricted/suspended/deleted accounts cannot regain access from local cache, stale deep links or chat.
+- [ ] Test single-device sign-out plus "sign out all devices" refresh-token revocation and FCM cleanup.
+- [ ] Verify the privacy-safe signed-in-device list never exposes FCM tokens.
 - [ ] Test account deletion removes/anonymizes all user data according to the data-retention policy, including exact Nearby location.
 
 ## 6. Firestore / authorization
@@ -74,22 +76,22 @@ Use a production Firebase project separate from development/staging.
 
 ## 7. Payments / entitlements
 
-Razorpay must be server-authoritative. Do not trust a client success callback, plan name, amount or locally cached premium flag.
+Google Play Billing is server-authoritative. Do not trust a client purchase callback, product label, cached premium flag or local boost state.
 
-- [x] Server creates Razorpay orders from a server-owned plan catalogue.
-- [x] Server verifies signature plus authoritative Razorpay order/payment state, amount, currency and ownership.
-- [x] Payment activation is idempotent using deterministic payment records.
-- [ ] Configure Razorpay live key ID and secret in secure production configuration; never commit the secret.
-- [ ] Configure and verify the production webhook secret/endpoint if webhook recovery is enabled for the release.
-- [ ] Test checkout success, cancellation, app process death after payment, duplicate verification, webhook replay and wrong-user order access.
-- [ ] Test refund/chargeback business handling before advertising irreversible entitlements.
-- [ ] Ensure Play listing/payment declarations are consistent with the actual business/payment model and applicable Play policies.
+- [x] Android purchase flow uses Google Play Billing.
+- [x] Backend verifies purchase tokens with Google Play before granting subscription/boost entitlements.
+- [x] Purchase processing is idempotent and rebuilds entitlement from the server payment ledger.
+- [x] Raw purchase tokens are not exposed through operations reconciliation views.
+- [ ] Configure the production Google Play service-account/API access and actual product IDs outside source control.
+- [ ] Verify acknowledgement/consumption and voided/refunded purchase reconciliation against the production Play account.
+- [ ] Test success, cancellation, pending purchase, process death, duplicate verification, replay, wrong-user token and refund/void scenarios.
+- [ ] Ensure Play Console products, pricing, refund copy and Data Safety/payment declarations match the shipped entitlement model.
 
 ## 8. Storage and media
 
 - [x] Remote user media paths use Firebase Auth UID, not local Room numeric IDs.
 - [x] Chat image/voice media has authenticated participant metadata/rules.
-- [ ] Test profile photo upload/delete/primary-photo update between devices.
+- [ ] Test profile photo upload → moderation queue → short-lived operator review → approve/reject → approved primary-photo publication between devices.
 - [ ] Test chat image and voice upload/download between two release devices.
 - [ ] Test retry after temporary network loss and verify failed uploads are not shown as successful cloud media.
 - [ ] Verify Storage lifecycle/cost policy for abandoned chat/media files.
@@ -106,13 +108,16 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Nearby returns only profile identity + computed distance, never another member's coordinates.
 - [x] Server filters self, stale locations, either-direction blocks, stealth profiles and incompatible gender preferences.
 - [x] User can explicitly stop sharing and delete the stored location.
-- [x] Location data is excluded after 30 days without refresh and deleted with the user profile.
-- [ ] Deploy the new location Functions before exposing Nearby in production.
+- [x] Exact location expires after 24 hours without refresh and is deleted immediately on stop-sharing, consent withdrawal or account deletion.
+- [ ] Keep Remote Config `enable_nearby=false` until production location/security/load evidence passes; deploy and validate location Functions before enabling.
 - [ ] Real-device test: denied permission, approximate permission, precise permission, GPS/network provider, location services off, no results, 5/25/100 km radii, block/stealth behavior and stop-sharing.
 - [ ] Data Safety and privacy policy explicitly describe foreground location collection, purpose, retention and deletion.
 
-## 10. Discovery / social / messaging
+## 10. Discovery / preferences / social / messaging
 
+- [x] Durable partner preferences are separate from transient discovery filters and support STRICT / PREFERRED / NO_PREFERENCE.
+- [x] Discovery enforces strict preferences bilaterally and uses bilateral preferred fit for ordering.
+- [ ] Test partner preferences across devices, including strict exclusion, preferred ordering and deliberate no-preference choices.
 - [ ] Discovery on a fresh second device shows authorized server-backed profiles without relying on demo/seed Room data.
 - [ ] Sent/received interests and mutual matches stay consistent across two devices.
 - [ ] Shortlists stay consistent across devices.
@@ -130,11 +135,14 @@ Nearby is foreground-only and should remain opt-in.
 
 ## 12. Verification / moderation / support
 
-- [x] Verification approval/rejection requires the server-side `admin` custom claim.
-- [ ] Establish a controlled admin-claim provisioning procedure outside the consumer app.
-- [ ] Test verification submission, review, approve and reject end-to-end.
-- [ ] Test report/support callable paths and establish a real moderation/support handling process.
-- [ ] Do not expose unfinished admin/operator screens inside the consumer release.
+- [x] Verification, moderation, payment and support actions require explicit least-privilege operations roles.
+- [x] Raw KYC files remain client-unreadable; operator review uses short-lived audited access.
+- [x] Profile-photo publication requires server-owned moderation approval.
+- [x] Moderators can place accounts under review, restrict, suspend or restore with immutable audit evidence; suspension revokes refresh tokens.
+- [x] A separate operator console is wired to role-scoped callable APIs; it is not embedded in the consumer app.
+- [ ] Provision initial `ops_admin` and delegated support/moderator/KYC/payment roles through the controlled bootstrap process.
+- [ ] Deploy the hardened operator Hosting surface and verify CSP/Auth/App Check behavior with real operator accounts.
+- [ ] Test verification submission/review/approve/reject, photo review, report enforcement, appeal/support and payment reconciliation end-to-end.
 
 ## 13. Privacy, legal and product claims
 
@@ -149,17 +157,17 @@ Nearby is foreground-only and should remain opt-in.
 
 The production shell intentionally exposes a smaller audited surface. Source files for experimental ideas are not automatically production features.
 
-- [ ] Inventory every route reachable from `MainShell` before release.
+- [x] Inventory every route reachable from `MainShell` before release (`docs/production-readiness/route-inventory.md`).
 - [ ] Classify every screen as `READY`, `BETA`, `STUB`, `UNSAFE`, or `POST_LAUNCH`.
-- [ ] Hide/remove every `STUB`, `UNSAFE` or unvalidated payment/identity/communication route.
+- [x] Hide/remove every `STUB`/`UNSAFE` route; Nearby and Kundali remain fail-closed behind Remote Config until their production evidence passes.
 - [ ] Placeholder language packs must remain hidden until independent translation and layout QA is complete.
 - [ ] Remove stale Firebase Dynamic Links references and any other retired/deprecated integration from docs/code.
 - [ ] Remove unused demo credentials, fake data generators and obsolete local-password utilities if no debug/test caller remains.
 
 ## 15. Release test matrix
 
-- [ ] Auth: sign-up, login, reset, Google, sign-out, disabled account, deletion.
-- [ ] Profile: onboarding, edit, photo, privacy, verification status.
+- [ ] Auth: phone OTP signup/login, email signup/login/reset, Google, sign-out, sign-out-all-devices, restricted/suspended account and deletion.
+- [ ] Profile: onboarding, edit, weighted strength, partner preferences, moderated photo, privacy and verification status.
 - [ ] Discovery: fresh device, filters, stealth, blocks, pagination, no-results.
 - [ ] Social: interests, mutual match, shortlist, unblock/reblock, two-device consistency.
 - [ ] Nearby: all permission/service/radius/privacy cases in section 9.
