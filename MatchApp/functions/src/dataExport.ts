@@ -97,6 +97,27 @@ function verificationExport(
   return safe;
 }
 
+function submittedReportExport(report: Record<string, unknown>): Record<string, unknown> {
+  const {
+    lastReviewedBy: _lastReviewedBy,
+    lastReviewedRole: _lastReviewedRole,
+    resolutionReason: _resolutionReason,
+    ...safe
+  } = report;
+  return safe;
+}
+
+function mediaModerationExport(row: Record<string, unknown>): Record<string, unknown> {
+  const {
+    reviewedBy: _reviewedBy,
+    reviewedRole: _reviewedRole,
+    reviewReason: _reviewReason,
+    duplicateAcrossAccounts: _duplicateAcrossAccounts,
+    ...safe
+  } = row;
+  return safe;
+}
+
 async function buildExport(uid: string): Promise<Record<string, unknown>> {
   const [
     profile,
@@ -121,6 +142,14 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     outgoingInterests,
     incomingInterests,
     matches,
+    profileViewsByMe,
+    profileViewsOfMe,
+    recommendationFeedback,
+    recommendationImpressions,
+    profileAnalytics,
+    submittedReports,
+    photoModeration,
+    videoModeration,
     supportTickets,
     assistedRequest,
     familyDelegates,
@@ -148,6 +177,14 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     queryAll(db.collection("interests").where("fromUid", "==", uid)),
     queryAll(db.collection("interests").where("toUid", "==", uid)),
     queryAll(db.collection("matches").where("users", "array-contains", uid)),
+    queryAll(db.collection("profileViews").where("viewerUid", "==", uid)),
+    queryAll(db.collection("profileViews").where("viewedUid", "==", uid)),
+    childCollection(`recommendationFeedback/${uid}/targets`),
+    queryAll(db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)),
+    childCollection(`profileAnalytics/${uid}/weekly`),
+    queryAll(db.collection("profileReports").where("reporterUid", "==", uid)),
+    queryAll(db.collection("photoModeration").where("uid", "==", uid)),
+    queryAll(db.collection("videoModeration").where("uid", "==", uid)),
     queryAll(db.collection("supportTickets").where("uid", "==", uid)),
     singleDoc("rmRequests", uid),
     childCollection(`familyDelegates/${uid}/members`),
@@ -179,6 +216,11 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
         "blocks and per-member privacy choices",
         "notifications",
         "interests and matches",
+        "profile-view history involving this account",
+        "consented recommendation feedback and impression history",
+        "derived profile analytics",
+        "reports submitted by this account",
+        "profile photo/video moderation status with internal review data removed",
         "chat threads and messages",
         "support tickets and assisted-matchmaking requests",
         "family profile delegation relationships",
@@ -187,8 +229,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
       ],
       excludes: [
         "raw KYC files",
-        "internal fraud/risk signals",
-        "operator audit records",
+        "internal fraud/risk signals, including duplicate-photo risk evidence",
+        "operator identities, internal review reasons and audit records",
         "payment-provider secrets or tokens",
       ],
     },
@@ -217,6 +259,20 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
         received: incomingInterests,
       },
       matches,
+      profileViews: {
+        viewedByMe: profileViewsByMe,
+        viewedMe: profileViewsOfMe,
+      },
+      recommendation: {
+        feedback: recommendationFeedback,
+        impressions: recommendationImpressions,
+      },
+      profileAnalytics,
+      submittedReports: submittedReports.map(submittedReportExport),
+      mediaModeration: {
+        photos: photoModeration.map(mediaModerationExport),
+        videos: videoModeration.map(mediaModerationExport),
+      },
       chats,
       supportTickets,
       assistedMatchmakingRequest: assistedRequest,
