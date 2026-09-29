@@ -51,7 +51,8 @@ private data class QuickPreset(
     val city: String = "",
     val motherTongue: String = "",
     val caste: String = "",
-    val state: String = ""
+    val state: String = "",
+    val country: String = ""
 )
 
 private val RELIGION_PRESETS = listOf(
@@ -116,67 +117,13 @@ private val STATE_PRESETS = listOf(
 )
 
 private val NRI_PRESETS = listOf(
-    QuickPreset("USA",       Icons.Filled.Flight, Color(0xFF1A237E), state = "United States"),
-    QuickPreset("UK",        Icons.Filled.Flight, Color(0xFF880E4F), state = "United Kingdom"),
-    QuickPreset("Canada",    Icons.Filled.Flight, Color(0xFFE65100), state = "Canada"),
-    QuickPreset("Australia", Icons.Filled.Flight, Color(0xFF1B5E20), state = "Australia"),
-    QuickPreset("Germany",   Icons.Filled.Flight, Color(0xFF37474F), state = "Germany"),
-    QuickPreset("UAE/Gulf",  Icons.Filled.Flight, Color(0xFF4E342E), state = "UAE"),
-    QuickPreset("Singapore", Icons.Filled.Flight, Color(0xFF6A1B9A), state = "Singapore"),
-)
-
-private val FALLBACK_PRESETS = listOf(
-    RegionPresetDto("nearby", "Nearby Matches",
-        description = "Profiles from your city and surrounding areas.",
-        filters = RegionPresetFiltersDto(),
-        tags = listOf("Nearby", "Local")),
-    RegionPresetDto("hyderabad-telugu", "Hyderabad Telugu Matches",
-        description = "Telugu mother tongue profiles in Hyderabad, Telangana.",
-        filters = RegionPresetFiltersDto(city = "Hyderabad", state = "Telangana", motherTongue = "Telugu"),
-        tags = listOf("Telangana", "City", "Language")),
-    RegionPresetDto("vijayawada-reddy", "Reddy Community - Vijayawada",
-        description = "Reddy community profiles around Vijayawada, Andhra Pradesh.",
-        filters = RegionPresetFiltersDto(city = "Vijayawada", caste = "Reddy", state = "Andhra Pradesh"),
-        tags = listOf("Community", "Andhra Pradesh", "Caste")),
-    RegionPresetDto("usa-telugu-nri", "Telugu NRI - United States",
-        description = "US-based Telugu profiles for NRI matrimonial search.",
-        filters = RegionPresetFiltersDto(motherTongue = "Telugu", country = "United States"),
-        tags = listOf("NRI", "USA", "Telugu")),
-    RegionPresetDto("bangalore-it", "Bengaluru IT Professionals",
-        description = "Profiles in Bengaluru working in IT and Software.",
-        filters = RegionPresetFiltersDto(city = "Bangalore", occupationCategory = "IT/Software"),
-        tags = listOf("Career", "Karnataka")),
-    RegionPresetDto("chennai-tamil", "Chennai Tamil Matches",
-        description = "Tamil mother tongue profiles in Chennai, Tamil Nadu.",
-        filters = RegionPresetFiltersDto(city = "Chennai", state = "Tamil Nadu", motherTongue = "Tamil"),
-        tags = listOf("Tamil Nadu", "City", "Language")),
-    // NRI popular destinations
-    RegionPresetDto("uk-hindu-nri", "Hindu NRI - United Kingdom",
-        description = "UK-based Hindu profiles seeking matches from India.",
-        filters = RegionPresetFiltersDto(religion = "Hindu", country = "United Kingdom"),
-        tags = listOf("NRI", "UK", "Hindu")),
-    RegionPresetDto("canada-punjabi-nri", "Punjabi NRI - Canada",
-        description = "Canadian Punjabi profiles for NRI matrimonial search.",
-        filters = RegionPresetFiltersDto(motherTongue = "Punjabi", country = "Canada"),
-        tags = listOf("NRI", "Canada", "Punjabi")),
-    RegionPresetDto("gulf-muslim", "Muslim Professionals - Gulf",
-        description = "Muslim profiles working in UAE, Saudi Arabia, and Gulf countries.",
-        filters = RegionPresetFiltersDto(religion = "Muslim", country = "UAE"),
-        tags = listOf("NRI", "Gulf", "Muslim")),
-    // Profession-based
-    RegionPresetDto("doctors-medical", "Doctors & Medical Professionals",
-        description = "MBBS, MD, Dental, and allied medical professionals across India.",
-        filters = RegionPresetFiltersDto(occupationCategory = "Medical/Healthcare"),
-        tags = listOf("Career", "Doctors", "Medical")),
-    RegionPresetDto("iit-iim-elite", "IIT / IIM / Premier Institute Alumni",
-        description = "Graduates from India's top engineering and management institutes.",
-        filters = RegionPresetFiltersDto(occupationCategory = "Engineering/Technology"),
-        tags = listOf("Career", "Elite", "Education")),
-    // Second marriage
-    RegionPresetDto("second-marriage", "Second Marriage / Divorcee",
-        description = "Profiles open to second marriage — divorcee, widowed, awaiting divorce.",
-        filters = RegionPresetFiltersDto(maritalStatus = "Divorced"),
-        tags = listOf("Second Marriage", "Divorcee")),
+    QuickPreset("USA",       Icons.Filled.Flight, Color(0xFF1A237E), country = "United States"),
+    QuickPreset("UK",        Icons.Filled.Flight, Color(0xFF880E4F), country = "United Kingdom"),
+    QuickPreset("Canada",    Icons.Filled.Flight, Color(0xFFE65100), country = "Canada"),
+    QuickPreset("Australia", Icons.Filled.Flight, Color(0xFF1B5E20), country = "Australia"),
+    QuickPreset("Germany",   Icons.Filled.Flight, Color(0xFF37474F), country = "Germany"),
+    QuickPreset("UAE/Gulf",  Icons.Filled.Flight, Color(0xFF4E342E), country = "UAE"),
+    QuickPreset("Singapore", Icons.Filled.Flight, Color(0xFF6A1B9A), country = "Singapore"),
 )
 
 // ── Backend status ───────────────────────────────────────────────────────────
@@ -192,7 +139,7 @@ class RegionsViewModel @Inject constructor(
 
     val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
 
-    private val _presets = MutableStateFlow<List<RegionPresetDto>>(FALLBACK_PRESETS)
+    private val _presets = MutableStateFlow<List<RegionPresetDto>>(emptyList())
     val presets = _presets.asStateFlow()
 
     val backendStatus = MutableStateFlow(BackendStatus.Unknown)
@@ -224,11 +171,11 @@ class RegionsViewModel @Inject constructor(
         backendStatus.value = BackendStatus.Loading
         catalog.fetchPresets()
             .onSuccess { list ->
-                _presets.value = list.ifEmpty { FALLBACK_PRESETS }
+                _presets.value = list
                 backendStatus.value = if (list.isNotEmpty()) BackendStatus.Live else BackendStatus.Offline
             }
             .onFailure {
-                _presets.value = FALLBACK_PRESETS
+                _presets.value = emptyList()
                 backendStatus.value = BackendStatus.Offline
             }
     }
@@ -248,11 +195,12 @@ class RegionsViewModel @Inject constructor(
 
     /** Tap a quick chip → show its matches inline */
     fun selectQuick(label: String, religion: String = "", city: String = "",
-                    motherTongue: String = "", caste: String = "", state: String = "") = viewModelScope.launch {
+                    motherTongue: String = "", caste: String = "", state: String = "",
+                    country: String = "") = viewModelScope.launch {
         _selectedPreset.value = null
         _presetResults.value = emptyList()
         _quickLabel.value = label
-        loadQuickResults(religion, city, motherTongue, caste, state)
+        loadQuickResults(religion, city, motherTongue, caste, state, country)
     }
 
     fun clearQuick() {
@@ -269,7 +217,12 @@ class RegionsViewModel @Inject constructor(
             state        = f.state?.takeIf { it.isNotBlank() } ?: existing.state,
             caste        = f.caste?.takeIf { it.isNotBlank() } ?: existing.caste,
             religion     = f.religion?.takeIf { it.isNotBlank() } ?: existing.religion,
-            motherTongue = f.motherTongue?.takeIf { it.isNotBlank() } ?: existing.motherTongue
+            motherTongue = f.motherTongue?.takeIf { it.isNotBlank() } ?: existing.motherTongue,
+            countryOfResidence = f.country?.takeIf { it.isNotBlank() } ?: existing.countryOfResidence,
+            occupationCategory = f.occupationCategory?.takeIf { it.isNotBlank() } ?: existing.occupationCategory,
+            maritalStatus = f.maritalStatus?.takeIf { it.isNotBlank() } ?: existing.maritalStatus,
+            nriStatus = f.nriStatus?.takeIf { it.isNotBlank() } ?: existing.nriStatus,
+            nriOnly = if (!f.country.isNullOrBlank() || !f.nriStatus.isNullOrBlank()) true else existing.nriOnly
         ))
     }
 
@@ -292,21 +245,34 @@ class RegionsViewModel @Inject constructor(
         val uid = session.userId.first() ?: run { _loadingResults.value = false; return }
         val f = p.filters
         val filter = MatchFilter(
-            city = f.city ?: "", state = f.state ?: "",
-            caste = f.caste ?: "", religion = f.religion ?: "",
-            motherTongue = f.motherTongue ?: ""
+            city = f.city ?: "",
+            state = f.state ?: "",
+            caste = f.caste ?: "",
+            religion = f.religion ?: "",
+            motherTongue = f.motherTongue ?: "",
+            countryOfResidence = f.country ?: "",
+            occupationCategory = f.occupationCategory ?: "",
+            maritalStatus = f.maritalStatus ?: "",
+            nriStatus = f.nriStatus ?: "",
+            nriOnly = !f.country.isNullOrBlank() || !f.nriStatus.isNullOrBlank()
         )
         _presetResults.value = matchingRepo.recommendations(uid, MatchMode.ADVANCED, filter)
         _loadingResults.value = false
     }
 
     private suspend fun loadQuickResults(religion: String, city: String,
-                                         motherTongue: String, caste: String, state: String) {
+                                         motherTongue: String, caste: String, state: String,
+                                         country: String) {
         _loadingQuick.value = true
         val uid = session.userId.first() ?: run { _loadingQuick.value = false; return }
         val filter = MatchFilter(
-            religion = religion, city = city, motherTongue = motherTongue,
-            caste = caste, state = state
+            religion = religion,
+            city = city,
+            motherTongue = motherTongue,
+            caste = caste,
+            state = state,
+            countryOfResidence = country,
+            nriOnly = country.isNotBlank()
         )
         _quickResults.value = matchingRepo.recommendations(uid, MatchMode.ADVANCED, filter)
         _loadingQuick.value = false
@@ -410,7 +376,9 @@ fun RegionsScreen(
                 backendStatus = backendStatus,
                 activeChips = activeChips,
                 onSelectPreset = vm::selectPreset,
-                onSelectQuick = { q -> vm.selectQuick(q.label, q.religion, q.city, q.motherTongue, q.caste, q.state) },
+                onSelectQuick = { q ->
+                    vm.selectQuick(q.label, q.religion, q.city, q.motherTongue, q.caste, q.state, q.country)
+                },
                 onClearChip = vm::clearSingle,
                 onClearAll = vm::clearAll,
                 onGoMatches = onGoMatches,
@@ -472,7 +440,7 @@ private fun BrowseView(
             SectionHeader(
                 icon = if (backendStatus == BackendStatus.Live) Icons.Filled.CloudDone else Icons.Filled.Groups,
                 title = "Community presets",
-                subtitle = "Tap a preset to see matching profiles",
+                subtitle = if (backendStatus == BackendStatus.Live) "Server-published filters" else "No server catalogue available",
                 count = presets.size
             )
         }
