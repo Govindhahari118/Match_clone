@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   MAX_DAILY_INTERESTS_SAFETY,
   HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD,
+  HIGH_VOLUME_MESSAGE_SIGNAL_THRESHOLD,
   MAX_DAILY_REPORTS,
   MAX_DAILY_SUPPORT_TICKETS,
   safeUsageCount,
@@ -14,6 +15,7 @@ const {
 test("hard safety ceilings stay separate from product quota", () => {
   assert.equal(MAX_DAILY_INTERESTS_SAFETY, 200);
   assert.equal(HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD, 50);
+  assert.equal(HIGH_VOLUME_MESSAGE_SIGNAL_THRESHOLD, 300);
   assert.equal(MAX_DAILY_REPORTS, 25);
   assert.equal(MAX_DAILY_SUPPORT_TICKETS, 10);
 });
