@@ -230,3 +230,21 @@ export const onIdentityVerificationConsentChanged = functions.firestore
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   });
+
+
+/**
+ * Durable partner intent may include sensitive attributes. Withdrawal removes the private
+ * partner-preference document; discovery then falls back to its non-configured/default contract.
+ */
+export const onSensitivePreferencesConsentChanged = functions.firestore
+  .document("consents/{uid}/items/sensitive_preferences")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (
+      after?.granted === true &&
+      after?.noticeVersion === currentConsentVersion("sensitive_preferences")
+    ) {
+      return;
+    }
+    await db.collection("partnerPreferences").doc(context.params.uid).delete();
+  });
