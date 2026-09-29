@@ -13,10 +13,15 @@ service firebase.storage {
     function explicitInterestFrom(ownerUid, viewerUid) {
       return firestore.exists(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid));
     }
+    function activeAccount(uid) {
+      return firestore.exists(/databases/(default)/documents/users/$(uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
+    }
     function ownerMediaReadable(uid) {
       return signedIn() && (
-        request.auth.uid == uid ||
-        (firestore.exists(/databases/(default)/documents/users/$(uid)) &&
+        (request.auth.uid == uid && activeAccount(uid)) ||
+        (activeAccount(request.auth.uid) &&
+          activeAccount(uid) &&
           !blockedEitherWay(request.auth.uid, uid) &&
           !profileHiddenFrom(uid, request.auth.uid) &&
           (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
@@ -36,6 +41,8 @@ service firebase.storage {
     }
     function chatUsable(threadId) {
       return chatMember(threadId, request.auth.uid) &&
+        activeAccount(chatParticipants(threadId)[0]) &&
+        activeAccount(chatParticipants(threadId)[1]) &&
         !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
     }
     function validChatMedia(threadId) {
