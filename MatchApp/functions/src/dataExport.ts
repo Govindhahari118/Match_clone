@@ -75,6 +75,15 @@ async function singleDoc(collection: string, uid: string): Promise<Record<string
     : null;
 }
 
+function paymentExport(payment: Record<string, unknown>): Record<string, unknown> {
+  const {
+    tokenHash: _tokenHash,
+    purchaseTokenHash: _purchaseTokenHash,
+    ...safe
+  } = payment;
+  return safe;
+}
+
 function verificationExport(
   verification: Record<string, unknown> | null
 ): Record<string, unknown> | null {
@@ -95,6 +104,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     privacySettings,
     notificationPrefs,
     appearancePrefs,
+    subscription,
+    payments,
     verification,
     verificationRequest,
     location,
@@ -117,6 +128,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     singleDoc("privacySettings", uid),
     singleDoc("notificationPrefs", uid),
     singleDoc("appearancePrefs", uid),
+    singleDoc("subscriptions", uid),
+    queryAll(db.collection("payments").where("uid", "==", uid)),
     singleDoc("verifications", uid),
     singleDoc("verificationRequests", uid),
     singleDoc("userLocations", uid),
@@ -153,6 +166,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
         "profile",
         "private profile",
         "preferences and privacy settings",
+        "subscription and payment history with provider tokens removed",
         "consent state and history",
         "saved searches and shortlist",
         "blocks and per-member privacy choices",
@@ -177,6 +191,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
       privacySettings,
       notificationPrefs,
       appearancePrefs,
+      subscription,
+      payments: payments.map(paymentExport),
       verification: verificationExport(verification),
       verificationRequest: verificationExport(verificationRequest),
       location,
