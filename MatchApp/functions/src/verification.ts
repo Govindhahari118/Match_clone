@@ -20,6 +20,9 @@ const MAX_VERIFICATION_BYTES = 5 * 1024 * 1024;
 // option must use an explicitly implemented, registered OVSE/provider flow with signature validation
 // and its own consent contract. This remains false until that provider adapter exists in source.
 const AADHAAR_OFFLINE_PROVIDER_IMPLEMENTED = false;
+const SELFIE_PROVIDER_IMPLEMENTED = false;
+const LIVENESS_PROVIDER_IMPLEMENTED = false;
+const FACE_SIMILARITY_PROVIDER_IMPLEMENTED = false;
 
 function requireDocumentPath(uid: string, value: unknown): string {
   const path = typeof value === "string" ? value.trim() : "";
@@ -67,6 +70,15 @@ export const getVerificationOptions = functions.https.onCall(async (_data, conte
     aadhaarUnavailableReason: AADHAAR_OFFLINE_PROVIDER_IMPLEMENTED
       ? null
       : "registered_ovse_provider_flow_not_integrated",
+    selfieVerificationAvailable: SELFIE_PROVIDER_IMPLEMENTED,
+    livenessAvailable: LIVENESS_PROVIDER_IMPLEMENTED,
+    faceSimilarityAvailable: FACE_SIMILARITY_PROVIDER_IMPLEMENTED,
+    advancedIdentityUnavailableReason:
+      SELFIE_PROVIDER_IMPLEMENTED &&
+      LIVENESS_PROVIDER_IMPLEMENTED &&
+      FACE_SIMILARITY_PROVIDER_IMPLEMENTED
+        ? null
+        : "validated_biometric_provider_adapter_not_integrated",
   };
 });
 
