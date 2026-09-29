@@ -214,8 +214,7 @@ class VideoProfileViewModel @Inject constructor(
     }
 
     fun clearSavedMessage() = _ui.update { it.copy(saved = false) }
-
-
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
