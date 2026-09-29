@@ -37,7 +37,8 @@ object MatchScorer {
     fun explain(
         me: UserProfile,
         peer: UserProfile,
-        bilateralPreferenceFit: Float? = null
+        bilateralPreferenceFit: Float? = null,
+        astrologyScoreOverride: Float? = null
     ): Result {
         val factors = mutableListOf<Factor>()
 
@@ -49,7 +50,13 @@ object MatchScorer {
             factors += Factor("questionnaire", it, 0.25f)
         }
 
-        if (astrologyApplicable(me, peer)) {
+        if (astrologyScoreOverride != null) {
+            factors += Factor(
+                "astrology",
+                astrologyScoreOverride.coerceIn(0f, 1f),
+                0.15f
+            )
+        } else if (astrologyApplicable(me, peer)) {
             Astrology.scoreOrNull(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra)?.let {
                 factors += Factor("astrology", it, 0.15f)
             }
