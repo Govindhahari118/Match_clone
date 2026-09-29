@@ -12,7 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class ProductionOptionalRoutes(
     val nearby: Boolean = false,
-    val kundali: Boolean = false
+    val kundali: Boolean = false,
+    val nri: Boolean = false
 )
 
 
@@ -82,7 +83,8 @@ class RemoteConfigManager @Inject constructor() {
     private fun refreshOptionalRoutes() {
         _optionalRoutes.value = ProductionOptionalRoutes(
             nearby = remoteConfig.getBoolean(KEY_ENABLE_NEARBY),
-            kundali = remoteConfig.getBoolean(KEY_ENABLE_KUNDALI)
+            kundali = remoteConfig.getBoolean(KEY_ENABLE_KUNDALI),
+            nri = remoteConfig.getBoolean(KEY_ENABLE_NRI_FEATURES)
         )
     }
 
