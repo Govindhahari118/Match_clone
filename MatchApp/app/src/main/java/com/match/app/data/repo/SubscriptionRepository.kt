@@ -112,6 +112,7 @@ class SubscriptionRepository @Inject constructor(
 
     private suspend fun syncPremiumStatusFromServer(): Boolean {
         val status = fetchMembershipStatus()
+        session.setSubscriptionPlan(status.planId)
         val localId = session.userId.first()
         if (localId != null) {
             val user = userDao.findById(localId)
