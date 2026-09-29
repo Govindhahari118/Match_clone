@@ -142,6 +142,13 @@
       "requiredFlag": null
     },
     {
+      "path": "ui/family/FamilyAccessScreen.kt",
+      "symbol": "FamilyAccessScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
       "path": "ui/family/FamilyScreen.kt",
       "symbol": "FamilyScreen",
       "status": "BETA",
@@ -333,8 +340,8 @@
     {
       "path": "ui/recentlyjoined/RecentlyJoinedScreen.kt",
       "symbol": "RecentlyJoinedScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
