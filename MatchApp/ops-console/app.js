@@ -11,6 +11,7 @@
     dashboard: ["support", "moderator", "kyc_reviewer", "payment_ops", "ops_admin"],
     account: ["support", "moderator", "kyc_reviewer", "payment_ops", "ops_admin"],
     support: ["support", "ops_admin"],
+    assisted: ["support", "ops_admin"],
     reports: ["moderator", "ops_admin"],
     risk: ["moderator", "ops_admin"],
     verification: ["kyc_reviewer", "ops_admin"],
@@ -177,6 +178,44 @@
       root.appendChild(row);
     });
     if (!(data.tickets || []).length) root.appendChild(text("p", "No open support tickets.", "muted"));
+  }
+
+  async function loadAssisted() {
+    const data = await call("listAssistedRequests", { status: "OPEN", limit: 100 });
+    const root = el("assistedList");
+    clear(root);
+    (data.requests || []).forEach((request) => {
+      const row = item(
+        `${request.plan || "Assisted"} • ${request.uid}`,
+        `${request.status || "OPEN"} • created ${formatTime(request.createdAtMillis)}`
+      );
+      row.appendChild(text("p", request.preferences || "No free-form partner requirements supplied."));
+      row.appendChild(text("div", `Callback: ${request.name || "Member"} • ${request.phone || "not supplied"}`, "muted"));
+      const status = select(
+        ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_ON_MEMBER", "RESOLVED", "CANCELLED"],
+        request.status || "OPEN"
+      );
+      const assignedTo = input("Assigned operator UID", request.assignedTo || "");
+      const reason = input("Operator reason (required)");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      actions.append(status, assignedTo, reason);
+      actions.appendChild(button("Save", async () => {
+        await call("updateAssistedRequest", {
+          uid: request.uid,
+          status: status.value,
+          assignedTo: assignedTo.value,
+          reason: reason.value,
+        });
+        setStatus("Assisted request updated.");
+        await loadAssisted();
+      }));
+      row.appendChild(actions);
+      root.appendChild(row);
+    });
+    if (!(data.requests || []).length) {
+      root.appendChild(text("p", "No open assisted-matchmaking requests.", "muted"));
+    }
   }
 
   async function loadReports() {
@@ -430,6 +469,7 @@
       try {
         if (action === "metrics") await loadMetrics();
         if (action === "support") await loadSupport();
+        if (action === "assisted") await loadAssisted();
         if (action === "reports") await loadReports();
         if (action === "risk") await loadRisk();
         if (action === "verification") await loadVerification();
