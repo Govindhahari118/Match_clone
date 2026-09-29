@@ -161,6 +161,7 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 - [x] Inventory every route reachable from `MainShell` before release (`docs/production-readiness/route-inventory.md`).
 - [ ] Classify every screen as `READY`, `BETA`, `STUB`, `UNSAFE`, or `POST_LAUNCH`.
 - [x] Hide/remove every `STUB`/`UNSAFE` route; Nearby and Kundali remain fail-closed behind **both** Android Remote Config and backend Functions config until their production evidence passes.
+- [ ] After deploying the hardened media rules/functions, verify the retired Video Profile / voice-bio cleanup has removed legacy `videoUrl`/`voiceBioUrl` references and owned objects before broad production rollout.
 - [ ] Keep `features.kundali=false` until the versioned Rasi/Nakshatra policy has independent reference validation; enable it only together with Remote Config `enable_kundali=true`.
 - [ ] Placeholder language packs must remain hidden until independent translation and layout QA is complete.
 - [ ] Remove stale Firebase Dynamic Links references and any other retired/deprecated integration from docs/code.
