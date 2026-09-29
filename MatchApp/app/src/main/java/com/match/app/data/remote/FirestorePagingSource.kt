@@ -27,7 +27,7 @@ class FirestorePagingSource(
     private val myLookingFor: String,
     private val filter: MatchFilter,
     private val blockedUids: Set<String> = emptySet(),
-    @Suppress("unused") private val likedUids: Set<String> = emptySet()
+    private val likedUids: Set<String> = emptySet()
 ) : PagingSource<String, DiscoveryProfileCandidate>() {
 
     private val functions = FirebaseFunctions.getInstance()
@@ -104,6 +104,7 @@ class FirestorePagingSource(
         val profiles = rawProfiles.mapNotNull { raw ->
             val uid = raw["firebaseUid"] as? String ?: return@mapNotNull null
             if (uid.isBlank() || uid == myUid || uid in blockedUids) return@mapNotNull null
+            if (filter.keyword.isBlank() && uid in likedUids) return@mapNotNull null
             val entity = mapToEntity(uid, raw)
 
             if (!matchesGenderPreference(entity)) return@mapNotNull null
