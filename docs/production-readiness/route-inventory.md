@@ -32,6 +32,8 @@
 | Language | READY | Supported locale catalog only. |
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
+| Recently joined | READY | Uses the same server-authorized discovery path with authoritative profile creation timestamps and normal privacy/block/reciprocal-preference checks. |
+| Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
 | Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
