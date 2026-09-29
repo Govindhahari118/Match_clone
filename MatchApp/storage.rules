@@ -82,16 +82,22 @@ service firebase.storage {
 
     match /photos/{uid}/{fileName} {
       allow read: if publishedPhotoReadable(uid, fileName);
-      allow create, update: if signedIn() && request.auth.uid == uid &&
+      allow create: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
-        request.resource.contentType.matches('image/.*');
+        request.resource.contentType.matches('image/.*') &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /videos/{uid}/{fileName} {
       allow read: if publishedVideoReadable(uid, fileName);
-      allow create, update: if signedIn() && request.auth.uid == uid &&
+      allow create: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
-        request.resource.contentType.matches('video/.*');
+        request.resource.contentType.matches('video/.*') &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /voicebios/{uid}/{fileName} {
