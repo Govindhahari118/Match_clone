@@ -37,11 +37,13 @@ import com.match.app.core.config.RemoteConfigManager
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.aiinsights.AIMatchInsightsScreen
 import com.match.app.ui.analytics.ProfileAnalyticsScreen
 import com.match.app.ui.assisted.AssistedServiceScreen
 import com.match.app.ui.biodata.BiodataScreen
 import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
+import com.match.app.ui.deepcompat.CompatibilityDeepDiveScreen
 import com.match.app.ui.detail.MatchDetailScreen
 import com.match.app.ui.family.FamilyAccessScreen
 import com.match.app.ui.family.FamilyScreen
@@ -106,6 +108,8 @@ object MainRoutes {
     const val FAMILY_DETAILS = "family_details"
     const val ASSISTED = "assisted_matchmaking"
     const val PROFILE_ANALYTICS = "profile_analytics"
+    const val MATCH_INSIGHTS = "match_insights"
+    const val COMPATIBILITY_BREAKDOWN = "compatibility/{candidateId}"
     const val SAFETY_CENTER = "safety_center"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
@@ -114,6 +118,7 @@ object MainRoutes {
     fun detail(userId: Long) = "detail/$userId"
     fun chat(peerId: Long) = "chat/$peerId"
     fun kundli(targetId: Long) = "kundli/$targetId"
+    fun compatibility(candidateId: Long) = "compatibility/$candidateId"
 }
 
 private sealed class Tab(val route: String, val label: String, val icon: ImageVector, val tag: String) {
@@ -172,6 +177,7 @@ private fun AppDrawer(
             if (nearbyEnabled) DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn) else null,
             if (nriEnabled) DrawerItem(MainRoutes.NRI, "NRI discovery", "Eligible members living abroad", Icons.Filled.Public) else null,
             DrawerItem(MainRoutes.RECENTLY_JOINED, "Recently joined", "Eligible members from the last 30 days", Icons.Filled.FiberNew),
+            DrawerItem(MainRoutes.MATCH_INSIGHTS, "Match insights", "Explainable matching signals", Icons.Filled.Insights),
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -474,6 +480,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.PROFILE_ANALYTICS) {
                     ProfileAnalyticsScreen(onBack = { nav.popBackStack() })
                 }
+                composable(MainRoutes.MATCH_INSIGHTS) {
+                    AIMatchInsightsScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
+                }
                 composable(MainRoutes.SAFETY_CENTER) {
                     SafetyCenterScreen(onBack = { nav.popBackStack() })
                 }
@@ -542,7 +554,19 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onBack = { nav.popBackStack() },
                         onChat = { nav.navigate(MainRoutes.chat(userId)) },
                         onPricing = { nav.navigate(MainRoutes.PRICING) },
-                        onKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(userId)) }
+                        onKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(userId)) },
+                        onCompatibilityBreakdown = { nav.navigate(MainRoutes.compatibility(userId)) }
+                    )
+                }
+                composable(
+                    MainRoutes.COMPATIBILITY_BREAKDOWN,
+                    arguments = listOf(navArgument("candidateId") { type = NavType.LongType })
+                ) { backStack ->
+                    val candidateId = backStack.arguments?.getLong("candidateId") ?: return@composable
+                    CompatibilityDeepDiveScreen(
+                        candidateId = candidateId,
+                        onBack = { nav.popBackStack() },
+                        onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
                 composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
