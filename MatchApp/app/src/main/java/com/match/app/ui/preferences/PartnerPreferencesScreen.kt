@@ -127,7 +127,7 @@ fun PartnerPreferencesScreen(
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
             ) {
                 MatreeInlineNotice(
-                    message = "Strict preferences exclude profiles in both directions. Preferred preferences improve ordering but do not hide otherwise eligible members."
+                    message = "Strict preferences exclude profiles in both directions. Preferred preferences improve ordering but do not hide otherwise eligible members. Saving records the current Sensitive preferences notice because fields such as religion and lifestyle are stored as private partner intent; you can withdraw that purpose later from Privacy."
                 )
 
                 RangePreferenceCard(
