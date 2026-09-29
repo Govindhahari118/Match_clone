@@ -30,6 +30,8 @@ import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.remote.MemberPrivacyRelation
 import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
+import com.match.app.data.repo.ConsentRepository
+import com.match.app.data.repo.ConsentState
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeHero
 import com.match.app.ui.components.MatreeInfoCard
@@ -61,7 +63,8 @@ class PrivacyViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
-    private val privacy: FirestorePrivacyService
+    private val privacy: FirestorePrivacyService,
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
     val incognito = session.incognitoMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -117,6 +120,38 @@ class PrivacyViewModel @Inject constructor(
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _consents = MutableStateFlow<List<ConsentState>>(emptyList())
+    val consents: StateFlow<List<ConsentState>> = _consents.asStateFlow()
+
+    private val _consentLoading = MutableStateFlow(false)
+    val consentLoading: StateFlow<Boolean> = _consentLoading.asStateFlow()
+
+    init {
+        refreshConsents()
+    }
+
+    fun refreshConsents() = viewModelScope.launch {
+        _consentLoading.value = true
+        runCatching { consentRepository.getState() }
+            .onSuccess { _consents.value = it }
+            .onFailure { _error.value = "Could not load your consent choices. Please try again." }
+        _consentLoading.value = false
+    }
+
+    fun setOptionalConsent(purpose: String, granted: Boolean) = viewModelScope.launch {
+        _consentLoading.value = true
+        _error.value = null
+        runCatching {
+            consentRepository.set(purpose, granted)
+            consentRepository.getState()
+        }.onSuccess {
+            _consents.value = it
+        }.onFailure {
+            _error.value = "Could not update this consent choice. Please try again."
+        }
+        _consentLoading.value = false
+    }
 
     fun setIncognito(value: Boolean) = viewModelScope.launch { session.setIncognitoMode(value) }
     fun setHoroscopeVisible(value: Boolean) = updateUser { it.copy(showHoroscope = value) }
@@ -199,6 +234,8 @@ fun PrivacyDashboardScreen(
     val activityPrivacy by vm.activityPrivacy.collectAsState()
     val saving by vm.saving.collectAsState()
     val error by vm.error.collectAsState()
+    val consents by vm.consents.collectAsState()
+    val consentLoading by vm.consentLoading.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var manageVisibility by remember { mutableStateOf(false) }
 
@@ -273,6 +310,13 @@ fun PrivacyDashboardScreen(
                 checked = user?.showHoroscope ?: true,
                 enabled = user != null && !saving,
                 onCheckedChange = vm::setHoroscopeVisible
+            )
+
+            ConsentChoicesCard(
+                consents = consents,
+                loading = consentLoading,
+                onToggle = vm::setOptionalConsent,
+                onRefresh = vm::refreshConsents
             )
 
             MatreeInfoCard {
@@ -405,6 +449,84 @@ fun PrivacyDashboardScreen(
                 )
             }
             Spacer(Modifier.height(MatreeDesign.spacing.xl))
+        }
+    }
+}
+
+@Composable
+private fun ConsentChoicesCard(
+    consents: List<ConsentState>,
+    loading: Boolean,
+    onToggle: (String, Boolean) -> Unit,
+    onRefresh: () -> Unit
+) {
+    val optional = listOf(
+        "personalization" to Pair(
+            "Personalized recommendations",
+            "Allows Matree to record recommendation feedback such as profile opens, shortlists and matches to improve your ranking. Turning this off stops new personalization telemetry."
+        ),
+        "marketing" to Pair(
+            "Marketing messages",
+            "Allows optional promotional communication. Service, security and account notifications are handled separately."
+        )
+    )
+
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Policy, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+            Column(Modifier.weight(1f)) {
+                Text("Optional processing choices", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "These choices are read from the server-authoritative consent ledger. Sensitive feature-specific consent such as identity, media and location is requested when that feature is used.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onRefresh, enabled = !loading) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh consent choices")
+            }
+        }
+
+        if (loading && consents.isEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = MatreeDesign.spacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                Text("Loading consent choices…", style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            optional.forEach { (purpose, copy) ->
+                val state = consents.firstOrNull { it.purpose == purpose }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = MatreeDesign.spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(copy.first, fontWeight = FontWeight.Medium)
+                        Text(
+                            copy.second,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (state != null && state.granted && !state.isCurrent) {
+                            Text(
+                                "The notice changed; review this choice again before processing resumes.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Switch(
+                        checked = state?.isCurrent == true,
+                        onCheckedChange = { onToggle(purpose, it) },
+                        enabled = !loading && state != null
+                    )
+                }
+            }
         }
     }
 }
