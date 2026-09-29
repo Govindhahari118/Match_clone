@@ -422,6 +422,7 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("backgroundChecks").where("targetUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
+        await deleteQuery(db.collection("dataExportRequests").where("uid", "==", uid));
         await deleteQuery(db.collection("supportTickets").where("uid", "==", uid));
         await deleteQuery(db.collection("profileReports").where("reporterUid", "==", uid));
         await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
@@ -474,7 +475,7 @@ export const deleteUserAccount = functions
       });
 
       await runDeletionPhase(requestRef, completed, "MEDIA", async () => {
-        for (const prefix of ["photos", "videos", "voicebios", "verifications"]) {
+        for (const prefix of ["photos", "videos", "voicebios", "verifications", "exports"]) {
           await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
         }
       });
