@@ -202,7 +202,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     accountUid: uid,
     scope: {
