@@ -33,6 +33,7 @@
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
 | Recently joined | READY | Uses the same server-authorized discovery path with authoritative profile creation timestamps and normal privacy/block/reciprocal-preference checks. |
+| Family details | READY | Edits the signed-in member's real family-background fields with cloud-authoritative profile revision/sync handling and bounded inputs. |
 | Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
 | Assisted matchmaking request | READY | Records a human-service callback/request with server status/cancellation and ops workflow. It does not purchase, activate or guarantee an RM service; pricing/service activation remain operator-confirmed. |
 | Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
@@ -52,7 +53,7 @@ their end-to-end provider/data/entitlement contract passes the same Definition o
 
 `AI Match Insights`, `Profile Analytics`, `Background Check`,
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
-`Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`, `Family tools`,
+`Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
 `Referral`, `Regions`, `Daily Rewards`, `Safety Center
 standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
