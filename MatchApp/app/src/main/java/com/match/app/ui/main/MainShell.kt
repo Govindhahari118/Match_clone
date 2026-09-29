@@ -37,6 +37,7 @@ import com.match.app.core.config.RemoteConfigManager
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.analytics.ProfileAnalyticsScreen
 import com.match.app.ui.assisted.AssistedServiceScreen
 import com.match.app.ui.biodata.BiodataScreen
 import com.match.app.ui.chat.ChatListScreen
@@ -59,6 +60,7 @@ import com.match.app.ui.phone.PhoneVerificationScreen
 import com.match.app.ui.profile.ProfileScreen
 import com.match.app.ui.recentlyjoined.RecentlyJoinedScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
+import com.match.app.ui.safety.SafetyCenterScreen
 import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
 import com.match.app.ui.verification.VerificationScreen
@@ -103,6 +105,8 @@ object MainRoutes {
     const val FAMILY_ACCESS = "family_access"
     const val FAMILY_DETAILS = "family_details"
     const val ASSISTED = "assisted_matchmaking"
+    const val PROFILE_ANALYTICS = "profile_analytics"
+    const val SAFETY_CENTER = "safety_center"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
@@ -182,6 +186,8 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.PRIVACY_DASH, "Privacy", "Visibility and account privacy", Icons.Filled.PrivacyTip),
             DrawerItem(MainRoutes.PRICING, "Membership", "Google Play membership plans", Icons.Filled.WorkspacePremium),
             DrawerItem(MainRoutes.ASSISTED, "Assisted matchmaking", "Request human matchmaking support", Icons.Filled.SupportAgent),
+            DrawerItem(MainRoutes.PROFILE_ANALYTICS, "Profile analytics", "Real account activity metrics", Icons.Filled.BarChart),
+            DrawerItem(MainRoutes.SAFETY_CENTER, "Safety Center", "Platform safety controls and guidance", Icons.Filled.Shield),
             DrawerItem(MainRoutes.SETTINGS, "Settings", "Language, security and account", Icons.Filled.Settings),
             DrawerItem(MainRoutes.HELP, "Help", "Support and guidance", Icons.AutoMirrored.Filled.Help)
         )),
@@ -464,6 +470,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
                 composable(MainRoutes.ASSISTED) {
                     AssistedServiceScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.PROFILE_ANALYTICS) {
+                    ProfileAnalyticsScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.SAFETY_CENTER) {
+                    SafetyCenterScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
