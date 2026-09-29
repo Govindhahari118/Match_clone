@@ -460,6 +460,7 @@ export const deleteUserAccount = functions
         await deleteCollection(`profileAnalytics/${uid}/weekly`);
         await deleteCollection(`sessions/${uid}/devices`);
         await deleteCollection(`riskActivity/${uid}/days`);
+        await deleteCollection(`riskActivity/${uid}/messageEvents`);
         await deleteCollection(`recommendationFeedback/${uid}/targets`);
         await deleteQuery(
           db.collectionGroup("targets").where("targetUid", "==", uid)
