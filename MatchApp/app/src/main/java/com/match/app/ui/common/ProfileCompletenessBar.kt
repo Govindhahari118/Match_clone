@@ -65,25 +65,35 @@ fun ProfileCompletenessBar(
                 trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
             )
 
-            if (missing.isNotEmpty()) {
+            if (score < 100) {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Add: ${missing.joinToString(", ")}",
+                        if (missing.isNotEmpty()) {
+                            "Next: ${missing.joinToString(", ")}"
+                        } else {
+                            "Review partner preferences and verification to strengthen your profile."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = onComplete, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                        Text("Complete", style = MaterialTheme.typography.labelSmall)
+                        Text("Review", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
 
-            // Item checklist (first 6 only)
+            Text(
+                "Strength is server-calculated from profile sections, approved photo, partner preferences and verification.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Visible section checklist only; the percentage remains server-authoritative.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items.take(6).forEach { (label, done) ->
                     Column(
