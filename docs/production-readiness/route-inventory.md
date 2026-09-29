@@ -1,6 +1,6 @@
 # Matree production route inventory
 
-> Scope: reachable production navigation on `gpt/matree-pin-to-pin-completion-20260925`.
+> Scope: reachable production navigation on `gpt/matree-master-plan-hardening-20260929`.
 >
 > This inventory classifies navigation exposure, not overall release readiness. A `READY` route still
 > depends on the exact-head CI, Firebase/provider configuration, security rules and external gates.
@@ -48,9 +48,11 @@ their end-to-end provider/data/entitlement contract passes the same Definition o
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
 `Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`, `Family tools`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
-`NRI discovery`, `Photo Editor`, `Referral`, `Regions`, `Daily Rewards`, `Safety Center
+`NRI discovery`, `Referral`, `Regions`, `Daily Rewards`, `Safety Center
 standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
 `Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
+
+`Profile photo upload` is production-backed through protected Storage plus server moderation; the old simulated Photo Editor controls were removed. The upload surface must not claim crop/filter/brightness transforms until transformed bytes are actually produced and validated.
 
 Their Kotlin files are not proof of product availability. They must not be re-added to production
 navigation merely because a screen renders. Provider-backed optional callables for the retired
