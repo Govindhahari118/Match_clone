@@ -42,9 +42,7 @@ data class PartnerPreferences(
 )
 
 @Singleton
-class PartnerPreferenceRepository @Inject constructor(
-    private val consentRepository: ConsentRepository
-) {
+class PartnerPreferenceRepository @Inject constructor() {
     private val functions = FirebaseFunctions.getInstance()
 
     suspend fun load(): PartnerPreferences {
@@ -55,7 +53,6 @@ class PartnerPreferenceRepository @Inject constructor(
     }
 
     suspend fun save(value: PartnerPreferences): PartnerPreferences {
-        consentRepository.set("sensitive_preferences", true)
         val result = functions.getHttpsCallable("setPartnerPreferences")
             .call(toMap(value))
             .await()
