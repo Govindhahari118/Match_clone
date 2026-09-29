@@ -6,6 +6,10 @@ import {
   requireActiveConsent,
 } from "./consent";
 import { db, persistAndSendNotification, requireAppCheck, requireOpsRole } from "./shared";
+import {
+  GENERIC_GOVERNMENT_ID_LEVEL,
+  verificationLevelAfterGenericReview,
+} from "./verificationLevelPolicy";
 
 const GENERIC_VERIFICATION_TYPES = [
   "Passport",
@@ -202,12 +206,8 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
   const approved = data?.approved === true;
   const rejectionReason = typeof data?.rejectionReason === "string" ? data.rejectionReason.trim().slice(0, 500) : "";
-  const newLevel = Number(data?.newLevel);
 
   if (!targetUid) throw new functions.https.HttpsError("invalid-argument", "targetUid required");
-  if (approved && (!Number.isInteger(newLevel) || newLevel < 2 || newLevel > 5)) {
-    throw new functions.https.HttpsError("invalid-argument", "Government-ID approval level must be an integer from 2 to 5");
-  }
   if (!approved && rejectionReason.length < 3) {
     throw new functions.https.HttpsError("invalid-argument", "A rejection reason is required");
   }
@@ -227,8 +227,10 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   const previousLevel = Number(profileSnap.data()?.verificationLevel || 0);
   const previousVerified = profileSnap.data()?.isVerified === true;
   const nextStatus = approved ? "verified" : "rejected";
-  const nextLevel = approved ? newLevel : previousLevel;
-  const nextVerified = approved ? newLevel >= 2 : previousVerified;
+  const nextLevel = verificationLevelAfterGenericReview(previousLevel, approved);
+  const nextVerified = approved
+    ? nextLevel >= GENERIC_GOVERNMENT_ID_LEVEL
+    : previousVerified;
   const effectiveReason = approved ? "APPROVED" : rejectionReason;
 
   const batch = db.batch();
@@ -241,8 +243,8 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   });
   if (approved) {
     batch.update(profileRef, {
-      verificationLevel: newLevel,
-      isVerified: newLevel >= 2,
+      verificationLevel: nextLevel,
+      isVerified: nextVerified,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   }
