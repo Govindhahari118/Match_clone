@@ -29,5 +29,7 @@ test("magic bytes must agree with declared image/PDF mime", () => {
 test("MP4 requires an ftyp box marker", () => {
   const mp4 = Buffer.concat([Buffer.from([0,0,0,24]), Buffer.from("ftypisom", "ascii")]);
   assert.equal(fileSignatureMatchesMime(mp4, "video/mp4"), true);
+  assert.equal(fileSignatureMatchesMime(mp4, "audio/mp4"), true);
   assert.equal(fileSignatureMatchesMime(Buffer.from("not an mp4"), "video/mp4"), false);
+  assert.equal(fileSignatureMatchesMime(Buffer.from("not an m4a"), "audio/mp4"), false);
 });
