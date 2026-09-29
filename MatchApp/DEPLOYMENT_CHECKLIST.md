@@ -109,7 +109,8 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Server filters self, stale locations, either-direction blocks, stealth profiles and incompatible gender preferences.
 - [x] User can explicitly stop sharing and delete the stored location.
 - [x] Exact location expires after 24 hours without refresh and is deleted immediately on stop-sharing, consent withdrawal or account deletion.
-- [ ] Keep Remote Config `enable_nearby=false` until production location/security/load evidence passes; deploy and validate location Functions before enabling.
+- [ ] Keep Remote Config `enable_nearby=false` **and** Functions config `features.nearby=false` until production location/security/load evidence passes; deploy and validate location Functions before enabling either layer.
+- [ ] Enable Nearby only after both rollout authorities are intentionally set: Android Remote Config `enable_nearby=true` and backend Functions config `features.nearby=true`. Roll back either one to disable new sharing/search immediately; `getNearbyStatus` and `clearMyLocation` remain available so members can inspect/erase stored location while disabled.
 - [ ] Real-device test: denied permission, approximate permission, precise permission, GPS/network provider, location services off, no results, 5/25/100 km radii, block/stealth behavior and stop-sharing.
 - [ ] Data Safety and privacy policy explicitly describe foreground location collection, purpose, retention and deletion.
 
@@ -159,7 +160,8 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 
 - [x] Inventory every route reachable from `MainShell` before release (`docs/production-readiness/route-inventory.md`).
 - [ ] Classify every screen as `READY`, `BETA`, `STUB`, `UNSAFE`, or `POST_LAUNCH`.
-- [x] Hide/remove every `STUB`/`UNSAFE` route; Nearby and Kundali remain fail-closed behind Remote Config until their production evidence passes.
+- [x] Hide/remove every `STUB`/`UNSAFE` route; Nearby and Kundali remain fail-closed behind **both** Android Remote Config and backend Functions config until their production evidence passes.
+- [ ] Keep `features.kundali=false` until the versioned Rasi/Nakshatra policy has independent reference validation; enable it only together with Remote Config `enable_kundali=true`.
 - [ ] Placeholder language packs must remain hidden until independent translation and layout QA is complete.
 - [ ] Remove stale Firebase Dynamic Links references and any other retired/deprecated integration from docs/code.
 - [ ] Remove unused demo credentials, fake data generators and obsolete local-password utilities if no debug/test caller remains.
