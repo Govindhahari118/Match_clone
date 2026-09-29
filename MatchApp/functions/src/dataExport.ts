@@ -5,10 +5,10 @@ import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
 import { db, requireAppCheck } from "./shared";
+import { DATA_EXPORT_COOLDOWN_MS, dataExportRetryAfterMs } from "./dataExportPolicy";
 
 const EXPORT_LINK_MS = 10 * 60 * 1000;
 const EXPORT_RETENTION_MS = 24 * 60 * 60 * 1000;
-const EXPORT_COOLDOWN_MS = 10 * 60 * 1000;
 const PAGE_SIZE = 300;
 const MAX_EXPORT_DOCS_PER_QUERY = 100_000;
 
@@ -237,18 +237,21 @@ export const createMyDataExport = functions
     const throttleRef = db.collection("dataExportRateLimits").doc(uid);
     await db.runTransaction(async (tx) => {
       const throttle = await tx.get(throttleRef);
-      const nextAllowedAt = Number(throttle.data()?.nextAllowedAtMillis || 0);
-      if (throttle.exists && Number.isFinite(nextAllowedAt) && nextAllowedAt > now) {
+      const retryAfterMillis = dataExportRetryAfterMs(
+        throttle.data()?.nextAllowedAtMillis,
+        now
+      );
+      if (throttle.exists && retryAfterMillis > 0) {
         throw new functions.https.HttpsError(
           "resource-exhausted",
           "A recent export request is still within the safety cooldown. Try again later.",
-          { retryAfterMillis: nextAllowedAt - now }
+          { retryAfterMillis }
         );
       }
       tx.set(throttleRef, {
         uid,
         lastRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
-        nextAllowedAtMillis: now + EXPORT_COOLDOWN_MS,
+        nextAllowedAtMillis: now + DATA_EXPORT_COOLDOWN_MS,
       }, { merge: false });
     });
 
