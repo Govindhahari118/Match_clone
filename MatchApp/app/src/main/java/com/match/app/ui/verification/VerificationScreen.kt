@@ -74,6 +74,13 @@ data class VerificationUi(
     val rejectionReason: String = ""
 )
 
+data class VerificationOptionsUi(
+    val genericDocumentTypes: List<String> = emptyList(),
+    val identityConsentVersion: String = "",
+    val aadhaarOfflineAvailable: Boolean = false,
+    val loaded: Boolean = false
+)
+
 private data class RemoteVerification(
     val status: VerificationStatus = VerificationStatus.NOT_STARTED,
     val rejectionReason: String = ""
@@ -129,18 +136,57 @@ class VerificationViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VerificationUi())
 
+    private val _options = MutableStateFlow(VerificationOptionsUi())
+    val options: StateFlow<VerificationOptionsUi> = _options.asStateFlow()
+
     private val _submitting = MutableStateFlow(false)
     val submitting = _submitting.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            runCatching {
+                val response = functions.getHttpsCallable("getVerificationOptions").call().await()
+                @Suppress("UNCHECKED_CAST")
+                val data = response.data as? Map<String, Any?> ?: error("Invalid verification-options response")
+                VerificationOptionsUi(
+                    genericDocumentTypes = (data["genericDocumentTypes"] as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        ?.filter { it.isNotBlank() }
+                        .orEmpty(),
+                    identityConsentVersion = data["identityConsentVersion"] as? String ?: "",
+                    aadhaarOfflineAvailable = data["aadhaarOfflineAvailable"] as? Boolean ?: false,
+                    loaded = true
+                )
+            }.onSuccess {
+                _options.value = it
+            }.onFailure {
+                _error.value = "Verification options could not be loaded. Please reconnect and try again."
+            }
+        }
+    }
+
     fun clearError() { _error.value = null }
 
-    fun submitVerification(docType: String, documentUri: Uri?) {
+    fun submitVerification(docType: String, documentUri: Uri?, consentGranted: Boolean) {
         if (_submitting.value) return
         if (documentUri == null) {
             _error.value = "Choose a clear government-ID image or PDF before submitting."
+            return
+        }
+        if (!consentGranted) {
+            _error.value = "Review and accept the identity-verification consent before submitting."
+            return
+        }
+        val consentVersion = options.value.identityConsentVersion
+        if (!options.value.loaded || consentVersion.isBlank()) {
+            _error.value = "Current verification consent could not be loaded. Please retry."
+            return
+        }
+        if (docType !in options.value.genericDocumentTypes) {
+            _error.value = "Choose a currently supported government ID type."
             return
         }
         viewModelScope.launch {
@@ -148,6 +194,17 @@ class VerificationViewModel @Inject constructor(
             _error.value = null
             try {
                 val uid = FirebaseAuth.getInstance().currentUser?.uid ?: error("Sign in required")
+                functions.getHttpsCallable("recordConsent")
+                    .call(
+                        mapOf(
+                            "purpose" to "identity_verification",
+                            "granted" to true,
+                            "noticeVersion" to consentVersion,
+                            "locale" to "en-IN"
+                        )
+                    )
+                    .await()
+
                 val contentType = context.contentResolver.getType(documentUri)?.lowercase().orEmpty()
                 require(contentType.startsWith("image/") || contentType == "application/pdf") {
                     "Choose an image or PDF document."
@@ -199,10 +256,12 @@ fun VerificationScreen(
     vm: VerificationViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
+    val options by vm.options.collectAsState()
     val submitting by vm.submitting.collectAsState()
     val error by vm.error.collectAsState()
-    var selectedDocType by rememberSaveable { mutableStateOf("Aadhaar") }
+    var selectedDocType by rememberSaveable { mutableStateOf("Passport") }
     var selectedDocument by remember { mutableStateOf<Uri?>(null) }
+    var identityConsentGranted by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         selectedDocument = uri
@@ -212,6 +271,12 @@ fun VerificationScreen(
         error?.let {
             snackbar.showSnackbar(it)
             vm.clearError()
+        }
+    }
+
+    LaunchedEffect(options.genericDocumentTypes) {
+        if (options.genericDocumentTypes.isNotEmpty() && selectedDocType !in options.genericDocumentTypes) {
+            selectedDocType = options.genericDocumentTypes.first()
         }
     }
 
@@ -280,21 +345,36 @@ fun VerificationScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Aadhaar", "Passport", "PAN Card", "Voter ID").forEach { docType ->
-                        MatreeChoiceChip(
-                            text = docType,
-                            selected = selectedDocType == docType,
-                            onClick = { selectedDocType = docType },
-                            enabled = !submitting,
-                            icon = if (selectedDocType == docType) Icons.Filled.Check else null
-                        )
+                if (!options.loaded) {
+                    MatreeInlineNotice(
+                        message = "Loading the current verification policy…",
+                        icon = Icons.Filled.Sync
+                    )
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        options.genericDocumentTypes.forEach { docType ->
+                            MatreeChoiceChip(
+                                text = docType,
+                                selected = selectedDocType == docType,
+                                onClick = { selectedDocType = docType },
+                                enabled = !submitting,
+                                icon = if (selectedDocType == docType) Icons.Filled.Check else null
+                            )
+                        }
                     }
+                }
+
+                if (!options.aadhaarOfflineAvailable) {
+                    MatreeInlineNotice(
+                        message = "Aadhaar is not accepted as a generic card/image upload. It will only appear after a compliant registered offline-verification provider flow is deployed. Use another supported ID for now.",
+                        icon = Icons.Filled.PrivacyTip,
+                        tone = MatreeStatusTone.WARNING
+                    )
                 }
 
                 OutlinedButton(
                     onClick = { documentPicker.launch(arrayOf("image/*", "application/pdf")) },
-                    enabled = !submitting,
+                    enabled = !submitting && options.loaded && options.genericDocumentTypes.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth().testTag("verification_choose_document")
                 ) {
                     Icon(Icons.Filled.AttachFile, "Choose verification document")
@@ -309,11 +389,33 @@ fun VerificationScreen(
                     )
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Checkbox(
+                        checked = identityConsentGranted,
+                        onCheckedChange = { identityConsentGranted = it },
+                        enabled = !submitting && options.loaded
+                    )
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                    Text(
+                        "I consent to Matree processing this government-ID document only for identity verification and review. I understand the raw document is protected from other members and is deleted after review.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = MatreeDesign.spacing.xs)
+                    )
+                }
+
                 MatreePrimaryButton(
                     text = if (submitting) "Uploading & validating…" else t("submit_verification", "Submit for Verification"),
                     icon = if (submitting) null else Icons.Filled.Upload,
-                    onClick = { vm.submitVerification(selectedDocType, selectedDocument) },
-                    enabled = !submitting && selectedDocument != null,
+                    onClick = { vm.submitVerification(selectedDocType, selectedDocument, identityConsentGranted) },
+                    enabled = !submitting &&
+                        options.loaded &&
+                        options.identityConsentVersion.isNotBlank() &&
+                        selectedDocument != null &&
+                        identityConsentGranted,
                     modifier = Modifier.fillMaxWidth().testTag("verification_request_btn")
                 )            }
             Spacer(Modifier.height(MatreeDesign.spacing.md))
