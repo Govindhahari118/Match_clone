@@ -58,8 +58,11 @@ class FamilyViewModel @Inject constructor(
                 motherOccupation = p.motherOccupation,
                 siblings = p.siblings,
                 familyType = p.familyType.ifBlank { "Nuclear" },
-                nativePlace = p.city,
-                gotra = p.gothra
+                familyStatus = p.familyStatus.ifBlank { "Middle Class" },
+                familyValues = p.familyValues.ifBlank { "Moderate" },
+                nativePlace = p.nativeState,
+                gotra = p.gothra,
+                aboutFamily = p.aboutFamily
             )
         }
     }
@@ -74,8 +77,9 @@ class FamilyViewModel @Inject constructor(
             motherOccupation = info.motherOccupation,
             siblings = info.siblings,
             familyType = info.familyType,
+            familyStatus = info.familyStatus,
             familyValues = info.familyValues,
-            nativePlace = info.nativePlace,
+            nativeState = info.nativePlace,
             gotra = info.gotra,
             aboutFamily = info.aboutFamily
         )
@@ -101,10 +105,6 @@ fun FamilyScreen(
     var nativePlace by remember(info) { mutableStateOf(info.nativePlace) }
     var gotra by remember(info) { mutableStateOf(info.gotra) }
     var aboutFamily by remember(info) { mutableStateOf(info.aboutFamily) }
-    var familyIncome by remember { mutableStateOf("") }
-    var propertyDetails by remember { mutableStateOf("") }
-    var brothersMarried by remember { mutableStateOf("") }
-    var sistersMarried by remember { mutableStateOf("") }
 
     val snackbar = remember { SnackbarHostState() }
 
@@ -218,46 +218,7 @@ fun FamilyScreen(
                 singleLine = true
             )
 
-            // ── Siblings detail ──────────────────────────────────────────
-            SectionHeader(Icons.Filled.People, "Siblings Detail")
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = brothersMarried, onValueChange = { brothersMarried = it },
-                    label = { Text("Brothers married") },
-                    modifier = Modifier.weight(1f).testTag("family_bros_married"),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = sistersMarried, onValueChange = { sistersMarried = it },
-                    label = { Text("Sisters married") },
-                    modifier = Modifier.weight(1f).testTag("family_sis_married"),
-                    singleLine = true
-                )
-            }
-
-            // ── Family income & property ────────────────────────────────
-            SectionHeader(Icons.Filled.AccountBalance, "Family Finances")
-
-            Text(t("family_annual_income", "Family annual income"), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("< 5L", "5-10L", "10-25L", "25-50L", "50L-1Cr", "1Cr+").forEach { band ->
-                    FilterChip(
-                        selected = familyIncome == band,
-                        onClick = { familyIncome = band },
-                        label = { Text(band, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = propertyDetails, onValueChange = { propertyDetails = it },
-                label = { Text("Property / assets (optional)") },
-                leadingIcon = { Icon(Icons.Filled.HomeWork, null) },
-                modifier = Modifier.fillMaxWidth().testTag("family_property"),
-                singleLine = true
-            )
+            MatreeFamilyNotice()
 
             // ── About ─────────────────────────────────────────────────
             SectionHeader(Icons.Filled.Description, "About Family")
@@ -291,6 +252,21 @@ fun FamilyScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun MatreeFamilyNotice() {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            "Only fields backed by the current profile schema are shown here. Residence city is kept separate from native state so family-origin edits cannot change discovery location.",
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
