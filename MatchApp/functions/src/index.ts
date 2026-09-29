@@ -21,6 +21,7 @@ export * from "./identity";
 export * from "./savedSearches";
 export * from "./analytics";
 export * from "./health";
+export * from "./media";
 export * from "./profilePrivacyMigration";
 
 export * from "./ops";
