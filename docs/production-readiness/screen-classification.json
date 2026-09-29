@@ -432,8 +432,8 @@
       "path": "ui/videoprofile/VideoProfileScreen.kt",
       "symbol": "VideoProfileScreen",
       "status": "BETA",
-      "exposure": "hidden",
-      "requiredFlag": null
+      "exposure": "flagged",
+      "requiredFlag": "KEY_SHOW_VIDEO_PROFILES"
     },
     {
       "path": "ui/wedding/WeddingPlannerScreen.kt",
