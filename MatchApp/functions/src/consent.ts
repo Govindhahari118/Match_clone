@@ -138,3 +138,16 @@ export const getConsentState = functions.https.onCall(async (_data, context) => 
     }),
   };
 });
+
+
+/**
+ * Consent withdrawal is an active control, not just a ledger entry. Revoking location consent
+ * immediately removes the server-side exact Nearby point even if the originating device is gone.
+ */
+export const onLocationConsentChanged = functions.firestore
+  .document("consents/{uid}/items/location")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (after?.granted === true) return;
+    await db.collection("userLocations").doc(context.params.uid).delete();
+  });
