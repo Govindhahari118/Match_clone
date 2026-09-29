@@ -7,6 +7,7 @@ import {
   isVoidedPaymentStatus,
   rebuildEntitlementLedger,
 } from "./billingEntitlementPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const PACKAGE_NAME = "com.match.app";
 const ANDROID_PUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher";
@@ -346,12 +347,11 @@ export const verifyGooglePlayPurchase = functions
     const subscriptionRef = db.collection("subscriptions").doc(uid);
 
     const result = await db.runTransaction<GrantResult>(async (tx) => {
-      const reads = [tx.get(purchaseRef), tx.get(userRef)];
-      if (product.entitlementType === "BOOST") reads.push(tx.get(subscriptionRef));
-      const snapshots = await Promise.all(reads);
-      const existingPurchase = snapshots[0];
-      const userSnap = snapshots[1];
-      const subscriptionSnap = snapshots[2];
+      const [existingPurchase, userSnap, subscriptionSnap] = await Promise.all([
+        tx.get(purchaseRef),
+        tx.get(userRef),
+        tx.get(subscriptionRef),
+      ]);
 
       if (!userSnap.exists) {
         throw new functions.https.HttpsError("not-found", "User profile not found");
@@ -363,11 +363,12 @@ export const verifyGooglePlayPurchase = functions
       const user = userSnap.data() || {};
       let currentExpiry = 0;
       if (product.entitlementType === "MEMBERSHIP") {
-        currentExpiry = user.premiumUntil instanceof admin.firestore.Timestamp
-          ? user.premiumUntil.toMillis()
-          : Number(user.subscriptionExpiry || 0);
+        currentExpiry = resolveMembershipState(
+          subscriptionSnap.data(),
+          user
+        ).expiresAtMillis;
       } else {
-        currentExpiry = Number(subscriptionSnap?.data()?.boostUntil || 0);
+        currentExpiry = Number(subscriptionSnap.data()?.boostUntil || 0);
       }
       const grantedAtMillis = Date.now();
       const base = Math.max(grantedAtMillis, Number.isFinite(currentExpiry) ? currentExpiry : 0);
@@ -393,16 +394,24 @@ export const verifyGooglePlayPurchase = functions
       };
 
       if (product.entitlementType === "MEMBERSHIP") {
-        const premiumUntil = admin.firestore.Timestamp.fromMillis(expiresAtMillis);
         paymentRecord.planId = product.entitlementId;
         paymentRecord.premiumUntilMillis = expiresAtMillis;
+        tx.set(subscriptionRef, {
+          membershipActive: true,
+          membershipPlan: product.entitlementId,
+          membershipUntilMillis: expiresAtMillis,
+          membershipPaymentId: paymentId,
+          membershipUpdatedAt: now,
+        }, { merge: true });
+        // Only the public badge remains on users/{uid}; plan, expiry and payment identifiers are
+        // private server authority under subscriptions/{uid}.
         tx.update(userRef, {
           isPremium: true,
-          premiumPlan: product.entitlementId,
-          subscriptionPlan: product.entitlementId,
-          premiumUntil,
-          subscriptionExpiry: expiresAtMillis,
-          paymentId,
+          premiumPlan: admin.firestore.FieldValue.delete(),
+          subscriptionPlan: admin.firestore.FieldValue.delete(),
+          premiumUntil: admin.firestore.FieldValue.delete(),
+          subscriptionExpiry: admin.firestore.FieldValue.delete(),
+          paymentId: admin.firestore.FieldValue.delete(),
           updatedAt: now,
         });
       } else {
@@ -476,6 +485,27 @@ export const getMyBoostStatus = functions.https.onCall(async (_data, context) =>
   const raw = Number(snapshot.data()?.boostUntil || 0);
   const boostUntil = Number.isFinite(raw) && raw > Date.now() ? raw : 0;
   return { boostUntil, active: boostUntil > Date.now() };
+});
+
+
+/** Owner-only membership status. Detailed entitlement metadata never lives in peer-readable profiles. */
+export const getMyMembershipStatus = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const [subscription, user] = await Promise.all([
+    db.collection("subscriptions").doc(uid).get(),
+    db.collection("users").doc(uid).get(),
+  ]);
+  if (!user.exists) throw new functions.https.HttpsError("not-found", "User profile not found");
+
+  const state = resolveMembershipState(subscription.data(), user.data() || {});
+  return {
+    active: state.active,
+    planId: state.planId,
+    expiresAtMillis: state.expiresAtMillis,
+  };
 });
 
 
