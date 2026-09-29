@@ -1,6 +1,6 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
-import { db, requireOpsRole } from "./shared";
+import { db, persistAndSendNotification, requireOpsRole } from "./shared";
 import {
   enforcementSuppressesInteractions,
   normalizeEnforcementStatus,
@@ -124,7 +124,7 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
   const ticketRef = db.collection("supportTickets").doc(ticketId);
   const auditRef = db.collection("opsAuditLog").doc();
 
-  await db.runTransaction(async (tx) => {
+  const transition = await db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ticketRef);
     if (!snapshot.exists) {
       throw new functions.https.HttpsError("not-found", "Support ticket not found");
@@ -166,7 +166,38 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
       reason,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    return {
+      previousStatus,
+      ownerUid: String(current.uid || ""),
+    };
   });
+
+  if (transition.ownerUid && transition.previousStatus !== nextStatus) {
+    try {
+      await persistAndSendNotification({
+        notificationId: `support_${ticketId}_${nextStatus}`,
+        userId: transition.ownerUid,
+        type: "SYSTEM",
+        title: "Support request updated",
+        body: nextStatus === "RESOLVED" || nextStatus === "CLOSED"
+          ? "Your support request has been resolved. Open Help & Support to review its status."
+          : "Your support request status changed. Open Help & Support to review it.",
+        entityType: "support",
+        entityId: ticketId,
+        deepLink: "matrimonyconnect://notifications",
+        pushType: "support_status",
+        preferenceKey: "critical",
+        priority: "high",
+      });
+    } catch (error) {
+      functions.logger.warn("Support status notification delivery failed", {
+        ticketId,
+        nextStatus,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   return { success: true, ticketId, status: nextStatus };
 });
