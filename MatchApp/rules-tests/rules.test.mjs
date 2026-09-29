@@ -529,3 +529,19 @@ test('operations records are server-only for ordinary authenticated clients', as
     await assertFails(setDoc(doc(aliceDb, path), { status: 'CLOSED' }, { merge: true }));
   }
 });
+
+
+test('data export request and throttle state are server-only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  for (const path of [
+    'dataExportRequests/fake_export',
+    'dataExportRateLimits/alice',
+  ]) {
+    await assertFails(getDoc(doc(aliceDb, path)));
+    await assertFails(setDoc(doc(aliceDb, path), {
+      uid: 'alice',
+      status: 'READY',
+      nextAllowedAtMillis: Date.now() + 600000,
+    }));
+  }
+});
