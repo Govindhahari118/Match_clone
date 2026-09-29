@@ -197,6 +197,14 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+      - name: Validate operator console assets
+        shell: bash
+        run: |
+          test -f ../ops-console/index.html
+          test -f ../ops-console/styles.css
+          test -f ../ops-console/app.js
+          node --check ../ops-console/app.js
+          grep -q 'app.js' ../ops-console/index.html
       - name: Audit production dependencies
         shell: bash
         run: |
