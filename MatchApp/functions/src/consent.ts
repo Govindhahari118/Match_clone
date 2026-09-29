@@ -239,15 +239,29 @@ export const onMediaProcessingConsentChanged = functions.firestore
     if (isCurrentConsentRecord("media_processing", after)) return;
 
     const uid = context.params.uid;
-    const pending = await db.collection("photoModeration")
-      .where("uid", "==", uid)
-      .where("status", "==", "PENDING")
-      .limit(100)
-      .get();
+    const [pendingPhotos, pendingVideos] = await Promise.all([
+      db.collection("photoModeration")
+        .where("uid", "==", uid)
+        .where("status", "==", "PENDING")
+        .limit(100)
+        .get(),
+      db.collection("videoModeration")
+        .where("uid", "==", uid)
+        .where("status", "==", "PENDING")
+        .limit(100)
+        .get(),
+    ]);
 
-    for (const doc of pending.docs) {
+    for (const doc of pendingPhotos.docs) {
       const storagePath = String(doc.data()?.storagePath || "");
       if (storagePath.startsWith(`photos/${uid}/`) && !storagePath.includes("..")) {
+        await admin.storage().bucket().file(storagePath).delete({ ignoreNotFound: true });
+      }
+      await doc.ref.delete();
+    }
+    for (const doc of pendingVideos.docs) {
+      const storagePath = String(doc.data()?.storagePath || "");
+      if (storagePath.startsWith(`videos/${uid}/`) && !storagePath.includes("..")) {
         await admin.storage().bucket().file(storagePath).delete({ ignoreNotFound: true });
       }
       await doc.ref.delete();
