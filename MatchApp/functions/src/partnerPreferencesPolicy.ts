@@ -133,6 +133,39 @@ function strings(value: unknown, maxItems = 20): string[] {
   return [...unique.values()];
 }
 
+function modeForValues(modeValue: unknown, valuesValue: unknown): PreferenceMode {
+  return strings(valuesValue).length > 0 ? mode(modeValue) : "NO_PREFERENCE";
+}
+
+function choiceStrings(value: unknown, allowed: readonly string[]): string[] {
+  if (!Array.isArray(value)) return [];
+  const byKey = new Map(allowed.map((item) => [item.toUpperCase(), item]));
+  const selected = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const canonical = byKey.get(item.trim().toUpperCase());
+    if (canonical) selected.add(canonical);
+  }
+  return [...selected];
+}
+
+function modeForChoices(
+  modeValue: unknown,
+  valuesValue: unknown,
+  allowed: readonly string[]
+): PreferenceMode {
+  return choiceStrings(valuesValue, allowed).length > 0
+    ? mode(modeValue)
+    : "NO_PREFERENCE";
+}
+
+const CHILDREN_CHOICES = ["HAS_CHILDREN", "NO_CHILDREN"] as const;
+const NRI_CHOICES = ["NRI", "INDIA_RESIDENT"] as const;
+const RELOCATION_CHOICES = [
+  "WILLING_TO_RELOCATE",
+  "NOT_WILLING_TO_RELOCATE",
+] as const;
+
 export function normalizePartnerPreferences(
   value: unknown
 ): PartnerPreferenceDocument {
@@ -156,47 +189,51 @@ export function normalizePartnerPreferences(
     heightMode: mode(raw.heightMode),
     heightMinCm,
     heightMaxCm,
-    religionMode: mode(raw.religionMode),
+    religionMode: modeForValues(raw.religionMode, raw.religions),
     religions: strings(raw.religions),
-    casteMode: mode(raw.casteMode),
+    casteMode: modeForValues(raw.casteMode, raw.castes),
     castes: strings(raw.castes),
-    subCasteMode: mode(raw.subCasteMode),
+    subCasteMode: modeForValues(raw.subCasteMode, raw.subCastes),
     subCastes: strings(raw.subCastes),
-    stateMode: mode(raw.stateMode),
+    stateMode: modeForValues(raw.stateMode, raw.states),
     states: strings(raw.states),
-    cityMode: mode(raw.cityMode),
+    cityMode: modeForValues(raw.cityMode, raw.cities),
     cities: strings(raw.cities),
-    motherTongueMode: mode(raw.motherTongueMode),
+    motherTongueMode: modeForValues(raw.motherTongueMode, raw.motherTongues),
     motherTongues: strings(raw.motherTongues),
-    maritalStatusMode: mode(raw.maritalStatusMode),
+    maritalStatusMode: modeForValues(raw.maritalStatusMode, raw.maritalStatuses),
     maritalStatuses: strings(raw.maritalStatuses),
-    educationMode: mode(raw.educationMode),
+    educationMode: modeForValues(raw.educationMode, raw.educationLevels),
     educationLevels: strings(raw.educationLevels),
-    occupationMode: mode(raw.occupationMode),
+    occupationMode: modeForValues(raw.occupationMode, raw.occupationCategories),
     occupationCategories: strings(raw.occupationCategories),
-    dietMode: mode(raw.dietMode),
+    dietMode: modeForValues(raw.dietMode, raw.diets),
     diets: strings(raw.diets),
-    smokingMode: mode(raw.smokingMode),
+    smokingMode: modeForValues(raw.smokingMode, raw.smoking),
     smoking: strings(raw.smoking),
-    drinkingMode: mode(raw.drinkingMode),
+    drinkingMode: modeForValues(raw.drinkingMode, raw.drinking),
     drinking: strings(raw.drinking),
-    countryOfResidenceMode: mode(raw.countryOfResidenceMode),
+    countryOfResidenceMode: modeForValues(raw.countryOfResidenceMode, raw.countriesOfResidence),
     countriesOfResidence: strings(raw.countriesOfResidence),
-    citizenshipMode: mode(raw.citizenshipMode),
+    citizenshipMode: modeForValues(raw.citizenshipMode, raw.citizenships),
     citizenships: strings(raw.citizenships),
-    childrenMode: mode(raw.childrenMode),
-    childrenStatuses: strings(raw.childrenStatuses),
-    nriMode: mode(raw.nriMode),
-    nriStatuses: strings(raw.nriStatuses),
-    relocationMode: mode(raw.relocationMode),
-    relocationStatuses: strings(raw.relocationStatuses),
-    familyTypeMode: mode(raw.familyTypeMode),
+    childrenMode: modeForChoices(raw.childrenMode, raw.childrenStatuses, CHILDREN_CHOICES),
+    childrenStatuses: choiceStrings(raw.childrenStatuses, CHILDREN_CHOICES),
+    nriMode: modeForChoices(raw.nriMode, raw.nriStatuses, NRI_CHOICES),
+    nriStatuses: choiceStrings(raw.nriStatuses, NRI_CHOICES),
+    relocationMode: modeForChoices(
+      raw.relocationMode,
+      raw.relocationStatuses,
+      RELOCATION_CHOICES
+    ),
+    relocationStatuses: choiceStrings(raw.relocationStatuses, RELOCATION_CHOICES),
+    familyTypeMode: modeForValues(raw.familyTypeMode, raw.familyTypes),
     familyTypes: strings(raw.familyTypes),
-    familyValuesMode: mode(raw.familyValuesMode),
+    familyValuesMode: modeForValues(raw.familyValuesMode, raw.familyValues),
     familyValues: strings(raw.familyValues),
-    physicalStatusMode: mode(raw.physicalStatusMode),
+    physicalStatusMode: modeForValues(raw.physicalStatusMode, raw.physicalStatuses),
     physicalStatuses: strings(raw.physicalStatuses),
-    residentialStatusMode: mode(raw.residentialStatusMode),
+    residentialStatusMode: modeForValues(raw.residentialStatusMode, raw.residentialStatuses),
     residentialStatuses: strings(raw.residentialStatuses),
   };
 }
