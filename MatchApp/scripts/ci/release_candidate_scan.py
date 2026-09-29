@@ -129,6 +129,45 @@ def main() -> int:
         require('hasActiveConsent(viewerUid, "personalization")' in text(recommendation_backend),
                 "recommendation telemetry must honor current personalization consent", failures)
 
+    storage_rules = ROOT / "storage.rules"
+    if storage_rules.exists():
+        sr = text(storage_rules)
+        require("peerCanReadPublishedMedia" in sr,
+                "profile photo/video peers must be limited to backend-published media", failures)
+        require("request.resource.metadata.keys().hasOnly(['ownerUid'])" in sr,
+                "member profile-media uploads must not self-assign publication metadata", failures)
+
+    media_backend = ROOT / "functions/src/media.ts"
+    if media_backend.exists():
+        media = text(media_backend)
+        require('requireActiveConsent(uid, "media_processing")' in media,
+                "profile-media moderation must require current media-processing consent", failures)
+        require("submitProfileVideo" in media and "reviewProfileVideo" in media,
+                "video profiles must use trusted submit/review backend authority", failures)
+        require("setPublishedMetadata" in media,
+                "profile media must receive trusted publication metadata", failures)
+
+    profile_service = APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt"
+    if profile_service.exists():
+        ps = text(profile_service)
+        require('remove("photoUrl")' in ps and 'remove("videoUrl")' in ps,
+                "generic client profile sync must exclude moderated media pointers", failures)
+
+    photo_editor = APP / "src/main/java/com/match/app/ui/photoeditor/PhotoEditorScreen.kt"
+    if photo_editor.exists():
+        editor = text(photo_editor)
+        for fake_control in ["FilterPreset", "AdjustmentSlider(", "watermark by remember"]:
+            require(fake_control not in editor,
+                    f"photo UI contains a preview-only editing control: {fake_control}", failures)
+
+    video_screen = APP / "src/main/java/com/match/app/ui/videoprofile/VideoProfileScreen.kt"
+    if video_screen.exists():
+        video = text(video_screen)
+        require('getHttpsCallable("submitProfileVideo")' in video,
+                "video profile upload must submit through trusted moderation", failures)
+        require('mapOf("videoUrl" to' not in video,
+                "video profile must not publish videoUrl from Android", failures)
+
     # Production builds must not regain demo-account/password authority. Firebase Auth is the
     # only password authority and synthetic users/interactions belong in test/debug fixtures only.
     require(not (APP / "src/main/java/com/match/app/data/seed").exists(),
