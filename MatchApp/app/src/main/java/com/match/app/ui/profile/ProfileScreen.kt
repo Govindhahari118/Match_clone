@@ -233,6 +233,14 @@ fun ProfileScreen(
                     p.hobbies.take(8).forEach { hobby -> AssistChip(onClick = {}, enabled = false, label = { Text(hobby) }) }
                 }
             }
+            OutlinedButton(
+                onClick = onGoFamily,
+                modifier = Modifier.fillMaxWidth().testTag("btn_family_details")
+            ) {
+                Icon(Icons.Filled.Edit, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Edit family details")
+            }
         }
 
         if (p.bio.isNotBlank()) ProfileSection("About me") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
