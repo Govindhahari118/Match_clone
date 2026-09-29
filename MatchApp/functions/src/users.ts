@@ -446,6 +446,12 @@ export const deleteUserAccount = functions
         await deleteCollection(`blocks/${uid}/blocked`);
         await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
         await deleteCollection(`privacyRelations/${uid}/members`);
+        await deleteCollection(`familyDelegates/${uid}/members`);
+        await deleteQuery(db.collectionGroup("members").where("delegateUid", "==", uid));
+        await deleteQuery(db.collection("familyInvites").where("ownerUid", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("ownerUid", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("delegateUid", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("actorUid", "==", uid));
         await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
         await deleteCollection(`contactGrants/${uid}/viewers`);
         await deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid));
@@ -501,6 +507,7 @@ export const deleteUserAccount = functions
           db.collection("consentLedger").doc(uid),
           db.collection("riskSignals").doc(uid),
           db.collection("riskAssessments").doc(uid),
+          db.collection("familyDelegates").doc(uid),
           db.collection("accountEnforcements").doc(uid),
           db.collection("verifications").doc(uid),
           db.collection("verificationRequests").doc(uid),
