@@ -46,3 +46,13 @@ python3 scripts/ci/production_external_gate.py \
 After the staged rollout and post-rollout health review, the same exact SHA must pass `--mode full`.
 A repository CI pass or a synthetically generated CI validator file is never external production
 evidence.
+
+
+## Operations readiness
+
+Before production moderation/support/KYC/payment operations begin, provision role-scoped operator
+accounts using `docs/release/OPS_ROLE_BOOTSTRAP.md`. The bootstrap tool is dry-run-first and writes a
+server-only audit record; executing it against production remains an external evidence gate.
+
+Use `docs/release/ROLLBACK_RUNBOOK.md` for incident rollback and feature-disable decisions. A real
+production-like rollback drill must be attached to the exact release SHA before full rollout.
