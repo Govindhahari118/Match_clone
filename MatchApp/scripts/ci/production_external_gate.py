@@ -33,6 +33,11 @@ def main() -> int:
     parser.add_argument("--evidence", required=True, type=pathlib.Path)
     parser.add_argument("--sha", required=True)
     parser.add_argument("--mode", choices=("prelaunch", "full"), default="prelaunch")
+    parser.add_argument(
+        "--allow-ci-synthetic",
+        action="store_true",
+        help="CI self-test only: permit evidenceType=ci-synthetic-validator",
+    )
     args = parser.parse_args()
 
     if not args.evidence.exists():
@@ -46,6 +51,16 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
+    evidence_type = str(data.get("evidenceType", "")).strip()
+    if args.allow_ci_synthetic:
+        if evidence_type != "ci-synthetic-validator":
+            failures.append("CI synthetic validation requires evidenceType=ci-synthetic-validator")
+    elif evidence_type != "operator-controlled-production-evidence":
+        failures.append(
+            "evidenceType must be operator-controlled-production-evidence; "
+            "CI/template/synthetic evidence is not release evidence"
+        )
+
     recorded_sha = str(data.get("gitSha", "")).strip()
     if recorded_sha != args.sha:
         failures.append(f"gitSha mismatch: expected {args.sha}, found {recorded_sha or '<missing>'}")
@@ -62,8 +77,15 @@ def main() -> int:
     else:
         for gate in gates:
             reference = str(evidence_links.get(gate, "")).strip()
-            if len(reference) < 3:
-                failures.append(f"evidence reference missing for {gate}")
+            if len(reference) < 8:
+                failures.append(f"evidence reference missing/too short for {gate}")
+                continue
+            lowered = reference.lower()
+            if not args.allow_ci_synthetic and any(
+                marker in lowered
+                for marker in ("synthetic", "template", "placeholder", "example", "todo", "tbd")
+            ):
+                failures.append(f"non-production evidence reference rejected for {gate}")
 
     if failures:
         print(f"Production external gate FAILED ({args.mode})")
