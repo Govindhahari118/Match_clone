@@ -160,13 +160,14 @@ export const onLocationConsentChanged = functions.firestore
 
 
 async function deleteQueryInBatches(query: FirebaseFirestore.Query): Promise<void> {
-  while (true) {
+  let hasMore = true;
+  while (hasMore) {
     const snapshot = await query.limit(300).get();
     if (snapshot.empty) return;
     const batch = db.batch();
     snapshot.docs.forEach((doc) => batch.delete(doc.ref));
     await batch.commit();
-    if (snapshot.size < 300) return;
+    hasMore = snapshot.size === 300;
   }
 }
 
