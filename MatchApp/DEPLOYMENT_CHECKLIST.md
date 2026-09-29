@@ -111,7 +111,8 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Exact location expires after 24 hours without refresh and is deleted immediately on stop-sharing, consent withdrawal or account deletion.
 - [ ] Keep Remote Config `enable_nearby=false` until production location/security/load evidence passes; deploy and validate location Functions before enabling.
 - [ ] Real-device test: denied permission, approximate permission, precise permission, GPS/network provider, location services off, no results, 5/25/100 km radii, block/stealth behavior and stop-sharing.
-- [ ] Data Safety and privacy policy explicitly describe foreground location collection, purpose, retention and deletion.
+- [x] Repository Privacy/Data Safety drafts explicitly describe opt-in foreground Nearby location, approximate/precise behavior, server-only exact coordinates, purpose, stop-sharing and deletion behavior.
+- [ ] Final legal/Data Safety wording and retention obligations are approved against the exact production deployment.
 
 ## 10. Discovery / preferences / social / messaging
 
@@ -179,7 +180,8 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 - [ ] Payments: test/live smoke test plus replay/idempotency/recovery cases.
 - [ ] Notifications: foreground/background/killed-process receipt and deep navigation.
 - [ ] Offline: authenticated cached viewing only; no insecure offline authentication or false server-write success.
-- [ ] Room migrations: upgrade from every supported production DB schema to the current schema without data loss.
+- [x] CI emulator migration matrix upgrades every registered supported schema hop (v13 through current) and asserts retained rows/current artifacts.
+- [ ] Where real historical production database fixtures exist, validate those exact fixtures on the release build before rollout.
 - [ ] Accessibility: TalkBack labels, font scaling, contrast, touch targets and keyboard/input behavior.
 - [ ] Performance: cold start, discovery scroll, image memory, chat list, ANR/crash rate on lower-end devices.
 
@@ -199,7 +201,7 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 - [ ] Attach concrete references for Firebase production configuration, signing, release credentials, App Check/Play Integrity, auth device matrix, licensed billing, physical E2E, accessibility, performance SLO, penetration test, legal/Data Safety, Play pre-launch report and rollback drill.
 - [ ] Run `python3 scripts/ci/production_external_gate.py --evidence <file> --sha <exact-sha> --mode prelaunch` before production promotion.
 - [ ] After controlled rollout and post-rollout health review, run the same exact SHA with `--mode full`.
-- [ ] Never use the CI synthetic validator JSON as release evidence.
+- [x] External-evidence gate rejects templates/CI synthetic provenance by default; CI synthetic validation requires the explicit `--allow-ci-synthetic` self-test flag.
 
 ## Definition of Done
 
