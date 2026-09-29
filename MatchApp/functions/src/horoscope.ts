@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck } from "./shared";
+import { db, requireAppCheck, requireProductionFeature } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
 import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
 
@@ -16,6 +16,7 @@ function isHindu(religion: unknown): boolean {
  */
 export const getSharedHoroscope = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
+  requireProductionFeature("kundali");
   const viewerUid = context.auth?.uid;
   if (!viewerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
