@@ -30,6 +30,7 @@ class AstrologyTest {
     @Test fun `invalid catalogue values do not create a production score`() {
         assertNull(Astrology.scoreOrNull("Unknown", "Pushya", "Cancer", "Pushya"))
         assertNull(Astrology.scoreOrNull("Cancer", "Unknown", "Cancer", "Pushya"))
+        assertEquals(0f, Astrology.score("Unknown", "Pushya", "Cancer", "Pushya"), 0f)
         assertTrue(Astrology.isValid("Cancer", "Pushya"))
         assertTrue(!Astrology.isValid("Cancer", "Unknown"))
     }
