@@ -244,6 +244,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onGoLanguage: () -> Unit = {},
     onGoPartnerPreferences: () -> Unit = {},
+    onGoFamilyAccess: () -> Unit = {},
     onUpgrade: () -> Unit = {},
     onAccountDeleted: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel()
@@ -349,6 +350,26 @@ fun SettingsScreen(
                         Text("Partner preferences", fontWeight = FontWeight.SemiBold)
                         Text(
                             "Set strict boundaries separately from preferred qualities. These are private and apply bilaterally in discovery.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Filled.ChevronRight, null)
+                }
+            }
+
+            Card(
+                onClick = onGoFamilyAccess,
+                modifier = Modifier.fillMaxWidth().testTag("settings_family_access"),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.FamilyRestroom, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Family access", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Invite, accept or revoke explicit family profile access. Delegated edits remain restricted by server policy.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
