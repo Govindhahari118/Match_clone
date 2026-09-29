@@ -70,9 +70,9 @@ service firebase.storage {
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
+    // Voice bio is not a production feature. Existing owners retain deletion authority only.
     match /voicebios/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
+      allow read, create, update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
