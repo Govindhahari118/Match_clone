@@ -137,6 +137,16 @@ def main() -> int:
                     f"NRI screen must not contain synthetic member inventory marker: {marker}",
                     failures)
 
+    photo_editor = APP / "src/main/java/com/match/app/ui/photoeditor/PhotoEditorScreen.kt"
+    if photo_editor.exists():
+        photo = text(photo_editor)
+        for marker in ["FilterPreset", "AdjustmentSlider(", "CropAspect"]:
+            require(marker not in photo,
+                    f"profile photo UI must not advertise unapplied edit control: {marker}",
+                    failures)
+        require("submitted for moderation" in photo.lower(),
+                "profile photo upload must disclose moderation-before-publication", failures)
+
     if failures:
         print("Release candidate repository scan FAILED")
         for item in failures:
