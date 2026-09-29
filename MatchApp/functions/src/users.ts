@@ -449,6 +449,7 @@ export const deleteUserAccount = functions
         await deleteCollection(`familyDelegates/${uid}/members`);
         await deleteQuery(db.collectionGroup("members").where("delegateUid", "==", uid));
         await deleteQuery(db.collection("familyInvites").where("ownerUid", "==", uid));
+        await deleteQuery(db.collection("familyInvites").where("acceptedBy", "==", uid));
         await deleteQuery(db.collection("familyAccessAudit").where("ownerUid", "==", uid));
         await deleteQuery(db.collection("familyAccessAudit").where("delegateUid", "==", uid));
         await deleteQuery(db.collection("familyAccessAudit").where("actorUid", "==", uid));
