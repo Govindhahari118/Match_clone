@@ -1,8 +1,8 @@
 # Matree production readiness — current completion branch
 
-> Branch: `gpt/matree-pin-to-pin-completion-20260925`
+> Branch: `gpt/matree-master-plan-hardening-20260929` (PR #22)
 >
-> Baseline: `gpt/matree-pin-to-pin-20260923` (itself based on canonical `Gpt_matree`)
+> Base: canonical `main`; this branch carries the September 29 production-hardening completion pass.
 >
 > Status: **DRAFT / NOT PRODUCTION-READY**
 >
@@ -114,6 +114,10 @@ win over earlier exploratory text; security/privacy invariants are never weakene
 - Google Play entitlement reconciliation has deterministic policy/ledger regression coverage for
   void/refund/expiry paths, and compatibility scoring carries formula version/factor evidence
 - legacy protected-media token references have an idempotent owner-path migration policy and tests
+- every Android Screen source is exhaustively classified with a CI gate that prevents hidden/STUB/UNSAFE/POST_LAUNCH exposure drift
+- release-candidate privacy/legal copy was reconciled to the implemented Firebase/Google Play/Nearby/media architecture; CI rejects legacy E2EE/Razorpay/BCrypt/no-GPS claims
+- role-scoped operations provisioning has a dry-run-first audited bootstrap that preserves unrelated custom claims and revokes refresh tokens after changes
+- production rollback has an explicit safe-off/maintenance/release-rollback runbook tied to the existing Remote Config kill switches
 
 ## Exact-head evidence
 
