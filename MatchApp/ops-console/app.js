@@ -274,7 +274,6 @@
         `${request.verificationMethod || ""} • ${formatTime(request.submittedAtMillis)}`
       );
       const reason = input("Rejection reason");
-      const level = select(["2", "3", "4", "5"], "2");
       const actions = document.createElement("div");
       actions.className = "row-actions";
       actions.appendChild(button("Open document", async () => {
@@ -282,12 +281,11 @@
         window.open(review.documentUrl, "_blank", "noopener,noreferrer");
         setStatus("Short-lived KYC review link opened and audited.");
       }));
-      actions.append(level);
       actions.appendChild(button("Approve", async () => {
         await call("approveVerification", {
           targetUid: request.uid,
           approved: true,
-          newLevel: Number(level.value),
+          newLevel: 2,
         });
         setStatus("Verification approved.");
         await loadVerification();
