@@ -123,3 +123,15 @@ test('retired video profile fields cannot be created or changed by a client', as
   await assertFails(updateDoc(doc(alice, 'users/alice'), { videoUrl: 'videos/alice/new.mp4' }));
   await assertFails(updateDoc(doc(alice, 'users/alice'), { voiceBioUrl: 'voicebios/alice/new.m4a' }));
 });
+
+
+test('public profile creation rejects billing metadata even when values look free', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({
+    subscriptionPlan: 'FREE',
+    subscriptionExpiry: 0,
+  })));
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({
+    paymentId: 'client-value',
+  })));
+});
