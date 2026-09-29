@@ -483,16 +483,23 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
   const enforcementRef = db.collection("accountEnforcements").doc(targetUid);
   const auditRef = db.collection("opsAuditLog").doc();
 
-  const previousStatus = await db.runTransaction(async (tx) => {
+  const transition = await db.runTransaction(async (tx) => {
     const user = await tx.get(userRef);
     if (!user.exists) {
       throw new functions.https.HttpsError("not-found", "Account not found");
     }
     const before = String(user.data()?.accountStatus || "ACTIVE").toUpperCase();
+    const userPaused = user.data()?.userPaused === true || before === "PAUSED";
+    const effectiveAccountStatus =
+      nextStatus === "ACTIVE" && userPaused ? "PAUSED" : nextStatus;
+    const effectivePaused =
+      nextStatus === "ACTIVE" ? userPaused : enforcementSuppressesInteractions(nextStatus);
 
     tx.set(userRef, {
-      accountStatus: nextStatus,
-      matrimonyPaused: enforcementSuppressesInteractions(nextStatus),
+      accountStatus: effectiveAccountStatus,
+      userPaused,
+      matrimonyPaused: effectivePaused,
+      searchStatus: effectivePaused ? "PAUSED" : "ACTIVE",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -517,14 +524,18 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
       action: "ACCOUNT_ENFORCEMENT_UPDATED",
       targetCollection: "users",
       targetId: targetUid,
-      before: { accountStatus: before },
-      after: { accountStatus: nextStatus },
+      before: { accountStatus: before, userPaused },
+      after: {
+        accountStatus: effectiveAccountStatus,
+        enforcementStatus: nextStatus,
+        userPaused,
+      },
       reason,
       reportId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return before;
+    return { before, effectiveAccountStatus, userPaused };
   });
 
   if (nextStatus === "SUSPENDED") {
@@ -535,16 +546,19 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
     actorUid: actor.uid,
     actorRole: actor.role,
     targetUid,
-    previousStatus,
+    previousStatus: transition.before,
     nextStatus,
+    effectiveAccountStatus: transition.effectiveAccountStatus,
     reportId,
   });
 
   return {
     success: true,
     targetUid,
-    previousStatus,
+    previousStatus: transition.before,
     status: nextStatus,
+    accountStatus: transition.effectiveAccountStatus,
+    userPaused: transition.userPaused,
   };
 });
 
