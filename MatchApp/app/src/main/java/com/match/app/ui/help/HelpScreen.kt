@@ -197,10 +197,20 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            AssistChip(
-                                onClick = {},
-                                label = { Text(ticket.status.replace('_', ' ')) }
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Text(
+                                    ticket.status.replace('_', ' '),
+                                    modifier = Modifier.padding(
+                                        horizontal = MatreeDesign.spacing.sm,
+                                        vertical = MatreeDesign.spacing.xxs
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
                         }
                     }
                 }
