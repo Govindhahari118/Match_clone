@@ -130,5 +130,8 @@ service firebase.storage {
       allow delete: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid;
     }
+    match /exports/{uid}/{fileName} {
+      allow read, write: if false;
+    }
   }
 }
