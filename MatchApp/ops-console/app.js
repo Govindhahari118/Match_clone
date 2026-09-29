@@ -350,6 +350,48 @@
     if (!(data.items || []).length) root.appendChild(text("p", "No pending photos.", "muted"));
   }
 
+  async function loadVideos() {
+    const data = await call("listPendingVideoModeration", { limit: 100 });
+    const root = el("videoList");
+    clear(root);
+    (data.items || []).forEach((video) => {
+      const row = item(
+        `Profile video • ${video.uid}`,
+        `${video.contentType || ""} • ${Number(video.size || 0)} bytes • ${formatTime(video.createdAtMillis)}`
+      );
+      const reason = input("Moderation reason (required)");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      actions.appendChild(button("Open video", async () => {
+        const review = await call("getVideoModerationReviewCase", { moderationId: video.id });
+        window.open(review.documentUrl, "_blank", "noopener,noreferrer");
+        setStatus("Short-lived video review link opened and audited.");
+      }));
+      actions.append(reason);
+      actions.appendChild(button("Approve", async () => {
+        await call("reviewProfileVideo", {
+          moderationId: video.id,
+          decision: "APPROVED",
+          reason: reason.value,
+        });
+        setStatus("Video approved.");
+        await loadVideos();
+      }));
+      actions.appendChild(button("Reject", async () => {
+        await call("reviewProfileVideo", {
+          moderationId: video.id,
+          decision: "REJECTED",
+          reason: reason.value,
+        });
+        setStatus("Video rejected.");
+        await loadVideos();
+      }, "danger"));
+      row.appendChild(actions);
+      root.appendChild(row);
+    });
+    if (!(data.items || []).length) root.appendChild(text("p", "No pending videos.", "muted"));
+  }
+
   async function lookupPayment(paymentId) {
     const data = await call("getPaymentReconciliationCase", { paymentId });
     el("paymentOutput").textContent = JSON.stringify(data, null, 2);
@@ -394,6 +436,7 @@
         if (action === "risk") await loadRisk();
         if (action === "verification") await loadVerification();
         if (action === "photos") await loadPhotos();
+        if (action === "videos") await loadVideos();
       } catch (error) {
         setStatus(errorMessage(error), true);
       } finally {
