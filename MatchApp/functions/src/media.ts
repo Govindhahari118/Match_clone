@@ -272,3 +272,53 @@ export const onProfilePhotoDeleted = functions.storage.object().onDelete(async (
     }
   });
 });
+
+
+/**
+ * Returns a five-minute signed URL for a pending profile-photo review case. Member Storage rules
+ * remain unchanged; the access is role-gated and audited at the backend.
+ */
+export const getPhotoModerationReviewCase = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["moderator", "ops_admin"]);
+  const moderationId = typeof data?.moderationId === "string"
+    ? data.moderationId.trim()
+    : "";
+  if (!moderationId.match(/^[a-f0-9]{64}$/)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid photo moderation case");
+  }
+
+  const review = await db.collection("photoModeration").doc(moderationId).get();
+  if (!review.exists || String(review.data()?.status || "") !== "PENDING") {
+    throw new functions.https.HttpsError("not-found", "Pending photo moderation case not found");
+  }
+  const value = review.data() || {};
+  const ownerUid = String(value.uid || "");
+  const storagePath = String(value.storagePath || "");
+  if (!ownerUid || !storagePath.startsWith(`photos/${ownerUid}/`) || storagePath.includes("..")) {
+    throw new functions.https.HttpsError("failed-precondition", "Photo moderation case is malformed");
+  }
+
+  const expiresAtMillis = Date.now() + 5 * 60 * 1000;
+  const [documentUrl] = await admin.storage().bucket().file(storagePath).getSignedUrl({
+    action: "read",
+    expires: expiresAtMillis,
+  });
+  await db.collection("opsAuditLog").add({
+    actorUid: actor.uid,
+    actorRole: actor.role,
+    action: "PROFILE_PHOTO_ACCESSED",
+    targetCollection: "photoModeration",
+    targetId: moderationId,
+    ownerUid,
+    reason: "PHOTO_REVIEW",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return {
+    moderationId,
+    uid: ownerUid,
+    storagePath,
+    documentUrl,
+    expiresAtMillis,
+  };
+});
