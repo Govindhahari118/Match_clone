@@ -8,6 +8,7 @@ import {
   sanitizeFamilyProfilePatch,
 } from "./familyDelegationPolicy";
 import { db, requireAppCheck } from "./shared";
+import { accountIsActive } from "./accountStatusPolicy";
 
 const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -29,7 +30,11 @@ async function activeDelegation(
   required: "VIEW_PROFILE" | "EDIT_PROFILE"
 ): Promise<FirebaseFirestore.DocumentSnapshot> {
   const ref = db.collection("familyDelegates").doc(ownerUid).collection("members").doc(delegateUid);
-  const snap = await ref.get();
+  const [snap, owner, delegate] = await Promise.all([
+    ref.get(),
+    db.collection("users").doc(ownerUid).get(),
+    db.collection("users").doc(delegateUid).get(),
+  ]);
   const data = snap.data() || {};
   if (
     !snap.exists ||
@@ -38,6 +43,17 @@ async function activeDelegation(
     !data.permissions.includes(required)
   ) {
     throw new functions.https.HttpsError("permission-denied", "Family access is not authorized");
+  }
+  if (
+    !owner.exists ||
+    !delegate.exists ||
+    !accountIsActive(owner.data()?.accountStatus) ||
+    !accountIsActive(delegate.data()?.accountStatus)
+  ) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Family access is unavailable while either account is not active"
+    );
   }
   return snap;
 }
@@ -125,9 +141,12 @@ export const acceptFamilyDelegateInvite = functions.https.onCall(async (data, co
     }
 
     const owner = await tx.get(db.collection("users").doc(ownerUid));
-    if (!owner.exists ||
-        String(owner.data()?.accountStatus || "ACTIVE").toUpperCase() !== "ACTIVE") {
+    const delegate = await tx.get(db.collection("users").doc(delegateUid));
+    if (!owner.exists || !accountIsActive(owner.data()?.accountStatus)) {
       throw new functions.https.HttpsError("failed-precondition", "Managed profile is unavailable");
+    }
+    if (!delegate.exists || !accountIsActive(delegate.data()?.accountStatus)) {
+      throw new functions.https.HttpsError("failed-precondition", "Delegate account must be active");
     }
 
     const memberRef = db.collection("familyDelegates")
