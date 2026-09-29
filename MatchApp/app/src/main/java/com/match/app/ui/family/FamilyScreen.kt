@@ -31,9 +31,9 @@ data class FamilyInfo(
     val fatherOccupation: String = "",
     val motherOccupation: String = "",
     val siblings: Int = 0,
-    val familyType: String = "Nuclear",       // Nuclear / Joint
-    val familyStatus: String = "Middle Class", // Affluent / Middle Class / Upper Middle Class
-    val familyValues: String = "Moderate",     // Orthodox / Traditional / Moderate / Liberal
+    val familyType: String = "",
+    val familyStatus: String = "",
+    val familyValues: String = ""
     val nativePlace: String = "",
     val gotra: String = "",
     val aboutFamily: String = ""
@@ -57,9 +57,9 @@ class FamilyViewModel @Inject constructor(
                 fatherOccupation = p.fatherOccupation,
                 motherOccupation = p.motherOccupation,
                 siblings = p.siblings,
-                familyType = p.familyType.ifBlank { "Nuclear" },
-                familyStatus = p.familyStatus.ifBlank { "Middle Class" },
-                familyValues = p.familyValues.ifBlank { "Moderate" },
+                familyType = p.familyType,
+                familyStatus = p.familyStatus,
+                familyValues = p.familyValues,
                 nativePlace = p.nativeState,
                 gotra = p.gothra,
                 aboutFamily = p.aboutFamily
@@ -183,19 +183,19 @@ fun FamilyScreen(
 
             ChipGroup(
                 label = "Family type",
-                options = listOf("Nuclear", "Joint"),
+                options = listOf("Not specified", "Nuclear", "Joint"),
                 selected = familyType,
                 onSelect = { familyType = it }
             )
             ChipGroup(
                 label = "Family status",
-                options = listOf("Middle Class", "Upper Middle Class", "Affluent"),
+                options = listOf("Not specified", "Middle Class", "Upper Middle Class", "Affluent"),
                 selected = familyStatus,
                 onSelect = { familyStatus = it }
             )
             ChipGroup(
                 label = "Family values",
-                options = listOf("Orthodox", "Traditional", "Moderate", "Liberal"),
+                options = listOf("Not specified", "Orthodox", "Traditional", "Moderate", "Liberal"),
                 selected = familyValues,
                 onSelect = { familyValues = it }
             )
@@ -237,8 +237,9 @@ fun FamilyScreen(
                         FamilyInfo(
                             fatherOccupation = father, motherOccupation = mother,
                             siblings = siblings.toIntOrNull() ?: 0,
-                            familyType = familyType, familyStatus = familyStatus,
-                            familyValues = familyValues, nativePlace = nativePlace,
+                            familyType = familyType.takeUnless { it == "Not specified" }.orEmpty(),
+                            familyStatus = familyStatus.takeUnless { it == "Not specified" }.orEmpty(),
+                            familyValues = familyValues.takeUnless { it == "Not specified" }.orEmpty(), nativePlace = nativePlace,
                             gotra = gotra, aboutFamily = aboutFamily
                         )
                     )
@@ -283,12 +284,13 @@ private fun SectionHeader(icon: ImageVector, title: String) {
 @Composable
 private fun ChipGroup(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
     Column {
+        val displaySelection = selected.ifBlank { "Not specified" }
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { opt ->
                 FilterChip(
-                    selected = selected == opt,
+                    selected = displaySelection == opt,
                     onClick = { onSelect(opt) },
                     label = { Text(opt, style = MaterialTheme.typography.labelMedium) }
                 )
