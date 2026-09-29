@@ -50,15 +50,25 @@ function profileCompletenessFieldsChanged(
 
 async function recomputeProfileCompleteness(uid: string): Promise<void> {
   const userRef = db.collection("users").doc(uid);
-  const [userSnap, privateSnap] = await Promise.all([
-    userRef.get(),
-    db.collection("userPrivate").doc(uid).get(),
-  ]);
+  const [userSnap, privateSnap, partnerPreferencesSnap, verificationSnap] =
+    await Promise.all([
+      userRef.get(),
+      db.collection("userPrivate").doc(uid).get(),
+      db.collection("partnerPreferences").doc(uid).get(),
+      db.collection("verifications").doc(uid).get(),
+    ]);
   if (!userSnap.exists) return;
 
   const user = userSnap.data() || {};
   const privateProfile = privateSnap.data() || {};
-  const next = calculateProfileCompletenessValue(user, privateProfile);
+  const partnerPreferences = partnerPreferencesSnap.data() || {};
+  const verification = verificationSnap.data() || {};
+  const next = calculateProfileCompletenessValue(
+    user,
+    privateProfile,
+    partnerPreferences,
+    verification
+  );
   const current = Number(user.profileCompleteness ?? -1);
   if (Number.isFinite(current) && Math.abs(current - next) < 0.0005) return;
 
@@ -111,6 +121,19 @@ export const onProfileCompletenessPrivateWrite = functions.firestore
     ) {
       return;
     }
+    await recomputeProfileCompleteness(context.params.uid);
+  });
+
+
+export const onProfileCompletenessPartnerPreferencesWrite = functions.firestore
+  .document("partnerPreferences/{uid}")
+  .onWrite(async (_change, context) => {
+    await recomputeProfileCompleteness(context.params.uid);
+  });
+
+export const onProfileCompletenessVerificationWrite = functions.firestore
+  .document("verifications/{uid}")
+  .onWrite(async (_change, context) => {
     await recomputeProfileCompleteness(context.params.uid);
   });
 
@@ -419,6 +442,7 @@ export const deleteUserAccount = functions
           db.collection("profileAnalytics").doc(uid),
           db.collection("notificationPrefs").doc(uid),
           db.collection("appearancePrefs").doc(uid),
+          db.collection("partnerPreferences").doc(uid),
           db.collection("verifications").doc(uid),
           db.collection("verificationRequests").doc(uid),
           db.collection("rewards").doc(uid),
