@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -105,6 +106,11 @@ class SettingsViewModel @Inject constructor(
     private val _sessionBusy = MutableStateFlow(false)
     val sessionBusy: StateFlow<Boolean> = _sessionBusy.asStateFlow()
 
+    private val _exportBusy = MutableStateFlow(false)
+    val exportBusy: StateFlow<Boolean> = _exportBusy.asStateFlow()
+    private val _exportUrl = MutableStateFlow<String?>(null)
+    val exportUrl: StateFlow<String?> = _exportUrl.asStateFlow()
+
     private val _profilePaused = MutableStateFlow(false)
     val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
     private val _lifecycleBusy = MutableStateFlow(false)
@@ -179,6 +185,24 @@ class SettingsViewModel @Inject constructor(
     fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
 
+    fun requestDataExport() = viewModelScope.launch {
+        if (_exportBusy.value) return@launch
+        _exportBusy.value = true
+        authRepo.createMyDataExport()
+            .onSuccess { link ->
+                _exportUrl.value = link.downloadUrl
+                _searchMessage.value =
+                    "Your protected export is ready. The download link expires shortly."
+            }
+            .onFailure { error ->
+                _searchMessage.value = error.message?.take(180)
+                    ?: "Could not generate your data export. Re-authenticate and try again."
+            }
+        _exportBusy.value = false
+    }
+
+    fun consumeExportUrl() { _exportUrl.value = null }
+
     fun setProfilePaused(paused: Boolean) = viewModelScope.launch {
         if (_lifecycleBusy.value) return@launch
         _lifecycleBusy.value = true
@@ -238,6 +262,9 @@ fun SettingsScreen(
     val lifecycleBusy by vm.lifecycleBusy.collectAsState()
     val devices by vm.devices.collectAsState()
     val sessionBusy by vm.sessionBusy.collectAsState()
+    val exportBusy by vm.exportBusy.collectAsState()
+    val exportUrl by vm.exportUrl.collectAsState()
+    val uriHandler = LocalUriHandler.current
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
@@ -260,6 +287,13 @@ fun SettingsScreen(
                 vm.resetError()
             }
             else -> Unit
+        }
+    }
+    LaunchedEffect(exportUrl) {
+        exportUrl?.let { url ->
+            runCatching { uriHandler.openUri(url) }
+                .onFailure { snackbar.showSnackbar("Could not open the protected export link.") }
+            vm.consumeExportUrl()
         }
     }
     LaunchedEffect(searchMessage) {
@@ -607,6 +641,27 @@ fun SettingsScreen(
                         else -> "Pause matrimony profile"
                     }
                 )
+            }
+
+            HorizontalDivider()
+            Text("Account data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Generate a protected JSON export of your account data. Raw KYC files, internal fraud signals and provider secrets are excluded. For security, the server requires a recently authenticated session and the download link expires shortly.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = vm::requestDataExport,
+                enabled = !exportBusy && accountState !is SettingsViewModel.AccountState.Deleting,
+                modifier = Modifier.fillMaxWidth().testTag("settings_export_data")
+            ) {
+                if (exportBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.Download, contentDescription = null)
+                }
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(if (exportBusy) "Preparing export…" else "Download my data")
             }
 
             Text("Permanent deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
