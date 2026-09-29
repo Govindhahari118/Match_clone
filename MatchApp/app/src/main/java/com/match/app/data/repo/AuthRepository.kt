@@ -16,6 +16,7 @@ import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
@@ -392,8 +393,14 @@ class AuthRepository @Inject constructor(
             try {
                 val synced = firestoreProfile.pushProfile(updated)
                 userDao.update(synced)
+            } catch (conflict: ProfileConflictException) {
+                // FirestoreProfileService refreshes the latest server copy before surfacing the
+                // conflict. Preserve that authoritative copy and let the UI require a refresh.
+                throw conflict
             } catch (ex: Exception) {
-                Log.w("AuthRepository", "Family details cloud sync failed", ex)
+                userDao.update(u)
+                Log.w("AuthRepository", "Family details cloud sync failed; local edit rolled back", ex)
+                throw ex
             }
         }
     }
