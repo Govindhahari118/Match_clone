@@ -61,7 +61,7 @@ import kotlinx.coroutines.launch
 data class FamilyAccessUi(
     val loading: Boolean = true,
     val busy: Boolean = false,
-    val snapshot: FamilyAccessSnapshot = FamilyAccessSnapshot(emptyList(), emptyList()),
+    val snapshot: FamilyAccessSnapshot = FamilyAccessSnapshot(emptyList(), emptyList(), emptyList()),
     val role: String = "PARENT",
     val canEdit: Boolean = false,
     val invite: FamilyInvite? = null,
@@ -158,6 +158,30 @@ class FamilyAccessViewModel @Inject constructor(
                     )
                 }
             }
+    }
+
+    fun cancelInvite(inviteId: String) = viewModelScope.launch {
+        if (_ui.value.busy) return@launch
+        _ui.update { it.copy(busy = true, message = null) }
+        runCatching {
+            repository.cancelInvite(inviteId)
+            repository.listAccess()
+        }.onSuccess { snapshot ->
+            _ui.update {
+                it.copy(
+                    busy = false,
+                    snapshot = snapshot,
+                    message = "Pending family invite cancelled."
+                )
+            }
+        }.onFailure { error ->
+            _ui.update {
+                it.copy(
+                    busy = false,
+                    message = error.message?.take(180) ?: "Could not cancel family invite."
+                )
+            }
+        }
     }
 
     fun revoke(delegateUid: String) = viewModelScope.launch {
@@ -387,6 +411,31 @@ fun FamilyAccessScreen(
                 enabled = !ui.busy && ui.acceptToken.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Accept family access") }
+
+            Text("Pending invites", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (ui.snapshot.pendingInvites.isEmpty()) {
+                Text("No active pending invites.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            ui.snapshot.pendingInvites.forEach { pending ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(
+                            pending.role.lowercase().replaceFirstChar { it.uppercase() } + " invite",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            pending.permissions.joinToString(", ") + " • expires " +
+                                DateFormat.getDateTimeInstance().format(Date(pending.expiresAtMillis)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = { vm.cancelInvite(pending.inviteId) },
+                            enabled = !ui.busy
+                        ) { Text("Cancel invite") }
+                    }
+                }
+            }
 
             Text("People with access to my profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             val activeDelegates = ui.snapshot.delegates.filter { it.active }
