@@ -1,6 +1,6 @@
 # Matree production route inventory
 
-> Scope: reachable production navigation on `gpt/matree-pin-to-pin-completion-20260925`.
+> Scope: reachable production navigation on `gpt/matree-production-launch-final-20260929`.
 >
 > This inventory classifies navigation exposure, not overall release readiness. A `READY` route still
 > depends on the exact-head CI, Firebase/provider configuration, security rules and external gates.
@@ -19,7 +19,7 @@
 |---|---|---|
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
-| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production route is fail-closed behind Remote Config `enable_nearby`; production location/load evidence is required before enabling. |
+| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production is fail-closed behind Android Remote Config `enable_nearby` **and** backend Functions config `features.nearby`; production location/load evidence is required before enabling both. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
 | Messages list | READY | Real conversations only. |
@@ -31,7 +31,7 @@
 | Language | READY | Supported locale catalog only. |
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
-| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
+| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Compatibility is calculated by a versioned trusted backend policy, and production is fail-closed behind Android Remote Config `enable_kundali` **and** backend Functions config `features.kundali`; independent reference validation is required before enabling both. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
@@ -74,5 +74,8 @@ the same release candidate.
 
 BETA capability presence in source does not make it launch-visible. `enable_nearby` and
 `enable_kundali` default to `false` in the Android Remote Config contract. Drawer, Home, profile,
-interest and direct/deep navigation paths all enforce the same flags. A direct navigation attempt
-while disabled renders a truthful unavailable state rather than entering the feature.
+interest and direct/deep navigation paths all enforce the same flags. The backend independently
+requires `features.nearby=true` or `features.kundali=true`, so a modified client cannot bypass the
+rollout decision by invoking callables directly. A direct navigation attempt while disabled renders
+a truthful unavailable state rather than entering the feature. Nearby status/clear operations remain
+available while disabled so rollback never prevents a member from deleting previously stored location.
