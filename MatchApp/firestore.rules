@@ -70,7 +70,7 @@ service cloud.firestore {
         'isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan',
         'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
-        'lastActiveAt','boostActiveUntil','accountStatus','matrimonyPaused','searchStatus','pausedAt',
+        'lastActiveAt','boostActiveUntil','accountStatus','userPaused','matrimonyPaused','searchStatus','pausedAt',
         'religion','religionId','religionLocked','religionConfirmedAt',
         'profileCompleteness','profileCompletenessUpdatedAt','matchScore','profileViewCount','createdAt',
         'photoUrl'
