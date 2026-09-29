@@ -19,6 +19,7 @@ export * from "./horoscope";
 export * from "./presence";
 export * from "./identity";
 export * from "./savedSearches";
+export * from "./partnerPreferences";
 export * from "./analytics";
 export * from "./health";
 export * from "./media";
