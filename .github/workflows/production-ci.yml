@@ -62,7 +62,7 @@ jobs:
             "penetrationTestPassed","legalAndDataSafetyApproved","playPreLaunchReportPassed",
             "rollbackDrillPassed","controlledRolloutCompleted","postRolloutHealthPassed"
           ]
-          data={"gitSha":sha,"evidence":{}}
+          data={"gitSha":sha,"evidenceType":"ci-synthetic-validator","evidence":{}}
           for gate in gates:
               data[gate]=True
               data["evidence"][gate]="synthetic-ci-validator-reference"
@@ -72,7 +72,13 @@ jobs:
           PY
           python3 scripts/ci/production_external_gate.py \
             --evidence /tmp/matree-external-gate-synthetic.json \
-            --sha "$GITHUB_SHA" --mode full
+            --sha "$GITHUB_SHA" --mode full --allow-ci-synthetic
+          if python3 scripts/ci/production_external_gate.py \
+              --evidence /tmp/matree-external-gate-synthetic.json \
+              --sha "$GITHUB_SHA" --mode prelaunch; then
+            echo "CI synthetic validator must be rejected without the explicit self-test flag."
+            exit 1
+          fi
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
       - name: Android lint
