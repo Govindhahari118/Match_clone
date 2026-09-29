@@ -7,6 +7,10 @@ import {
 } from "./consent";
 import { db, persistAndSendNotification, requireAppCheck, requireOpsRole } from "./shared";
 import { reviewerRequestedLevelIsValid, verificationLevelForMethod } from "./verificationLevelPolicy";
+import {
+  fileSignatureMatchesMime,
+  VERIFICATION_DOCUMENT_MIME_TYPES,
+} from "./fileSignaturePolicy";
 
 const GENERIC_VERIFICATION_TYPES = [
   "Passport",
@@ -159,14 +163,25 @@ export const submitVerificationRequest = functions.https.onCall(async (data, con
   if (!Number.isFinite(size) || size <= 0 || size > MAX_VERIFICATION_BYTES) {
     throw new functions.https.HttpsError("invalid-argument", "Verification document must be 5 MB or smaller");
   }
-  if (!(contentType.startsWith("image/") || contentType === "application/pdf")) {
-    throw new functions.https.HttpsError("invalid-argument", "Verification document must be an image or PDF");
+  if (!VERIFICATION_DOCUMENT_MIME_TYPES.has(contentType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Verification document must be a supported JPEG, PNG, WebP or PDF file"
+    );
   }
   if (ownerUid !== uid) {
     throw new functions.https.HttpsError("permission-denied", "Verification document ownership mismatch");
   }
   if (uploadedDocType !== docType) {
     throw new functions.https.HttpsError("permission-denied", "Verification document type metadata mismatch");
+  }
+
+  const [documentPrefix] = await file.download({ start: 0, end: 31 });
+  if (!fileSignatureMatchesMime(documentPrefix, contentType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Verification document bytes do not match the declared file type"
+    );
   }
 
   const requestRef = db.collection("verificationRequests").doc(uid);
