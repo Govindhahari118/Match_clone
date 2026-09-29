@@ -490,8 +490,8 @@ fun SettingsScreen(
             )
             SettingToggle(
                 icon = Icons.Filled.Notifications,
-                title = "Account & system",
-                subtitle = "Verification, safety, subscription and service updates.",
+                title = "Optional system updates",
+                subtitle = "Service and non-critical account updates. Security, safety and verification alerts remain enabled.",
                 checked = notificationPreferences.system,
                 onCheckedChange = { vm.setNotificationPreference("system", it) }
             )
