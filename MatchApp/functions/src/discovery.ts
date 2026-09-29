@@ -485,7 +485,15 @@ export const discoverProfiles = functions
 
     const profiles = rankedCandidates
       .slice(0, RETURN_LIMIT)
-      .map(({ doc }) => publicProfile(doc.id, doc.data() || {}, now));
+      .map(({ doc, preferredFit }) => {
+        const profile = publicProfile(doc.id, doc.data() || {}, now);
+        return preferredFit == null
+          ? profile
+          : {
+            ...profile,
+            pairPreferenceFit: Math.round(preferredFit * 1000) / 1000,
+          };
+      });
 
     const nextCursor = scan.docs.length === SCAN_LIMIT
       ? scan.docs[scan.docs.length - 1].id
