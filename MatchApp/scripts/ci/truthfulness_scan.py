@@ -6,6 +6,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCAN_ROOTS = [ROOT / "app" / "src" / "main", ROOT / "functions" / "src"]
+ANDROID_TEST_ROOT = ROOT / "app" / "src" / "androidTest"
 EXTENSIONS = {".kt", ".kts", ".java", ".ts", ".js", ".xml", ".json"}
 
 STUB_RULES = [
@@ -13,6 +14,13 @@ STUB_RULES = [
     ("NotImplementedError executable stub", re.compile(r"\bNotImplementedError\b")),
     ("UnsupportedOperationException executable stub", re.compile(r"\bUnsupportedOperationException\b")),
     ("Firebase fake-key bypass", re.compile(r"fake API keys|Bypassing Firebase", re.IGNORECASE)),
+]
+
+STALE_RELEASE_TEST_RULES = [
+    ("demo authentication in production-gate instrumentation", re.compile(r"signInAsDemo|demo[_ -]?user", re.IGNORECASE)),
+    ("stale hidden route asserted by production-gate instrumentation", re.compile(
+        r"drawer_(?:regions|circles|stories|family)|(?:regions|circles|stories|family)_screen"
+    )),
 ]
 
 I18N_LEGACY_RULES = [
@@ -86,6 +94,13 @@ UNSUPPORTED_APPEARANCE_PALETTE = re.compile(
 STALE_UNIVERSAL_THEME_NAME = re.compile(r"Matree Signature")
 
 
+def android_test_files():
+    if ANDROID_TEST_ROOT.exists():
+        for path in ANDROID_TEST_ROOT.rglob("*"):
+            if path.is_file() and path.suffix.lower() in {".kt", ".java"}:
+                yield path
+
+
 def source_files():
     for root in SCAN_ROOTS:
         if root.exists():
@@ -145,6 +160,14 @@ def main() -> int:
                     f"{path.relative_to(ROOT)}:{line_no}: stale universal theme name; "
                     f"use Matree Neutral: {line.strip()}"
                 )
+
+    for path in android_test_files():
+        for line_no, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            for label, pattern in STALE_RELEASE_TEST_RULES:
+                if pattern.search(line):
+                    findings.append(
+                        f"{path.relative_to(ROOT)}:{line_no}: stale release-test contract ({label}): {line.strip()}"
+                    )
 
     if findings:
         print("Production integrity scan FAILED")
