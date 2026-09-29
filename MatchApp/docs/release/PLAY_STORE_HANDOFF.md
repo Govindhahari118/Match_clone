@@ -31,8 +31,11 @@ Monitor Crashlytics/ANR, authentication, onboarding/profile writes, discovery, i
 ## External evidence gate
 
 Copy `docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json` to an operator-controlled
-release-evidence location, set `gitSha` to the exact candidate, and attach a concrete artifact or
-record reference for every gate. Do not commit credentials or sensitive test artifacts.
+release-evidence location, set `gitSha` to the exact candidate, keep
+`evidenceType=operator-controlled-production-evidence`, and attach a concrete artifact or
+record reference for every gate. Do not commit credentials or sensitive test artifacts. Template,
+placeholder and CI-synthetic provenance is rejected by the production gate unless the explicit
+CI-only self-test flag is supplied.
 
 Before Play production promotion:
 
