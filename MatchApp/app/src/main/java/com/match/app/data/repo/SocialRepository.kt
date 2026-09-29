@@ -31,10 +31,26 @@ class SocialRepository @Inject constructor(
     private val firestoreBlock: FirestoreBlockService,
     private val firestoreProfile: FirestoreProfileService
 ) {
+    suspend fun sendInterest(from: Long, to: Long, isSuperLike: Boolean = false): Boolean =
+        withContext(Dispatchers.IO) {
+            val mutual = syncInterestToFirestore(from, to, isLike = true, isSuperLike = isSuperLike)
+            if (!mutual && !remoteInterestExists(from, to)) {
+                throw IllegalStateException("Interest could not be sent")
+            }
+            if (!likeDao.isLiked(from, to)) {
+                likeDao.like(
+                    LikeEntity(
+                        fromUserId = from,
+                        toUserId = to,
+                        isSuperLike = isSuperLike
+                    )
+                )
+            }
+            mutual
+        }
+
     suspend fun like(from: Long, to: Long) = withContext(Dispatchers.IO) {
-        val synced = syncInterestToFirestore(from, to, isLike = true)
-        if (!synced && !remoteInterestExists(from, to)) throw IllegalStateException("Interest could not be sent")
-        likeDao.like(LikeEntity(fromUserId = from, toUserId = to))
+        sendInterest(from, to, isSuperLike = false)
     }
 
     suspend fun unlike(from: Long, to: Long) = withContext(Dispatchers.IO) {
@@ -174,12 +190,8 @@ class SocialRepository @Inject constructor(
     fun observeReceivedInterests(me: Long): Flow<List<Long>> = likeDao.observeReceivedInterests(me)
     fun observeSentInterests(me: Long): Flow<List<Long>> = likeDao.observeSentInterests(me)
 
-    suspend fun superLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) {
-        val isMutual = syncInterestToFirestore(from, to, isLike = true, isSuperLike = true)
-        if (!isMutual && !remoteInterestExists(from, to)) throw IllegalStateException("Super Interest could not be sent")
-        if (!likeDao.isLiked(from, to)) likeDao.like(LikeEntity(fromUserId = from, toUserId = to, isSuperLike = true))
-        isMutual
-    }
+    suspend fun superLike(from: Long, to: Long): Boolean =
+        sendInterest(from, to, isSuperLike = true)
 
     suspend fun isSuperLike(from: Long, to: Long): Boolean = withContext(Dispatchers.IO) { likeDao.isSuperLike(from, to) }
 
