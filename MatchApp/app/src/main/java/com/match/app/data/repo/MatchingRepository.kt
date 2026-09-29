@@ -68,8 +68,11 @@ class MatchingRepository @Inject constructor(
     suspend fun myCity(userId: Long): String = userDao.findById(userId)?.city ?: ""
     suspend fun myState(userId: Long): String = userDao.findById(userId)?.state ?: ""
 
-    suspend fun astrologyApplicable(userId: Long): Boolean =
-        ReligionCategory.fromReligion(userDao.findById(userId)?.religion.orEmpty()) == ReligionCategory.HINDU
+    suspend fun astrologyApplicable(userId: Long): Boolean {
+        val user = userDao.findById(userId) ?: return false
+        return ReligionCategory.fromReligion(user.religion) == ReligionCategory.HINDU &&
+            Astrology.isValid(user.rasi, user.nakshatra)
+    }
 
     suspend fun recommendations(
         seekerId: Long,
@@ -150,7 +153,7 @@ class MatchingRepository @Inject constructor(
                     }
                 }
                 .filter { !filter.willingToRelocate || it.willingToRelocate }
-                .map { candidate ->
+                .mapNotNull { candidate ->
                     val candidateProfile = candidate.toProfile(qMap)
                     val qScore = if (seekerProfile.selfVector != null && seekerProfile.partnerVector != null) {
                         qMap[candidate.id]?.let { q ->
@@ -160,16 +163,27 @@ class MatchingRepository @Inject constructor(
                                 Vec.decode(q.selfVector),
                                 Vec.decode(q.partnerVector)
                             )
-                        } ?: 0f
-                    } else 0f
+                        }
+                    } else null
+                    if (mode == MatchMode.QUESTIONNAIRE && qScore == null) {
+                        return@mapNotNull null
+                    }
+
                     val astro = if (
                         ReligionCategory.fromReligion(seekerEntity.religion) == ReligionCategory.HINDU &&
-                        ReligionCategory.fromReligion(candidate.religion) == ReligionCategory.HINDU &&
-                        seekerEntity.rasi.isNotBlank() && seekerEntity.nakshatra.isNotBlank() &&
-                        candidate.rasi.isNotBlank() && candidate.nakshatra.isNotBlank()
+                        ReligionCategory.fromReligion(candidate.religion) == ReligionCategory.HINDU
                     ) {
-                        Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
-                    } else 0f
+                        Astrology.scoreOrNull(
+                            seekerEntity.rasi,
+                            seekerEntity.nakshatra,
+                            candidate.rasi,
+                            candidate.nakshatra
+                        )
+                    } else null
+                    if (mode == MatchMode.ASTROLOGY && astro == null) {
+                        return@mapNotNull null
+                    }
+
                     val combined = MatchScorer.explain(
                         seekerProfile,
                         candidateProfile,
@@ -177,8 +191,8 @@ class MatchingRepository @Inject constructor(
                     )
                     MatchResult(
                         user = candidateProfile,
-                        questionnaireScore = qScore,
-                        astrologyScore = astro,
+                        questionnaireScore = qScore ?: 0f,
+                        astrologyScore = astro ?: 0f,
                         combinedScore = combined.percentage.toFloat() / 100f,
                         mode = mode,
                         formulaVersion = combined.formulaVersion,
@@ -191,8 +205,12 @@ class MatchingRepository @Inject constructor(
                         }
                     )
                 }
-                .filter { filter.minScore <= 0f || it.combinedScore >= filter.minScore }
-                .sortedByDescending { it.combinedScore }
+                .filter { filter.minScore <= 0f || it.primary() >= filter.minScore }
+                .filter {
+                    filter.minPoruthamScore <= 0 ||
+                        (it.astrologyScore * 100f).toInt() >= filter.minPoruthamScore
+                }
+                .sortedByDescending { it.primary() }
                 .take(200)
                 .toList()
         }
