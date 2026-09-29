@@ -248,3 +248,72 @@ export const onSensitivePreferencesConsentChanged = functions.firestore
     }
     await db.collection("partnerPreferences").doc(context.params.uid).delete();
   });
+
+
+/**
+ * Media-processing withdrawal cancels raw profile media that has not yet been approved. Already
+ * published profile media remains a user-visible profile asset and can be removed explicitly from
+ * the profile; withdrawal prevents new moderation submissions until consent is granted again.
+ */
+export const onMediaProcessingConsentChanged = functions.firestore
+  .document("consents/{uid}/items/media_processing")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (
+      after?.granted === true &&
+      after?.noticeVersion === currentConsentVersion("media_processing")
+    ) {
+      return;
+    }
+
+    const uid = context.params.uid;
+    const [photoCases, videoCases, videoState] = await Promise.all([
+      db.collection("photoModeration").where("uid", "==", uid).limit(100).get(),
+      db.collection("videoModeration").where("uid", "==", uid).limit(100).get(),
+      db.collection("profileVideoState").doc(uid).get(),
+    ]);
+
+    const pendingPaths = [
+      ...photoCases.docs
+        .filter((doc) => String(doc.data()?.status || "") === "PENDING")
+        .map((doc) => String(doc.data()?.storagePath || "")),
+      ...videoCases.docs
+        .filter((doc) => String(doc.data()?.status || "") === "PENDING")
+        .map((doc) => String(doc.data()?.storagePath || "")),
+    ].filter((path) =>
+      (path.startsWith(`photos/${uid}/`) || path.startsWith(`videos/${uid}/`)) &&
+      !path.includes("..")
+    );
+
+    await Promise.all(
+      [...new Set(pendingPaths)].map((path) =>
+        admin.storage().bucket().file(path).delete({ ignoreNotFound: true })
+      )
+    );
+
+    const updates: Promise<FirebaseFirestore.WriteResult>[] = [];
+    photoCases.docs
+      .filter((doc) => String(doc.data()?.status || "") === "PENDING")
+      .forEach((doc) => {
+        updates.push(doc.ref.set({
+          status: "CANCELLED_CONSENT_WITHDRAWN",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }));
+      });
+    videoCases.docs
+      .filter((doc) => String(doc.data()?.status || "") === "PENDING")
+      .forEach((doc) => {
+        updates.push(doc.ref.set({
+          status: "CANCELLED_CONSENT_WITHDRAWN",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }));
+      });
+    if (videoState.exists && String(videoState.data()?.status || "") === "PENDING") {
+      updates.push(videoState.ref.set({
+        status: "CANCELLED_CONSENT_WITHDRAWN",
+        storagePath: "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }));
+    }
+    await Promise.all(updates);
+  });
