@@ -52,7 +52,7 @@ export function requireOpsRole(
   return { uid, role: matched };
 }
 
-export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system";
+export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system" | "critical";
 
 type FcmDeviceToken = {
   deviceId: string;
@@ -139,6 +139,9 @@ export async function notificationPreferenceEnabled(
   uid: string,
   key: NotificationPreferenceKey
 ): Promise<boolean> {
+  // Security, verification and other account-safety alerts are transactional notices rather than
+  // optional engagement notifications and therefore cannot be disabled by a marketing/system toggle.
+  if (key === "critical") return true;
   const prefs = await db.collection("notificationPrefs").doc(uid).get();
   return prefs.data()?.[key] !== false;
 }
