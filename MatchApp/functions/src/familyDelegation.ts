@@ -101,6 +101,7 @@ export const createFamilyDelegateInvite = functions.https.onCall(async (data, co
 
   return {
     inviteToken: token,
+    inviteId: hash,
     expiresAtMillis: now + INVITE_TTL_MS,
     role,
     permissions,
@@ -182,6 +183,40 @@ export const acceptFamilyDelegateInvite = functions.https.onCall(async (data, co
   return { success: true, ...result };
 });
 
+export const cancelFamilyDelegateInvite = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const ownerUid = context.auth?.uid;
+  if (!ownerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const inviteId = typeof data?.inviteId === "string" ? data.inviteId.trim() : "";
+  if (!/^[a-f0-9]{64}$/.test(inviteId)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid family invite");
+  }
+
+  const inviteRef = db.collection("familyInvites").doc(inviteId);
+  await db.runTransaction(async (tx) => {
+    const invite = await tx.get(inviteRef);
+    if (!invite.exists || String(invite.data()?.ownerUid || "") !== ownerUid) {
+      throw new functions.https.HttpsError("not-found", "Family invite not found");
+    }
+    if (String(invite.data()?.status || "") !== "OPEN") return;
+
+    tx.update(inviteRef, {
+      status: "CANCELLED",
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.create(db.collection("familyAccessAudit").doc(), {
+      ownerUid,
+      actorUid: ownerUid,
+      action: "INVITE_CANCELLED",
+      inviteId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true };
+});
+
 export const revokeFamilyDelegate = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
   const ownerUid = context.auth?.uid;
@@ -215,10 +250,12 @@ export const listMyFamilyAccess = functions.https.onCall(async (_data, context) 
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
-  const [owned, delegated] = await Promise.all([
+  const [owned, delegated, inviteSnapshot] = await Promise.all([
     db.collection("familyDelegates").doc(uid).collection("members").get(),
     db.collectionGroup("members").where("delegateUid", "==", uid).get(),
+    db.collection("familyInvites").where("ownerUid", "==", uid).limit(50).get(),
   ]);
+  const now = Date.now();
   return {
     delegates: owned.docs.map((doc) => ({
       delegateUid: doc.id,
@@ -226,6 +263,22 @@ export const listMyFamilyAccess = functions.https.onCall(async (_data, context) 
       permissions: Array.isArray(doc.data().permissions) ? doc.data().permissions : [],
       active: doc.data().active === true,
     })),
+    pendingInvites: inviteSnapshot.docs
+      .filter((doc) => {
+        const value = doc.data();
+        const expiresAt = value.expiresAt instanceof admin.firestore.Timestamp
+          ? value.expiresAt.toMillis()
+          : 0;
+        return String(value.status || "") === "OPEN" && expiresAt > now;
+      })
+      .map((doc) => ({
+        inviteId: doc.id,
+        role: String(doc.data().role || ""),
+        permissions: Array.isArray(doc.data().permissions) ? doc.data().permissions : [],
+        expiresAtMillis: doc.data().expiresAt instanceof admin.firestore.Timestamp
+          ? doc.data().expiresAt.toMillis()
+          : 0,
+      })),
     managedProfiles: delegated.docs
       .filter((doc) => doc.data().active === true)
       .map((doc) => ({
