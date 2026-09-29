@@ -130,9 +130,13 @@ object Astrology {
         return (points / totalPossible).coerceIn(0f, 1f)
     }
 
-    /** Legacy convenience for non-production callers; invalid data remains explicitly neutral. */
+    /**
+     * Legacy convenience for callers that require a non-null number. Invalid catalogue data fails
+     * closed to zero; production compatibility code should prefer scoreOrNull so a missing
+     * astrology dimension can be omitted instead of fabricated as neutral.
+     */
     fun score(
         rasiA: String, nakshatraA: String,
         rasiB: String, nakshatraB: String
-    ): Float = scoreOrNull(rasiA, nakshatraA, rasiB, nakshatraB) ?: 0.5f
+    ): Float = scoreOrNull(rasiA, nakshatraA, rasiB, nakshatraB) ?: 0f
 }
