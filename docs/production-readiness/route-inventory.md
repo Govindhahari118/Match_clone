@@ -34,6 +34,7 @@
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
 | Recently joined | READY | Uses the same server-authorized discovery path with authoritative profile creation timestamps and normal privacy/block/reciprocal-preference checks. |
 | Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
+| Assisted matchmaking request | READY | Records a human-service callback/request with server status/cancellation and ops workflow. It does not purchase, activate or guarantee an RM service; pricing/service activation remain operator-confirmed. |
 | Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative government-ID statuses; production KYC/provider evidence required for provider-backed advanced identity methods. |
@@ -48,7 +49,7 @@
 The following source surfaces remain **HIDDEN/UNAVAILABLE** unless they are separately promoted after
 their end-to-end provider/data/entitlement contract passes the same Definition of Done:
 
-`AI Match Insights`, `Profile Analytics`, `Assisted Matchmaking`, `Background Check`,
+`AI Match Insights`, `Profile Analytics`, `Background Check`,
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
 `Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`, `Family tools`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
