@@ -27,6 +27,7 @@ export * from "./media";
 export * from "./calls";
 export * from "./dataExport";
 export * from "./assisted";
+export * from "./familyDelegation";
 export * from "./profilePrivacyMigration";
 
 export * from "./ops";
