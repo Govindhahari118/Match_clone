@@ -37,6 +37,8 @@
 | Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
 | Assisted matchmaking request | READY | Records a human-service callback/request with server status/cancellation and ops workflow. It does not purchase, activate or guarantee an RM service; pricing/service activation remain operator-confirmed. |
 | Profile analytics | READY | Authenticated callable derives all-time counts from real profile views, interests, matches, chats and shortlists; no synthetic ranks or demographic estimates. |
+| Match insights | READY | Browse real eligible recommendations with computed questionnaire/astrology signals only; no invented personality traits, relationship timelines or success predictions. |
+| Compatibility breakdown | READY | Per-profile view of the real versioned compatibility factors used by matching, with missing dimensions omitted/renormalized and astrology explicitly labeled beta. |
 | Safety Center | READY | Truthful guidance over real block/report/privacy/location/verification controls; no invented fraud statistics or unsupported encryption claims. |
 | Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
@@ -53,9 +55,9 @@
 The following source surfaces remain **HIDDEN/UNAVAILABLE** unless they are separately promoted after
 their end-to-end provider/data/entitlement contract passes the same Definition of Done:
 
-`AI Match Insights`, `Background Check`,
+`Background Check`,
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
-`Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`,
+`Counselling`, `Swipe Discovery`, `Live Events`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
 `Referral`, `Regions`, `Daily Rewards`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
 `Testimonials`, `Relationship Timeline`, and `Wedding Planner`.
