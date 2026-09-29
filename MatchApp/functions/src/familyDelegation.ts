@@ -198,7 +198,7 @@ export const listMyFamilyAccess = functions.https.onCall(async (_data, context) 
 
   const [owned, delegated] = await Promise.all([
     db.collection("familyDelegates").doc(uid).collection("members").get(),
-    db.collectionGroup("members").where("delegateUid", "==", uid).where("active", "==", true).get(),
+    db.collectionGroup("members").where("delegateUid", "==", uid).get(),
   ]);
   return {
     delegates: owned.docs.map((doc) => ({
@@ -207,11 +207,13 @@ export const listMyFamilyAccess = functions.https.onCall(async (_data, context) 
       permissions: Array.isArray(doc.data().permissions) ? doc.data().permissions : [],
       active: doc.data().active === true,
     })),
-    managedProfiles: delegated.docs.map((doc) => ({
-      ownerUid: String(doc.data().ownerUid || ""),
-      role: String(doc.data().role || ""),
-      permissions: Array.isArray(doc.data().permissions) ? doc.data().permissions : [],
-    })),
+    managedProfiles: delegated.docs
+      .filter((doc) => doc.data().active === true)
+      .map((doc) => ({
+        ownerUid: String(doc.data().ownerUid || ""),
+        role: String(doc.data().role || ""),
+        permissions: Array.isArray(doc.data().permissions) ? doc.data().permissions : [],
+      })),
   };
 });
 
