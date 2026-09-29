@@ -111,7 +111,7 @@ export const revokeAllSessions = functions.https.onCall(async (_data, context) =
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  if (deviceSnapshot.size > 0 || eventRef) await batch.commit();
+  await batch.commit();
   await admin.auth().revokeRefreshTokens(uid);
 
   return { success: true, revokedDeviceCount: deviceSnapshot.size };
