@@ -94,16 +94,10 @@ def main() -> int:
         "KEY_ENABLE_KUNDALI",
     ]:
         require(
-            re.search(rf"{flag}\\s+to\\s+false\\b", remote_config) is not None,
+            re.search(rf"{flag}\s+to\s+false\b", remote_config) is not None,
             f"{flag} must remain fail-closed by default until its production gate passes",
             failures,
         )
-
-    remote_config = text(APP / "src/main/java/com/match/app/core/config/RemoteConfigManager.kt")
-    for safe_off in ["KEY_ENABLE_NEARBY", "KEY_ENABLE_KUNDALI", "KEY_ENABLE_NRI_FEATURES",
-                     "KEY_SHOW_VIDEO_PROFILES", "KEY_ENABLE_VOICE_CALLS"]:
-        require(re.search(rf"{safe_off}\s+to\s+false", remote_config) is not None,
-                f"{safe_off} must remain false by default for release builds", failures)
 
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
