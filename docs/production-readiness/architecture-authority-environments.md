@@ -67,6 +67,8 @@ Optional features default to OFF unless the trusted project enables them:
 - NRI features
 - AI icebreakers
 - daily rewards
+- Nearby
+- Kundali
 
 Operational keys also include maintenance mode/message, forced/recommended update version,
 free-message limit, daily-like limit, Boost duration, photo limits and minimum photos for Boost.
