@@ -50,6 +50,7 @@ import com.match.app.ui.nearby.NearbyMatchesScreen
 import com.match.app.ui.notifications.NotificationsScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
+import com.match.app.ui.preferences.PartnerPreferencesScreen
 import com.match.app.ui.profile.ProfileScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
 import com.match.app.ui.settings.SettingsScreen
@@ -87,6 +88,7 @@ object MainRoutes {
     const val REFUNDS = "refunds"
     const val BIODATA = "biodata"
     const val PRIVACY_DASH = "privacy_dash"
+    const val PARTNER_PREFERENCES = "partner_preferences"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
@@ -406,8 +408,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     SettingsScreen(
                         onBack = { nav.popBackStack() },
                         onGoLanguage = { nav.navigate(MainRoutes.LANGUAGE_SELECT) },
+                        onGoPartnerPreferences = { nav.navigate(MainRoutes.PARTNER_PREFERENCES) },
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
+                }
+                composable(MainRoutes.PARTNER_PREFERENCES) {
+                    PartnerPreferencesScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
