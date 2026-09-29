@@ -575,3 +575,69 @@ export const onProfileVideoDeleted = functions.storage.object().onDelete(async (
     }
   });
 });
+
+
+/**
+ * Defense-in-depth for direct Firebase Storage chat uploads. Storage Rules enforce participant,
+ * filename, metadata and MIME contracts, while this trigger verifies the actual file signature.
+ * A malicious client that lies about bytes is quarantined by deleting the object and recording a
+ * private risk signal; no public/profile state is changed automatically.
+ */
+export const onChatMediaUploaded = functions.storage.object().onFinalize(async (object) => {
+  const storagePath = object.name || "";
+  const match = storagePath.match(
+    /^chat-media\/([a-f0-9]{64})\/([A-Za-z0-9_-]{16,128})\.(jpg|m4a)$/
+  );
+  if (!match) return;
+
+  const threadId = match[1];
+  const extension = match[3];
+  const metadata = object.metadata || {};
+  const senderUid = String(metadata.senderUid || "");
+  const recipientUid = String(metadata.recipientUid || "");
+  const kind = String(metadata.kind || "");
+  const declaredThread = String(metadata.threadId || "");
+  const contentType = String(object.contentType || "").toLowerCase();
+  const expectedMime = extension === "jpg" ? "image/jpeg" : "audio/mp4";
+  const expectedKind = extension === "jpg" ? "image" : "voice";
+  const file = admin.storage().bucket(object.bucket).file(storagePath);
+
+  let valid = Boolean(
+    senderUid &&
+    recipientUid &&
+    senderUid !== recipientUid &&
+    declaredThread === threadId &&
+    kind === expectedKind &&
+    contentType === expectedMime
+  );
+
+  if (valid) {
+    try {
+      const [prefix] = await file.download({ start: 0, end: 31 });
+      valid = fileSignatureMatchesMime(prefix, contentType);
+    } catch (error) {
+      functions.logger.warn("Chat media signature read failed", {
+        storagePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      valid = false;
+    }
+  }
+
+  if (valid) return;
+
+  await file.delete({ ignoreNotFound: true });
+  if (senderUid) {
+    await db.collection("riskSignals").doc(senderUid).set({
+      invalidChatMediaSignalCount: admin.firestore.FieldValue.increment(1),
+      lastInvalidChatMediaSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+  functions.logger.warn("Invalid chat media quarantined", {
+    storagePath,
+    senderUid: senderUid || null,
+    contentType,
+    kind,
+  });
+});
