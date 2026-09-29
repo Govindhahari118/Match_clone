@@ -354,6 +354,13 @@
         `Profile photo • ${photo.uid}`,
         `${photo.contentType || ""} • ${Number(photo.size || 0)} bytes • ${formatTime(photo.createdAtMillis)}`
       );
+      if (photo.duplicateAcrossAccounts === true) {
+        row.appendChild(text(
+          "p",
+          "Internal warning: exact uploaded bytes were previously seen on another account. Review ownership/context before approval.",
+          "error"
+        ));
+      }
       const reason = input("Moderation reason (required)");
       const actions = document.createElement("div");
       actions.className = "row-actions";
