@@ -22,6 +22,7 @@ import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AccountDeviceSession
 import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
@@ -99,6 +100,11 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
+    private val _devices = MutableStateFlow<List<AccountDeviceSession>>(emptyList())
+    val devices: StateFlow<List<AccountDeviceSession>> = _devices.asStateFlow()
+    private val _sessionBusy = MutableStateFlow(false)
+    val sessionBusy: StateFlow<Boolean> = _sessionBusy.asStateFlow()
+
     private val _profilePaused = MutableStateFlow(false)
     val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
     private val _lifecycleBusy = MutableStateFlow(false)
@@ -108,6 +114,23 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _profilePaused.value = authRepo.getMatrimonyPaused()
         }
+        refreshDevices()
+    }
+
+    fun refreshDevices() = viewModelScope.launch {
+        authRepo.listMyDevices()
+            .onSuccess { _devices.value = it }
+            .onFailure { _searchMessage.value = "Could not load signed-in devices." }
+    }
+
+    fun signOutAllDevices() = viewModelScope.launch {
+        if (_sessionBusy.value) return@launch
+        _sessionBusy.value = true
+        authRepo.signOutAllDevices()
+            .onFailure {
+                _sessionBusy.value = false
+                _searchMessage.value = "Could not revoke all sessions. Please retry."
+            }
     }
 
     fun useAutomaticTheme() = updateTheme(ThemePreference.AUTOMATIC)
@@ -212,6 +235,8 @@ fun SettingsScreen(
     val searchMessage by vm.searchMessage.collectAsState()
     val profilePaused by vm.profilePaused.collectAsState()
     val lifecycleBusy by vm.lifecycleBusy.collectAsState()
+    val devices by vm.devices.collectAsState()
+    val sessionBusy by vm.sessionBusy.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
@@ -490,6 +515,46 @@ fun SettingsScreen(
                 checked = biometric,
                 onCheckedChange = vm::setBiometricLock
             )
+
+            MatreeInfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Devices, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Signed-in devices", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (devices.isEmpty()) "No registered push installations found."
+                            else "${devices.size} registered installation${if (devices.size == 1) "" else "s"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        devices.take(3).forEach { device ->
+                            Text(
+                                listOf(device.platform, device.appVersion)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" • ")
+                                    .ifBlank { "Registered device" },
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    IconButton(onClick = vm::refreshDevices) {
+                        Icon(Icons.Filled.Refresh, "Refresh devices")
+                    }
+                }
+                MatreeSecondaryButton(
+                    text = if (sessionBusy) "Revoking sessions…" else "Sign out all devices",
+                    onClick = vm::signOutAllDevices,
+                    enabled = !sessionBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Filled.Logout
+                )
+                Text(
+                    "This revokes Firebase refresh tokens and removes registered push installations, including this device.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             HorizontalDivider()
             Text("Matrimony visibility", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
