@@ -37,6 +37,8 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Production truthfulness scan
         run: python3 scripts/ci/truthfulness_scan.py
+      - name: Screen classification gate
+        run: python3 scripts/ci/screen_classification_scan.py
       - name: Release candidate repository scan
         run: python3 scripts/ci/release_candidate_scan.py
       - name: Validate external production gate logic
