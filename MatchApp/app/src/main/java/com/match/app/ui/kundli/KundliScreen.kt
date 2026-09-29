@@ -122,7 +122,12 @@ class KundliViewModel @Inject constructor(
             kundliRepository.getSharedHoroscope(target.firebaseUid)
                 .onSuccess { shared ->
                     val score = if (shared.available) {
-                        Astrology.score(shared.myRasi, shared.myNakshatra, shared.targetRasi, shared.targetNakshatra)
+                        Astrology.scoreOrNull(
+                            shared.myRasi,
+                            shared.myNakshatra,
+                            shared.targetRasi,
+                            shared.targetNakshatra
+                        )
                     } else null
                     _ui.value = KundliUi(
                         loading = false,
@@ -140,7 +145,11 @@ class KundliViewModel @Inject constructor(
                             "not_applicable" -> "Kundali comparison is shown only when it is applicable to both members."
                             "viewer_incomplete" -> "Add your Rasi and Nakshatra before comparing."
                             "target_incomplete" -> "This member has not added enough horoscope information for comparison."
-                            else -> if (shared.available) null else "Horoscope compatibility is not available for this profile."
+                            else -> when {
+                                !shared.available -> "Horoscope compatibility is not available for this profile."
+                                score == null -> "Horoscope information is outside the supported Rasi/Nakshatra catalogue."
+                                else -> null
+                            }
                         }
                     )
                 }
