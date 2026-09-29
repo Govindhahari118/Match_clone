@@ -179,6 +179,64 @@ def main() -> int:
                 if pattern.search(data):
                     failures.append(f"{p.relative_to(ROOT)}: {label}")
 
+    # Hidden/prototype source must also remain truthful. A future navigation change must not
+    # resurrect phantom provider callables or bundled fake member/event inventory.
+    app_source = APP / "src/main/java"
+    obsolete_callable_names = [
+        "requestBackgroundCheckByProfileId",
+        "requestBackgroundCheck",
+        "requestSecureCall",
+        "respondToSecureCall",
+        "bookCounselling",
+        "getRewardsState",
+        "claimDailyReward",
+        "redeemReward",
+        "registerForEvent",
+        "joinCommunity",
+    ]
+    if app_source.exists():
+        for source in app_source.rglob("*.kt"):
+            data = text(source)
+            for callable_name in obsolete_callable_names:
+                require(
+                    f'getHttpsCallable("{callable_name}")' not in data,
+                    f"{source.relative_to(ROOT)}: phantom callable {callable_name} must not ship",
+                    failures,
+                )
+
+    prototype_markers = [
+        (
+            APP / "src/main/java/com/match/app/ui/events/LiveEventsScreen.kt",
+            ["UPCOMING_EVENTS = listOf(", "attendees:", "maxAttendees:"],
+        ),
+        (
+            APP / "src/main/java/com/match/app/ui/circles/CirclesScreen.kt",
+            ["BUNDLED_CIRCLES", "100% phone-verified", "Premium Members"],
+        ),
+        (
+            APP / "src/main/java/com/match/app/ui/regions/RegionsScreen.kt",
+            ["FALLBACK_PRESETS"],
+        ),
+        (
+            APP / "src/main/java/com/match/app/ui/timeline/RelationshipTimelineScreen.kt",
+            ["First Call", "First In-Person Meet", "15 Mar 2026"],
+        ),
+        (
+            APP / "src/main/java/com/match/app/ui/biogen/BioGeneratorScreen.kt",
+            ['mutableStateOf("Priya")', "AI Bio Generator"],
+        ),
+    ]
+    for source, markers in prototype_markers:
+        if not source.exists():
+            continue
+        data = text(source)
+        for marker in markers:
+            require(
+                marker not in data,
+                f"{source.relative_to(ROOT)}: fabricated/prototype marker must not return: {marker}",
+                failures,
+            )
+
     nri_screen = APP / "src/main/java/com/match/app/ui/nri/NRIMatchScreen.kt"
     if nri_screen.exists():
         nri = text(nri_screen)
