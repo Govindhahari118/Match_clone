@@ -8,7 +8,11 @@ function requestId(req: functions.https.Request): string {
   return crypto.randomUUID();
 }
 
-function baseHeaders(res: functions.Response, id: string): void {
+type HeaderResponse = {
+  set(field: string, value: string): unknown;
+};
+
+function baseHeaders(res: HeaderResponse, id: string): void {
   res.set("Cache-Control", "no-store");
   res.set("X-Request-Id", id);
 }
