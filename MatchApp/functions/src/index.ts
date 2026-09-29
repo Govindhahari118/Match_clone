@@ -11,6 +11,8 @@ export * from "./interests";
 export * from "./playBilling";
 export * from "./safety";
 export * from "./verification";
+export * from "./consent";
+export * from "./trust";
 export * from "./discovery";
 export * from "./location";
 export * from "./horoscope";
