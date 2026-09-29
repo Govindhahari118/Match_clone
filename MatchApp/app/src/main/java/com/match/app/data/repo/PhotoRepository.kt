@@ -21,7 +21,8 @@ class PhotoRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: PhotoDao,
     private val userDao: UserDao,
-    private val storageService: FirebaseStorageService
+    private val storageService: FirebaseStorageService,
+    private val consentRepository: ConsentRepository
 ) {
     private val functions = FirebaseFunctions.getInstance()
     fun observe(userId: Long): Flow<List<PhotoEntity>> = dao.observeForUser(userId)
@@ -31,6 +32,7 @@ class PhotoRepository @Inject constructor(
         runCatching {
             val user = userDao.findById(userId) ?: error("User not found")
             val firebaseUid = user.firebaseUid.takeIf { it.isNotBlank() } ?: error("Profile is not linked to Firebase")
+            consentRepository.set("media_processing", true)
             val remoteUrl = storageService.uploadPhoto(firebaseUid, src).getOrThrow()
             functions.getHttpsCallable("submitProfilePhoto")
                 .call(mapOf("storagePath" to remoteUrl))
