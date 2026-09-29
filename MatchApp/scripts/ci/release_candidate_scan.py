@@ -143,6 +143,25 @@ def main() -> int:
                     f"NRI screen must not contain synthetic member inventory marker: {marker}",
                     failures)
 
+    verification_backend = ROOT / "functions/src/verification.ts"
+    verification_policy = ROOT / "functions/src/verificationLevelPolicy.ts"
+    ops_console = ROOT / "ops-console/app.js"
+    if verification_backend.exists() and verification_policy.exists():
+        verification = text(verification_backend)
+        policy = text(verification_policy)
+        require("GENERIC_GOVERNMENT_ID_LEVEL = 2" in policy,
+                "generic government-ID evidence must remain Level 2 only", failures)
+        require("verificationLevel: evidenceLevel" in verification,
+                "verification approval must derive level from backend evidence", failures)
+        require("newLevel >= 2" not in verification and "newLevel > 5" not in verification,
+                "generic ID review must not restore reviewer-selected higher verification levels",
+                failures)
+    if ops_console.exists():
+        ops = text(ops_console)
+        require('select(["2", "3", "4", "5"]' not in ops,
+                "ops console must not offer manual verification-level escalation",
+                failures)
+
     calls_backend = ROOT / "functions/src/calls.ts"
     if calls_backend.exists():
         calls = text(calls_backend)
