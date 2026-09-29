@@ -78,6 +78,9 @@ data class VerificationOptionsUi(
     val genericDocumentTypes: List<String> = emptyList(),
     val identityConsentVersion: String = "",
     val aadhaarOfflineAvailable: Boolean = false,
+    val selfieVerificationAvailable: Boolean = false,
+    val livenessAvailable: Boolean = false,
+    val faceSimilarityAvailable: Boolean = false,
     val loaded: Boolean = false
 )
 
@@ -158,6 +161,11 @@ class VerificationViewModel @Inject constructor(
                         .orEmpty(),
                     identityConsentVersion = data["identityConsentVersion"] as? String ?: "",
                     aadhaarOfflineAvailable = data["aadhaarOfflineAvailable"] as? Boolean ?: false,
+                    selfieVerificationAvailable =
+                        data["selfieVerificationAvailable"] as? Boolean ?: false,
+                    livenessAvailable = data["livenessAvailable"] as? Boolean ?: false,
+                    faceSimilarityAvailable =
+                        data["faceSimilarityAvailable"] as? Boolean ?: false,
                     loaded = true
                 )
             }.onSuccess {
@@ -369,6 +377,18 @@ fun VerificationScreen(
                         message = "Aadhaar is not accepted as a generic card/image upload. It will only appear after a compliant registered offline-verification provider flow is deployed. Use another supported ID for now.",
                         icon = Icons.Filled.PrivacyTip,
                         tone = MatreeStatusTone.WARNING
+                    )
+                }
+
+                if (
+                    !options.selfieVerificationAvailable ||
+                    !options.livenessAvailable ||
+                    !options.faceSimilarityAvailable
+                ) {
+                    MatreeInlineNotice(
+                        message = "Selfie verification, liveness and face similarity are not presented as active checks until a validated biometric provider adapter is deployed and server-verified. Government-ID review remains available independently.",
+                        icon = Icons.Filled.Face,
+                        tone = MatreeStatusTone.NEUTRAL
                     )
                 }
 
