@@ -143,6 +143,13 @@ def main() -> int:
                     f"NRI screen must not contain synthetic member inventory marker: {marker}",
                     failures)
 
+    calls_backend = ROOT / "functions/src/calls.ts"
+    if calls_backend.exists():
+        calls = text(calls_backend)
+        require("const COMMUNICATION_PROVIDER_IMPLEMENTED = false;" in calls,
+                "secure calls must remain fail-closed until the audited provider adapter replaces the placeholder contract",
+                failures)
+
     family_screen = APP / "src/main/java/com/match/app/ui/family/FamilyScreen.kt"
     if family_screen.exists():
         family = text(family_screen)
