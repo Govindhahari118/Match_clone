@@ -169,6 +169,7 @@ export const listPendingPhotoModeration = functions.https.onCall(async (data, co
         storagePath: String(value.storagePath || ""),
         contentType: String(value.contentType || ""),
         size: Number(value.size || 0),
+        duplicateAcrossAccounts: value.duplicateAcrossAccounts === true,
         createdAtMillis: value.createdAt instanceof admin.firestore.Timestamp
           ? value.createdAt.toMillis()
           : null,
@@ -235,7 +236,10 @@ export const reviewProfilePhoto = functions.https.onCall(async (data, context) =
       action: "PROFILE_PHOTO_REVIEWED",
       targetCollection: "photoModeration",
       targetId: moderationId,
-      before: { status: "PENDING" },
+      before: {
+        status: "PENDING",
+        duplicateAcrossAccounts: current.duplicateAcrossAccounts === true,
+      },
       after: { status: decision },
       reason,
       ownerUid,
@@ -344,6 +348,7 @@ export const getPhotoModerationReviewCase = functions.https.onCall(async (data, 
     uid: ownerUid,
     storagePath,
     documentUrl,
+    duplicateAcrossAccounts: value.duplicateAcrossAccounts === true,
     expiresAtMillis,
   };
 });
