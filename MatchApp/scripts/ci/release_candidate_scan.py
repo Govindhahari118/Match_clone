@@ -143,6 +143,21 @@ def main() -> int:
                     f"NRI screen must not contain synthetic member inventory marker: {marker}",
                     failures)
 
+    family_screen = APP / "src/main/java/com/match/app/ui/family/FamilyScreen.kt"
+    if family_screen.exists():
+        family = text(family_screen)
+        for marker in [
+            'familyType: String = "Nuclear"',
+            'familyStatus: String = "Middle Class"',
+            'familyValues: String = "Moderate"',
+            'ifBlank { "Nuclear" }',
+            'ifBlank { "Middle Class" }',
+            'ifBlank { "Moderate" }',
+        ]:
+            require(marker not in family,
+                    f"family profile must not fabricate an unspecified attribute: {marker}",
+                    failures)
+
     photo_editor = APP / "src/main/java/com/match/app/ui/photoeditor/PhotoEditorScreen.kt"
     if photo_editor.exists():
         photo = text(photo_editor)
