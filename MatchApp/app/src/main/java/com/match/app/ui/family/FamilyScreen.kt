@@ -33,7 +33,7 @@ data class FamilyInfo(
     val siblings: Int = 0,
     val familyType: String = "",
     val familyStatus: String = "",
-    val familyValues: String = ""
+    val familyValues: String = "",
     val nativePlace: String = "",
     val gotra: String = "",
     val aboutFamily: String = ""
@@ -49,7 +49,7 @@ class FamilyViewModel @Inject constructor(
     val isSaved = MutableStateFlow(false)
 
     init {
-        // In a full implementation, load from DB. Here we pre-fill with defaults.
+        // Load the member's current persisted profile values; missing attributes remain unspecified.
         viewModelScope.launch {
             val uid = session.userId.first() ?: return@launch
             val p = auth.currentProfile(uid) ?: return@launch
