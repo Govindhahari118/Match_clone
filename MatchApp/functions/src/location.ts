@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { requireActiveConsent } from "./consent";
-import { db, requireAppCheck } from "./shared";
+import { db, requireAppCheck, requireProductionFeature } from "./shared";
 import {
   nearbyAccountIsActive,
   nearbyAccountIsDiscoverable,
@@ -168,6 +168,7 @@ export const getNearbyStatus = functions.https.onCall(async (_data, context) => 
 
 export const updateMyLocation = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
+  requireProductionFeature("nearby");
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
   await requireActiveConsent(uid, "location");
@@ -204,6 +205,7 @@ export const nearbyProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
+    requireProductionFeature("nearby");
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
     await requireActiveConsent(uid, "location");
