@@ -20,6 +20,7 @@ export * from "./presence";
 export * from "./identity";
 export * from "./savedSearches";
 export * from "./partnerPreferences";
+export * from "./recommendationFeedback";
 export * from "./analytics";
 export * from "./health";
 export * from "./media";
