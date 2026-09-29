@@ -125,7 +125,7 @@ Nearby is foreground-only and should remain opt-in.
 - [ ] Blocking immediately prevents discovery/interest/chat in both directions.
 - [ ] Chat availability is derived from the server-authoritative mutual match state.
 - [ ] Text/image/voice messages synchronize across devices and retries do not create duplicate remote messages.
-- [ ] Remove or debug-gate any remaining demo seeds/fake activity before production.
+- [x] Production source contains no demo/seed account authority or bundled fake member/event inventory; release CI rejects reintroduction.
 
 ## 11. Notifications
 
