@@ -54,6 +54,7 @@ import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
 import com.match.app.ui.preferences.PartnerPreferencesScreen
 import com.match.app.ui.profile.ProfileScreen
+import com.match.app.ui.recentlyjoined.RecentlyJoinedScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
 import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
@@ -71,6 +72,7 @@ object MainRoutes {
     const val MATCHES = "matches"
     const val NEARBY = "nearby"
     const val NRI = "nri"
+    const val RECENTLY_JOINED = "recently_joined"
     const val INTERESTS = "interests"
     const val SHORTLISTS = "shortlists"
     const val CHAT_LIST = "chat_list"
@@ -157,6 +159,7 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.MATCHES, "Discover", "Browse compatible profiles", Icons.Filled.Search),
             if (nearbyEnabled) DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn) else null,
             if (nriEnabled) DrawerItem(MainRoutes.NRI, "NRI discovery", "Eligible members living abroad", Icons.Filled.Public) else null,
+            DrawerItem(MainRoutes.RECENTLY_JOINED, "Recently joined", "Eligible members from the last 30 days", Icons.Filled.FiberNew),
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -392,6 +395,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     } else {
                         OptionalFeatureUnavailable("NRI discovery", onBack = { nav.popBackStack() })
                     }
+                }
+                composable(MainRoutes.RECENTLY_JOINED) {
+                    RecentlyJoinedScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
                 }
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
