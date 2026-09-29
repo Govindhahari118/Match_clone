@@ -255,6 +255,36 @@ async function deleteCollection(path: string): Promise<number> {
   return deleteQuery(db.collection(path));
 }
 
+async function removeUidFromPhotoFingerprints(uid: string): Promise<void> {
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await db.collection("photoFingerprints")
+      .where("owners", "array-contains", uid)
+      .limit(DELETE_BATCH_SIZE)
+      .get();
+    if (snapshot.empty) break;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      const owners = Array.isArray(doc.data()?.owners)
+        ? doc.data()?.owners.filter((value: unknown): value is string =>
+          typeof value === "string" && value !== uid)
+        : [];
+      if (owners.length === 0) {
+        batch.delete(doc.ref);
+      } else {
+        batch.update(doc.ref, {
+          owners,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    });
+    await batch.commit();
+    hasMore = snapshot.size === DELETE_BATCH_SIZE;
+  }
+}
+
+
 async function deleteFcmDevicesForUser(uid: string): Promise<void> {
   const devices = db.collection("fcmTokens").doc(uid).collection("devices");
   let hasMore = true;
@@ -392,6 +422,18 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("backgroundChecks").where("targetUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
+        await deleteQuery(db.collection("supportTickets").where("uid", "==", uid));
+        await deleteQuery(db.collection("profileReports").where("reporterUid", "==", uid));
+        await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
+        await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
+        await deleteQuery(
+          db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
+        );
+        await deleteQuery(
+          db.collection("recommendationImpressionBatches")
+            .where("targetUids", "array-contains", uid)
+        );
       });
 
       await runDeletionPhase(requestRef, completed, "OWNER_SCOPED_DATA", async () => {
@@ -408,6 +450,14 @@ export const deleteUserAccount = functions
         await deleteCollection(`subscriptions/${uid}/usage`);
         await deleteCollection(`profileAnalytics/${uid}/weekly`);
         await deleteCollection(`sessions/${uid}/devices`);
+        await deleteCollection(`riskActivity/${uid}/days`);
+        await deleteCollection(`recommendationFeedback/${uid}/targets`);
+        await deleteQuery(
+          db.collectionGroup("targets").where("targetUid", "==", uid)
+        );
+        await deleteCollection(`consents/${uid}/items`);
+        await deleteCollection(`consentLedger/${uid}/events`);
+        await removeUidFromPhotoFingerprints(uid);
         await deleteFcmDevicesForUser(uid);
       });
 
@@ -443,6 +493,13 @@ export const deleteUserAccount = functions
           db.collection("notificationPrefs").doc(uid),
           db.collection("appearancePrefs").doc(uid),
           db.collection("partnerPreferences").doc(uid),
+          db.collection("riskActivity").doc(uid),
+          db.collection("recommendationFeedback").doc(uid),
+          db.collection("consents").doc(uid),
+          db.collection("consentLedger").doc(uid),
+          db.collection("riskSignals").doc(uid),
+          db.collection("riskAssessments").doc(uid),
+          db.collection("accountEnforcements").doc(uid),
           db.collection("verifications").doc(uid),
           db.collection("verificationRequests").doc(uid),
           db.collection("rewards").doc(uid),
