@@ -293,7 +293,7 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
   requireOpsRole(context, ["support", "moderator", "payment_ops", "kyc_reviewer", "ops_admin"]);
   const now = Date.now();
 
-  const [tickets, reports, verifications] = await Promise.all([
+  const [tickets, reports, verifications, photoModeration, videoModeration] = await Promise.all([
     db.collection("supportTickets")
       .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "ESCALATED"])
       .limit(1000)
@@ -304,6 +304,14 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
       .get(),
     db.collection("verificationRequests")
       .where("status", "==", "pending")
+      .limit(1000)
+      .get(),
+    db.collection("photoModeration")
+      .where("status", "==", "PENDING")
+      .limit(1000)
+      .get(),
+    db.collection("videoModeration")
+      .where("status", "==", "PENDING")
       .limit(1000)
       .get(),
   ]);
@@ -328,7 +336,14 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
     support: summarize(tickets.docs),
     moderation: summarize(reports.docs),
     verification: summarize(verifications.docs),
-    truncated: tickets.size >= 1000 || reports.size >= 1000 || verifications.size >= 1000,
+    photoModeration: summarize(photoModeration.docs),
+    videoModeration: summarize(videoModeration.docs),
+    truncated:
+      tickets.size >= 1000 ||
+      reports.size >= 1000 ||
+      verifications.size >= 1000 ||
+      photoModeration.size >= 1000 ||
+      videoModeration.size >= 1000,
   };
 });
 
