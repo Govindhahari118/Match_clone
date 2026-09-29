@@ -120,25 +120,25 @@ fun SecondMarriageScreen(
 
             // ── Why Choose Second Marriage Section ───────────────────────
             item {
-                Text("Why Match for Second Marriage?",
+                Text("Second-marriage discovery",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    WhyCard(Icons.Filled.Verified, "Verified Profiles",
-                        "All members verified — real people, honest journeys",
+                    WhyCard(Icons.Filled.Verified, "Current Results",
+                        "Profiles are returned through the same server-authorized discovery and privacy checks as Discover.",
                         Color(0xFF1565C0), Modifier.weight(1f))
-                    WhyCard(Icons.Filled.PrivacyTip, "100% Private",
-                        "Your second marriage search remains completely confidential",
+                    WhyCard(Icons.Filled.PrivacyTip, "Privacy Controls",
+                        "Profile visibility, blocking and discovery privacy follow the same server-enforced controls used elsewhere in Matree.",
                         Color(0xFF2E7D32), Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    WhyCard(Icons.Filled.FamilyRestroom, "Family Friendly",
-                        "Profiles include children status, family situation, and values",
+                    WhyCard(Icons.Filled.FamilyRestroom, "Family Context",
+                        "Where members choose to provide them, family and children fields can help with compatibility discussions.",
                         Color(0xFF8B1A1A), Modifier.weight(1f))
-                    WhyCard(Icons.Filled.SupportAgent, "Expert Support",
-                        "Dedicated counsellors to guide your journey with sensitivity",
+                    WhyCard(Icons.Filled.SupportAgent, "Support Resources",
+                        "Help and support are available through Matree's current support channels; counselling is not advertised unless a real provider is enabled.",
                         Color(0xFF6A1B9A), Modifier.weight(1f))
                 }
             }
