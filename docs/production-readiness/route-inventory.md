@@ -62,6 +62,15 @@ navigation merely because a screen renders. Provider-backed optional callables f
 feature bundle/background-check prototype are also removed from the deployed Functions export
 surface; promotion requires a new audited backend/provider contract, not just re-enabling a route.
 
+## Exhaustive screen classification
+
+The route table above describes launch navigation. The complete Android screen inventory is maintained
+in `docs/production-readiness/screen-classification.json`. Production CI discovers every
+`app/src/main/**/**Screen.kt` and fails if a screen is unclassified, if a STUB/UNSAFE/POST_LAUNCH
+screen becomes routed, or if a flagged BETA route loses its fail-closed Remote Config default.
+This makes source presence non-authoritative: adding a screen file cannot silently make it a launch
+feature.
+
 ## Deep-link exposure
 
 Production currently accepts the documented `matrimonyconnect://` internal scheme for typed,
