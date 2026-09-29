@@ -17,7 +17,7 @@ import kotlin.math.abs
  */
 object MatchScorer {
 
-    const val FORMULA_VERSION = "match-v2-applicability"
+    const val FORMULA_VERSION = "match-v3-bilateral-preferences"
 
     data class Factor(
         val key: String,
@@ -34,23 +34,31 @@ object MatchScorer {
 
     fun calculate(me: UserProfile, peer: UserProfile): Int = explain(me, peer).percentage
 
-    fun explain(me: UserProfile, peer: UserProfile): Result {
+    fun explain(
+        me: UserProfile,
+        peer: UserProfile,
+        bilateralPreferenceFit: Float? = null
+    ): Result {
         val factors = mutableListOf<Factor>()
 
+        bilateralPreferenceFit?.let {
+            factors += Factor("bilateral_preferences", it.coerceIn(0f, 1f), 0.35f)
+        }
+
         questionnaireScore(me, peer)?.let {
-            factors += Factor("questionnaire", it, 0.40f)
+            factors += Factor("questionnaire", it, 0.25f)
         }
 
         if (astrologyApplicable(me, peer)) {
             factors += Factor(
                 "astrology",
                 Astrology.score(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra),
-                0.30f
+                0.15f
             )
         }
 
         demographicsScore(me, peer)?.let {
-            factors += Factor("demographics_lifestyle", it, 0.20f)
+            factors += Factor("demographics_lifestyle", it, 0.15f)
         }
 
         val trust = (
