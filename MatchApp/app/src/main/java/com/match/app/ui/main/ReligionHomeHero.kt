@@ -30,8 +30,10 @@ import com.match.app.domain.model.MatchFilter
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.ReligionExperiencePreference
 import com.match.app.ui.theme.AppPalette
+import com.match.app.ui.components.MatreeThemeOrnament
 import com.match.app.ui.theme.MatreeDesign
 import com.match.app.ui.theme.colorSchemeFor
+import com.match.app.ui.theme.visualFamilyFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -221,6 +223,7 @@ fun ReligionHomeHero(
 @Composable
 private fun LargeReligionCard(style: ReligionCardStyle, onClick: () -> Unit) {
     val preview = colorSchemeFor(style.palette, dark = false)
+    val visual = visualFamilyFor(style.palette)
     val spacing = MatreeDesign.spacing
     Card(
         modifier = Modifier
@@ -232,9 +235,21 @@ private fun LargeReligionCard(style: ReligionCardStyle, onClick: () -> Unit) {
     ) {
         Box(
             Modifier.fillMaxSize()
-                .background(Brush.linearGradient(listOf(preview.primary, preview.primary.copy(alpha = 0.78f))))
+                .background(
+                    Brush.linearGradient(
+                        listOf(preview.primary, visual.accentSecondary, preview.primary)
+                    )
+                )
                 .padding(spacing.xl)
         ) {
+            MatreeThemeOrnament(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.xl),
+                motif = visual.motif,
+                ornamentColor = visual.ornament,
+                ornamentAlpha = 0.30f
+            )
             Icon(
                 style.icon,
                 contentDescription = null,
@@ -267,6 +282,7 @@ private fun CompactReligionCard(
     onClick: () -> Unit
 ) {
     val preview = colorSchemeFor(style.palette, dark = false)
+    val visual = visualFamilyFor(style.palette)
     val spacing = MatreeDesign.spacing
     Card(
         modifier = modifier.height(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.display),
@@ -276,9 +292,17 @@ private fun CompactReligionCard(
     ) {
         Box(
             Modifier.fillMaxSize()
-                .background(Brush.linearGradient(listOf(preview.primary, preview.primary.copy(alpha = 0.78f))))
+                .background(Brush.linearGradient(listOf(preview.primary, visual.accentSecondary, preview.primary)))
                 .padding(spacing.md)
         ) {
+            MatreeThemeOrnament(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(MatreeDesign.sizes.avatarStandard),
+                motif = visual.motif,
+                ornamentColor = visual.ornament,
+                ornamentAlpha = 0.26f
+            )
             Icon(
                 style.icon,
                 contentDescription = null,

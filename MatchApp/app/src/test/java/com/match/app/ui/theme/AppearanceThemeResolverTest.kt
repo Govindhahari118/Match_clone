@@ -26,6 +26,10 @@ class AppearanceThemeResolverTest {
         assertEquals(AppPalette.HINDU, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Hindu"))
         assertEquals(AppPalette.MUSLIM, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Islam"))
         assertEquals(AppPalette.CHRISTIAN, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Christian"))
+        assertEquals(AppPalette.SIKH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Sikh"))
+        assertEquals(AppPalette.BUDDHIST, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Buddhist"))
+        assertEquals(AppPalette.JAIN, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Jain"))
+        assertEquals(AppPalette.PARSI, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "VIVAH", "Parsi"))
     }
 
     @Test
@@ -56,4 +60,14 @@ class AppearanceThemeResolverTest {
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", ""))
         assertEquals(AppPalette.VIVAH, AppearanceThemeResolver.resolve(ThemePreference.AUTOMATIC, "MUSLIM", "Prefer not to say"))
     }
+    @Test
+    fun `unspecified appearance defaults to Matree Neutral instead of religion automatic`() {
+        assertEquals(ThemePreference.NEUTRAL, com.match.app.domain.model.AppearancePreference().themePreference)
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage(null))
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage("unsupported"))
+        assertEquals(ThemePreference.NEUTRAL, ThemePreference.fromStorage("AUTOMATIC"))
+        assertEquals(ThemePreference.AUTOMATIC, ThemePreference.fromStorage("PROFILE_RELIGION"))
+        assertEquals("PROFILE_RELIGION", ThemePreference.AUTOMATIC.storageKey)
+    }
+
 }

@@ -12,15 +12,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeProgressCard
 import com.match.app.ui.components.MatreeProfileCard
+import com.match.app.ui.components.MatreeProfileHeader
 import com.match.app.ui.components.MatreeProfileCardVariant
 import com.match.app.ui.components.MatreeSecondaryButton
+import com.match.app.ui.components.MatreeTextButton
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusChip
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.components.MatreeVisualHero
 
 /**
  * Debug/design-time catalog only. The preview identity and data never enter the release source set.
@@ -33,6 +38,20 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                 modifier = Modifier.padding(MatreeDesign.spacing.md),
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
             ) {
+                MatreeVisualHero(
+                    actionLabel = "Discover profiles",
+                    onAction = {}
+                )
+                MatreeProfileHeader(
+                    name = "Theme preview",
+                    age = 29,
+                    photoModels = emptyList(),
+                    username = "preview",
+                    primaryLine = "Hyderabad • Product professional",
+                    secondaryLine = "Debug catalog identity only",
+                    isVerified = true,
+                    isPremium = true
+                )
                 MatreeProfileCard(
                     name = "Theme preview",
                     age = 29,
@@ -61,7 +80,16 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    MatreeTextButton(
+                        text = "Details",
+                        onClick = {}
+                    )
                 }
+                MatreeChoiceChip(
+                    text = "Selected filter",
+                    selected = true,
+                    onClick = {}
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                     MatreeStatusChip("Verified", MatreeStatusTone.VERIFIED)
                     MatreeStatusChip("Premium", MatreeStatusTone.PREMIUM)
@@ -77,9 +105,21 @@ private fun ThemeCatalogPreview(palette: AppPalette, dark: Boolean) {
                     message = "Privacy and safety semantics stay stable across religion themes.",
                     tone = MatreeStatusTone.WARNING
                 )
+                MatreeInlineNotice(
+                    message = "Representative success state.",
+                    tone = MatreeStatusTone.SUCCESS
+                )
+                MatreeInlineNotice(
+                    message = "Representative error state.",
+                    tone = MatreeStatusTone.ERROR
+                )
                 MatreeStatePanel(
                     title = "No results",
                     message = "Representative empty state for theme QA."
+                )
+                MatreeLoadingState(
+                    message = "Loading representative theme content",
+                    rows = 2
                 )
             }
         }

@@ -461,7 +461,7 @@ test('appearance preferences are private, account-scoped, and presentation-only'
   const prefs = doc(aliceDb, 'appearancePrefs/alice');
 
   await assertSucceeds(setDoc(prefs, {
-    themePreference: 'AUTOMATIC',
+    themePreference: 'PROFILE_RELIGION',
     manualThemeKey: 'HINDU',
     updatedAt: new Date(),
   }));

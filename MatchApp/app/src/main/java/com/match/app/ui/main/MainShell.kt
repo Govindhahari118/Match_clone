@@ -16,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -209,7 +208,7 @@ private fun AppDrawer(
                 }
                 items(section.items) { item ->
                     val selected = currentRoute == item.route
-                    val background = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                    val background = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface.copy(alpha = 0f)
                     val foreground = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     Row(
                         Modifier.fillMaxWidth().background(background).clickable { onNavigate(item.route); onClose() }

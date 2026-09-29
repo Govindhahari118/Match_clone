@@ -10,8 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -19,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.match.app.domain.subscription.SubscriptionPlans.Feature
 import com.match.app.domain.subscription.SubscriptionPlans.Plan
 import com.match.app.ui.i18n.t
+import com.match.app.ui.theme.MatreeDesign
 
 /** Reusable, truthful paywall for server-backed membership features. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,12 +49,12 @@ fun PaywallSheet(
         ) {
             Box(
                 Modifier.size(72.dp).background(
-                    Brush.radialGradient(listOf(Color(0xFF8B1A1A), Color(0xFFD4A017))),
+                    MaterialTheme.colorScheme.primary,
                     CircleShape
                 ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(featureIcon(feature), null, tint = Color.White, modifier = Modifier.size(32.dp))
+                Icon(featureIcon(feature), null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp))
             }
 
             Text(featureTitle(feature), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -72,7 +71,7 @@ fun PaywallSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Filled.Star, null, tint = Color(0xFFD4A017), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.Star, null, tint = MatreeDesign.colors.premium, modifier = Modifier.size(20.dp))
                     Text(priceLabel, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -83,7 +82,7 @@ fun PaywallSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp), tint = Color(0xFF4CAF50))
+                    Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp), tint = MatreeDesign.colors.success)
                     Text(benefit, style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -92,7 +91,6 @@ fun PaywallSheet(
             Button(
                 onClick = { onUpgrade(); onDismiss() },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B1A1A)),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Filled.Rocket, null, Modifier.size(20.dp))

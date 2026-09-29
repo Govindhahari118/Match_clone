@@ -45,6 +45,7 @@ import com.match.app.ui.components.MatreeActionCard
 import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatePanel
+import com.match.app.ui.components.MatreeVisualHero
 import com.match.app.ui.theme.MatreeDesign
 
 /** Production home intentionally exposes only audited journeys. */
@@ -95,6 +96,12 @@ fun HomeLauncherScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+
+        MatreeVisualHero(
+            modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md),
+            actionLabel = "Discover profiles",
+            onAction = onGoMatches
+        )
 
         ReligionHomeHero(profileReligion = p.religion, onOpenMatches = onGoMatches)
 

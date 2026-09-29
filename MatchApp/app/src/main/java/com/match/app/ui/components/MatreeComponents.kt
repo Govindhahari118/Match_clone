@@ -1,5 +1,6 @@
 package com.match.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
@@ -24,7 +26,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.MatreeDesign
+import com.match.app.ui.theme.colorSchemeFor
+import com.match.app.ui.theme.visualFamilyFor
 
 enum class MatreeStatusTone { NEUTRAL, SUCCESS, WARNING, ERROR, INTEREST, VERIFIED, PREMIUM }
 enum class MatreeProfileCardVariant { HERO, STANDARD, COMPACT }
@@ -98,6 +103,149 @@ fun MatreeHero(
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             content?.invoke(this)
+        }
+    }
+}
+
+@Composable
+fun MatreeVisualHero(
+    modifier: Modifier = Modifier,
+    title: String = MatreeDesign.visual.heroTitle,
+    subtitle: String = MatreeDesign.visual.heroSubtitle,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    val spacing = MatreeDesign.spacing
+    val visual = MatreeDesign.visual
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.hero),
+        color = scheme.primaryContainer
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            scheme.primaryContainer,
+                            scheme.surfaceVariant,
+                            scheme.background
+                        )
+                    )
+                )
+        ) {
+            MatreeThemeOrnament(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.xxl),
+                motif = visual.motif
+            )
+            Column(
+                Modifier.padding(spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(spacing.sm)
+            ) {
+                Text(
+                    visual.heroEyebrow,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.primary
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onPrimaryContainer
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant
+                )
+                if (actionLabel != null && onAction != null) {
+                    MatreePrimaryButton(
+                        text = actionLabel,
+                        onClick = onAction,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MatreeThemeFamilyPreviewCard(
+    palette: AppPalette,
+    modifier: Modifier = Modifier,
+    darkPreview: Boolean = false
+) {
+    val preview = colorSchemeFor(palette, darkPreview)
+    val visual = visualFamilyFor(palette)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(MatreeDesign.radii.large),
+        colors = CardDefaults.cardColors(containerColor = preview.background)
+    ) {
+        Box(Modifier.fillMaxWidth()) {
+            MatreeThemeOrnament(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(MatreeDesign.sizes.avatarHero + MatreeDesign.spacing.xl),
+                motif = visual.motif,
+                ornamentColor = visual.ornament,
+                ornamentAlpha = if (darkPreview) 0.36f else visual.ornamentAlpha
+            )
+            Column(
+                Modifier.padding(MatreeDesign.spacing.md),
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+            ) {
+                Text(
+                    visual.displayName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = preview.primary
+                )
+                Text(
+                    visual.shortDescription,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = preview.onBackground
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    listOf(
+                        preview.primary,
+                        visual.accent,
+                        visual.accentSecondary,
+                        visual.ornament,
+                        preview.surfaceVariant
+                    ).forEach { swatch ->
+                        Surface(
+                            modifier = Modifier.size(MatreeDesign.sizes.iconLarge),
+                            shape = RoundedCornerShape(percent = 50),
+                            color = swatch
+                        ) {}
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    visual.visualKeywords.take(3).forEach { word ->
+                        Surface(
+                            shape = RoundedCornerShape(percent = 50),
+                            color = preview.surfaceVariant
+                        ) {
+                            Text(
+                                word,
+                                modifier = Modifier.padding(
+                                    horizontal = MatreeDesign.spacing.sm,
+                                    vertical = MatreeDesign.spacing.xxs
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = preview.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -205,6 +353,27 @@ fun MatreeSecondaryButton(
 }
 
 @Composable
+fun MatreeTextButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    icon: ImageVector? = null
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.defaultMinSize(minHeight = MatreeDesign.sizes.touchTarget)
+    ) {
+        icon?.let {
+            Icon(it, contentDescription = null, modifier = Modifier.size(MatreeDesign.sizes.iconSmall))
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
+        }
+        Text(text)
+    }
+}
+
+@Composable
 fun MatreeStatusChip(
     text: String,
     tone: MatreeStatusTone = MatreeStatusTone.NEUTRAL,
@@ -263,44 +432,53 @@ fun MatreeStatePanel(
         color = container,
         contentColor = contentColor
     ) {
-        Column(
-            Modifier.padding(MatreeDesign.spacing.lg),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
-        ) {
-            icon?.let {
-                Icon(
-                    it,
-                    contentDescription = null,
-                    modifier = Modifier.size(MatreeDesign.sizes.iconLarge),
-                    tint = contentColor
+        Box(Modifier.fillMaxWidth()) {
+            if (tone == MatreeStatusTone.NEUTRAL) {
+                MatreeThemeOrnament(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(MatreeDesign.sizes.avatarStandard + MatreeDesign.spacing.lg)
                 )
             }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor
-            )
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = contentColor,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            if (primaryActionLabel != null && onPrimaryAction != null) {
-                MatreePrimaryButton(
-                    text = primaryActionLabel,
-                    onClick = onPrimaryAction,
-                    modifier = Modifier.fillMaxWidth()
+            Column(
+                Modifier.padding(MatreeDesign.spacing.lg),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+            ) {
+                icon?.let {
+                    Icon(
+                        it,
+                        contentDescription = null,
+                        modifier = Modifier.size(MatreeDesign.sizes.iconLarge),
+                        tint = contentColor
+                    )
+                }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor
                 )
-            }
-            if (secondaryActionLabel != null && onSecondaryAction != null) {
-                MatreeSecondaryButton(
-                    text = secondaryActionLabel,
-                    onClick = onSecondaryAction,
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
+                if (primaryActionLabel != null && onPrimaryAction != null) {
+                    MatreePrimaryButton(
+                        text = primaryActionLabel,
+                        onClick = onPrimaryAction,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (secondaryActionLabel != null && onSecondaryAction != null) {
+                    MatreeSecondaryButton(
+                        text = secondaryActionLabel,
+                        onClick = onSecondaryAction,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }

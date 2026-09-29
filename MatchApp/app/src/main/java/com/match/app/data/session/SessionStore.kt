@@ -165,7 +165,7 @@ class SessionStore(private val context: Context) {
             prefs[KEY_RELIGION_THEME] == true -> ThemePreference.AUTOMATIC
             prefs[KEY_RELIGION_THEME] == false -> if ((legacyPalette ?: "VIVAH") == "VIVAH") ThemePreference.NEUTRAL else ThemePreference.MANUAL
             legacyPalette != null -> if (legacyPalette == "VIVAH") ThemePreference.NEUTRAL else ThemePreference.MANUAL
-            else -> ThemePreference.AUTOMATIC
+            else -> ThemePreference.NEUTRAL
         }
         val displayMode = prefs[KEY_DISPLAY_MODE]?.let { DisplayMode.fromStorage(it) } ?: when (prefs[KEY_DARK]) {
             true -> DisplayMode.DARK
@@ -291,7 +291,7 @@ class SessionStore(private val context: Context) {
     suspend fun setReligionLocked(value: Boolean) = context.dataStore.edit { it[KEY_RELIGION_LOCKED] = value }
 
     suspend fun setThemePreference(value: ThemePreference, manualThemeKey: String? = null) = context.dataStore.edit { prefs ->
-        prefs[KEY_THEME_PREFERENCE] = value.name
+        prefs[KEY_THEME_PREFERENCE] = value.storageKey
         when (value) {
             ThemePreference.AUTOMATIC -> prefs[KEY_RELIGION_THEME] = true
             ThemePreference.NEUTRAL -> {
@@ -319,9 +319,9 @@ class SessionStore(private val context: Context) {
     // Legacy setters retain coherent new-model state for any remaining old call sites.
     suspend fun setReligionThemeEnabled(value: Boolean) = context.dataStore.edit { prefs ->
         prefs[KEY_RELIGION_THEME] = value
-        if (value) prefs[KEY_THEME_PREFERENCE] = ThemePreference.AUTOMATIC.name
+        if (value) prefs[KEY_THEME_PREFERENCE] = ThemePreference.AUTOMATIC.storageKey
         else if (ThemePreference.fromStorage(prefs[KEY_THEME_PREFERENCE]) == ThemePreference.AUTOMATIC) {
-            prefs[KEY_THEME_PREFERENCE] = ThemePreference.NEUTRAL.name
+            prefs[KEY_THEME_PREFERENCE] = ThemePreference.NEUTRAL.storageKey
             prefs[KEY_PALETTE] = "VIVAH"
         }
     }

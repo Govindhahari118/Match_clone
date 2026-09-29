@@ -36,8 +36,11 @@ import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
+import com.match.app.ui.components.MatreePrimaryButton
+import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.components.MatreeThemeFamilyPreviewCard
 import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatreeDesign
@@ -213,6 +216,7 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
     var searchName by remember { mutableStateOf("") }
+    var themePreview by remember { mutableStateOf<AppPalette?>(null) }
 
     val currentPalette = AppPalette.fromProductionKey(appearance.manualThemeKey)
     val resolvedPalette = AppearanceThemeResolver.resolve(
@@ -220,6 +224,7 @@ fun SettingsScreen(
         manualPaletteKey = appearance.manualThemeKey,
         profileReligion = user?.religion
     )
+    val previewPalette = themePreview ?: resolvedPalette
 
     LaunchedEffect(accountState) {
         when (val state = accountState) {
@@ -314,9 +319,9 @@ fun SettingsScreen(
 
             Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             MatreeInfoCard {
-                Text("App theme", fontWeight = FontWeight.SemiBold)
+                Text("Theme", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Appearance is independent from your declared religion, partner preferences, privacy, verification and pricing.",
+                    "Choose a visual family for Matree. Appearance changes presentation only; it never changes identity, matching, trust or authorization.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -328,25 +333,26 @@ fun SettingsScreen(
                 AppearanceChoiceRow(
                     selected = appearance.themePreference == ThemePreference.AUTOMATIC,
                     title = "Automatic",
-                    subtitle = user?.religion?.takeIf { it.isNotBlank() }?.let {
-                        "Follow my confirmed profile religion — $it"
-                    } ?: "Use Matree Neutral until a profile religion is available",
-                    onClick = vm::useAutomaticTheme
+                    subtitle = "Follow my confirmed profile religion.",
+                    onClick = {
+                        themePreview = null
+                        vm.useAutomaticTheme()
+                    }
                 )
                 AppearanceChoiceRow(
                     selected = appearance.themePreference == ThemePreference.NEUTRAL,
                     title = "Matree Neutral",
-                    subtitle = "Use the universal Matree visual family",
-                    onClick = vm::useNeutralTheme
+                    subtitle = "Use the universal Matree visual family.",
+                    onClick = {
+                        themePreview = null
+                        vm.useNeutralTheme()
+                    }
                 )
 
-                Text("Manual theme family", fontWeight = FontWeight.SemiBold)
+                HorizontalDivider()
+                Text("Manual", fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (appearance.themePreference == ThemePreference.MANUAL) {
-                        "Selected: ${currentPalette.label}. This does not alter your profile religion."
-                    } else {
-                        "Choose any supported visual family without changing your actual religion."
-                    },
+                    "Choose any supported visual family independently of your profile religion. Tap a family to preview it, then apply it.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -357,16 +363,57 @@ fun SettingsScreen(
                     manualReligionPalettes.forEach { palette ->
                         MatreeChoiceChip(
                             text = palette.label,
-                            selected = appearance.themePreference == ThemePreference.MANUAL && currentPalette == palette,
-                            onClick = { vm.useManualTheme(palette) }
+                            selected = themePreview == palette || (
+                                themePreview == null &&
+                                    appearance.themePreference == ThemePreference.MANUAL &&
+                                    currentPalette == palette
+                            ),
+                            onClick = { themePreview = palette }
                         )
                     }
                 }
 
+                MatreeThemeFamilyPreviewCard(
+                    palette = previewPalette,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (themePreview != null) {
+                    MatreeInlineNotice(
+                        message = "Previewing ${previewPalette.label}. Apply it only if you want this appearance across Matree.",
+                        tone = MatreeStatusTone.NEUTRAL
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                    ) {
+                        MatreeSecondaryButton(
+                            text = "Cancel",
+                            onClick = { themePreview = null },
+                            modifier = Modifier.weight(1f)
+                        )
+                        MatreePrimaryButton(
+                            text = "Apply theme",
+                            onClick = {
+                                themePreview?.let { selected ->
+                                    vm.useManualTheme(selected)
+                                    themePreview = null
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                MatreeInlineNotice(
+                    message = "Changing visual theme does not change your profile religion.",
+                    tone = MatreeStatusTone.NEUTRAL
+                )
+
                 HorizontalDivider()
                 Text("Display mode", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Light/dark behavior is a separate device preference.",
+                    "Light and dark mode are independent from the selected visual family.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -389,7 +436,6 @@ fun SettingsScreen(
                     onClick = { vm.setDisplayMode(DisplayMode.DARK) }
                 )
             }
-
             Text("Notifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Choose which real account events may send a push notification. Notification history remains available in the app.",

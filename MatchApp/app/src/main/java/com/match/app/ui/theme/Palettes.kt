@@ -8,7 +8,7 @@ import com.match.app.domain.model.ReligionCategory
 
 /**
  * Brand palettes available to the user. Religion palettes are optional visual
- * treatments only; the default remains the neutral VIVAH matrimony theme.
+ * treatments only; the default remains the premium universal Matree Neutral matrimonial theme.
  * They intentionally avoid sacred text/symbols so the experience stays tasteful
  * and inclusive while still feeling culturally distinct.
  */
@@ -20,14 +20,14 @@ enum class AppPalette(val label: String, val swatch: Color) {
     MONO    ("Mono",     Color(0xFF424242)),
     GLACIER ("Glacier",  Color(0xFF4FC3F7)),
     TELUGU  ("Telugu",   Color(0xFFD4A017)),
-    VIVAH   ("Matree Neutral", Color(0xFF475569)),
-    HINDU   ("Hindu",    Color(0xFFB85B00)),
-    CHRISTIAN("Christian", Color(0xFF315E8A)),
-    MUSLIM  ("Muslim",   Color(0xFF17705A)),
-    SIKH    ("Sikh",     Color(0xFFB77900)),
-    BUDDHIST("Buddhist", Color(0xFF8A3B12)),
-    JAIN    ("Jain",     Color(0xFFA13D4A)),
-    PARSI   ("Parsi",    Color(0xFF4B5AA7)),
+    VIVAH   ("Matree Neutral", Color(0xFF6E2F4B)),
+    HINDU   ("Hindu",    Color(0xFFFF8A00)),
+    CHRISTIAN("Christian", Color(0xFF1E4DB7)),
+    MUSLIM  ("Muslim",   Color(0xFF0B6B53)),
+    SIKH    ("Sikh",     Color(0xFFD4AF37)),
+    BUDDHIST("Buddhist", Color(0xFFE19A2F)),
+    JAIN    ("Jain",     Color(0xFF537F46)),
+    PARSI   ("Parsi",    Color(0xFF0F6B6A)),
     COMMUNITY("Community", Color(0xFF6D4C7D));
 
     companion object {
@@ -137,14 +137,14 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         dark = dark
     )
     AppPalette.VIVAH -> scheme(
-        primary = Color(0xFF475569), primaryContainer = Color(0xFFE2E8F0), onPrimaryContainer = Color(0xFF0F172A),
-        secondary = Color(0xFF64748B), secondaryContainer = Color(0xFFF1F5F9), onSecondaryContainer = Color(0xFF1E293B),
-        tertiary = Color(0xFF4F6B5A),
-        lightBackground = Color(0xFFF8FAFC),
-        lightSurfaceVariant = Color(0xFFF1F5F9),
-        darkBackground = Color(0xFF0E1218),
-        darkSurface = Color(0xFF151B23),
-        darkSurfaceVariant = Color(0xFF1E2732),
+        primary = Color(0xFF6E2F4B), primaryContainer = Color(0xFFF5DDE7), onPrimaryContainer = Color(0xFF3A1426),
+        secondary = Color(0xFF8B5E57), secondaryContainer = Color(0xFFF3E4DE), onSecondaryContainer = Color(0xFF3D2721),
+        tertiary = Color(0xFF7A6434),
+        lightBackground = Color(0xFFFFF9F6),
+        lightSurfaceVariant = Color(0xFFF8EEE9),
+        darkBackground = Color(0xFF150E12),
+        darkSurface = Color(0xFF21161C),
+        darkSurfaceVariant = Color(0xFF2D2027),
         dark = dark
     )
     AppPalette.HINDU -> scheme(
@@ -159,66 +159,66 @@ internal fun colorSchemeFor(palette: AppPalette, dark: Boolean): ColorScheme = w
         dark = dark
     )
     AppPalette.CHRISTIAN -> scheme(
-        primary = Color(0xFF315E8A), primaryContainer = Color(0xFFD8E9FA), onPrimaryContainer = Color(0xFF0D2B47),
-        secondary = Color(0xFF79536B), secondaryContainer = Color(0xFFF3DCE9), onSecondaryContainer = Color(0xFF3B2030),
-        tertiary = Color(0xFF476A5A),
-        lightBackground = Color(0xFFF7FAFE),
-        lightSurfaceVariant = Color(0xFFEDF5FC),
+        primary = Color(0xFF1E4DB7), primaryContainer = Color(0xFFE6F0FF), onPrimaryContainer = Color(0xFF0A2A6B),
+        secondary = Color(0xFF8A6A13), secondaryContainer = Color(0xFFFFF0C2), onSecondaryContainer = Color(0xFF3C2C00),
+        tertiary = Color(0xFF5D6F7F),
+        lightBackground = Color(0xFFFFFEFC),
+        lightSurfaceVariant = Color(0xFFF4F7FB),
         darkBackground = Color(0xFF0B131B),
         darkSurface = Color(0xFF101D29),
         darkSurfaceVariant = Color(0xFF172838),
         dark = dark
     )
     AppPalette.MUSLIM -> scheme(
-        primary = Color(0xFF17705A), primaryContainer = Color(0xFFCDEEE4), onPrimaryContainer = Color(0xFF073D30),
-        secondary = Color(0xFF78613A), secondaryContainer = Color(0xFFF2E2C2), onSecondaryContainer = Color(0xFF3D2D12),
-        tertiary = Color(0xFF386A74),
-        lightBackground = Color(0xFFF7FCFA),
-        lightSurfaceVariant = Color(0xFFE9F8F2),
+        primary = Color(0xFF0B6B53), primaryContainer = Color(0xFFD9F2E9), onPrimaryContainer = Color(0xFF053B2E),
+        secondary = Color(0xFF8A6A13), secondaryContainer = Color(0xFFF5E8C5), onSecondaryContainer = Color(0xFF3B2B00),
+        tertiary = Color(0xFF0F4D4A),
+        lightBackground = Color(0xFFFAFCF8),
+        lightSurfaceVariant = Color(0xFFEEF7F2),
         darkBackground = Color(0xFF091512),
         darkSurface = Color(0xFF10211C),
         darkSurfaceVariant = Color(0xFF173029),
         dark = dark
     )
     AppPalette.SIKH -> scheme(
-        primary = Color(0xFF9A6700), primaryContainer = Color(0xFFFFE7A8), onPrimaryContainer = Color(0xFF352300),
-        secondary = Color(0xFF3D5268), secondaryContainer = Color(0xFFDCE7F1), onSecondaryContainer = Color(0xFF172A3B),
-        tertiary = Color(0xFF735C00),
-        lightBackground = Color(0xFFFFFBF3),
-        lightSurfaceVariant = Color(0xFFFFF4D8),
+        primary = Color(0xFF8C6100), primaryContainer = Color(0xFFFFE8A6), onPrimaryContainer = Color(0xFF352300),
+        secondary = Color(0xFF0B2D5B), secondaryContainer = Color(0xFFDCE7F5), onSecondaryContainer = Color(0xFF0A2344),
+        tertiary = Color(0xFF4F6D58),
+        lightBackground = Color(0xFFFFFBF2),
+        lightSurfaceVariant = Color(0xFFFFF5DF),
         darkBackground = Color(0xFF151108),
         darkSurface = Color(0xFF211A0D),
         darkSurfaceVariant = Color(0xFF2D2412),
         dark = dark
     )
     AppPalette.BUDDHIST -> scheme(
-        primary = Color(0xFF8A3B12), primaryContainer = Color(0xFFFFDBCA), onPrimaryContainer = Color(0xFF3A1000),
-        secondary = Color(0xFF8A6D00), secondaryContainer = Color(0xFFFFEFAF), onSecondaryContainer = Color(0xFF2D2400),
-        tertiary = Color(0xFF5C6840),
-        lightBackground = Color(0xFFFFF9F2),
-        lightSurfaceVariant = Color(0xFFFDEEDC),
+        primary = Color(0xFF9A4D16), primaryContainer = Color(0xFFFFE3C7), onPrimaryContainer = Color(0xFF431B00),
+        secondary = Color(0xFF6B7457), secondaryContainer = Color(0xFFE6EDD9), onSecondaryContainer = Color(0xFF27301F),
+        tertiary = Color(0xFF8A5A6D),
+        lightBackground = Color(0xFFFFFAF2),
+        lightSurfaceVariant = Color(0xFFF7EFE2),
         darkBackground = Color(0xFF17100B),
         darkSurface = Color(0xFF24170F),
         darkSurfaceVariant = Color(0xFF302016),
         dark = dark
     )
     AppPalette.JAIN -> scheme(
-        primary = Color(0xFFA13D4A), primaryContainer = Color(0xFFFFDADD), onPrimaryContainer = Color(0xFF41000A),
-        secondary = Color(0xFF826500), secondaryContainer = Color(0xFFFFEFAE), onSecondaryContainer = Color(0xFF2A2100),
-        tertiary = Color(0xFF52664B),
-        lightBackground = Color(0xFFFFFAF8),
-        lightSurfaceVariant = Color(0xFFF9ECE8),
+        primary = Color(0xFF537F46), primaryContainer = Color(0xFFE1EFD9), onPrimaryContainer = Color(0xFF173415),
+        secondary = Color(0xFF8A6A2D), secondaryContainer = Color(0xFFF3E3BE), onSecondaryContainer = Color(0xFF3A2909),
+        tertiary = Color(0xFF8A6E52),
+        lightBackground = Color(0xFFFFFDF8),
+        lightSurfaceVariant = Color(0xFFF8F3E9),
         darkBackground = Color(0xFF160C0F),
         darkSurface = Color(0xFF231216),
         darkSurfaceVariant = Color(0xFF30191F),
         dark = dark
     )
     AppPalette.PARSI -> scheme(
-        primary = Color(0xFF4B5AA7), primaryContainer = Color(0xFFE0E3FF), onPrimaryContainer = Color(0xFF101A58),
-        secondary = Color(0xFF8A6500), secondaryContainer = Color(0xFFFFE9A9), onSecondaryContainer = Color(0xFF2D2100),
-        tertiary = Color(0xFF4C6658),
+        primary = Color(0xFF0F6B6A), primaryContainer = Color(0xFFD8EFEC), onPrimaryContainer = Color(0xFF043938),
+        secondary = Color(0xFF8A6A2A), secondaryContainer = Color(0xFFF1E2BE), onSecondaryContainer = Color(0xFF392900),
+        tertiary = Color(0xFF1E3A5F),
         lightBackground = Color(0xFFFFFBF5),
-        lightSurfaceVariant = Color(0xFFF4EFE5),
+        lightSurfaceVariant = Color(0xFFF4EFE8),
         darkBackground = Color(0xFF0E1020),
         darkSurface = Color(0xFF161A2B),
         darkSurfaceVariant = Color(0xFF20263A),

@@ -119,7 +119,7 @@ class AppearancePreferenceRepository @Inject constructor(
         firestore.collection(COLLECTION).document(uid)
             .set(
                 mapOf(
-                    "themePreference" to preference.themePreference.name,
+                    "themePreference" to preference.themePreference.storageKey,
                     "manualThemeKey" to sanitizeManualThemeKey(preference.manualThemeKey),
                     "updatedAt" to FieldValue.serverTimestamp()
                 ),

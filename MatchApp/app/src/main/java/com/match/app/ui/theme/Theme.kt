@@ -39,7 +39,7 @@ fun MatchTheme(
     content: @Composable () -> Unit
 ) {
     val dark = darkMode ?: isSystemInDarkTheme()
-    ProvideMatreeDesignTokens(darkMode = dark) {
+    ProvideMatreeDesignTokens(darkMode = dark, palette = palette) {
         MaterialTheme(
             colorScheme = colorSchemeFor(palette, dark),
             typography = AppTypography,

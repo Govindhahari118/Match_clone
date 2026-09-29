@@ -45,6 +45,11 @@ _REACHABLE_UI_RELATIVE = [
     "ui/auth/SignInScreen.kt", "ui/auth/SignUpScreen.kt",
     "ui/onboarding/OnboardingScreen.kt", "ui/onboarding/ProfileWizardScreen.kt",
     "ui/main/MainShell.kt", "ui/main/HomeLauncherScreen.kt", "ui/main/HomeScreen.kt",
+    "ui/main/ReligionHomeHero.kt",
+    "ui/components/MatreeComponents.kt", "ui/components/MatreeThemeDecor.kt",
+    "ui/components/StateScreens.kt",
+    "ui/common/ContactUnlockSheet.kt", "ui/common/PaywallSheet.kt",
+    "ui/common/ProfileCompletenessBar.kt", "ui/common/Shimmer.kt", "ui/common/ShimmerCard.kt",
     "ui/matches/MatchesScreen.kt", "ui/nearby/NearbyMatchesScreen.kt",
     "ui/interests/InterestsScreen.kt", "ui/shortlist/ShortlistScreen.kt",
     "ui/chat/ChatListScreen.kt", "ui/chat/ChatScreen.kt",
@@ -61,8 +66,24 @@ UI_JAVA_ROOT = ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app"
 PRODUCTION_THEME_SURFACES = {UI_JAVA_ROOT / rel for rel in _REACHABLE_UI_RELATIVE}
 THEME_LITERAL_COLOR = re.compile(
     r"(?<!android\.graphics\.)\bColor\s*\(\s*0x[0-9A-Fa-f]+|"
-    r"\bColor\.(?:White|Black|Red|Green|Blue|Yellow|Gray|DarkGray|LightGray|Magenta|Cyan)"
+    r"\bColor\.(?:White|Black|Red|Green|Blue|Yellow|Gray|DarkGray|LightGray|Magenta|Cyan|Transparent)"
 )
+ANDROID_GRAPHICS_LITERAL_COLOR = re.compile(
+    r"\bandroid\.graphics\.Color\.(?:rgb|argb)\s*\("
+)
+
+APPEARANCE_SETTINGS_SURFACE = (
+    UI_JAVA_ROOT / "ui" / "settings" / "SettingsScreen.kt"
+)
+THEME_IDENTITY_SURFACES = {
+    APPEARANCE_SETTINGS_SURFACE,
+    UI_JAVA_ROOT / "ui" / "theme" / "Palettes.kt",
+    UI_JAVA_ROOT / "ui" / "theme" / "MatreeVisualFamily.kt",
+}
+UNSUPPORTED_APPEARANCE_PALETTE = re.compile(
+    r"AppPalette\.(?:ROSE|LAVENDER|SOLAR|OCEAN|MONO|GLACIER|TELUGU|COMMUNITY)\b"
+)
+STALE_UNIVERSAL_THEME_NAME = re.compile(r"Matree Signature")
 
 
 def source_files():
@@ -105,10 +126,24 @@ def main() -> int:
                             f"({identifier}): {line.strip()}"
                         )
 
-            if path in PRODUCTION_THEME_SURFACES and THEME_LITERAL_COLOR.search(line):
+            if path in PRODUCTION_THEME_SURFACES and (
+                THEME_LITERAL_COLOR.search(line) or ANDROID_GRAPHICS_LITERAL_COLOR.search(line)
+            ):
                 findings.append(
                     f"{path.relative_to(ROOT)}:{line_no}: hard-coded production UI color "
                     f"bypasses Matree theme: {line.strip()}"
+                )
+
+            if path == APPEARANCE_SETTINGS_SURFACE and UNSUPPORTED_APPEARANCE_PALETTE.search(line):
+                findings.append(
+                    f"{path.relative_to(ROOT)}:{line_no}: unsupported appearance palette exposed "
+                    f"to production settings: {line.strip()}"
+                )
+
+            if path in THEME_IDENTITY_SURFACES and STALE_UNIVERSAL_THEME_NAME.search(line):
+                findings.append(
+                    f"{path.relative_to(ROOT)}:{line_no}: stale universal theme name; "
+                    f"use Matree Neutral: {line.strip()}"
                 )
 
     if findings:
