@@ -426,6 +426,7 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("profileReports").where("reporterUid", "==", uid));
         await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
         await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("videoModeration").where("uid", "==", uid));
         await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
         await deleteQuery(
           db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
