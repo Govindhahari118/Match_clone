@@ -92,6 +92,5 @@ the same release candidate.
 
 ## Fail-closed release promotion
 
-BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali` and `enable_nri_features` default to `false` in the Android Remote Config contract. Drawer, Home, profile,
-interest and direct/deep navigation paths all enforce the same flags. A direct navigation attempt
+BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. A direct navigation attempt
 while disabled renders a truthful unavailable state rather than entering the feature.
