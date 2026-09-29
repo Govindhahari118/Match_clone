@@ -153,3 +153,80 @@ export const onLocationConsentChanged = functions.firestore
     if (after?.granted === true) return;
     await db.collection("userLocations").doc(context.params.uid).delete();
   });
+
+
+
+async function deleteQueryInBatches(query: FirebaseFirestore.Query): Promise<void> {
+  while (true) {
+    const snapshot = await query.limit(300).get();
+    if (snapshot.empty) return;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snapshot.size < 300) return;
+  }
+}
+
+/**
+ * Personalization consent controls optional behavioral recommendation telemetry. Withdrawal removes
+ * the signed-in member's feedback projection and impression history in addition to preventing new
+ * writes through hasActiveConsent().
+ */
+export const onPersonalizationConsentChanged = functions.firestore
+  .document("consents/{uid}/items/personalization")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (
+      after?.granted === true &&
+      after?.noticeVersion === currentConsentVersion("personalization")
+    ) {
+      return;
+    }
+
+    const uid = context.params.uid;
+    await Promise.all([
+      deleteQueryInBatches(
+        db.collection("recommendationFeedback").doc(uid).collection("targets")
+      ),
+      deleteQueryInBatches(
+        db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
+      ),
+    ]);
+    await db.collection("recommendationFeedback").doc(uid).delete();
+  });
+
+/**
+ * If identity-verification consent is withdrawn before review, Matree cancels the pending request
+ * and deletes the raw protected KYC object. Already-reviewed outcomes are not silently rewritten;
+ * their retention/deletion is governed by the separately configured account/retention workflow.
+ */
+export const onIdentityVerificationConsentChanged = functions.firestore
+  .document("consents/{uid}/items/identity_verification")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (
+      after?.granted === true &&
+      after?.noticeVersion === currentConsentVersion("identity_verification")
+    ) {
+      return;
+    }
+
+    const uid = context.params.uid;
+    const requestRef = db.collection("verificationRequests").doc(uid);
+    const request = await requestRef.get();
+    if (!request.exists || String(request.data()?.status || "").toLowerCase() !== "pending") {
+      return;
+    }
+
+    const documentPath = String(request.data()?.documentPath || "");
+    if (documentPath.startsWith(`verifications/${uid}/`) && !documentPath.includes("..")) {
+      await admin.storage().bucket().file(documentPath).delete({ ignoreNotFound: true });
+    }
+
+    await requestRef.set({
+      status: "cancelled_consent_withdrawn",
+      documentDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      consentWithdrawnAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
