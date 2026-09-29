@@ -104,6 +104,7 @@ class LocationRepository @Inject constructor(
     }
 
     suspend fun refreshAndFindNearby(radiusKm: Int): List<NearbyProfile> = withContext(Dispatchers.IO) {
+        consentRepository.set("location", true)
         val location = currentLocation()
         updateRemoteLocation(location)
         findNearby(radiusKm)
@@ -147,6 +148,7 @@ class LocationRepository @Inject constructor(
 
     suspend fun stopSharingLocation() = withContext(Dispatchers.IO) {
         functions.getHttpsCallable("clearMyLocation").call().await()
+        consentRepository.set("location", false)
         Unit
     }
 
