@@ -22,7 +22,7 @@ before(async () => {
 after(async () => env?.cleanup());
 beforeEach(async () => env.clearFirestore());
 
-test('member cannot publish an unmoderated photoUrl', async () => {
+test('member cannot publish unmoderated profile media pointers', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'users/alice'), {
       firebaseUid: 'alice',
@@ -36,6 +36,10 @@ test('member cannot publish an unmoderated photoUrl', async () => {
   const alice = env.authenticatedContext('alice').firestore();
   await assertFails(updateDoc(doc(alice, 'users/alice'), {
     photoUrl: 'photos/alice/unreviewed.jpg',
+    profileRevision: 1,
+  }));
+  await assertFails(updateDoc(doc(alice, 'users/alice'), {
+    videoUrl: 'videos/alice/unreviewed.mp4',
     profileRevision: 1,
   }));
 });
@@ -58,5 +62,32 @@ test('photo moderation and account enforcement records are server-only', async (
   await assertFails(setDoc(doc(alice, 'photoModeration/forged'), {
     uid: 'alice',
     status: 'APPROVED',
+  }));
+});
+
+
+test('video moderation and profile video state are server-only', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'videoModeration/case-1'), {
+      uid: 'alice',
+      status: 'PENDING',
+    });
+    await setDoc(doc(ctx.firestore(), 'profileVideoState/alice'), {
+      uid: 'alice',
+      status: 'PENDING',
+      storagePath: 'videos/alice/pending.mp4',
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(getDoc(doc(alice, 'videoModeration/case-1')));
+  await assertFails(getDoc(doc(alice, 'profileVideoState/alice')));
+  await assertFails(setDoc(doc(alice, 'videoModeration/forged'), {
+    uid: 'alice',
+    status: 'APPROVED',
+  }));
+  await assertFails(setDoc(doc(alice, 'profileVideoState/alice'), {
+    uid: 'alice',
+    status: 'PUBLISHED',
   }));
 });
