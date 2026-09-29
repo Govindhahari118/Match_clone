@@ -214,8 +214,15 @@ class VerificationViewModel @Inject constructor(
                     .await()
 
                 val contentType = context.contentResolver.getType(documentUri)?.lowercase().orEmpty()
-                require(contentType.startsWith("image/") || contentType == "application/pdf") {
-                    "Choose an image or PDF document."
+                require(
+                    contentType in setOf(
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "application/pdf"
+                    )
+                ) {
+                    "Choose a JPEG, PNG, WebP or PDF document."
                 }
                 val knownSize = documentSize(documentUri)
                 require(knownSize <= 0L || knownSize <= MAX_VERIFICATION_BYTES) {
@@ -393,13 +400,13 @@ fun VerificationScreen(
                 }
 
                 OutlinedButton(
-                    onClick = { documentPicker.launch(arrayOf("image/*", "application/pdf")) },
+                    onClick = { documentPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp", "application/pdf")) },
                     enabled = !submitting && options.loaded && options.genericDocumentTypes.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth().testTag("verification_choose_document")
                 ) {
                     Icon(Icons.Filled.AttachFile, "Choose verification document")
                     Spacer(Modifier.width(MatreeDesign.spacing.xs))
-                    Text(if (selectedDocument == null) "Choose image or PDF" else "Document selected")
+                    Text(if (selectedDocument == null) "Choose JPEG, PNG, WebP or PDF" else "Document selected")
                 }
                 selectedDocument?.let { uri ->
                     Text(
