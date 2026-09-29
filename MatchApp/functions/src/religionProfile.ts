@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { db, requireAppCheck } from "./shared";
+import { DEFAULT_PARTNER_PREFERENCES } from "./partnerPreferencesPolicy";
 
 const RELIGIONS: Record<string, { id: string; label: string }> = {
   "hindu": { id: "HINDU", label: "Hindu" },
@@ -37,9 +38,13 @@ export const confirmReligion = functions.https.onCall(async (data, context) => {
 
   const profileRef = db.collection("users").doc(uid);
   const privateRef = db.collection("userPrivate").doc(uid);
+  const preferenceRef = db.collection("partnerPreferences").doc(uid);
 
   await db.runTransaction(async (tx) => {
-    const profile = await tx.get(profileRef);
+    const [profile, existingPreferences] = await Promise.all([
+      tx.get(profileRef),
+      tx.get(preferenceRef),
+    ]);
     if (!profile.exists) {
       throw new functions.https.HttpsError(
         "failed-precondition",
@@ -50,20 +55,39 @@ export const confirmReligion = functions.https.onCall(async (data, context) => {
     const current = profile.data() ?? {};
     if (current.religionLocked === true) {
       const currentId = typeof current.religionId === "string" ? current.religionId : null;
-      if (currentId === religion.id) return;
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Religion is already confirmed. Use the protected correction process if it is incorrect."
-      );
+      if (currentId !== religion.id) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Religion is already confirmed. Use the protected correction process if it is incorrect."
+        );
+      }
+    } else {
+      tx.set(profileRef, {
+        religion: religion.label,
+        religionId: religion.id,
+        religionLocked: true,
+        religionConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
 
-    tx.set(profileRef, {
-      religion: religion.label,
-      religionId: religion.id,
-      religionLocked: true,
-      religionConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    // First-run discovery follows the explicitly confirmed religion without coupling visual theme
+    // to match eligibility. The preference remains fully editable later; an existing preference
+    // document is never overwritten.
+    const bootstrapSameReligion =
+      religion.id !== "OTHER" && religion.id !== "PREFER_NOT_TO_SAY";
+    if (!existingPreferences.exists && bootstrapSameReligion) {
+      tx.set(preferenceRef, {
+        ...DEFAULT_PARTNER_PREFERENCES,
+        configured: true,
+        religionMode: "STRICT",
+        religions: [religion.label],
+        schemaVersion: 2,
+        source: "RELIGION_CONFIRMATION_BOOTSTRAP",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: false });
+    }
 
     if (religion.id !== "HINDU") {
       tx.set(profileRef, {
