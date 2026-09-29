@@ -3,6 +3,13 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { declinedInterestAllowsNewRequest } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import {
+  HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD,
+  MAX_DAILY_INTERESTS_SAFETY,
+  crossesThreshold,
+  safeUsageCount,
+  usageAllowed,
+} from "./abusePolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -57,6 +64,8 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   const responseRef = db.collection("interestResponses").doc(`${senderUid}_${targetUid}`);
   const usageDay = new Date().toISOString().slice(0, 10);
   const usageRef = db.collection("subscriptions").doc(senderUid).collection("usage").doc(`interests_${usageDay}`);
+  const riskActivityRef = db.collection("riskActivity").doc(senderUid).collection("days").doc(usageDay);
+  const riskSignalRef = db.collection("riskSignals").doc(senderUid);
   const senderBlockRef = db.collection("blocks").doc(senderUid).collection("blocked").doc(targetUid);
   const targetBlockRef = db.collection("blocks").doc(targetUid).collection("blocked").doc(senderUid);
   const senderPrivacyRef = db.collection("privacyRelations").doc(senderUid).collection("members").doc(targetUid);
@@ -74,6 +83,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       targetBlock,
       senderPrivacy,
       targetPrivacy,
+      riskActivity,
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(targetRef),
@@ -85,6 +95,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(targetBlockRef),
       tx.get(senderPrivacyRef),
       tx.get(targetPrivacyRef),
+      tx.get(riskActivityRef),
     ]);
 
     if (!senderSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
@@ -125,6 +136,26 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
         alreadySent: true,
         interestsUsedToday: Number(usageSnap.data()?.count || 0),
       };
+    }
+
+    const safetyCount = safeUsageCount(riskActivity.data()?.interestCount);
+    if (!usageAllowed(safetyCount, MAX_DAILY_INTERESTS_SAFETY)) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Daily interest safety limit reached. Try again tomorrow."
+      );
+    }
+    const nextSafetyCount = safetyCount + 1;
+    tx.set(riskActivityRef, {
+      interestCount: nextSafetyCount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    if (crossesThreshold(safetyCount, HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD)) {
+      tx.set(riskSignalRef, {
+        highVolumeInterestDayCount: admin.firestore.FieldValue.increment(1),
+        lastHighVolumeInterestAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
 
     let interestsUsedToday = Number(usageSnap.data()?.count || 0);
