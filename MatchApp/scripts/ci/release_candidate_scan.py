@@ -245,6 +245,32 @@ def main() -> int:
                     f"NRI screen must not contain synthetic member inventory marker: {marker}",
                     failures)
 
+    swipe_screen = APP / "src/main/java/com/match/app/ui/discovery/SwipeDiscoveryScreen.kt"
+    if swipe_screen.exists():
+        swipe = text(swipe_screen)
+        require("social.sendInterest(" in swipe,
+                "Swipe Discovery must persist interests through server-authoritative social flow", failures)
+        require("userDao.allExcluding" not in swipe,
+                "Swipe Discovery must not use local Room inventory as discovery authority", failures)
+        require("matchOverlayProfile = profile" not in swipe,
+                "Swipe Discovery must not fabricate a mutual-match celebration on local like", failures)
+
+    deep_compat = APP / "src/main/java/com/match/app/ui/deepcompat/CompatibilityDeepDiveViewModel.kt"
+    if deep_compat.exists():
+        compat = text(deep_compat)
+        require("MatchingRepository" in compat,
+                "compatibility deep dive must use the production matching repository", failures)
+        require("MatchScoreEngine" not in compat,
+                "compatibility deep dive must not restore the legacy split-brain scorer", failures)
+
+    recently_joined = APP / "src/main/java/com/match/app/ui/recentlyjoined/RecentlyJoinedScreen.kt"
+    if recently_joined.exists():
+        recent = text(recently_joined)
+        require("recentlyJoinedDays = 30" in recent,
+                "Recently Joined must use server-authoritative creation-time filtering", failures)
+        require("userDao.allExcluding" not in recent,
+                "Recently Joined must not derive chronology from local cache ordering", failures)
+
     verification_backend = ROOT / "functions/src/verification.ts"
     verification_policy = ROOT / "functions/src/verificationLevelPolicy.ts"
     ops_console = ROOT / "ops-console/app.js"
