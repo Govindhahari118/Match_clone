@@ -7,11 +7,9 @@ import {
   crossesThreshold,
   safeUsageCount,
 } from "./abusePolicy";
+import { classifyMessageSafety } from "./messageSafetyPolicy";
 
 const MESSAGE_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-const EXTERNAL_LINK = /\b(?:https?:\/\/|www\.)[^\s]+/i;
-const MONEY_REQUEST =
-  /(?:\b(?:send|transfer|pay|deposit|loan|urgent)\b.{0,80}\b(?:money|cash|upi|bank|account|inr|rupees?)\b)|(?:₹\s*\d)|(?:\b(?:upi id|bank account|account number)\b)/i;
 
 function eventId(threadId: string, messageId: string): string {
   return crypto.createHash("sha256").update(threadId + "|" + messageId).digest("hex");
@@ -40,9 +38,9 @@ export const onChatMessageSafetySignal = functions.firestore
       : "";
     if (!senderUid || !recipientUid || senderUid === recipientUid) return;
 
-    const body = typeof value.body === "string" ? value.body.slice(0, 3000) : "";
-    const hasExternalLink = EXTERNAL_LINK.test(body);
-    const hasMoneyRequest = MONEY_REQUEST.test(body);
+    const signals = classifyMessageSafety(value.body);
+    const hasExternalLink = signals.externalLink;
+    const hasMoneyRequest = signals.moneyRequest;
     const day = dayKey();
 
     const activityRef = db.collection("riskActivity").doc(senderUid).collection("days").doc(day);
