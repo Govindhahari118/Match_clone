@@ -542,26 +542,29 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
   }
 
   let uid = "";
-  if (query.includes("@")) {
+  if (/^@[a-z0-9][a-z0-9._]{2,29}$/i.test(query)) {
+    const normalized = query.slice(1).toLowerCase();
+    const registry = await db.collection("usernames").doc(normalized).get();
+    uid = String(registry.data()?.uid || "");
+  } else if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(query)) {
     try {
-      uid = (await admin.auth().getUserByEmail(query)).uid;
+      uid = (await admin.auth().getUserByEmail(query.toLowerCase())).uid;
     } catch {
       throw new functions.https.HttpsError("not-found", "Account not found");
     }
   } else if (/^MAT-[A-F0-9]+$/i.test(query)) {
     const registry = await db.collection("matrimonyIds").doc(query.toUpperCase()).get();
     uid = String(registry.data()?.uid || "");
-  } else if (/^[a-zA-Z0-9._]{3,30}$/.test(query)) {
-    const normalized = query.replace(/^@/, "").toLowerCase();
-    const registry = await db.collection("usernames").doc(normalized).get();
-    uid = String(registry.data()?.uid || "");
+  } else if (/^[a-zA-Z0-9._-]{3,128}$/.test(query)) {
+    const normalized = query.toLowerCase();
+    if (/^[a-z0-9][a-z0-9._]{2,29}$/.test(normalized)) {
+      const registry = await db.collection("usernames").doc(normalized).get();
+      uid = String(registry.data()?.uid || "");
+    }
     if (!uid) {
       const direct = await db.collection("users").doc(query).get();
       if (direct.exists) uid = direct.id;
     }
-  } else {
-    const direct = await db.collection("users").doc(query).get();
-    if (direct.exists) uid = direct.id;
   }
   if (!uid) throw new functions.https.HttpsError("not-found", "Account not found");
 
