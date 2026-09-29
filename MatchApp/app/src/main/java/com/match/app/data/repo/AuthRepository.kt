@@ -346,31 +346,34 @@ class AuthRepository @Inject constructor(
         motherOccupation: String,
         siblings: Int,
         familyType: String,
+        familyStatus: String,
         familyValues: String,
-        nativePlace: String,
+        nativeState: String,
         gotra: String,
         aboutFamily: String
-    ) {
-        val u = userDao.findById(userId) ?: return
-        val updated = u.copy(
-            fatherOccupation = fatherOccupation,
-            motherOccupation = motherOccupation,
+    ): Result<Unit> = runCatching {
+        require(siblings in 0..20) { "Number of siblings must be between 0 and 20." }
+        val original = userDao.findById(userId) ?: error("Profile not found")
+        val updated = original.copy(
+            fatherOccupation = fatherOccupation.trim().take(120),
+            motherOccupation = motherOccupation.trim().take(120),
             siblings = siblings,
-            familyType = familyType,
-            familyValues = familyValues,
-            gothra = gotra,
-            city = nativePlace.ifBlank { u.city },
-            aboutFamily = aboutFamily
+            familyType = familyType.trim().take(40),
+            familyStatus = familyStatus.trim().take(60),
+            familyValues = familyValues.trim().take(60),
+            nativeState = nativeState.trim().take(100),
+            gothra = gotra.trim().take(100),
+            aboutFamily = aboutFamily.trim().take(1000)
         )
-        userDao.update(updated)
-        if (u.firebaseUid.isNotBlank()) {
-            try {
-                val synced = firestoreProfile.pushProfile(updated)
-                userDao.update(synced)
-            } catch (ex: Exception) {
-                Log.w("AuthRepository", "Family details cloud sync failed", ex)
-            }
+
+        // Cloud profile is canonical. Do not tell the user "saved" when a local-only write failed
+        // to reach the server; pushProfile returns the server revision that is safe to cache.
+        val synced = if (updated.firebaseUid.isNotBlank()) {
+            firestoreProfile.pushProfile(updated)
+        } else {
+            updated
         }
+        userDao.update(synced)
     }
 
     suspend fun updateBio(userId: Long, bio: String) {
