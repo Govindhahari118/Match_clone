@@ -146,6 +146,8 @@ fun ProfileScreen(
     onGoPrivacy: () -> Unit = {},
     onGoGuidelines: () -> Unit = {},
     onGoBiodata: () -> Unit = {},
+    onGoVideoProfile: () -> Unit = {},
+    videoProfileEnabled: Boolean = false,
     unreadNotif: Int = 0,
     vm: ProfileViewModel = hiltViewModel()
 ) {
@@ -250,6 +252,14 @@ fun ProfileScreen(
                 onClick = onGoBiodata,
                 modifier = Modifier.fillMaxWidth()
             )
+            if (videoProfileEnabled) {
+                MatreeSecondaryButton(
+                    text = "Video profile",
+                    icon = Icons.Filled.Videocam,
+                    onClick = onGoVideoProfile,
+                    modifier = Modifier.fillMaxWidth().testTag("btn_video_profile")
+                )
+            }
             MatreeSecondaryButton(
                 text = "Settings",
                 icon = Icons.Filled.Settings,
