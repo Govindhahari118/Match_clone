@@ -11,8 +11,8 @@
     {
       "path": "ui/aiinsights/AIMatchInsightsScreen.kt",
       "symbol": "AIMatchInsightsScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
@@ -116,8 +116,8 @@
     {
       "path": "ui/deepcompat/CompatibilityDeepDiveScreen.kt",
       "symbol": "CompatibilityDeepDiveScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
