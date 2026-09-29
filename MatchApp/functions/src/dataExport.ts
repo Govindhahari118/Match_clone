@@ -121,6 +121,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     incomingInterests,
     matches,
     supportTickets,
+    familyDelegates,
+    familyManagedProfiles,
   ] = await Promise.all([
     singleDoc("users", uid),
     singleDoc("userPrivate", uid),
@@ -145,6 +147,8 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     queryAll(db.collection("interests").where("toUid", "==", uid)),
     queryAll(db.collection("matches").where("users", "array-contains", uid)),
     queryAll(db.collection("supportTickets").where("uid", "==", uid)),
+    childCollection(`familyDelegates/${uid}/members`),
+    queryAll(db.collectionGroup("members").where("delegateUid", "==", uid)),
   ]);
 
   const chatSnapshots = await queryAll(
@@ -174,6 +178,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
         "interests and matches",
         "chat threads and messages",
         "support tickets",
+        "family profile delegation relationships",
         "verification status",
         "current stored Nearby location, if any",
       ],
@@ -211,6 +216,10 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
       matches,
       chats,
       supportTickets,
+      familyAccess: {
+        delegates: familyDelegates,
+        managedProfiles: familyManagedProfiles.filter((item) => item.active === true),
+      },
     },
   };
 }
