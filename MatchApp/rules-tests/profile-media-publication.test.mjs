@@ -154,3 +154,20 @@ test('voice bio peer access is also limited to the published object', async () =
   await assertSucceeds(getBytes(ref(bobStorage, 'voicebios/alice/current.m4a')));
   await assertFails(getBytes(ref(bobStorage, 'voicebios/alice/draft.m4a')));
 });
+
+
+test('profile media upload MIME types are narrow', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'photos/alice/not-allowed.png'),
+    new Uint8Array([1]),
+    { contentType: 'image/png', customMetadata: { ownerUid: 'alice' } },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'videos/alice/not-allowed.webm'),
+    new Uint8Array([1]),
+    { contentType: 'video/webm', customMetadata: { ownerUid: 'alice' } },
+  ));
+});
