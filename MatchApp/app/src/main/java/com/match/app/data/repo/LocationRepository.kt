@@ -48,7 +48,8 @@ data class NearbySharingStatus(
 class LocationRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val userDao: UserDao,
-    private val profileService: FirestoreProfileService
+    private val profileService: FirestoreProfileService,
+    private val consentRepository: ConsentRepository
 ) {
     private val functions = FirebaseFunctions.getInstance()
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
