@@ -29,9 +29,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.google.firebase.functions.FirebaseFunctions
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.remote.FirebaseStorageService
-import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.common.resolveSecureMediaModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,16 +41,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.io.File
 import javax.inject.Inject
 
 data class VideoProfileUiState(
     val loading: Boolean = true,
     val storedReference: String = "",
+    val pendingReference: String = "",
     val selectedUri: String = "",
+    val reviewStatus: String = "NONE",
     val uploading: Boolean = false,
     val deleting: Boolean = false,
-    val saved: Boolean = false,
+    val submittedForReview: Boolean = false,
     val error: String? = null
 )
 
@@ -58,24 +62,53 @@ class VideoProfileViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val storageService: FirebaseStorageService,
-    private val profileService: FirestoreProfileService
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
 
+    private val functions = FirebaseFunctions.getInstance()
     private val _ui = MutableStateFlow(VideoProfileUiState())
     val ui = _ui.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            val localId = session.userId.first()
-            val user = localId?.let { userDao.findById(it) }
-            _ui.value = if (user == null) {
-                VideoProfileUiState(loading = false, error = "Profile could not be loaded.")
-            } else {
-                VideoProfileUiState(
-                    loading = false,
-                    storedReference = user.videoUrl
-                )
+        refresh()
+    }
+
+    private fun refresh() = viewModelScope.launch {
+        val localId = session.userId.first()
+        val user = localId?.let { userDao.findById(it) }
+        if (user == null || user.firebaseUid.isBlank()) {
+            _ui.value = VideoProfileUiState(
+                loading = false,
+                error = "Profile could not be loaded."
+            )
+            return@launch
+        }
+
+        runCatching {
+            val result = functions.getHttpsCallable("getMyProfileVideoState").call().await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?> ?: emptyMap()
+            Triple(
+                data["publishedPath"] as? String ?: user.videoUrl,
+                data["pendingPath"] as? String ?: "",
+                data["status"] as? String ?: "NONE"
+            )
+        }.onSuccess { (published, pending, status) ->
+            if (published != user.videoUrl) {
+                userDao.update(user.copy(videoUrl = published))
             }
+            _ui.value = VideoProfileUiState(
+                loading = false,
+                storedReference = published,
+                pendingReference = pending,
+                reviewStatus = status
+            )
+        }.onFailure { error ->
+            _ui.value = VideoProfileUiState(
+                loading = false,
+                storedReference = user.videoUrl,
+                error = error.message?.take(180) ?: "Could not load profile video status."
+            )
         }
     }
 
@@ -83,17 +116,17 @@ class VideoProfileViewModel @Inject constructor(
         _ui.update {
             it.copy(
                 selectedUri = uri.toString(),
-                saved = false,
+                submittedForReview = false,
                 error = null
             )
         }
     }
 
     fun cancelSelection() {
-        _ui.update { it.copy(selectedUri = "", saved = false, error = null) }
+        _ui.update { it.copy(selectedUri = "", submittedForReview = false, error = null) }
     }
 
-    fun saveVideo() = viewModelScope.launch {
+    fun submitVideo() = viewModelScope.launch {
         val localId = session.userId.first() ?: return@launch
         val user = userDao.findById(localId) ?: return@launch
         val firebaseUid = user.firebaseUid.takeIf { it.isNotBlank() } ?: run {
@@ -103,39 +136,45 @@ class VideoProfileViewModel @Inject constructor(
         val source = _ui.value.selectedUri.takeIf { it.isNotBlank() } ?: return@launch
         if (_ui.value.uploading) return@launch
 
-        val previousReference = _ui.value.storedReference
-        _ui.update { it.copy(uploading = true, saved = false, error = null) }
-
+        _ui.update { it.copy(uploading = true, submittedForReview = false, error = null) }
+        var uploadedReference = ""
         runCatching {
-            val newReference = storageService.uploadProfileVideo(firebaseUid, Uri.parse(source)).getOrThrow()
-
-            // Publish only after the new object is completely uploaded. This preserves the old
-            // working video if the replacement upload fails.
-            userDao.update(user.copy(videoUrl = newReference))
-            profileService.updateFields(firebaseUid, mapOf("videoUrl" to newReference))
-
-            // Cleanup is deliberately after publication and best-effort. A cleanup failure cannot
-            // turn a successfully published replacement into fake failure.
-            if (previousReference.isProtectedRemoteReference() && previousReference != newReference) {
-                runCatching { storageService.deleteProtectedMedia(previousReference).getOrThrow() }
+            consentRepository.set("media_processing", true)
+            uploadedReference = storageService
+                .uploadProfileVideo(firebaseUid, Uri.parse(source))
+                .getOrThrow()
+            val result = functions.getHttpsCallable("submitProfileVideo")
+                .call(mapOf("storagePath" to uploadedReference))
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = result.data as? Map<String, Any?> ?: error("Invalid video submission response")
+            check((data["status"] as? String) == "PENDING") {
+                "Video was not accepted for review"
             }
-            newReference
-        }.onSuccess { newReference ->
+            uploadedReference
+        }.onSuccess { pending ->
             _ui.update {
                 it.copy(
-                    storedReference = newReference,
+                    pendingReference = pending,
                     selectedUri = "",
+                    reviewStatus = "PENDING",
                     uploading = false,
-                    saved = true,
+                    submittedForReview = true,
                     error = null
                 )
             }
         }.onFailure { error ->
+            if (uploadedReference.isNotBlank()) {
+                runCatching {
+                    storageService.deleteProtectedMedia(uploadedReference).getOrThrow()
+                }
+            }
             _ui.update {
                 it.copy(
                     uploading = false,
-                    saved = false,
-                    error = error.message?.take(180) ?: "Video upload failed. Please try again."
+                    submittedForReview = false,
+                    error = error.message?.take(180)
+                        ?: "Video submission failed. Please try again."
                 )
             }
         }
@@ -145,36 +184,25 @@ class VideoProfileViewModel @Inject constructor(
         val localId = session.userId.first() ?: return@launch
         val user = userDao.findById(localId) ?: return@launch
         if (_ui.value.deleting) return@launch
-        val reference = _ui.value.storedReference
 
         _ui.update { it.copy(deleting = true, error = null) }
         runCatching {
-            if (reference.isProtectedRemoteReference()) {
-                storageService.deleteProtectedMedia(reference).getOrThrow()
-            }
+            functions.getHttpsCallable("removeProfileVideo").call().await()
             userDao.update(user.copy(videoUrl = ""))
-            if (user.firebaseUid.isNotBlank()) {
-                profileService.updateFields(user.firebaseUid, mapOf("videoUrl" to ""))
-            }
         }.onSuccess {
-            _ui.value = VideoProfileUiState(loading = false)
+            _ui.value = VideoProfileUiState(loading = false, reviewStatus = "REMOVED")
         }.onFailure { error ->
             _ui.update {
                 it.copy(
                     deleting = false,
-                    error = error.message?.take(180) ?: "Could not remove the video."
+                    error = error.message?.take(180) ?: "Could not remove the profile video."
                 )
             }
         }
     }
 
-    fun clearSavedMessage() = _ui.update { it.copy(saved = false) }
-
-    private fun String.isProtectedRemoteReference(): Boolean =
-        startsWith("gs://", ignoreCase = true) ||
-            startsWith("https://firebasestorage.googleapis.com", ignoreCase = true) ||
-            startsWith("https://storage.googleapis.com", ignoreCase = true) ||
-            startsWith("videos/", ignoreCase = true)
+    fun clearSubmittedMessage() =
+        _ui.update { it.copy(submittedForReview = false) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -215,7 +243,9 @@ fun VideoProfileScreen(
         recorder.launch(captureUri)
     }
 
-    val playbackSource = ui.selectedUri.ifBlank { ui.storedReference }
+    val playbackSource = ui.selectedUri.ifBlank {
+        ui.pendingReference.ifBlank { ui.storedReference }
+    }
     var resolvedPlaybackUri by remember(playbackSource, playbackRetry) { mutableStateOf<Uri?>(null) }
     var resolvingPlayback by remember(playbackSource, playbackRetry) {
         mutableStateOf(playbackSource.isNotBlank())
@@ -284,7 +314,7 @@ fun VideoProfileScreen(
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        "A short optional video can help another member understand your personality and communication style. Matree does not promise a response or visibility multiplier.",
+                        "A short optional video can help another member understand your personality and communication style. Uploading records the current Media processing notice, and the video stays owner-only until an authorized review publishes it. Matree does not promise a response or visibility multiplier.",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -386,7 +416,7 @@ fun VideoProfileScreen(
                 }
             }
 
-            if (ui.saved) {
+            if (ui.submittedForReview || ui.reviewStatus == "PENDING") {
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -394,17 +424,17 @@ fun VideoProfileScreen(
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Filled.CheckCircle,
+                            Icons.Filled.Schedule,
                             null,
                             tint = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "Video uploaded and saved to your profile.",
+                            "Video submitted for review. Your currently approved video stays published until this review is approved.",
                             modifier = Modifier.weight(1f),
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
-                        IconButton(onClick = vm::clearSavedMessage) {
+                        IconButton(onClick = vm::clearSubmittedMessage) {
                             Icon(Icons.Filled.Close, contentDescription = "Dismiss")
                         }
                     }
@@ -439,7 +469,7 @@ fun VideoProfileScreen(
 
             if (ui.selectedUri.isNotBlank()) {
                 Button(
-                    onClick = vm::saveVideo,
+                    onClick = vm::submitVideo,
                     enabled = !ui.uploading,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -456,7 +486,7 @@ fun VideoProfileScreen(
                         Icon(Icons.Filled.CloudUpload, null)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text(if (ui.uploading) "Uploading…" else "Upload & save")
+                    Text(if (ui.uploading) "Submitting…" else "Upload for review")
                 }
                 TextButton(
                     onClick = vm::cancelSelection,
@@ -465,7 +495,7 @@ fun VideoProfileScreen(
                 ) {
                     Text("Cancel selection")
                 }
-            } else if (ui.storedReference.isNotBlank()) {
+            } else if (ui.storedReference.isNotBlank() || ui.pendingReference.isNotBlank()) {
                 OutlinedButton(
                     onClick = vm::removeVideo,
                     enabled = !ui.deleting,
