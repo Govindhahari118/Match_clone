@@ -10,6 +10,7 @@ import {
   normalizePartnerPreferences,
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
+import { recordRecommendationImpressionBatch } from "./recommendationFeedback";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -485,5 +486,12 @@ export const discoverProfiles = functions
     const nextCursor = scan.docs.length === SCAN_LIMIT
       ? scan.docs[scan.docs.length - 1].id
       : null;
+
+    await recordRecommendationImpressionBatch(
+      viewerUid,
+      profiles.map((profile) => String(profile.firebaseUid || "")),
+      keyword ? "SEARCH" : "DISCOVER"
+    );
+
     return { profiles, nextCursor };
   });
