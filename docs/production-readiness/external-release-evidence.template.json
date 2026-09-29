@@ -1,0 +1,117 @@
+{
+  "releaseSha": "EXACT_RELEASE_SHA",
+  "gates": [
+    {
+      "id": "production_firebase_configuration",
+      "status": "PENDING",
+      "owner": "Platform",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "production_signing",
+      "status": "PENDING",
+      "owner": "Release",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "app_check_play_integrity_enforcement",
+      "status": "PENDING",
+      "owner": "Security",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "aadhaar_registered_provider_flow",
+      "status": "PENDING",
+      "owner": "Identity",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "selfie_liveness_face_provider",
+      "status": "PENDING",
+      "owner": "Identity",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "voice_video_number_masking_provider",
+      "status": "PENDING",
+      "owner": "Communications",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "google_play_licensed_billing",
+      "status": "PENDING",
+      "owner": "Payments",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "physical_device_e2e",
+      "status": "PENDING",
+      "owner": "QA",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "performance_slo",
+      "status": "PENDING",
+      "owner": "Performance",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "accessibility_physical_device",
+      "status": "PENDING",
+      "owner": "Accessibility",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "penetration_test",
+      "status": "PENDING",
+      "owner": "Security",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "kundali_reference_validation",
+      "status": "PENDING",
+      "owner": "Compatibility",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "localization_native_qa",
+      "status": "PENDING",
+      "owner": "Localization",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "legal_data_safety_store",
+      "status": "PENDING",
+      "owner": "Compliance",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "rollback_drill",
+      "status": "PENDING",
+      "owner": "Release",
+      "evidence": "",
+      "completedAt": ""
+    },
+    {
+      "id": "controlled_rollout",
+      "status": "PENDING",
+      "owner": "Release",
+      "evidence": "",
+      "completedAt": ""
+    }
+  ]
+}
