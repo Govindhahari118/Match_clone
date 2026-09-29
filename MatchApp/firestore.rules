@@ -228,6 +228,7 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     match /savedSearches/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
+    match /partnerPreferences/{ownerUid} { allow read, write: if false; }
 
     match /shortlists/{ownerUid}/saved/{targetUid} { allow read, write: if isOwner(ownerUid) && !blockedEitherWay(ownerUid, targetUid) && !profileHiddenFrom(targetUid, ownerUid); }
     match /shortlists/{ownerUid} { allow read: if isOwner(ownerUid); }
