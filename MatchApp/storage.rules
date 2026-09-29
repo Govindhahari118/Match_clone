@@ -17,16 +17,18 @@ service firebase.storage {
       return firestore.exists(/databases/(default)/documents/users/$(uid)) &&
         firestore.get(/databases/(default)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
     }
-    function ownerMediaReadable(uid) {
-      return signedIn() && (
-        (request.auth.uid == uid && activeAccount(uid)) ||
-        (activeAccount(request.auth.uid) &&
-          activeAccount(uid) &&
-          !blockedEitherWay(request.auth.uid, uid) &&
-          !profileHiddenFrom(uid, request.auth.uid) &&
-          (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
-            explicitInterestFrom(uid, request.auth.uid)))
-      );
+    function ownerCanReadMedia(uid) {
+      return signedIn() && request.auth.uid == uid && activeAccount(uid);
+    }
+    function peerCanReadPublishedMedia(uid) {
+      return signedIn() && request.auth.uid != uid &&
+        activeAccount(request.auth.uid) &&
+        activeAccount(uid) &&
+        !blockedEitherWay(request.auth.uid, uid) &&
+        !profileHiddenFrom(uid, request.auth.uid) &&
+        (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
+          explicitInterestFrom(uid, request.auth.uid)) &&
+        resource.metadata.get('published', 'false') == 'true';
     }
     function chatExists(threadId) {
       return firestore.exists(/databases/(default)/documents/chats/$(threadId));
@@ -61,17 +63,27 @@ service firebase.storage {
     }
 
     match /photos/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow read: if ownerCanReadMedia(uid) || peerCanReadPublishedMedia(uid);
+      // Members may create only unprivileged owner-bound metadata. The trusted moderation backend
+      // is the only writer that can add published=true.
+      allow create, update: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*') &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /videos/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+      allow read: if ownerCanReadMedia(uid) || peerCanReadPublishedMedia(uid);
+      allow create, update: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType.matches('video/.*') &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /voicebios/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
+      allow read: if ownerCanReadMedia(uid) || peerCanReadPublishedMedia(uid);
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
