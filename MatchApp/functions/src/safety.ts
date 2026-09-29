@@ -138,8 +138,11 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
 
 const SUPPORT_CATEGORIES = new Set([
   "Account",
-  "Membership",
   "Verification",
+  "Match/search",
+  "Membership",
+  "Payment",
+  "Privacy",
   "Safety",
   "Technical issue",
   "Other",
