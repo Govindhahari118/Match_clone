@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SignInScreen(
     onGoSignUp: () -> Unit,
+    onGoPhone: () -> Unit = {},
     vm: SignInViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsState()
@@ -126,6 +127,19 @@ fun SignInScreen(
                     enabled = !state.loading && email.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().testTag("signin_submit")
                 )
+
+                Spacer(Modifier.height(MatreeDesign.spacing.xs))
+                OutlinedButton(
+                    onClick = onGoPhone,
+                    enabled = !state.loading,
+                    modifier = Modifier.fillMaxWidth()
+                        .height(52.dp)
+                        .testTag("signin_phone")
+                ) {
+                    Icon(Icons.Filled.PhoneAndroid, contentDescription = null)
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                    Text("Continue with phone OTP")
+                }
 
                 TextButton(
                     onClick = { forgotEmail = email; showForgotDialog = true },
