@@ -379,7 +379,14 @@ test('verification documents cannot be read by another client', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const bytes = new Uint8Array([1, 2, 3]);
-  await assertSucceeds(uploadBytes(ref(aliceStorage, 'verifications/alice/id.jpg'), bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'verifications/alice/id.jpg'),
+    bytes,
+    {
+      contentType: 'image/jpeg',
+      customMetadata: { ownerUid: 'alice', docType: 'Passport' },
+    }
+  ));
   await assertFails(getBytes(ref(bobStorage, 'verifications/alice/id.jpg')));
 });
 
