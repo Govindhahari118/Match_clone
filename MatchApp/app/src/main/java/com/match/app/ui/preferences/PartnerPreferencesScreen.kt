@@ -91,7 +91,8 @@ class PartnerPreferencesViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PartnerPreferencesScreen(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    onSaved: () -> Unit = {},
     vm: PartnerPreferencesViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
@@ -100,6 +101,7 @@ fun PartnerPreferencesScreen(
     LaunchedEffect(ui.message, ui.error) {
         val message = ui.error ?: ui.message
         if (message != null) {
+            if (ui.error == null && ui.value.configured) onSaved()
             snackbar.showSnackbar(message)
             vm.consumeMessage()
         }
