@@ -1,6 +1,6 @@
 # Matree architecture, authority and environment map
 
-> Applies to `gpt/matree-pin-to-pin-completion-20260925`.
+> Applies to `gpt/matree-master-plan-hardening-20260929` (PR #22).
 > This records repository-enforceable boundaries. Production project IDs, provider credentials,
 > enforcement switches and deployment proof remain operator evidence and are not invented here.
 
