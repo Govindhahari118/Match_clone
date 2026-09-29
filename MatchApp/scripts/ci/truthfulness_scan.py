@@ -18,8 +18,8 @@ STUB_RULES = [
 
 STALE_RELEASE_TEST_RULES = [
     ("demo authentication in production-gate instrumentation", re.compile(r"signInAsDemo|demo[_ -]?user", re.IGNORECASE)),
-    ("stale hidden route asserted by production-gate instrumentation", re.compile(
-        r"drawer_(?:regions|circles|stories|family)|(?:regions|circles|stories|family)_screen"
+    ("stale hidden route positively navigated by production-gate instrumentation", re.compile(
+        r"(?:openDrawerAndNavigate|waitFor)\(\s*[\"'](?:regions|circles|stories|family)[\"']"
     )),
 ]
 
