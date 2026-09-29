@@ -554,3 +554,45 @@ export const onProfileVideoDeleted = functions.storage.object().onDelete(async (
     }
   });
 });
+
+
+async function cleanupRetiredVoiceBioField(): Promise<number> {
+  const snapshot = await db.collection("users")
+    .where("voiceBioUrl", ">", "")
+    .limit(200)
+    .get();
+  if (snapshot.empty) return 0;
+
+  const bucket = admin.storage().bucket();
+  const batch = db.batch();
+  for (const doc of snapshot.docs) {
+    const raw = doc.data()?.voiceBioUrl;
+    const path = typeof raw === "string" ? raw.trim() : "";
+    if (path.startsWith(`voicebios/${doc.id}/`) && !path.includes("..")) {
+      try {
+        await bucket.file(path).delete({ ignoreNotFound: true });
+      } catch (error) {
+        functions.logger.warn("Retired voice-bio deletion failed", {
+          uid: doc.id,
+          path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    batch.update(doc.ref, {
+      voiceBioUrl: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  return snapshot.size;
+}
+
+/** Data-minimization cleanup for the retired voice-bio prototype. */
+export const cleanupRetiredVoiceBioMedia = functions.pubsub
+  .schedule("every 24 hours")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const referencesRemoved = await cleanupRetiredVoiceBioField();
+    functions.logger.info("Retired voice-bio cleanup completed", { referencesRemoved });
+  });
