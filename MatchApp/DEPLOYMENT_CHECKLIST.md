@@ -188,6 +188,14 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 - [ ] Stage production rollout (for example 5% → 20% → 50% → 100%) while monitoring Crashlytics, ANRs, Functions errors, payment failures and Firebase cost.
 - [ ] Have an operational rollback/disable plan using release rollback and narrowly scoped Remote Config feature flags where already implemented.
 
+## 17. Machine-verified external evidence
+
+- [ ] Copy the external evidence template to an operator-controlled release record for the exact Git SHA.
+- [ ] Attach concrete references for Firebase production configuration, signing, release credentials, App Check/Play Integrity, auth device matrix, licensed billing, physical E2E, accessibility, performance SLO, penetration test, legal/Data Safety, Play pre-launch report and rollback drill.
+- [ ] Run `python3 scripts/ci/production_external_gate.py --evidence <file> --sha <exact-sha> --mode prelaunch` before production promotion.
+- [ ] After controlled rollout and post-rollout health review, run the same exact SHA with `--mode full`.
+- [ ] Never use the CI synthetic validator JSON as release evidence.
+
 ## Definition of Done
 
 A candidate is production-ready only when the exact release commit has green CI, every active feature has passed its end-to-end real-device test, production Firebase/payment/Play configuration is complete, privacy declarations match the implementation, and there are no known P0/P1 blockers. Hidden source files and future-feature ideas do not count as completed functionality.
