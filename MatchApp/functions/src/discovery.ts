@@ -5,6 +5,11 @@ import {
   activityVisibilityAllows,
   normalizeActivityVisibility,
 } from "./activityVisibilityPolicy";
+import {
+  bilateralPreferredFit,
+  normalizePartnerPreferences,
+  strictPreferencesAllow,
+} from "./partnerPreferencesPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -247,11 +252,24 @@ export const discoverProfiles = functions
       : "";
     const normalizedUsername = keyword.replace(/^@+/, "");
 
-    const viewerDoc = await db.collection("users").doc(viewerUid).get();
+    const [viewerDoc, viewerPreferencesDoc] = await Promise.all([
+      db.collection("users").doc(viewerUid).get(),
+      db.collection("partnerPreferences").doc(viewerUid).get(),
+    ]);
     if (!viewerDoc.exists) {
       throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
     }
     const viewer = viewerDoc.data() || {};
+    const viewerAccountStatus = stringValue(viewer.accountStatus).toUpperCase() || "ACTIVE";
+    if (viewerAccountStatus !== "ACTIVE" || viewer.matrimonyPaused === true) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Discovery is unavailable while your matrimony account is not active"
+      );
+    }
+    const viewerPartnerPreferences = normalizePartnerPreferences(
+      viewerPreferencesDoc.data()
+    );
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
 
@@ -296,6 +314,9 @@ export const discoverProfiles = functions
       db.collection("privacyRelations").doc(doc.id).collection("members").doc(viewerUid)
     );
     const subscriptionRefs = candidates.map((doc) => db.collection("subscriptions").doc(doc.id));
+    const partnerPreferenceRefs = candidates.map((doc) =>
+      db.collection("partnerPreferences").doc(doc.id)
+    );
     const privateFilterRequested = needsPrivateFilterData(data);
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
     const privateRefs = privateFilterRequested
@@ -321,6 +342,7 @@ export const discoverProfiles = functions
       reverseDocs,
       privacyDocs,
       subscriptionDocs,
+      partnerPreferenceDocs,
       privateDocs,
       presenceDocs,
       activitySettingsDocs,
@@ -331,6 +353,7 @@ export const discoverProfiles = functions
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
       subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
+      partnerPreferenceRefs.length ? db.getAll(...partnerPreferenceRefs) : Promise.resolve([]),
       privateRefs.length ? db.getAll(...privateRefs) : Promise.resolve([]),
       presenceRefs.length ? db.getAll(...presenceRefs) : Promise.resolve([]),
       activitySettingsRefs.length ? db.getAll(...activitySettingsRefs) : Promise.resolve([]),
@@ -342,6 +365,12 @@ export const discoverProfiles = functions
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
+    const partnerPreferencesByUid = new Map(
+      candidates.map((doc, index) => [
+        doc.id,
+        normalizePartnerPreferences(partnerPreferenceDocs[index]?.data()),
+      ])
+    );
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
     const visibleLastActiveByUid = new Map<string, number>();
     reverseDocs.forEach((doc, index) => {
@@ -382,18 +411,14 @@ export const discoverProfiles = functions
     }
 
     const now = Date.now();
-    const rankedCandidates = keyword
-      ? candidates
-      : candidates.slice().sort((left, right) => {
-        const leftBoosted = (boostUntilByUid.get(left.id) || 0) > now ? 1 : 0;
-        const rightBoosted = (boostUntilByUid.get(right.id) || 0) > now ? 1 : 0;
-        if (leftBoosted !== rightBoosted) return rightBoosted - leftBoosted;
-        return createdAtMillis(right.data() || {}) - createdAtMillis(left.data() || {});
-      });
+    const eligible: Array<{
+      doc: FirebaseFirestore.DocumentSnapshot;
+      preferredFit: number | null;
+      boosted: number;
+      createdAt: number;
+    }> = [];
 
-    const profiles: Record<string, unknown>[] = [];
-    for (const doc of rankedCandidates) {
-      if (profiles.length >= RETURN_LIMIT) break;
+    for (const doc of candidates) {
       if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
       const candidate = doc.data() || {};
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
@@ -425,8 +450,37 @@ export const discoverProfiles = functions
         visibleLastActiveByUid.get(doc.id) || 0
       )) continue;
 
-      profiles.push(publicProfile(doc.id, candidate, now));
+      const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
+        normalizePartnerPreferences(undefined);
+      if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
+      if (!strictPreferencesAllow(candidatePartnerPreferences, viewer)) continue;
+
+      eligible.push({
+        doc,
+        preferredFit: bilateralPreferredFit(
+          viewerPartnerPreferences,
+          viewer,
+          candidatePartnerPreferences,
+          candidate
+        ),
+        boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
+        createdAt: createdAtMillis(candidate),
+      });
     }
+
+    const rankedCandidates = keyword
+      ? eligible
+      : eligible.sort((left, right) => {
+        const leftFit = left.preferredFit ?? -1;
+        const rightFit = right.preferredFit ?? -1;
+        if (leftFit !== rightFit) return rightFit - leftFit;
+        if (left.boosted !== right.boosted) return right.boosted - left.boosted;
+        return right.createdAt - left.createdAt;
+      });
+
+    const profiles = rankedCandidates
+      .slice(0, RETURN_LIMIT)
+      .map(({ doc }) => publicProfile(doc.id, doc.data() || {}, now));
 
     const nextCursor = scan.docs.length === SCAN_LIMIT
       ? scan.docs[scan.docs.length - 1].id
