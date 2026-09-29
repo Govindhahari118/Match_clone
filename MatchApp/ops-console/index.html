@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Matree Operations</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <strong>Matree Operations</strong>
+      <span id="identity">Signed out</span>
+    </div>
+    <button id="signOut" class="secondary" hidden>Sign out</button>
+  </header>
+
+  <main>
+    <section id="loginCard" class="card narrow">
+      <h1>Operator sign in</h1>
+      <p>Use an account with server-issued Matree operations roles. Member accounts have no access.</p>
+      <form id="loginForm">
+        <label>Email<input id="email" type="email" autocomplete="username" required></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="app" hidden>
+      <div id="status" class="notice" aria-live="polite"></div>
+      <nav id="tabs" aria-label="Operations modules">
+        <button data-tab="dashboard">Dashboard</button>
+        <button data-tab="account">Account</button>
+        <button data-tab="support">Support</button>
+        <button data-tab="reports">Moderation</button>
+        <button data-tab="risk">Risk</button>
+        <button data-tab="verification">Verification</button>
+        <button data-tab="photos">Photos</button>
+        <button data-tab="payments">Payments</button>
+      </nav>
+
+      <section id="dashboard" class="panel">
+        <div class="panel-head"><h2>Queue health</h2><button data-action="metrics">Refresh</button></div>
+        <pre id="metricsOutput">No metrics loaded.</pre>
+      </section>
+
+      <section id="account" class="panel" hidden>
+        <h2>Exact account lookup</h2>
+        <form id="accountForm" class="inline">
+          <input id="accountQuery" placeholder="UID, email, @username or MAT-…" required>
+          <button>Lookup</button>
+        </form>
+        <pre id="accountOutput">No account selected.</pre>
+      </section>
+
+      <section id="support" class="panel" hidden>
+        <div class="panel-head"><h2>Support queue</h2><button data-action="support">Refresh</button></div>
+        <div id="supportList"></div>
+      </section>
+
+      <section id="reports" class="panel" hidden>
+        <div class="panel-head"><h2>Moderation reports</h2><button data-action="reports">Refresh</button></div>
+        <div id="reportList"></div>
+      </section>
+
+      <section id="risk" class="panel" hidden>
+        <div class="panel-head"><h2>Risk review</h2><button data-action="risk">Refresh</button></div>
+        <div id="riskList"></div>
+      </section>
+
+      <section id="verification" class="panel" hidden>
+        <div class="panel-head"><h2>KYC verification</h2><button data-action="verification">Refresh</button></div>
+        <div id="verificationList"></div>
+      </section>
+
+      <section id="photos" class="panel" hidden>
+        <div class="panel-head"><h2>Photo moderation</h2><button data-action="photos">Refresh</button></div>
+        <div id="photoList"></div>
+      </section>
+
+      <section id="payments" class="panel" hidden>
+        <h2>Payment reconciliation</h2>
+        <form id="paymentForm" class="inline">
+          <input id="paymentId" placeholder="Payment ID" required>
+          <button>Lookup</button>
+        </form>
+        <pre id="paymentOutput">No payment selected.</pre>
+      </section>
+    </section>
+  </main>
+
+  <script src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
+  <script src="/__/firebase/10.14.1/firebase-auth-compat.js"></script>
+  <script src="/__/firebase/10.14.1/firebase-functions-compat.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
