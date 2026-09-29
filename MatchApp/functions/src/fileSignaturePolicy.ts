@@ -49,7 +49,9 @@ export function fileSignatureMatchesMime(prefix: Buffer, mime: string): boolean 
     case "image/png": return isPng(prefix);
     case "image/webp": return isWebp(prefix);
     case "application/pdf": return isPdf(prefix);
-    case "video/mp4": return isMp4(prefix);
+    case "video/mp4":
+    case "audio/mp4":
+      return isMp4(prefix);
     default: return false;
   }
 }
