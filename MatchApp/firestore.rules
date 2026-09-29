@@ -287,6 +287,24 @@ service cloud.firestore {
       // first upload a protected Storage object and then call submitVerificationRequest.
       allow create, update, delete: if false;
     }
+
+    // Consent state is server-written so clients cannot fabricate the version or timestamp that
+    // authorized a sensitive operation. Members may read only their own current state/history.
+    match /consents/{uid}/items/{purpose} {
+      allow read: if isOwner(uid);
+      allow create, update, delete: if false;
+    }
+    match /consents/{uid} { allow read: if isOwner(uid); allow write: if false; }
+    match /consentLedger/{uid}/events/{eventId} {
+      allow read: if isOwner(uid);
+      allow create, update, delete: if false;
+    }
+    match /consentLedger/{uid} { allow read: if isOwner(uid); allow write: if false; }
+
+    // Fraud/risk evidence and reviewed assessments are never directly readable or writable by
+    // member clients. A privacy-safe Trust summary is returned through an authorized callable.
+    match /riskSignals/{uid} { allow read, write: if false; }
+    match /riskAssessments/{uid} { allow read, write: if false; }
     match /notifications/{notifId} { allow read: if isSignedIn() && resource.data.userId == request.auth.uid; allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']); allow create, delete: if false; }
     match /notificationPrefs/{uid} {
       allow read: if isOwner(uid);
