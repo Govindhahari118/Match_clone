@@ -151,8 +151,8 @@
     {
       "path": "ui/family/FamilyScreen.kt",
       "symbol": "FamilyScreen",
-      "status": "BETA",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
