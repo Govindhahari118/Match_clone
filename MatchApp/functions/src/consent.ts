@@ -41,16 +41,18 @@ function safeLocale(value: unknown): string {
   return /^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$/.test(locale) ? locale : "en-IN";
 }
 
-export async function requireActiveConsent(uid: string, purpose: ConsentPurpose): Promise<void> {
+export async function hasActiveConsent(uid: string, purpose: ConsentPurpose): Promise<boolean> {
   const snapshot = await db.collection("consents").doc(uid).collection("items").doc(purpose).get();
   const data = snapshot.data() || {};
-  if (
+  return (
     snapshot.exists &&
     data.granted === true &&
     data.noticeVersion === currentConsentVersion(purpose)
-  ) {
-    return;
-  }
+  );
+}
+
+export async function requireActiveConsent(uid: string, purpose: ConsentPurpose): Promise<void> {
+  if (await hasActiveConsent(uid, purpose)) return;
   throw new functions.https.HttpsError(
     "failed-precondition",
     "Current consent is required before this operation can continue"
