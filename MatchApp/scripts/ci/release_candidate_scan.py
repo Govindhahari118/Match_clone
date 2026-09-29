@@ -89,6 +89,15 @@ def main() -> int:
     ignore = gitignore + "\n" + local_gitignore
     require("keystore.properties" in ignore, "keystore.properties must be ignored", failures)
 
+    # Production builds must not regain demo-account/password authority. Firebase Auth is the
+    # only password authority and synthetic users/interactions belong in test/debug fixtures only.
+    require(not (APP / "src/main/java/com/match/app/data/seed").exists(),
+            "demo/seed account source must not ship in the production source set", failures)
+    require(not (APP / "src/main/java/com/match/app/core/security/Passwords.kt").exists(),
+            "device-local password hashing authority must not ship in production", failures)
+    require("libs.jbcrypt" not in gradle,
+            "obsolete BCrypt dependency must not ship in production", failures)
+
     prod_roots = [APP / "src/main", ROOT / "functions/src"]
     forbidden = [
         ("emulator endpoint", re.compile(r"\b10\.0\.2\.2\b")),
