@@ -6,6 +6,7 @@ import {
   requireActiveConsent,
 } from "./consent";
 import { db, persistAndSendNotification, requireAppCheck, requireOpsRole } from "./shared";
+import { reviewerRequestedLevelIsValid, verificationLevelForMethod } from "./verificationLevelPolicy";
 
 const GENERIC_VERIFICATION_TYPES = [
   "Passport",
@@ -214,12 +215,8 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
   const approved = data?.approved === true;
   const rejectionReason = typeof data?.rejectionReason === "string" ? data.rejectionReason.trim().slice(0, 500) : "";
-  const newLevel = Number(data?.newLevel);
 
   if (!targetUid) throw new functions.https.HttpsError("invalid-argument", "targetUid required");
-  if (approved && (!Number.isInteger(newLevel) || newLevel < 2 || newLevel > 5)) {
-    throw new functions.https.HttpsError("invalid-argument", "Government-ID approval level must be an integer from 2 to 5");
-  }
   if (!approved && rejectionReason.length < 3) {
     throw new functions.https.HttpsError("invalid-argument", "A rejection reason is required");
   }
@@ -232,15 +229,23 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   if (String(requestSnap.data()?.status || "").toLowerCase() !== "pending") {
     throw new functions.https.HttpsError("failed-precondition", "Only pending verification requests can be reviewed");
   }
-  if (String(requestSnap.data()?.verificationMethod || "") !== "GENERIC_GOVERNMENT_ID_REVIEW") {
+  const verificationMethod = String(requestSnap.data()?.verificationMethod || "");
+  const evidenceLevel = verificationLevelForMethod(verificationMethod);
+  if (evidenceLevel == null) {
     throw new functions.https.HttpsError("failed-precondition", "Unsupported verification review method");
+  }
+  if (approved && !reviewerRequestedLevelIsValid(verificationMethod, data?.newLevel)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "The requested verification level is not supported by this evidence type"
+    );
   }
 
   const previousLevel = Number(profileSnap.data()?.verificationLevel || 0);
   const previousVerified = profileSnap.data()?.isVerified === true;
   const nextStatus = approved ? "verified" : "rejected";
-  const nextLevel = approved ? newLevel : previousLevel;
-  const nextVerified = approved ? newLevel >= 2 : previousVerified;
+  const nextLevel = approved ? evidenceLevel : previousLevel;
+  const nextVerified = approved ? evidenceLevel >= 2 : previousVerified;
   const effectiveReason = approved ? "APPROVED" : rejectionReason;
 
   const batch = db.batch();
@@ -253,8 +258,8 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   });
   if (approved) {
     batch.update(profileRef, {
-      verificationLevel: newLevel,
-      isVerified: newLevel >= 2,
+      verificationLevel: evidenceLevel,
+      isVerified: evidenceLevel >= 2,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   }
