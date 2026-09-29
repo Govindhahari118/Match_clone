@@ -1,6 +1,7 @@
 package com.match.app.core.matching
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,6 +24,14 @@ class AstrologyTest {
                 assertTrue("out of range: $s", s in 0f..1f)
             }
         }
+    }
+
+
+    @Test fun `invalid catalogue values do not create a production score`() {
+        assertNull(Astrology.scoreOrNull("Unknown", "Pushya", "Cancer", "Pushya"))
+        assertNull(Astrology.scoreOrNull("Cancer", "Unknown", "Cancer", "Pushya"))
+        assertTrue(Astrology.isValid("Cancer", "Pushya"))
+        assertTrue(!Astrology.isValid("Cancer", "Unknown"))
     }
 
     @Test fun `combined weighs questionnaire and astrology`() {
