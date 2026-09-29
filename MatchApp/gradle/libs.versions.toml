@@ -10,7 +10,6 @@ hilt = "2.57.1"
 hiltNav = "1.1.0"
 room = "2.8.5"
 datastore = "1.0.0"
-jbcrypt = "0.4"
 biometric = "1.1.0"
 coroutines = "1.7.3"
 splashscreen = "1.0.1"
@@ -58,7 +57,6 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
-jbcrypt = { group = "org.mindrot", name = "jbcrypt", version.ref = "jbcrypt" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
