@@ -42,7 +42,9 @@ data class PartnerPreferences(
 )
 
 @Singleton
-class PartnerPreferenceRepository @Inject constructor() {
+class PartnerPreferenceRepository @Inject constructor(
+    private val consentRepository: ConsentRepository
+) {
     private val functions = FirebaseFunctions.getInstance()
 
     suspend fun load(): PartnerPreferences {
@@ -53,6 +55,9 @@ class PartnerPreferenceRepository @Inject constructor() {
     }
 
     suspend fun save(value: PartnerPreferences): PartnerPreferences {
+        // Partner preferences can include sensitive matrimonial criteria. Record the backend-owned
+        // current notice version before the server accepts or processes the preference document.
+        consentRepository.set("sensitive_preferences", true)
         val result = functions.getHttpsCallable("setPartnerPreferences")
             .call(toMap(value))
             .await()
