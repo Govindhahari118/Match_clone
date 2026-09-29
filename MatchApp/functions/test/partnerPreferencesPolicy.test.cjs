@@ -152,3 +152,23 @@ test("residence classification treats overseas country as NRI even before isNRI 
     false
   );
 });
+
+
+test("empty list modes normalize to no preference and finite choice values are whitelisted", () => {
+  const prefs = normalizePartnerPreferences({
+    casteMode: "STRICT",
+    castes: [],
+    childrenMode: "STRICT",
+    childrenStatuses: ["UNKNOWN", "no_children"],
+    nriMode: "PREFERRED",
+    nriStatuses: ["nri", "bogus"],
+    relocationMode: "STRICT",
+    relocationStatuses: [],
+  });
+  assert.equal(prefs.casteMode, "NO_PREFERENCE");
+  assert.equal(prefs.childrenMode, "STRICT");
+  assert.deepEqual(prefs.childrenStatuses, ["NO_CHILDREN"]);
+  assert.equal(prefs.nriMode, "PREFERRED");
+  assert.deepEqual(prefs.nriStatuses, ["NRI"]);
+  assert.equal(prefs.relocationMode, "NO_PREFERENCE");
+});
