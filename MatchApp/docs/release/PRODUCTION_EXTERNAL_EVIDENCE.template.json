@@ -1,5 +1,6 @@
 {
   "gitSha": "REPLACE_WITH_EXACT_RELEASE_SHA",
+  "evidenceType": "operator-controlled-production-evidence",
   "productionFirebaseConfigured": false,
   "productionSigningVerified": false,
   "releaseCredentialsVerified": false,
