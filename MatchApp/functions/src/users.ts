@@ -516,6 +516,7 @@ export const deleteUserAccount = functions
           db.collection("sessions").doc(uid),
           db.collection("fcmTokens").doc(uid),
           db.collection("userLocations").doc(uid),
+          db.collection("dataExportRateLimits").doc(uid),
         ];
         for (let i = 0; i < singletonRefs.length; i += DELETE_BATCH_SIZE) {
           const batch = db.batch();
