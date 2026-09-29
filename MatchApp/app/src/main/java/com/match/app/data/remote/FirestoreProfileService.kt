@@ -49,7 +49,7 @@ class FirestoreProfileService @Inject constructor(
             "paymentId", "contactsRevealedThisMonth", "contactsResetAt",
             "username", "usernameNormalized", "lastActiveAt", "boostActiveUntil", "accountStatus",
             "profileCompleteness", "profileCompletenessUpdatedAt", "profileRevision", "matchScore",
-            "profileViewCount", "createdAt"
+            "profileViewCount", "createdAt", "photoUrl", "videoUrl"
         )
         private val PROTECTED_PROFILE_FIELDS = setOf(
             "religion", "religionId", "religionLocked", "religionConfirmedAt"
@@ -67,6 +67,10 @@ class FirestoreProfileService @Inject constructor(
         require(auth.currentUser?.uid == uid) { "Cannot update another user's profile" }
 
         val publicData = entityToPublicMap(entity).toMutableMap().apply {
+            // Publication pointers are backend-owned moderation outcomes. Generic profile sync must
+            // never create, replace or clear them.
+            remove("photoUrl")
+            remove("videoUrl")
             put("email", FieldValue.delete())
             put("phoneNumber", FieldValue.delete())
             put("fcmToken", FieldValue.delete())
