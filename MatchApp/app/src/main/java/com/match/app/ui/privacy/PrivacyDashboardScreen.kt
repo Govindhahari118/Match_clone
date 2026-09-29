@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,7 +31,9 @@ import com.match.app.data.remote.FirestoreProfileService
 import com.match.app.data.remote.MemberPrivacyRelation
 import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
+import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ConsentRepository
+import com.match.app.data.repo.DataExportLink
 import com.match.app.data.repo.ConsentState
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeHero
@@ -64,7 +67,8 @@ class PrivacyViewModel @Inject constructor(
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
     private val privacy: FirestorePrivacyService,
-    private val consentRepository: ConsentRepository
+    private val consentRepository: ConsentRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
     val incognito = session.incognitoMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -126,6 +130,12 @@ class PrivacyViewModel @Inject constructor(
 
     private val _consentLoading = MutableStateFlow(false)
     val consentLoading: StateFlow<Boolean> = _consentLoading.asStateFlow()
+
+    private val _exporting = MutableStateFlow(false)
+    val exporting: StateFlow<Boolean> = _exporting.asStateFlow()
+
+    private val _exportLink = MutableStateFlow<DataExportLink?>(null)
+    val exportLink: StateFlow<DataExportLink?> = _exportLink.asStateFlow()
 
     init {
         refreshConsents()
@@ -217,6 +227,24 @@ class PrivacyViewModel @Inject constructor(
         }
     }
 
+    fun createDataExport() = viewModelScope.launch {
+        if (_exporting.value) return@launch
+        _exporting.value = true
+        _error.value = null
+        authRepository.createMyDataExport()
+            .onSuccess { _exportLink.value = it }
+            .onFailure { error ->
+                _exportLink.value = null
+                val message = error.message.orEmpty()
+                _error.value = if (message.contains("Recent authentication", ignoreCase = true)) {
+                    "For your security, sign in again before exporting account data."
+                } else {
+                    "Could not generate your account export. Please try again."
+                }
+            }
+        _exporting.value = false
+    }
+
     fun dismissError() { _error.value = null }
 }
 
@@ -236,6 +264,9 @@ fun PrivacyDashboardScreen(
     val error by vm.error.collectAsState()
     val consents by vm.consents.collectAsState()
     val consentLoading by vm.consentLoading.collectAsState()
+    val exporting by vm.exporting.collectAsState()
+    val exportLink by vm.exportLink.collectAsState()
+    val uriHandler = LocalUriHandler.current
     val snackbar = remember { SnackbarHostState() }
     var manageVisibility by remember { mutableStateOf(false) }
 
@@ -429,7 +460,33 @@ fun PrivacyDashboardScreen(
             Text("Account data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             MatreeInfoCard {
                 Text(
-                    "Account deletion is available in Settings. The authenticated deletion flow removes server data before the local session is cleared.",
+                    "Generate a server-side copy of your account data. Raw KYC files, internal fraud/risk signals, operator audit records and payment-provider secrets are excluded. A recent sign-in is required and the download link is short-lived.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MatreePrimaryButton(
+                    text = if (exporting) "Generating export…" else "Export my data",
+                    icon = if (exporting) Icons.Filled.Sync else Icons.Filled.Download,
+                    onClick = vm::createDataExport,
+                    enabled = !exporting,
+                    modifier = Modifier.fillMaxWidth().testTag("privacy_export_data")
+                )
+                exportLink?.let { link ->
+                    MatreeSecondaryButton(
+                        text = "Open export download",
+                        icon = Icons.Filled.OpenInNew,
+                        onClick = { uriHandler.openUri(link.downloadUrl) },
+                        modifier = Modifier.fillMaxWidth().testTag("privacy_open_export")
+                    )
+                    Text(
+                        "The download link expires shortly. The generated export is automatically removed from export storage after its retention window.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                HorizontalDivider()
+                Text(
+                    "Account deletion is available in Settings. The authenticated deletion flow suppresses the public profile immediately, removes server data through a restartable workflow, then clears local account state after server confirmation.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
