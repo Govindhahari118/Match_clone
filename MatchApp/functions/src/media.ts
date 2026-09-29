@@ -3,6 +3,11 @@ import * as crypto from "crypto";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck, requireOpsRole } from "./shared";
 import { requireActiveConsent } from "./consent";
+import {
+  fileSignatureMatchesMime,
+  PROFILE_PHOTO_MIME_TYPES,
+  PROFILE_VIDEO_MIME_TYPES,
+} from "./fileSignaturePolicy";
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024;
@@ -68,13 +73,21 @@ export const submitProfilePhoto = functions.https.onCall(async (data, context) =
 
   const [metadata] = await file.getMetadata();
   const ownerUid = metadata.metadata?.ownerUid;
-  const contentType = String(metadata.contentType || "");
+  const contentType = String(metadata.contentType || "").toLowerCase();
   const size = Number(metadata.size || 0);
-  if (ownerUid !== uid || !contentType.startsWith("image/") ||
+  if (ownerUid !== uid || !PROFILE_PHOTO_MIME_TYPES.has(contentType) ||
       !Number.isFinite(size) || size <= 0 || size > MAX_PROFILE_PHOTO_BYTES) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Uploaded photo does not satisfy the protected media contract"
+    );
+  }
+
+  const [photoPrefix] = await file.download({ start: 0, end: 31 });
+  if (!fileSignatureMatchesMime(photoPrefix, contentType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Profile photo bytes do not match the declared file type"
     );
   }
 
@@ -359,11 +372,19 @@ export const submitProfileVideo = functions.https.onCall(async (data, context) =
   const ownerUid = metadata.metadata?.ownerUid || "";
   const contentType = String(metadata.contentType || "").toLowerCase();
   const size = Number(metadata.size || 0);
-  if (ownerUid !== uid || !contentType.startsWith("video/") ||
+  if (ownerUid !== uid || !PROFILE_VIDEO_MIME_TYPES.has(contentType) ||
       !Number.isFinite(size) || size <= 0 || size > MAX_PROFILE_VIDEO_BYTES) {
     throw new functions.https.HttpsError(
       "failed-precondition",
       "Uploaded video does not satisfy the protected media contract"
+    );
+  }
+
+  const [videoPrefix] = await file.download({ start: 0, end: 31 });
+  if (!fileSignatureMatchesMime(videoPrefix, contentType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Profile video bytes do not match the declared file type"
     );
   }
 
