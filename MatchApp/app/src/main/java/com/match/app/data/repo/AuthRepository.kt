@@ -346,8 +346,9 @@ class AuthRepository @Inject constructor(
         motherOccupation: String,
         siblings: Int,
         familyType: String,
+        familyStatus: String,
         familyValues: String,
-        nativePlace: String,
+        nativeState: String,
         gotra: String,
         aboutFamily: String
     ) {
@@ -357,9 +358,10 @@ class AuthRepository @Inject constructor(
             motherOccupation = motherOccupation,
             siblings = siblings,
             familyType = familyType,
+            familyStatus = familyStatus,
             familyValues = familyValues,
             gothra = gotra,
-            city = nativePlace.ifBlank { u.city },
+            nativeState = nativeState,
             aboutFamily = aboutFamily
         )
         userDao.update(updated)
