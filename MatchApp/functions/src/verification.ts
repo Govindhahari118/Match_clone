@@ -289,7 +289,7 @@ export const approveVerification = functions.https.onCall(async (data, context) 
       entityId: targetUid,
       deepLink: "matrimonyconnect://verification",
       pushType: "verification_update",
-      preferenceKey: "system",
+      preferenceKey: "critical",
       priority: "high",
     });
   } catch (err) {
