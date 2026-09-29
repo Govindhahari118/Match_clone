@@ -114,6 +114,9 @@ def main() -> int:
         ("localhost endpoint", re.compile(r"https?://(?:localhost|127\.0\.0\.1)\b", re.I)),
         ("hard-coded OTP bypass", re.compile(r"(?:otp|verification).{0,40}(?:bypass|hardcoded)", re.I)),
         ("fake payment success", re.compile(r"fake.{0,20}(?:payment|purchase).{0,20}success", re.I)),
+        ("unverified Firebase residency claim", re.compile(r"Firebase servers \(US/Mumbai\)", re.I)),
+        ("unverified fixed grievance SLA", re.compile(r"Response within 72 hours", re.I)),
+        ("hard-coded grievance mailbox", re.compile(r"grievance@matrimonyconnect\.app", re.I)),
     ]
     for base in prod_roots:
         if not base.exists():
@@ -125,6 +128,14 @@ def main() -> int:
             for label, pattern in forbidden:
                 if pattern.search(data):
                     failures.append(f"{p.relative_to(ROOT)}: {label}")
+
+    nri_screen = APP / "src/main/java/com/match/app/ui/nri/NRIMatchScreen.kt"
+    if nri_screen.exists():
+        nri = text(nri_screen)
+        for marker in ["NRIProfile(", "NRICountry(", '"41K+"', '"92%"']:
+            require(marker not in nri,
+                    f"NRI screen must not contain synthetic member inventory marker: {marker}",
+                    failures)
 
     if failures:
         print("Release candidate repository scan FAILED")
