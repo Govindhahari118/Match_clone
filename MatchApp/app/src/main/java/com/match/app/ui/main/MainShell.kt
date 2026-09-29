@@ -61,6 +61,7 @@ import com.match.app.ui.questionnaire.QuestionnaireScreen
 import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
 import com.match.app.ui.verification.VerificationScreen
+import com.match.app.ui.videoprofile.VideoProfileScreen
 import com.match.app.ui.whoviewed.WhoViewedScreen
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -88,6 +89,7 @@ object MainRoutes {
     const val PRICING = "pricing"
     const val VERIFICATION = "verification"
     const val PHONE_VERIFICATION = "phone_verification"
+    const val VIDEO_PROFILE = "video_profile"
     const val HELP = "help"
     const val TERMS = "terms"
     const val PRIVACY = "privacy"
@@ -432,6 +434,10 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoPrivacy = { nav.navigate(MainRoutes.PRIVACY_DASH) },
                         onGoGuidelines = { nav.navigate(MainRoutes.GUIDELINES) },
                         onGoBiodata = { nav.navigate(MainRoutes.BIODATA) },
+                        onGoVideoProfile = {
+                            if (optionalRoutes.videoProfiles) nav.navigate(MainRoutes.VIDEO_PROFILE)
+                        },
+                        videoProfileEnabled = optionalRoutes.videoProfiles,
                         unreadNotif = unreadNotif
                     )
                 }
@@ -492,6 +498,13 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onBack = { nav.popBackStack() },
                         onVerified = { nav.popBackStack() }
                     )
+                }
+                composable(MainRoutes.VIDEO_PROFILE) {
+                    if (optionalRoutes.videoProfiles) {
+                        VideoProfileScreen(onBack = { nav.popBackStack() })
+                    } else {
+                        OptionalFeatureUnavailable("Video profile", onBack = { nav.popBackStack() })
+                    }
                 }
                 composable(MainRoutes.PRIVACY_DASH) {
                     PrivacyDashboardScreen(onBack = { nav.popBackStack() }, onGoSettings = { nav.navigate(MainRoutes.SETTINGS) })
