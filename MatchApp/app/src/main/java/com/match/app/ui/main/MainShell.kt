@@ -47,6 +47,7 @@ import com.match.app.ui.kundli.KundliScreen
 import com.match.app.ui.legal.LegalScreen
 import com.match.app.ui.matches.MatchesScreen
 import com.match.app.ui.nearby.NearbyMatchesScreen
+import com.match.app.ui.nri.NRIMatchScreen
 import com.match.app.ui.notifications.NotificationsScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
@@ -68,6 +69,7 @@ object MainRoutes {
     const val HOME = "home"
     const val MATCHES = "matches"
     const val NEARBY = "nearby"
+    const val NRI = "nri"
     const val INTERESTS = "interests"
     const val SHORTLISTS = "shortlists"
     const val CHAT_LIST = "chat_list"
@@ -143,6 +145,7 @@ private fun AppDrawer(
     unreadMsg: Int,
     nearbyEnabled: Boolean,
     kundaliEnabled: Boolean,
+    nriEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -151,6 +154,7 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.HOME, "Home", "Your activity", Icons.Filled.Home),
             DrawerItem(MainRoutes.MATCHES, "Discover", "Browse compatible profiles", Icons.Filled.Search),
             if (nearbyEnabled) DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn) else null,
+            if (nriEnabled) DrawerItem(MainRoutes.NRI, "NRI discovery", "Live profiles by country of residence", Icons.Filled.Public) else null,
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -276,6 +280,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 unreadMsg = unreadMsg,
                 nearbyEnabled = optionalRoutes.nearby,
                 kundaliEnabled = optionalRoutes.kundali,
+                nriEnabled = optionalRoutes.nri,
                 onNavigate = { route ->
                     nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -374,6 +379,21 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         )
                     } else {
                         OptionalFeatureUnavailable("Nearby", onBack = { nav.popBackStack() })
+                    }
+                }
+                composable(MainRoutes.NRI) {
+                    if (optionalRoutes.nri) {
+                        NRIMatchScreen(
+                            onBack = { nav.popBackStack() },
+                            onBrowseResults = {
+                                nav.navigate(MainRoutes.MATCHES) {
+                                    popUpTo(MainRoutes.NRI) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        )
+                    } else {
+                        OptionalFeatureUnavailable("NRI discovery", onBack = { nav.popBackStack() })
                     }
                 }
                 composable(MainRoutes.INTERESTS) {
