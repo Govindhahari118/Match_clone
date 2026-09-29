@@ -74,125 +74,11 @@ service firebase.storage {
         request.resource.metadata.recipientUid != request.auth.uid &&
         (
           (request.resource.metadata.kind == 'image' &&
-            fileName.matches('^[A-Za-z0-9_-]{16,128}\\.jpg
-
-    match /photos/{uid}/{fileName} {
-      allow read: if publishedPhotoReadable(uid, fileName);
-      allow create: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
-        request.resource.contentType == 'image/jpeg' &&
-        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
-        request.resource.metadata.ownerUid == uid;
-      allow update: if false;
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /videos/{uid}/{fileName} {
-      allow read: if publishedVideoReadable(uid, fileName);
-      allow create: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
-        request.resource.contentType == 'video/mp4' &&
-        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
-        request.resource.metadata.ownerUid == uid;
-      allow update: if false;
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /voicebios/{uid}/{fileName} {
-      allow read: if publishedVoiceBioReadable(uid, fileName);
-      allow create, update: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('audio/.*');
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /verifications/{uid}/{allPaths=**} {
-      // Raw KYC material is never client-readable. Existing clients may still upload their own
-      // protected object; only the new backend callable can convert a metadata-bound object into a
-      // PENDING verification state.
-      allow read: if false;
-      allow create, update: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
-        request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] &&
-        request.resource.metadata.keys().hasOnly(['ownerUid','docType']) &&
-        request.resource.metadata.ownerUid == uid &&
-        request.resource.metadata.docType in ['Passport','Driving Licence','PAN Card','Voter ID'];
-      allow delete: if false;
-    }
-    match /chat-media/{threadId}/{fileName} {
-      allow read: if signedIn() && chatUsable(threadId);
-      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId, fileName);
-      allow update: if signedIn() && chatUsable(threadId) &&
-        resource.metadata.senderUid == request.auth.uid &&
-        request.resource.metadata.senderUid == request.auth.uid &&
-        validChatMedia(threadId);
-      allow delete: if signedIn() && chatUsable(threadId) &&
-        resource.metadata.senderUid == request.auth.uid;
-    }
-    match /exports/{uid}/{fileName} {
-      allow read, write: if false;
-    }
-  }
-}
-) &&
+            fileName.matches('[A-Za-z0-9_-]+[.]jpg') &&
             request.resource.size < 8 * 1024 * 1024 &&
             request.resource.contentType == 'image/jpeg') ||
           (request.resource.metadata.kind == 'voice' &&
-            fileName.matches('^[A-Za-z0-9_-]{16,128}\\.m4a
-
-    match /photos/{uid}/{fileName} {
-      allow read: if publishedPhotoReadable(uid, fileName);
-      allow create: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
-        request.resource.contentType == 'image/jpeg' &&
-        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
-        request.resource.metadata.ownerUid == uid;
-      allow update: if false;
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /videos/{uid}/{fileName} {
-      allow read: if publishedVideoReadable(uid, fileName);
-      allow create: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
-        request.resource.contentType == 'video/mp4' &&
-        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
-        request.resource.metadata.ownerUid == uid;
-      allow update: if false;
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /voicebios/{uid}/{fileName} {
-      allow read: if publishedVoiceBioReadable(uid, fileName);
-      allow create, update: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('audio/.*');
-      allow delete: if signedIn() && request.auth.uid == uid;
-    }
-    match /verifications/{uid}/{allPaths=**} {
-      // Raw KYC material is never client-readable. Existing clients may still upload their own
-      // protected object; only the new backend callable can convert a metadata-bound object into a
-      // PENDING verification state.
-      allow read: if false;
-      allow create, update: if signedIn() && request.auth.uid == uid &&
-        request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
-        request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] &&
-        request.resource.metadata.keys().hasOnly(['ownerUid','docType']) &&
-        request.resource.metadata.ownerUid == uid &&
-        request.resource.metadata.docType in ['Passport','Driving Licence','PAN Card','Voter ID'];
-      allow delete: if false;
-    }
-    match /chat-media/{threadId}/{fileName} {
-      allow read: if signedIn() && chatUsable(threadId);
-      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId);
-      allow update: if signedIn() && chatUsable(threadId) &&
-        resource.metadata.senderUid == request.auth.uid &&
-        request.resource.metadata.senderUid == request.auth.uid &&
-        validChatMedia(threadId);
-      allow delete: if signedIn() && chatUsable(threadId) &&
-        resource.metadata.senderUid == request.auth.uid;
-    }
-    match /exports/{uid}/{fileName} {
-      allow read, write: if false;
-    }
-  }
-}
-) &&
+            fileName.matches('[A-Za-z0-9_-]+[.]m4a') &&
             request.resource.size < 12 * 1024 * 1024 &&
             request.resource.contentType == 'audio/mp4')
         );
@@ -226,9 +112,6 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
-      // Raw KYC material is never client-readable. Existing clients may still upload their own
-      // protected object; only the new backend callable can convert a metadata-bound object into a
-      // PENDING verification state.
       allow read: if false;
       allow create, update: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
@@ -240,11 +123,11 @@ service firebase.storage {
     }
     match /chat-media/{threadId}/{fileName} {
       allow read: if signedIn() && chatUsable(threadId);
-      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId);
+      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId, fileName);
       allow update: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid &&
         request.resource.metadata.senderUid == request.auth.uid &&
-        validChatMedia(threadId);
+        validChatMedia(threadId, fileName);
       allow delete: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid;
     }
