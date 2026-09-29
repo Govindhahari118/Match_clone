@@ -3,45 +3,60 @@ package com.match.app.ui.photoeditor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import com.match.app.ui.i18n.t
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 
-private val PINK = Color(0xFFD81B60)
-
-private enum class FilterPreset(val label: String, val tint: Color) {
-    Original("Original", Color.Transparent),
-    Warm("Warm", Color(0x33FF6F00)),
-    Cool("Cool", Color(0x331565C0)),
-    Vintage("Vintage", Color(0x33795548)),
-    BW("B & W", Color(0x66000000)),
-    Sharp("Sharpen", Color(0x22FFFFFF))
-}
-private enum class CropAspect(val label: String) { Square("1:1"), Portrait("3:4"), Passport("2:3") }
-
+/**
+ * Truthful production photo-upload surface.
+ *
+ * The previous prototype exposed visual crop/filter/brightness controls but uploaded the original
+ * URI unchanged. Those simulated editing controls were removed. Real image transforms must not be
+ * presented until transformed bytes are actually generated and tested.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoEditorScreen(
@@ -49,69 +64,136 @@ fun PhotoEditorScreen(
     vm: PhotoEditorViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
-    var selectedFilter by remember { mutableStateOf(FilterPreset.Original) }
-    var crop by remember { mutableStateOf(CropAspect.Portrait) }
-    var rotation by remember { mutableIntStateOf(0) }
-    var watermark by remember { mutableStateOf(true) }
-    var brightness by remember { mutableFloatStateOf(0.5f) }
-    var contrast by remember { mutableFloatStateOf(0.5f) }
-    var saturation by remember { mutableFloatStateOf(0.5f) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> uri?.let { vm.setSourceUri(it) } }
+    ) { uri: Uri? -> uri?.let(vm::setSourceUri) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(t("photo_editor", "Photo Editor")) },
+                title = { Text("Profile photo") },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("photoeditor_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
-    ) { pad ->
+    ) { padding ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("photo_editor_screen"),
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .testTag("photo_editor_screen"),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Preview
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFFF5F5F5),
-                modifier = Modifier.fillMaxWidth().height(280.dp)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(300.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     if (ui.sourceUri != null) {
                         AsyncImage(
                             model = ui.sourceUri,
-                            contentDescription = "Selected photo",
-                            modifier = Modifier.fillMaxSize()
-                                .background(selectedFilter.tint),
+                            contentDescription = "Selected profile photo",
+                            modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Box(
-                            Modifier.fillMaxSize()
-                                .background(Brush.verticalGradient(listOf(Color(0xFFFFCDD2), Color(0xFFF8BBD0))))
-                        ) {
-                            Text("\uD83D\uDC70", Modifier.align(Alignment.Center),
-                                style = MaterialTheme.typography.displayLarge)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Filled.PhotoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Choose a profile photo",
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
-                    if (watermark) {
-                        Surface(shape = RoundedCornerShape(6.dp),
-                            color = Color.White.copy(alpha = 0.75f),
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
-                            Text("Shared on Match",
-                                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            }
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Policy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Media-processing consent",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Enable this if you want Matree to validate, store and moderate the selected profile photo. You can withdraw this choice later from Privacy & visibility.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (ui.mediaConsentVersion.isNotBlank()) {
+                                Text(
+                                    "Notice version ${ui.mediaConsentVersion}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                        Switch(
+                            checked = ui.mediaConsentCurrent,
+                            onCheckedChange = vm::setMediaConsent,
+                            enabled = !ui.consentLoading && !ui.loading
+                        )
                     }
+                    if (ui.consentLoading) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                }
+            }
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text("Moderation before publication", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "The selected original image is uploaded to protected storage and submitted to the moderation queue. It is not published merely because upload succeeds.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "No crop, filter, brightness or rotation edit is applied by this screen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -119,133 +201,85 @@ fun PhotoEditorScreen(
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
 
-            Text("Info: ${crop.label} • rotated $rotation° • ${selectedFilter.label}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-
-            // Filters
-            Text(t("filters", "Filters"), fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()) {
-                FilterPreset.entries.take(3).forEach { f ->
-                    FilterChip(selected = selectedFilter == f, onClick = { selectedFilter = f },
-                        label = { Text(f.label) }, modifier = Modifier.weight(1f))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()) {
-                FilterPreset.entries.drop(3).forEach { f ->
-                    FilterChip(selected = selectedFilter == f, onClick = { selectedFilter = f },
-                        label = { Text(f.label) }, modifier = Modifier.weight(1f))
-                }
+            ui.error?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
-            // Crop aspect
-            Text("Crop aspect", fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()) {
-                CropAspect.entries.forEach { a ->
-                    FilterChip(selected = crop == a, onClick = { crop = a },
-                        label = { Text(a.label) }, modifier = Modifier.weight(1f))
-                }
-            }
-
-            // Rotate
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { rotation = (rotation - 90 + 360) % 360 }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.AutoMirrored.Filled.RotateLeft, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp)); Text("Rotate L")
-                }
-                OutlinedButton(onClick = { rotation = (rotation + 90) % 360 }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.AutoMirrored.Filled.RotateRight, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp)); Text("Rotate R")
-                }
-            }
-
-            // Brightness
-            Text(t("adjustments", "Adjustments"), fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium)
-
-            AdjustmentSlider("Brightness", brightness) { brightness = it }
-            AdjustmentSlider("Contrast", contrast) { contrast = it }
-            AdjustmentSlider("Saturation", saturation) { saturation = it }
-
-            // Watermark toggle
-            ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Security, null, tint = PINK)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(t("watermark", "Watermark"), fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall)
-                        Text("Protects your photos from unauthorised use",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (ui.saved) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Photo submitted for moderation",
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "Status: ${ui.moderationStatus ?: "PENDING"}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
-                    Switch(checked = watermark, onCheckedChange = { watermark = it })
                 }
             }
 
-            if (ui.error != null) {
-                Text(ui.error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+            OutlinedButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                enabled = !ui.loading,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            ) {
+                Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text(if (ui.sourceUri == null) "Choose photo" else "Choose a different photo")
             }
 
             Button(
                 onClick = vm::saveToProfile,
-                modifier = Modifier.fillMaxWidth().height(52.dp).testTag("photo_save_btn"),
-                colors = ButtonDefaults.buttonColors(containerColor = PINK),
-                enabled = ui.sourceUri != null && !ui.saved && !ui.loading
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                    .testTag("photo_save_btn"),
+                enabled = ui.sourceUri != null &&
+                    ui.mediaConsentCurrent &&
+                    !ui.consentLoading &&
+                    !ui.saved &&
+                    !ui.loading
             ) {
-                Icon(Icons.Filled.CloudUpload, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp)); Text(if (ui.saved) "Saved!" else "Upload to Profile")
-            }
-
-            // Pick image button
-            OutlinedButton(
-                onClick = { imagePickerLauncher.launch("image/*") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.PhotoLibrary, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp)); Text("Choose Photo from Gallery")
+                if (ui.loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Icon(Icons.Filled.CloudUpload, contentDescription = null)
+                }
+                Spacer(Modifier.size(8.dp))
+                Text(if (ui.loading) "Submitting…" else "Submit photo for review")
             }
 
             if (ui.saved) {
-                Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFE8F5E9),
-                    modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center) {
-                        Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp), tint = Color(0xFF2E7D32))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Photo uploaded successfully!",
-                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32))
-                    }
+                OutlinedButton(
+                    onClick = vm::resetSaved,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Select another photo")
                 }
             }
-
-            // Reset button
-            TextButton(onClick = {
-                selectedFilter = FilterPreset.Original
-                brightness = 0.5f; contrast = 0.5f; saturation = 0.5f
-                rotation = 0; vm.resetSaved()
-            }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Refresh, null, Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp)); Text("Reset All")
-            }
-            Spacer(Modifier.height(16.dp))
         }
-    }
-}
-
-@Composable
-private fun AdjustmentSlider(label: String, value: Float, onChange: (Float) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(80.dp))
-        Slider(value = value, onValueChange = onChange, modifier = Modifier.weight(1f))
-        Text("${((value - 0.5f) * 200).toInt()}",
-            style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(36.dp))
     }
 }
