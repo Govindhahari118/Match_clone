@@ -114,7 +114,13 @@ class FirestoreFeatureService @Inject constructor() {
 
     suspend fun getRMRequest(uid: String): Map<String, Any?>? {
         if (uid.isBlank()) return null
-        return ownerDocuments(rmRequestsCol.whereEqualTo("uid", uid), limit = 50).firstOrNull()
+        val result = functions.getHttpsCallable("getMyRelationshipManagerRequest")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: return null
+        @Suppress("UNCHECKED_CAST")
+        return payload["request"] as? Map<String, Any?>
     }
 
     suspend fun requestBackgroundCheck(uid: String, targetUid: String, plan: String): String {
