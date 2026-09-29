@@ -197,7 +197,21 @@ export const onSensitivePreferencesConsentChanged = functions.firestore
     const after = change.after.exists ? change.after.data() : undefined;
     if (after?.granted === true &&
         after?.noticeVersion === currentConsentVersion("sensitive_preferences")) return;
-    await db.collection("partnerPreferences").doc(context.params.uid).delete();
+    const uid = context.params.uid;
+    const rmRequestRef = db.collection("rmRequests").doc(uid);
+    const rmRequest = await rmRequestRef.get();
+    const cleanup: Promise<unknown>[] = [
+      db.collection("partnerPreferences").doc(uid).delete(),
+    ];
+    if (rmRequest.exists && String(rmRequest.data()?.preferences || "").length > 0) {
+      cleanup.push(
+        rmRequestRef.set({
+          preferences: "",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true })
+      );
+    }
+    await Promise.all(cleanup);
   });
 
 
