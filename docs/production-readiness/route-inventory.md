@@ -36,7 +36,8 @@
 | Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
 | Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
-| Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
+| Verification | BETA | Server-authoritative government-ID statuses; production KYC/provider evidence required for provider-backed advanced identity methods. |
+| Phone verification | READY | Firebase Phone Auth credential linking plus backend confirmation; explicitly separate from government-ID/KYC verification. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
 | Help | READY | Support/help navigation; support operations depend on backend records where shown. |
 | Terms / Privacy / Guidelines / Security / Refunds | READY | Static legal/support surfaces; final operator/legal approval is external. |
