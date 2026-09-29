@@ -7,6 +7,11 @@ import com.match.app.data.local.entity.UserEntity
 import com.match.app.domain.model.MatchFilter
 import kotlinx.coroutines.tasks.await
 
+data class DiscoveryProfileCandidate(
+    val profile: UserEntity,
+    val pairPreferenceFit: Float?
+)
+
 /**
  * Cursor-paged production discovery source backed by a trusted callable.
  *
@@ -23,7 +28,7 @@ class FirestorePagingSource(
     private val filter: MatchFilter,
     private val blockedUids: Set<String> = emptySet(),
     @Suppress("unused") private val likedUids: Set<String> = emptySet()
-) : PagingSource<String, UserEntity>() {
+) : PagingSource<String, DiscoveryProfileCandidate>() {
 
     private val functions = FirebaseFunctions.getInstance()
 
@@ -32,9 +37,9 @@ class FirestorePagingSource(
         private const val DAY_MS = 24L * 60L * 60L * 1000L
     }
 
-    override fun getRefreshKey(state: PagingState<String, UserEntity>): String? = null
+    override fun getRefreshKey(state: PagingState<String, DiscoveryProfileCandidate>): String? = null
 
-    override suspend fun load(params: LoadParams<String>): LoadResult<String, UserEntity> = try {
+    override suspend fun load(params: LoadParams<String>): LoadResult<String, DiscoveryProfileCandidate> = try {
         val payload = mutableMapOf<String, Any>(
             "ageMin" to filter.ageMin,
             "ageMax" to filter.ageMax,
@@ -160,7 +165,12 @@ class FirestorePagingSource(
             }
             if (filter.willingToRelocate && !entity.willingToRelocate) return@mapNotNull null
             if (filter.recentlyJoinedDays > 0 && entity.createdAt < now - filter.recentlyJoinedDays * DAY_MS) return@mapNotNull null
-            entity
+            DiscoveryProfileCandidate(
+                profile = entity,
+                pairPreferenceFit = (raw["pairPreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f)
+            )
         }
 
         LoadResult.Page(
