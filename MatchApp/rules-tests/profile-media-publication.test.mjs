@@ -53,7 +53,7 @@ test('owner can read pending profile media but peer cannot before publication', 
   await assertSucceeds(uploadBytes(
     ref(aliceStorage, 'photos/alice/pending.jpg'),
     new Uint8Array([1, 2, 3]),
-    { contentType: 'image/jpeg' },
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
   ));
   await assertSucceeds(getBytes(ref(aliceStorage, 'photos/alice/pending.jpg')));
   await assertFails(getBytes(ref(bobStorage, 'photos/alice/pending.jpg')));
@@ -61,7 +61,7 @@ test('owner can read pending profile media but peer cannot before publication', 
   await assertSucceeds(uploadBytes(
     ref(aliceStorage, 'videos/alice/pending.mp4'),
     new Uint8Array([4, 5, 6]),
-    { contentType: 'video/mp4' },
+    { contentType: 'video/mp4', customMetadata: { ownerUid: 'alice' } },
   ));
   await assertSucceeds(getBytes(ref(aliceStorage, 'videos/alice/pending.mp4')));
   await assertFails(getBytes(ref(bobStorage, 'videos/alice/pending.mp4')));
@@ -74,22 +74,22 @@ test('peer can read only the exact published photo and video object', async () =
   await uploadBytes(
     ref(aliceStorage, 'photos/alice/approved.jpg'),
     new Uint8Array([1]),
-    { contentType: 'image/jpeg' },
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
   );
   await uploadBytes(
     ref(aliceStorage, 'photos/alice/other.jpg'),
     new Uint8Array([2]),
-    { contentType: 'image/jpeg' },
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
   );
   await uploadBytes(
     ref(aliceStorage, 'videos/alice/approved.mp4'),
     new Uint8Array([3]),
-    { contentType: 'video/mp4' },
+    { contentType: 'video/mp4', customMetadata: { ownerUid: 'alice' } },
   );
   await uploadBytes(
     ref(aliceStorage, 'videos/alice/other.mp4'),
     new Uint8Array([4]),
-    { contentType: 'video/mp4' },
+    { contentType: 'video/mp4', customMetadata: { ownerUid: 'alice' } },
   );
 
   await env.withSecurityRulesDisabled(async context => {
@@ -112,7 +112,7 @@ test('block revokes access to previously published profile media', async () => {
   await uploadBytes(
     ref(aliceStorage, 'photos/alice/approved.jpg'),
     new Uint8Array([1, 2, 3]),
-    { contentType: 'image/jpeg' },
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
   );
   await env.withSecurityRulesDisabled(async context => {
     const db = context.firestore();
