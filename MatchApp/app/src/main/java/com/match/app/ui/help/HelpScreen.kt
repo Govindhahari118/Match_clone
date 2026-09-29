@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.repo.SupportRepository
+import com.match.app.data.repo.SupportTicketSummary
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeHero
 import com.match.app.ui.components.MatreeInfoCard
@@ -81,7 +82,16 @@ private val FAQS = listOf(
 )
 
 private val SUPPORT_CATEGORIES = listOf(
-    "Account", "Membership", "Verification", "Safety", "Technical issue", "Other"
+    "Account",
+    "Verification",
+    "Match/search",
+    "Membership",
+    "Payment",
+    "Privacy",
+    "Safety",
+    "Appeal",
+    "Technical issue",
+    "Other"
 )
 
 @HiltViewModel
@@ -95,6 +105,18 @@ class HelpViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    private val _tickets = MutableStateFlow<List<SupportTicketSummary>>(emptyList())
+    val tickets: StateFlow<List<SupportTicketSummary>> = _tickets.asStateFlow()
+
+    init {
+        refreshTickets()
+    }
+
+    fun refreshTickets() = viewModelScope.launch {
+        supportRepository.listMySupportTickets()
+            .onSuccess { _tickets.value = it }
+    }
+
     fun submit(category: String, text: String) = viewModelScope.launch {
         if (_submitting.value) return@launch
         _submitting.value = true
@@ -103,6 +125,7 @@ class HelpViewModel @Inject constructor(
             .onSuccess { ticketId ->
                 telemetry.supportSubmitted(category)
                 _message.value = "Support request submitted. Ticket: ${ticketId.take(12)}"
+                refreshTickets()
             }
             .onFailure { error ->
                 telemetry.recordFailure(MatreeTelemetry.Operation.FUNCTIONS, error)
@@ -119,6 +142,7 @@ class HelpViewModel @Inject constructor(
 fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
     val submitting by vm.submitting.collectAsState()
     val resultMessage by vm.message.collectAsState()
+    val tickets by vm.tickets.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var category by remember { mutableStateOf("Technical issue") }
     var supportText by remember { mutableStateOf("") }
@@ -150,6 +174,37 @@ fun HelpScreen(onBack: () -> Unit = {}, vm: HelpViewModel = hiltViewModel()) {
 
             Text("Frequently asked questions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             FAQS.forEachIndexed { index, faq -> FaqItem(faq, index) }
+
+            if (tickets.isNotEmpty()) {
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("My recent requests", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = vm::refreshTickets) { Text("Refresh") }
+                }
+                tickets.take(5).forEach { ticket ->
+                    MatreeInfoCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(ticket.category, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    ticket.message,
+                                    maxLines = 2,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            AssistChip(
+                                onClick = {},
+                                label = { Text(ticket.status.replace('_', ' ')) }
+                            )
+                        }
+                    }
+                }
+            }
 
             HorizontalDivider()
             Text("Contact support", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
