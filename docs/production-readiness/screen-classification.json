@@ -25,8 +25,8 @@
     {
       "path": "ui/assisted/AssistedServiceScreen.kt",
       "symbol": "AssistedServiceScreen",
-      "status": "BETA",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
