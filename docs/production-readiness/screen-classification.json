@@ -93,13 +93,6 @@
       "requiredFlag": null
     },
     {
-      "path": "ui/circles/CirclesScreen.kt",
-      "symbol": "CirclesScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
-      "requiredFlag": null
-    },
-    {
       "path": "ui/counselling/CounsellingScreen.kt",
       "symbol": "CounsellingScreen",
       "status": "POST_LAUNCH",
@@ -319,13 +312,6 @@
     {
       "path": "ui/referral/MatchmakerReferralScreen.kt",
       "symbol": "MatchmakerReferralScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
-      "requiredFlag": null
-    },
-    {
-      "path": "ui/regions/RegionsScreen.kt",
-      "symbol": "RegionsScreen",
       "status": "POST_LAUNCH",
       "exposure": "hidden",
       "requiredFlag": null
