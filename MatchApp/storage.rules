@@ -20,14 +20,17 @@ service firebase.storage {
     function ownerCanReadMedia(uid) {
       return signedIn() && request.auth.uid == uid && activeAccount(uid);
     }
-    function peerCanReadPublishedMedia(uid) {
+    function peerCanReadProfileMedia(uid) {
       return signedIn() && request.auth.uid != uid &&
         activeAccount(request.auth.uid) &&
         activeAccount(uid) &&
         !blockedEitherWay(request.auth.uid, uid) &&
         !profileHiddenFrom(uid, request.auth.uid) &&
         (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
-          explicitInterestFrom(uid, request.auth.uid)) &&
+          explicitInterestFrom(uid, request.auth.uid));
+    }
+    function peerCanReadPublishedMedia(uid) {
+      return peerCanReadProfileMedia(uid) &&
         resource.metadata.get('published', 'false') == 'true';
     }
     function chatExists(threadId) {
@@ -83,7 +86,7 @@ service firebase.storage {
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /voicebios/{uid}/{allPaths=**} {
-      allow read: if ownerCanReadMedia(uid) || peerCanReadPublishedMedia(uid);
+      allow read: if ownerCanReadMedia(uid) || peerCanReadProfileMedia(uid);
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
