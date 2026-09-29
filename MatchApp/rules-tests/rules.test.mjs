@@ -304,8 +304,8 @@ test('profile photo upload is owner-only', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const bytes = new Uint8Array([1, 2, 3, 4]);
-  await assertSucceeds(uploadBytes(ref(aliceStorage, 'photos/alice/profile.jpg'), bytes, { contentType: 'image/jpeg' }));
-  await assertFails(uploadBytes(ref(bobStorage, 'photos/alice/attack.jpg'), bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(ref(aliceStorage, 'photos/alice/profile.jpg'), bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await assertFails(uploadBytes(ref(bobStorage, 'photos/alice/attack.jpg'), bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
 });
 
 test('hidden member cannot read profile photo while owner still can', async () => {
@@ -315,7 +315,12 @@ test('hidden member cannot read profile photo while owner still can', async () =
   const object = ref(aliceStorage, 'photos/alice/private-profile.jpg');
   const bytes = new Uint8Array([8, 6, 7, 5, 3, 0, 9]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/private-profile.jpg',
+    });
+  });
   await assertSucceeds(getBytes(object));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
 
@@ -334,7 +339,12 @@ test('blocked member cannot read profile media', async () => {
   const object = ref(aliceStorage, 'photos/alice/block-test.jpg');
   const bytes = new Uint8Array([4, 2, 4, 2]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/block-test.jpg',
+    });
+  });
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
@@ -350,7 +360,12 @@ test('stealth profile media is private except to an explicit interest recipient'
   const object = ref(aliceStorage, 'photos/alice/stealth-test.jpg');
   const bytes = new Uint8Array([1, 9, 9, 9]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/stealth-test.jpg',
+    });
+  });
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
   });
