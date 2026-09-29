@@ -284,8 +284,8 @@
     {
       "path": "ui/phone/PhoneVerificationScreen.kt",
       "symbol": "PhoneVerificationScreen",
-      "status": "STUB",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
