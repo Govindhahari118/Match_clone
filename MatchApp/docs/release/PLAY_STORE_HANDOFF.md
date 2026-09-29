@@ -26,3 +26,23 @@ At minimum record fresh install, upgrade, process death, offline/reconnect, larg
 ## Rollout observability
 
 Monitor Crashlytics/ANR, authentication, onboarding/profile writes, discovery, interest/match transitions, chat/media, FCM, purchase reconciliation, deletion and Nearby failures. Halt rollout or disable an already feature-flagged optional feature when a material safety/privacy/reliability regression appears.
+
+
+## External evidence gate
+
+Copy `docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json` to an operator-controlled
+release-evidence location, set `gitSha` to the exact candidate, and attach a concrete artifact or
+record reference for every gate. Do not commit credentials or sensitive test artifacts.
+
+Before Play production promotion:
+
+```bash
+python3 scripts/ci/production_external_gate.py \
+  --evidence /secure/release-evidence/<sha>.json \
+  --sha <exact-git-sha> \
+  --mode prelaunch
+```
+
+After the staged rollout and post-rollout health review, the same exact SHA must pass `--mode full`.
+A repository CI pass or a synthetically generated CI validator file is never external production
+evidence.
