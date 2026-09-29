@@ -219,13 +219,6 @@
       "requiredFlag": null
     },
     {
-      "path": "ui/main/HomeScreen.kt",
-      "symbol": "HomeScreen",
-      "status": "STUB",
-      "exposure": "hidden",
-      "requiredFlag": null
-    },
-    {
       "path": "ui/matches/MatchesScreen.kt",
       "symbol": "MatchesScreen",
       "status": "READY",
