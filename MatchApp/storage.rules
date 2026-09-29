@@ -65,14 +65,14 @@ service firebase.storage {
       allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
+    // Video Profile / voice-bio prototypes are not production features. Existing objects are
+    // unreadable and no new client object may be created; the owner may still delete legacy data.
     match /videos/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+      allow read, create, update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /voicebios/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
+      allow read, create, update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
