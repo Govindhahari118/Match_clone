@@ -2,7 +2,7 @@ name: Production CI
 
 on:
   push:
-    branches: [Gpt_matree]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -37,6 +37,8 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Production truthfulness scan
         run: python3 scripts/ci/truthfulness_scan.py
+      - name: Release candidate repository scan
+        run: python3 scripts/ci/release_candidate_scan.py
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
       - name: Android lint
@@ -68,6 +70,8 @@ jobs:
           fi
           trap 'if [ "$cleanup" -eq 1 ]; then rm -f app/src/release/google-services.json; fi' EXIT
           ./gradlew --no-daemon bundleRelease
+          python3 scripts/ci/release_candidate_scan.py --merged-manifest app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml
+          python3 scripts/ci/release_artifact_audit.py app/build/outputs/bundle/release/*.aab
           if [ "$cleanup" -eq 1 ]; then
             rm -f app/build/outputs/bundle/release/*.aab
             cat > app/build/outputs/bundle/release/NON_PRODUCTION_FIREBASE_CONFIG.txt <<EOF
@@ -76,6 +80,11 @@ jobs:
           No production AAB is emitted until a real release google-services.json is supplied.
           EOF
           fi
+      - name: Generate exact-SHA release evidence
+        if: always()
+        shell: bash
+        run: |
+          python3 scripts/ci/release_evidence.py             --sha "$GITHUB_SHA"             --output app/build/outputs/bundle/release/RELEASE_EVIDENCE.md
       - name: Upload Android evidence
         if: always()
         uses: actions/upload-artifact@v4
