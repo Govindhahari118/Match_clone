@@ -322,3 +322,62 @@ export const getPhotoModerationReviewCase = functions.https.onCall(async (data, 
     expiresAtMillis,
   };
 });
+
+
+type RetiredProfileMediaField = "videoUrl" | "voiceBioUrl";
+
+async function cleanupRetiredProfileMediaField(
+  field: RetiredProfileMediaField,
+  prefix: "videos" | "voicebios"
+): Promise<number> {
+  const snapshot = await db.collection("users")
+    .where(field, ">", "")
+    .limit(200)
+    .get();
+  if (snapshot.empty) return 0;
+
+  const bucket = admin.storage().bucket();
+  const batch = db.batch();
+
+  for (const doc of snapshot.docs) {
+    const raw = doc.data()?.[field];
+    const path = typeof raw === "string" ? raw.trim() : "";
+    if (path.startsWith(`${prefix}/${doc.id}/`) && !path.includes("..")) {
+      try {
+        await bucket.file(path).delete({ ignoreNotFound: true });
+      } catch (error) {
+        functions.logger.warn("Retired profile media deletion failed", {
+          uid: doc.id,
+          field,
+          path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    batch.update(doc.ref, {
+      [field]: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+  return snapshot.size;
+}
+
+/**
+ * Data-minimization cleanup for retired Video Profile / voice-bio prototypes. Client rules already
+ * deny new upload/read authority; this job removes legacy public references and owned objects.
+ */
+export const cleanupRetiredProfileMedia = functions.pubsub
+  .schedule("every 24 hours")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const [videoReferencesRemoved, voiceReferencesRemoved] = await Promise.all([
+      cleanupRetiredProfileMediaField("videoUrl", "videos"),
+      cleanupRetiredProfileMediaField("voiceBioUrl", "voicebios"),
+    ]);
+    functions.logger.info("Retired profile media cleanup completed", {
+      videoReferencesRemoved,
+      voiceReferencesRemoved,
+    });
+  });
