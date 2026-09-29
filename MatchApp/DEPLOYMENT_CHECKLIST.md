@@ -1,16 +1,19 @@
-# MatrimonyConnect — Production Release Gates
+# Matree — Production Release Gates
 
-This checklist describes the current production architecture on `Gpt_matree`. A release is **not production-ready** merely because it compiles. Every P0 gate below must be satisfied with the production Firebase/Google Play configuration and real-device validation.
+This checklist describes the current production architecture on canonical `main`. A release is **not production-ready** merely because it compiles. Every P0 gate below must be satisfied with the production Firebase/Google Play configuration and real-device validation.
 
 ## 1. Source and CI gates
 
-- [ ] Choose the canonical production branch. `main` and `Gpt_matree` have unrelated history; do not force-merge or force-push them together.
-- [ ] Protect the canonical release branch and require the Production CI checks.
+- [x] Canonical production and release branch is `main`. Never delete or replace it with a prototype branch.
+- [ ] Protect `main` in GitHub and require the Production CI checks (external repository administration).
 - [ ] Production CI is green on the exact release commit:
   - Android JVM tests
   - Android lint
   - debug build
   - release AAB/R8 validation
+  - release configuration + merged-manifest scan
+  - generated AAB debug/test leakage audit
+  - exact-SHA release evidence manifest
   - Firebase Functions lint + TypeScript build
   - Firestore + Storage emulator security tests
 - [ ] No P0/P1 issue is knowingly deferred without disabling the affected user-facing route.
