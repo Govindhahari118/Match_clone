@@ -33,6 +33,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.match.app.MainActivity
+import com.match.app.core.config.RemoteConfigManager
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
@@ -120,8 +121,10 @@ private data class DrawerSection(val title: String, val items: List<DrawerItem>)
 class MainShellViewModel @Inject constructor(
     private val session: SessionStore,
     private val notifRepo: NotificationRepository,
-    private val messageDao: MessageDao
+    private val messageDao: MessageDao,
+    remoteConfig: RemoteConfigManager
 ) : ViewModel() {
+    val optionalRoutes = remoteConfig.optionalRoutes
     val unreadNotifications: StateFlow<Int> = session.userId.filterNotNull()
         .flatMapLatest { notifRepo.observeUnreadCount(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -136,14 +139,16 @@ private fun AppDrawer(
     currentRoute: String?,
     unreadNotif: Int,
     unreadMsg: Int,
+    nearbyEnabled: Boolean,
+    kundaliEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onClose: () -> Unit
 ) {
     val sections = listOf(
-        DrawerSection("MATCH", listOf(
+        DrawerSection("MATCH", listOfNotNull(
             DrawerItem(MainRoutes.HOME, "Home", "Your activity", Icons.Filled.Home),
             DrawerItem(MainRoutes.MATCHES, "Discover", "Browse compatible profiles", Icons.Filled.Search),
-            DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn),
+            if (nearbyEnabled) DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn) else null,
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -160,9 +165,9 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.SETTINGS, "Settings", "Language, security and account", Icons.Filled.Settings),
             DrawerItem(MainRoutes.HELP, "Help", "Support and guidance", Icons.AutoMirrored.Filled.Help)
         )),
-        DrawerSection("COMPATIBILITY", listOf(
+        DrawerSection("COMPATIBILITY", listOfNotNull(
             DrawerItem(MainRoutes.QUIZ, "Questionnaire", "Values and partner preferences", Icons.AutoMirrored.Filled.ListAlt),
-            DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome)
+            if (kundaliEnabled) DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome) else null
         )),
         DrawerSection("LEGAL", listOf(
             DrawerItem(MainRoutes.TERMS, "Terms", "Terms of service", Icons.Filled.Gavel),
@@ -242,6 +247,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val currentRoute = current?.route
     val unreadNotif by vm.unreadNotifications.collectAsState()
     val unreadMsg by vm.unreadMessages.collectAsState()
+    val optionalRoutes by vm.optionalRoutes.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -266,6 +272,8 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 currentRoute = currentRoute,
                 unreadNotif = unreadNotif,
                 unreadMsg = unreadMsg,
+                nearbyEnabled = optionalRoutes.nearby,
+                kundaliEnabled = optionalRoutes.kundali,
                 onNavigate = { route ->
                     nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -348,22 +356,28 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
-                        onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
+                        onGoKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.KUNDLI) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
-                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) }
+                        onGoNearby = { if (optionalRoutes.nearby) nav.navigate(MainRoutes.NEARBY) },
+                        kundaliEnabled = optionalRoutes.kundali,
+                        nearbyEnabled = optionalRoutes.nearby
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
                 composable(MainRoutes.NEARBY) {
-                    NearbyMatchesScreen(
-                        onBack = { nav.popBackStack() },
-                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
-                    )
+                    if (optionalRoutes.nearby) {
+                        NearbyMatchesScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        )
+                    } else {
+                        OptionalFeatureUnavailable("Nearby", onBack = { nav.popBackStack() })
+                    }
                 }
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
-                        onCheckKundli = { nav.navigate(MainRoutes.kundli(it)) },
+                        onCheckKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(it)) },
                         onOpenChat = { nav.navigate(MainRoutes.chat(it)) }
                     )
                 }
@@ -376,7 +390,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
+                        onGoKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.KUNDLI) },
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
@@ -410,13 +424,17 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
-                composable(MainRoutes.KUNDLI) { KundliScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.KUNDLI) {
+                    if (optionalRoutes.kundali) KundliScreen(onBack = { nav.popBackStack() })
+                    else OptionalFeatureUnavailable("Kundali", onBack = { nav.popBackStack() })
+                }
                 composable(
                     MainRoutes.KUNDLI_PAIR,
                     arguments = listOf(navArgument("targetId") { type = NavType.LongType })
                 ) { backStack ->
                     val targetId = backStack.arguments?.getLong("targetId") ?: return@composable
-                    KundliScreen(targetId = targetId, onBack = { nav.popBackStack() })
+                    if (optionalRoutes.kundali) KundliScreen(targetId = targetId, onBack = { nav.popBackStack() })
+                    else OptionalFeatureUnavailable("Kundali", onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.PRICING) { PricingScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.VERIFICATION) { VerificationScreen(onBack = { nav.popBackStack() }) }
@@ -438,7 +456,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onBack = { nav.popBackStack() },
                         onChat = { nav.navigate(MainRoutes.chat(userId)) },
                         onPricing = { nav.navigate(MainRoutes.PRICING) },
-                        onKundli = { nav.navigate(MainRoutes.kundli(userId)) }
+                        onKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(userId)) }
                     )
                 }
                 composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
@@ -447,5 +465,30 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun OptionalFeatureUnavailable(
+    featureName: String,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(MatreeDesign.spacing.sm))
+        Text("$featureName is not enabled for this release", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        Text(
+            "This feature stays off until its production validation gates pass.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(MatreeDesign.spacing.md))
+        Button(onClick = onBack) { Text("Back") }
     }
 }
