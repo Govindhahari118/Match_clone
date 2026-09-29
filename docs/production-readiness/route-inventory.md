@@ -53,6 +53,8 @@ their end-to-end provider/data/entitlement contract passes the same Definition o
 standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
 `Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
 
+`Video Profile` now has consented protected upload, server-owned moderation, audited operator review and backend-only publication/removal in source, but it remains hidden/off by default until real-device playback/upload, moderation-operations and performance evidence pass.
+
 `Profile photo upload` is production-backed through protected Storage plus server moderation; the old simulated Photo Editor controls were removed. The upload surface must not claim crop/filter/brightness transforms until transformed bytes are actually produced and validated.
 
 Their Kotlin files are not proof of product availability. They must not be re-added to production
