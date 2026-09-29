@@ -38,10 +38,12 @@ class FirestoreChatService @Inject constructor() {
                     val participants = (doc.get("participantUids") as? List<*>)?.filterIsInstance<String>().orEmpty()
                     if (participants.size != 2 || myUid !in participants) return@mapNotNull null
                     val peerUid = participants.firstOrNull { it != myUid } ?: return@mapNotNull null
+                    val lastSentAt = doc.getLong("lastSentAt") ?: 0L
+                    if (lastSentAt <= 0L) return@mapNotNull null
                     FirestoreChatThread(
                         peerFirebaseUid = peerUid,
                         lastMessage = doc.getString("lastMessage").orEmpty(),
-                        lastSentAt = doc.getLong("lastSentAt") ?: 0L
+                        lastSentAt = lastSentAt
                     )
                 }.sortedByDescending { it.lastSentAt }
                 trySend(threads)
@@ -75,6 +77,25 @@ class FirestoreChatService @Inject constructor() {
                 trySend(messages)
             }
         awaitClose { reg.remove() }
+    }
+
+    /**
+     * Establish the canonical server-authorized thread before uploading IMAGE/VOICE media.
+     * Prepared threads are not user-visible until sendChatMessage accepts a real message.
+     */
+    suspend fun prepareThread(myFirebaseUid: String, peerFirebaseUid: String): String {
+        require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank() && myFirebaseUid != peerFirebaseUid)
+        val result = functions.getHttpsCallable("prepareChatThread")
+            .call(mapOf("targetUid" to peerFirebaseUid))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?>
+            ?: error("Invalid chat-prepare response")
+        check(payload["success"] == true) { "Chat thread was not authorized by the server" }
+        val returned = payload["threadId"] as? String ?: error("Missing chat thread identity")
+        val expected = threadId(myFirebaseUid, peerFirebaseUid)
+        check(returned == expected) { "Server returned an unexpected chat thread identity" }
+        return returned
     }
 
     /**
