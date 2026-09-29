@@ -36,6 +36,14 @@ export function currentConsentVersion(purpose: ConsentPurpose): string {
   return CONSENT_VERSIONS[purpose];
 }
 
+export function isCurrentConsentRecord(
+  purpose: ConsentPurpose,
+  value: Record<string, unknown> | undefined
+): boolean {
+  return value?.granted === true &&
+    value?.noticeVersion === currentConsentVersion(purpose);
+}
+
 function safeLocale(value: unknown): string {
   const locale = typeof value === "string" ? value.trim() : "";
   return /^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$/.test(locale) ? locale : "en-IN";
@@ -43,10 +51,8 @@ function safeLocale(value: unknown): string {
 
 export async function hasActiveConsent(uid: string, purpose: ConsentPurpose): Promise<boolean> {
   const snapshot = await db.collection("consents").doc(uid).collection("items").doc(purpose).get();
-  const data = snapshot.data() || {};
-  return snapshot.exists &&
-    data.granted === true &&
-    data.noticeVersion === currentConsentVersion(purpose);
+  const data = snapshot.exists ? snapshot.data() as Record<string, unknown> : undefined;
+  return snapshot.exists && isCurrentConsentRecord(purpose, data);
 }
 
 export async function requireActiveConsent(uid: string, purpose: ConsentPurpose): Promise<void> {
@@ -191,4 +197,59 @@ export const onSensitivePreferencesConsentChanged = functions.firestore
     if (after?.granted === true &&
         after?.noticeVersion === currentConsentVersion("sensitive_preferences")) return;
     await db.collection("partnerPreferences").doc(context.params.uid).delete();
+  });
+
+
+/**
+ * Withdrawal cancels an in-flight generic identity review and deletes its raw object. Completed
+ * verification outcomes are not silently rewritten here; their minimum-retention policy is
+ * handled separately from optional raw-document processing.
+ */
+export const onIdentityVerificationConsentChanged = functions.firestore
+  .document("consents/{uid}/items/identity_verification")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() as Record<string, unknown> : undefined;
+    if (isCurrentConsentRecord("identity_verification", after)) return;
+
+    const uid = context.params.uid;
+    const requestRef = db.collection("verificationRequests").doc(uid);
+    const request = await requestRef.get();
+    if (!request.exists || String(request.data()?.status || "").toLowerCase() !== "pending") return;
+
+    const documentPath = String(request.data()?.documentPath || "");
+    if (documentPath.startsWith(`verifications/${uid}/`) && !documentPath.includes("..")) {
+      await admin.storage().bucket().file(documentPath).delete({ ignoreNotFound: true });
+    }
+    await requestRef.set({
+      status: "withdrawn",
+      documentPath: admin.firestore.FieldValue.delete(),
+      documentDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+/**
+ * Withdrawal cancels only pending profile-photo processing. Already approved profile photos remain
+ * user-controlled profile data and can be removed through the normal delete-photo flow.
+ */
+export const onMediaProcessingConsentChanged = functions.firestore
+  .document("consents/{uid}/items/media_processing")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() as Record<string, unknown> : undefined;
+    if (isCurrentConsentRecord("media_processing", after)) return;
+
+    const uid = context.params.uid;
+    const pending = await db.collection("photoModeration")
+      .where("uid", "==", uid)
+      .where("status", "==", "PENDING")
+      .limit(100)
+      .get();
+
+    for (const doc of pending.docs) {
+      const storagePath = String(doc.data()?.storagePath || "");
+      if (storagePath.startsWith(`photos/${uid}/`) && !storagePath.includes("..")) {
+        await admin.storage().bucket().file(storagePath).delete({ ignoreNotFound: true });
+      }
+      await doc.ref.delete();
+    }
   });
