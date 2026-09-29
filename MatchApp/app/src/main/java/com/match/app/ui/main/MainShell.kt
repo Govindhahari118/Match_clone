@@ -53,6 +53,7 @@ import com.match.app.ui.notifications.NotificationsScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
 import com.match.app.ui.preferences.PartnerPreferencesScreen
+import com.match.app.ui.phone.PhoneVerificationScreen
 import com.match.app.ui.profile.ProfileScreen
 import com.match.app.ui.recentlyjoined.RecentlyJoinedScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
@@ -85,6 +86,7 @@ object MainRoutes {
     const val KUNDLI_PAIR = "kundli/{targetId}"
     const val PRICING = "pricing"
     const val VERIFICATION = "verification"
+    const val PHONE_VERIFICATION = "phone_verification"
     const val HELP = "help"
     const val TERMS = "terms"
     const val PRIVACY = "privacy"
@@ -473,7 +475,18 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     else OptionalFeatureUnavailable("Kundali", onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.PRICING) { PricingScreen(onBack = { nav.popBackStack() }) }
-                composable(MainRoutes.VERIFICATION) { VerificationScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.VERIFICATION) {
+                    VerificationScreen(
+                        onBack = { nav.popBackStack() },
+                        onVerifyPhone = { nav.navigate(MainRoutes.PHONE_VERIFICATION) }
+                    )
+                }
+                composable(MainRoutes.PHONE_VERIFICATION) {
+                    PhoneVerificationScreen(
+                        onBack = { nav.popBackStack() },
+                        onVerified = { nav.popBackStack() }
+                    )
+                }
                 composable(MainRoutes.PRIVACY_DASH) {
                     PrivacyDashboardScreen(onBack = { nav.popBackStack() }, onGoSettings = { nav.navigate(MainRoutes.SETTINGS) })
                 }
