@@ -76,7 +76,7 @@ test("bilateral preferred fit averages both members without fabricating missing 
       b,
       { city: "Hyderabad", education: "Masters" }
     ),
-    1
+    0.5
   );
 
   const none = normalizePartnerPreferences({});
