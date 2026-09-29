@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck, requireOpsRole } from "./shared";
+import { requireActiveConsent } from "./consent";
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 
@@ -46,6 +47,7 @@ export const submitProfilePhoto = functions.https.onCall(async (data, context) =
   requireAppCheck(context);
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  await requireActiveConsent(uid, "media_processing");
 
   const storagePath = profilePhotoPath(data?.storagePath, uid);
   const file = admin.storage().bucket().file(storagePath);
