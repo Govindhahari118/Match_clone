@@ -50,11 +50,9 @@ object MatchScorer {
         }
 
         if (astrologyApplicable(me, peer)) {
-            factors += Factor(
-                "astrology",
-                Astrology.score(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra),
-                0.15f
-            )
+            Astrology.scoreOrNull(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra)?.let {
+                factors += Factor("astrology", it, 0.15f)
+            }
         }
 
         demographicsScore(me, peer)?.let {
@@ -97,10 +95,8 @@ object MatchScorer {
     private fun astrologyApplicable(me: UserProfile, peer: UserProfile): Boolean {
         return ReligionCategory.fromReligion(me.religion) == ReligionCategory.HINDU &&
             ReligionCategory.fromReligion(peer.religion) == ReligionCategory.HINDU &&
-            me.rasi.isNotBlank() &&
-            me.nakshatra.isNotBlank() &&
-            peer.rasi.isNotBlank() &&
-            peer.nakshatra.isNotBlank()
+            Astrology.isValid(me.rasi, me.nakshatra) &&
+            Astrology.isValid(peer.rasi, peer.nakshatra)
     }
 
     /**
