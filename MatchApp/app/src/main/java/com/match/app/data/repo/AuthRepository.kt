@@ -35,6 +35,12 @@ data class AccountDeviceSession(
     val updatedAtMillis: Long?
 )
 
+data class DataExportLink(
+    val downloadUrl: String,
+    val linkExpiresAtMillis: Long,
+    val exportExpiresAtMillis: Long
+)
+
 sealed class AuthResult {
     data class Success(val userId: Long) : AuthResult()
     data class Error(val message: String) : AuthResult()
@@ -217,6 +223,23 @@ class AuthRepository @Inject constructor(
                 updatedAtMillis = (value["updatedAtMillis"] as? Number)?.toLong()
             )
         }
+    }
+
+    suspend fun createMyDataExport(): Result<DataExportLink> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("createMyDataExport")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: error("Invalid data-export response")
+        val downloadUrl = payload["downloadUrl"] as? String
+            ?: error("Missing data-export download link")
+        require(downloadUrl.startsWith("https://")) { "Invalid data-export download link" }
+        DataExportLink(
+            downloadUrl = downloadUrl,
+            linkExpiresAtMillis = (payload["linkExpiresAtMillis"] as? Number)?.toLong() ?: 0L,
+            exportExpiresAtMillis = (payload["exportExpiresAtMillis"] as? Number)?.toLong() ?: 0L
+        )
     }
 
     suspend fun signOutAllDevices(): Result<Int> = runCatching {
