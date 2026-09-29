@@ -16,7 +16,7 @@ This checklist describes the current production architecture on canonical `main`
   - exact-SHA release evidence manifest
   - Firebase Functions lint + TypeScript build
   - Firestore + Storage emulator security tests
-- [ ] No P0/P1 issue is knowingly deferred without disabling the affected user-facing route.
+- [x] No known repository-controlled P0/P1 is knowingly exposed: incomplete/unsafe surfaces are hidden or fail-closed, and the screen-classification CI gate prevents accidental re-exposure.
 
 ## 2. Android / Play requirements
 
@@ -71,7 +71,7 @@ Use a production Firebase project separate from development/staging.
 - [x] Blocking is enforced in security-sensitive interactions.
 - [x] Chat requires authenticated participants and mutual interest.
 - [x] Security-rule emulator tests cover privileged profile fields, private data, blocking, chat, payments, profile views, Storage and exact Nearby coordinates.
-- [ ] Re-run emulator tests against every release rule change.
+- [x] Production CI re-runs Firestore/Storage emulator authorization tests for pull-request rule changes; exact-release deployment evidence is still required externally.
 - [ ] Verify every active query against production composite indexes before staged rollout.
 
 ## 7. Payments / entitlements
@@ -130,8 +130,8 @@ Nearby is foreground-only and should remain opt-in.
 
 - [ ] Test FCM token registration, token refresh, sign-out cleanup and stale-token cleanup.
 - [ ] Test interest, match and message notifications against production Functions.
-- [ ] Avoid sensitive personal content in lock-screen notification text.
-- [ ] Honor user notification preferences server-side where applicable.
+- [x] Push copy is deliberately generic and does not include message bodies, KYC data, contact data or other profile-sensitive content.
+- [x] Optional interest/match/message/system notification preferences are checked server-side; critical account/safety notifications remain transactional.
 
 ## 12. Verification / moderation / support
 
@@ -140,17 +140,21 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Profile-photo publication requires server-owned moderation approval.
 - [x] Moderators can place accounts under review, restrict, suspend or restore with immutable audit evidence; suspension revokes refresh tokens.
 - [x] A separate operator console is wired to role-scoped callable APIs; it is not embedded in the consumer app.
-- [ ] Provision initial `ops_admin` and delegated support/moderator/KYC/payment roles through the controlled bootstrap process.
+- [x] Controlled dry-run-first role-bootstrap tooling exists, preserves unrelated claims, requires approval/actor evidence, revokes refresh tokens and writes a server-only audit record.
+- [ ] Execute approved production role provisioning with the real Firebase project and attach the resulting operator evidence.
 - [ ] Deploy the hardened operator Hosting surface and verify CSP/Auth/App Check behavior with real operator accounts.
 - [ ] Test verification submission/review/approve/reject, photo review, report enforcement, appeal/support and payment reconciliation end-to-end.
 
 ## 13. Privacy, legal and product claims
 
-- [ ] Privacy Policy reflects the code that actually ships, including Auth, Firestore, Storage, FCM, Crashlytics/Analytics, payments, verification media and foreground location.
-- [ ] Google Play Data Safety answers exactly match production behavior.
+- [x] Repository privacy-policy draft reflects the implemented Auth, Firestore, Storage, FCM, Analytics/Crashlytics, Google Play, verification-media and foreground-Nearby flows without legacy Razorpay/E2EE/BCrypt claims.
+- [ ] Final Privacy Policy wording, controller/contact details, lawful-basis/rights language and retention schedule are approved by legal and published at the production HTTPS URL.
+- [x] Repository Data Safety engineering worksheet inventories the implemented data flows and explicitly requires exact-release reconciliation.
+- [ ] Final Google Play Data Safety answers are approved against the exact production SDK/provider configuration.
 - [ ] Publish Terms, Privacy, Community/Safety and Refund pages at stable HTTPS URLs.
-- [ ] Do not claim end-to-end encryption unless independently verified cryptographic key exchange and message confidentiality actually provide E2EE. Current device-local encryption must not be marketed as E2EE.
-- [ ] Ensure premium, verification, distance and safety copy does not overstate guarantees.
+- [x] Release-candidate legal/help copy does not claim E2EE; repository CI rejects reintroduction of the stale end-to-end-encryption claim.
+- [x] Repository truthfulness/release scans guard known overclaim classes; paid, verification, distance and safety flows use server/provider-derived state rather than fabricated success.
+- [ ] Final product/legal copy receives release-owner review on the exact candidate.
 - [ ] Complete content rating, target audience and account-deletion declarations.
 
 ## 14. Production surface / stale features
@@ -158,11 +162,11 @@ Nearby is foreground-only and should remain opt-in.
 The production shell intentionally exposes a smaller audited surface. Source files for experimental ideas are not automatically production features.
 
 - [x] Inventory every route reachable from `MainShell` before release (`docs/production-readiness/route-inventory.md`).
-- [ ] Classify every screen as `READY`, `BETA`, `STUB`, `UNSAFE`, or `POST_LAUNCH`.
+- [x] Every `*Screen.kt` is classified as `READY`, `BETA`, `STUB`, `UNSAFE`, or `POST_LAUNCH` in `docs/production-readiness/screen-classification.json`, and CI fails on inventory/exposure drift.
 - [x] Hide/remove every `STUB`/`UNSAFE` route; Nearby and Kundali remain fail-closed behind Remote Config until their production evidence passes.
-- [ ] Placeholder language packs must remain hidden until independent translation and layout QA is complete.
-- [ ] Remove stale Firebase Dynamic Links references and any other retired/deprecated integration from docs/code.
-- [ ] Remove unused demo credentials, fake data generators and obsolete local-password utilities if no debug/test caller remains.
+- [x] Only the explicitly supported production locale catalog is exposed; unsupported placeholder locales are excluded and regression-tested. Independent translation/layout QA remains an external release evidence item.
+- [x] Production source is guarded against Firebase Dynamic Links reintroduction; retired provider/client integrations identified by the hardening audit are removed or fail-closed.
+- [x] Production scan rejects demo/seed account source, device-local password authority and obsolete BCrypt; synthetic production inventory identified in the audit has been removed/fail-closed.
 
 ## 15. Release test matrix
 
@@ -186,7 +190,8 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 - [ ] Fix all P0/P1 findings and confirm CI green on the exact candidate commit.
 - [ ] Upload signed AAB and complete Play declarations.
 - [ ] Stage production rollout (for example 5% → 20% → 50% → 100%) while monitoring Crashlytics, ANRs, Functions errors, payment failures and Firebase cost.
-- [ ] Have an operational rollback/disable plan using release rollback and narrowly scoped Remote Config feature flags where already implemented.
+- [x] Repository rollback/kill-switch runbook documents safe-off Remote Config keys, maintenance use, core rollback actions and re-enable exit criteria (`docs/release/ROLLBACK_RUNBOOK.md`).
+- [ ] Execute and attach a real production-like rollback drill for the exact release SHA.
 
 ## 17. Machine-verified external evidence
 
