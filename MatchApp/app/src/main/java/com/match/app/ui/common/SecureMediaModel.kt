@@ -46,6 +46,11 @@ fun rememberSecureMediaUri(source: String?): Uri? {
 fun isProtectedFirebaseStorageSource(source: String?): Boolean {
     val value = source?.trim().orEmpty()
     if (value.startsWith("gs://", ignoreCase = true)) return true
+    if (
+        value.startsWith("photos/") ||
+        value.startsWith("videos/") ||
+        value.startsWith("voicebios/")
+    ) return true
     val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
     val host = uri.host?.lowercase().orEmpty()
     return host == "firebasestorage.googleapis.com" ||
@@ -74,7 +79,8 @@ suspend fun resolveSecureMediaModel(context: Context, source: String?): Any? {
  * Resolve a protected Firebase object into app-private cache bytes.
  *
  * Legacy tokenized Firebase HTTPS URLs are converted back to StorageReference identity before read,
- * so the token itself is never used as authorization. New writes should store gs:// references.
+ * so the token itself is never used as authorization. New writes should store canonical object paths
+ * such as photos/{uid}/... or videos/{uid}/..., which are resolved through the authenticated SDK.
  */
 suspend fun resolveProtectedMediaFile(context: Context, source: String): File? {
     require(isProtectedFirebaseStorageSource(source)) { "Expected Firebase Storage reference" }
@@ -109,6 +115,14 @@ private fun storageReferenceForProtectedSource(source: String): StorageReference
     val storage = FirebaseStorage.getInstance()
     if (source.startsWith("gs://", ignoreCase = true)) {
         return storage.getReferenceFromUrl(source)
+    }
+    if (
+        source.startsWith("photos/") ||
+        source.startsWith("videos/") ||
+        source.startsWith("voicebios/")
+    ) {
+        require(!source.contains("..")) { "Malformed protected Storage path" }
+        return storage.reference.child(source)
     }
 
     val uri = Uri.parse(source)
