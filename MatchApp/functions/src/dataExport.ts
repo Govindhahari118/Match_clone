@@ -236,7 +236,7 @@ export const createMyDataExport = functions
         metadata: {
           contentType: "application/json",
           cacheControl: "private, no-store, max-age=0",
-          contentDisposition: 'attachment; filename="matree-account-data.json"',
+          contentDisposition: "attachment; filename=\"matree-account-data.json\"",
           metadata: {
             ownerUid: uid,
             exportRequestId: requestId,
