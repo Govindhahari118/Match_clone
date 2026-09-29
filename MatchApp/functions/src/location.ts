@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
+import { requireActiveConsent } from "./consent";
 import { db, requireAppCheck } from "./shared";
 import {
   nearbyAccountIsActive,
@@ -169,6 +170,7 @@ export const updateMyLocation = functions.https.onCall(async (data, context) => 
   requireAppCheck(context);
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  await requireActiveConsent(uid, "location");
 
   const location = normalizedLocation(data);
   const profile = await db.collection("users").doc(uid).get();
@@ -204,6 +206,7 @@ export const nearbyProfiles = functions
     requireAppCheck(context);
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+    await requireActiveConsent(uid, "location");
 
     const radiusRaw = finiteNumber(data?.radiusKm ?? 25, "radiusKm");
     const radiusKm = Math.max(5, Math.min(100, radiusRaw));
