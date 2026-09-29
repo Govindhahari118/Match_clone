@@ -43,6 +43,7 @@ import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
 import com.match.app.ui.detail.MatchDetailScreen
 import com.match.app.ui.family.FamilyAccessScreen
+import com.match.app.ui.family.FamilyScreen
 import com.match.app.ui.help.HelpScreen
 import com.match.app.ui.interests.InterestsScreen
 import com.match.app.ui.kundli.KundliScreen
@@ -100,6 +101,7 @@ object MainRoutes {
     const val PRIVACY_DASH = "privacy_dash"
     const val PARTNER_PREFERENCES = "partner_preferences"
     const val FAMILY_ACCESS = "family_access"
+    const val FAMILY_DETAILS = "family_details"
     const val ASSISTED = "assisted_matchmaking"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
@@ -429,6 +431,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
+                        onGoFamily = { nav.navigate(MainRoutes.FAMILY_DETAILS) },
                         onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoTerms = { nav.navigate(MainRoutes.TERMS) },
                         onGoPrivacy = { nav.navigate(MainRoutes.PRIVACY_DASH) },
@@ -455,6 +458,9 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
                 composable(MainRoutes.FAMILY_ACCESS) {
                     FamilyAccessScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.FAMILY_DETAILS) {
+                    FamilyScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.ASSISTED) {
                     AssistedServiceScreen(onBack = { nav.popBackStack() })
