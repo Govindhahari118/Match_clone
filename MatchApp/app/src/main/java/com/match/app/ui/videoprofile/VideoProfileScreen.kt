@@ -484,7 +484,7 @@ fun VideoProfileScreen(
             }
 
             Button(
-                onClick = { picker.launch("video/*") },
+                onClick = { picker.launch("video/mp4") },
                 enabled = !ui.uploading && !ui.deleting,
                 modifier = Modifier
                     .fillMaxWidth()
