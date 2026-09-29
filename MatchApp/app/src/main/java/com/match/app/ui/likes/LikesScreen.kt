@@ -39,11 +39,11 @@ class LikesViewModel @Inject constructor(
     private val userDao: UserDao
 ) : ViewModel() {
 
-    val mutuals: StateFlow<List<MutualMatch>> = session.userId.filterNotNull()
-        .flatMapLatest { me ->
-            social.observeMutual(me).map { likes ->
-                likes.mapNotNull { like ->
-                    userDao.findById(like.toUserId)?.let { u ->
+    val mutuals: StateFlow<List<MutualMatch>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { myUid ->
+            social.observeMutualIdsRemote(myUid).map { ids ->
+                ids.mapNotNull { id ->
+                    userDao.findById(id)?.let { u ->
                         MutualMatch(UserProfile(
                             id = u.id, email = u.email, displayName = u.displayName, age = u.age,
                             gender = runCatching { Gender.valueOf(u.gender) }.getOrDefault(Gender.OTHER),
@@ -59,11 +59,12 @@ class LikesViewModel @Inject constructor(
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val incomingCount: StateFlow<Int> = session.userId.filterNotNull()
-        .flatMapLatest { social.observeIncoming(it) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val incomingCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { myUid -> social.observeReceivedInterestsRemote(myUid) }
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 }
 
 @Composable
@@ -122,7 +123,7 @@ private fun MutualCard(m: MutualMatch, onOpen: (Long) -> Unit, onChat: (Long) ->
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(52.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(m.profile.displayName.first().uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(m.profile.displayName.firstOrNull()?.uppercase() ?: "?", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(Modifier.width(12.dp))
