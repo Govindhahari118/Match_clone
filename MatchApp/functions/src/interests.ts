@@ -3,6 +3,10 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { declinedInterestAllowsNewRequest } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import {
+  normalizePartnerPreferences,
+  strictPreferencesAllow,
+} from "./partnerPreferencesPolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -61,6 +65,8 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   const targetBlockRef = db.collection("blocks").doc(targetUid).collection("blocked").doc(senderUid);
   const senderPrivacyRef = db.collection("privacyRelations").doc(senderUid).collection("members").doc(targetUid);
   const targetPrivacyRef = db.collection("privacyRelations").doc(targetUid).collection("members").doc(senderUid);
+  const senderPreferencesRef = db.collection("partnerPreferences").doc(senderUid);
+  const targetPreferencesRef = db.collection("partnerPreferences").doc(targetUid);
 
   return db.runTransaction(async (tx) => {
     const [
@@ -74,6 +80,8 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       targetBlock,
       senderPrivacy,
       targetPrivacy,
+      senderPreferencesSnap,
+      targetPreferencesSnap,
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(targetRef),
@@ -85,6 +93,8 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(targetBlockRef),
       tx.get(senderPrivacyRef),
       tx.get(targetPrivacyRef),
+      tx.get(senderPreferencesRef),
+      tx.get(targetPreferencesRef),
     ]);
 
     if (!senderSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
@@ -106,6 +116,18 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     }
     if (!genderCompatible(sender, target)) {
       throw new functions.https.HttpsError("failed-precondition", "This profile is outside mutual partner preferences");
+    }
+
+    const senderPreferences = normalizePartnerPreferences(senderPreferencesSnap.data());
+    const targetPreferences = normalizePartnerPreferences(targetPreferencesSnap.data());
+    if (
+      !strictPreferencesAllow(senderPreferences, target) ||
+      !strictPreferencesAllow(targetPreferences, sender)
+    ) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This profile is outside mutual strict partner preferences"
+      );
     }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
