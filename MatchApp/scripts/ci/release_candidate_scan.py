@@ -98,6 +98,21 @@ def main() -> int:
     require("libs.jbcrypt" not in gradle,
             "obsolete BCrypt dependency must not ship in production", failures)
 
+    remote_config = text(APP / "src/main/java/com/match/app/core/config/RemoteConfigManager.kt")
+    require('KEY_ENABLE_NEARBY to false' in remote_config,
+            "Nearby must remain fail-closed by default in Android Remote Config", failures)
+    require('KEY_ENABLE_KUNDALI to false' in remote_config,
+            "Kundali must remain fail-closed by default in Android Remote Config", failures)
+
+    location_functions = text(ROOT / "functions/src/location.ts")
+    horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
+    require('requireProductionFeature("nearby")' in location_functions,
+            "Nearby backend callables must enforce the production rollout gate", failures)
+    require(location_functions.count('requireProductionFeature("nearby")') >= 2,
+            "Nearby update and discovery paths must both enforce the backend rollout gate", failures)
+    require('requireProductionFeature("kundali")' in horoscope_functions,
+            "Kundali backend callable must enforce the production rollout gate", failures)
+
     for relative in [
         "src/main/java/com/match/app/core/trust/TrustScoreEngine.kt",
         "src/main/java/com/match/app/core/security/FakeProfileDetector.kt",
