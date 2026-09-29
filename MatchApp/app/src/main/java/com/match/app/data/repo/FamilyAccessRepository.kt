@@ -18,13 +18,22 @@ data class ManagedFamilyProfile(
     val permissions: List<String>
 )
 
+data class PendingFamilyInvite(
+    val inviteId: String,
+    val role: String,
+    val permissions: List<String>,
+    val expiresAtMillis: Long
+)
+
 data class FamilyAccessSnapshot(
     val delegates: List<FamilyDelegateAccess>,
+    val pendingInvites: List<PendingFamilyInvite>,
     val managedProfiles: List<ManagedFamilyProfile>
 )
 
 data class FamilyInvite(
     val inviteToken: String,
+    val inviteId: String,
     val expiresAtMillis: Long,
     val role: String,
     val permissions: List<String>
@@ -62,6 +71,16 @@ class FamilyAccessRepository @Inject constructor() {
                 active = row["active"] == true
             )
         }
+        val pending = (data["pendingInvites"] as? List<*>).orEmpty().mapNotNull { raw ->
+            val row = raw as? Map<*, *> ?: return@mapNotNull null
+            val inviteId = row["inviteId"] as? String ?: return@mapNotNull null
+            PendingFamilyInvite(
+                inviteId = inviteId,
+                role = row["role"] as? String ?: "",
+                permissions = (row["permissions"] as? List<*>).orEmpty().filterIsInstance<String>(),
+                expiresAtMillis = (row["expiresAtMillis"] as? Number)?.toLong() ?: 0L
+            )
+        }
         val managed = (data["managedProfiles"] as? List<*>).orEmpty().mapNotNull { raw ->
             val row = raw as? Map<*, *> ?: return@mapNotNull null
             val uid = row["ownerUid"] as? String ?: return@mapNotNull null
@@ -71,7 +90,7 @@ class FamilyAccessRepository @Inject constructor() {
                 permissions = (row["permissions"] as? List<*>).orEmpty().filterIsInstance<String>()
             )
         }
-        return FamilyAccessSnapshot(delegates, managed)
+        return FamilyAccessSnapshot(delegates, pending, managed)
     }
 
     suspend fun createInvite(role: String, canEdit: Boolean): FamilyInvite {
@@ -86,6 +105,7 @@ class FamilyAccessRepository @Inject constructor() {
         val data = result.data as? Map<String, Any?> ?: error("Invalid family invite response")
         return FamilyInvite(
             inviteToken = data["inviteToken"] as? String ?: error("Missing family invite token"),
+            inviteId = data["inviteId"] as? String ?: error("Missing family invite id"),
             expiresAtMillis = (data["expiresAtMillis"] as? Number)?.toLong() ?: 0L,
             role = data["role"] as? String ?: role,
             permissions = (data["permissions"] as? List<*>).orEmpty().filterIsInstance<String>()
@@ -151,6 +171,13 @@ class FamilyAccessRepository @Inject constructor() {
         val data = result.data as? Map<String, Any?> ?: error("Invalid managed-profile update")
         return (data["profileRevision"] as? Number)?.toLong()
             ?: error("Missing profile revision")
+    }
+
+    suspend fun cancelInvite(inviteId: String) {
+        require(inviteId.matches(Regex("[a-f0-9]{64}"))) { "Invalid family invite" }
+        functions.getHttpsCallable("cancelFamilyDelegateInvite")
+            .call(mapOf("inviteId" to inviteId))
+            .await()
     }
 
     suspend fun revoke(delegateUid: String) {
