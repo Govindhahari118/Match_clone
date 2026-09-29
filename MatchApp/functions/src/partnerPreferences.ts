@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { requireActiveConsent } from "./consent";
 import {
   DEFAULT_PARTNER_PREFERENCES,
   normalizePartnerPreferences,
@@ -38,6 +39,7 @@ export const setPartnerPreferences = functions.https.onCall(async (data, context
   requireAppCheck(context);
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  await requireActiveConsent(uid, "sensitive_preferences");
 
   const normalized = normalizePartnerPreferences({
     ...(data && typeof data === "object" ? data : {}),
