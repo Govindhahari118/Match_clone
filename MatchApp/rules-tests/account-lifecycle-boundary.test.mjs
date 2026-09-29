@@ -68,3 +68,23 @@ test('suspended member cannot keep using old match or chat records', async () =>
     lastSentAt: 2,
   }));
 });
+
+
+test('member cannot directly rewrite server-owned pause lifecycle fields', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice'), {
+      accountStatus: 'ACTIVE',
+      matrimonyPaused: false,
+      searchStatus: 'ACTIVE',
+      profileRevision: 0,
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(alice, 'users/alice'), {
+    matrimonyPaused: true,
+    searchStatus: 'PAUSED',
+    pausedAt: Date.now(),
+    profileRevision: 1,
+  }));
+});
