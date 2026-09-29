@@ -6,6 +6,15 @@ import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings
 import com.match.app.BuildConfig
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class ProductionOptionalRoutes(
+    val nearby: Boolean = false,
+    val kundali: Boolean = false
+)
+
 
 /**
  * Production feature flags come from Firebase Remote Config.
@@ -33,6 +42,8 @@ class RemoteConfigManager @Inject constructor() {
         const val KEY_MAX_PROFILE_PHOTOS = "max_profile_photos"
         const val KEY_ENABLE_AI_ICEBREAKERS = "enable_ai_icebreakers"
         const val KEY_DAILY_REWARD_ENABLED = "daily_reward_enabled"
+        const val KEY_ENABLE_NEARBY = "enable_nearby"
+        const val KEY_ENABLE_KUNDALI = "enable_kundali"
 
         private val DEFAULTS: Map<String, Any> = mapOf(
             KEY_FREE_MSG_LIMIT to 5L,
@@ -50,7 +61,9 @@ class RemoteConfigManager @Inject constructor() {
             KEY_ENABLE_NRI_FEATURES to false,
             KEY_MAX_PROFILE_PHOTOS to 6L,
             KEY_ENABLE_AI_ICEBREAKERS to false,
-            KEY_DAILY_REWARD_ENABLED to false
+            KEY_DAILY_REWARD_ENABLED to false,
+            KEY_ENABLE_NEARBY to false,
+            KEY_ENABLE_KUNDALI to false
         )
     }
 
@@ -63,11 +76,25 @@ class RemoteConfigManager @Inject constructor() {
         setDefaultsAsync(DEFAULTS)
     }
 
+    private val _optionalRoutes = MutableStateFlow(ProductionOptionalRoutes())
+    val optionalRoutes: StateFlow<ProductionOptionalRoutes> = _optionalRoutes.asStateFlow()
+
+    private fun refreshOptionalRoutes() {
+        _optionalRoutes.value = ProductionOptionalRoutes(
+            nearby = remoteConfig.getBoolean(KEY_ENABLE_NEARBY),
+            kundali = remoteConfig.getBoolean(KEY_ENABLE_KUNDALI)
+        )
+    }
+
     fun fetchAndActivate(onComplete: (Boolean) -> Unit = {}) {
         remoteConfig.fetchAndActivate()
-            .addOnSuccessListener { activated -> onComplete(activated) }
+            .addOnSuccessListener { activated ->
+                refreshOptionalRoutes()
+                onComplete(activated)
+            }
             .addOnFailureListener { error ->
                 Log.w("RemoteConfig", "Remote Config fetch failed; safe defaults/last activated values remain in effect", error)
+                refreshOptionalRoutes()
                 onComplete(false)
             }
     }
@@ -89,4 +116,6 @@ class RemoteConfigManager @Inject constructor() {
     val maxProfilePhotos: Int get() = remoteConfig.getLong(KEY_MAX_PROFILE_PHOTOS).toInt().coerceAtLeast(1)
     val enableAiIcebreakers: Boolean get() = remoteConfig.getBoolean(KEY_ENABLE_AI_ICEBREAKERS)
     val dailyRewardEnabled: Boolean get() = remoteConfig.getBoolean(KEY_DAILY_REWARD_ENABLED)
+    val enableNearby: Boolean get() = remoteConfig.getBoolean(KEY_ENABLE_NEARBY)
+    val enableKundali: Boolean get() = remoteConfig.getBoolean(KEY_ENABLE_KUNDALI)
 }
