@@ -219,6 +219,7 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(
     onBack: () -> Unit,
     onGoLanguage: () -> Unit = {},
+    onGoPartnerPreferences: () -> Unit = {},
     onUpgrade: () -> Unit = {},
     onAccountDeleted: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel()
@@ -298,6 +299,27 @@ fun SettingsScreen(
                     }
                     user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
                     SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { "Being assigned" }.orEmpty())
+                }
+            }
+
+            Text("Matching preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Card(
+                onClick = onGoPartnerPreferences,
+                modifier = Modifier.fillMaxWidth().testTag("settings_partner_preferences"),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Tune, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Partner preferences", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Set strict boundaries separately from preferred qualities. These are private and apply bilaterally in discovery.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Filled.ChevronRight, null)
                 }
             }
 
