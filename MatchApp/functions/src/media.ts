@@ -155,6 +155,9 @@ export const reviewProfilePhoto = functions.https.onCall(async (data, context) =
       throw new functions.https.HttpsError("failed-precondition", "Photo was already reviewed");
     }
 
+    const userRef = db.collection("users").doc(ownerUid);
+    const user = await tx.get(userRef);
+
     tx.update(moderationRef, {
       status: decision,
       reviewReason: reason,
@@ -164,8 +167,6 @@ export const reviewProfilePhoto = functions.https.onCall(async (data, context) =
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const userRef = db.collection("users").doc(ownerUid);
-    const user = await tx.get(userRef);
     if (decision === "APPROVED" && user.exists &&
         !String(user.data()?.photoUrl || "").trim()) {
       tx.update(userRef, { photoUrl: storagePath });
