@@ -7,9 +7,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Backend-driven catalogue (regions + community groups).  Calls fail soft and
- * return [Result] so screens can fall back to bundled presets when the backend
- * is unreachable.
+ * Backend-driven catalogue (regions + community groups).
+ *
+ * Calls fail soft via [Result], but production-facing consumers must not invent member inventory,
+ * verification status, counts or availability when the backend catalogue is unavailable.
  */
 @Singleton
 class CatalogRepository @Inject constructor(
