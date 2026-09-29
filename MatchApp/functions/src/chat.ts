@@ -91,6 +91,105 @@ async function validateChatMedia(
 }
 
 /**
+ * Prepare the canonical server-owned thread before a chat-media upload.
+ *
+ * Storage Rules deliberately require an existing trusted thread before accepting private chat
+ * media. A brand-new mutual match therefore calls this first for IMAGE/VOICE sends. Prepared
+ * threads use lastSentAt=0 and are hidden by Android until a real message is accepted.
+ */
+export const prepareChatThread = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const senderUid = context.auth?.uid;
+  if (!senderUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const recipientUid = cleanUid(data?.targetUid);
+  if (recipientUid === senderUid) {
+    throw new functions.https.HttpsError("invalid-argument", "Cannot prepare a chat with yourself");
+  }
+
+  const pair = [senderUid, recipientUid].sort();
+  const threadId = canonicalThreadId(senderUid, recipientUid);
+  const senderRef = db.collection("users").doc(senderUid);
+  const recipientRef = db.collection("users").doc(recipientUid);
+  const matchRef = db.collection("matches").doc(pair.join("_"));
+  const senderBlockRef = db.collection("blocks").doc(senderUid).collection("blocked").doc(recipientUid);
+  const recipientBlockRef = db.collection("blocks").doc(recipientUid).collection("blocked").doc(senderUid);
+  const senderPrivacyRef = db.collection("privacyRelations").doc(senderUid).collection("members").doc(recipientUid);
+  const recipientPrivacyRef = db.collection("privacyRelations").doc(recipientUid).collection("members").doc(senderUid);
+  const threadRef = db.collection("chats").doc(threadId);
+
+  await db.runTransaction(async (tx) => {
+    const [
+      sender,
+      recipient,
+      match,
+      senderBlock,
+      recipientBlock,
+      senderPrivacy,
+      recipientPrivacy,
+      thread,
+    ] = await Promise.all([
+      tx.get(senderRef),
+      tx.get(recipientRef),
+      tx.get(matchRef),
+      tx.get(senderBlockRef),
+      tx.get(recipientBlockRef),
+      tx.get(senderPrivacyRef),
+      tx.get(recipientPrivacyRef),
+      tx.get(threadRef),
+    ]);
+
+    if (!sender.exists || !recipient.exists) {
+      throw new functions.https.HttpsError("not-found", "Profile not found");
+    }
+    if (!accountIsActive(sender.data()?.accountStatus) ||
+        !accountIsActive(recipient.data()?.accountStatus)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Messaging is unavailable while an account is not active"
+      );
+    }
+    const matchUsers = Array.isArray(match.data()?.users) ? match.data()?.users : [];
+    if (!match.exists || !matchUsers.includes(senderUid) || !matchUsers.includes(recipientUid)) {
+      throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    }
+    if (senderBlock.exists || recipientBlock.exists) {
+      throw new functions.https.HttpsError("permission-denied", "Messaging is unavailable after a block");
+    }
+    if (senderPrivacy.data()?.profileHidden === true ||
+        recipientPrivacy.data()?.profileHidden === true) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Messaging is unavailable for this privacy relationship"
+      );
+    }
+
+    if (thread.exists) {
+      const participants = Array.isArray(thread.data()?.participantUids) ?
+        thread.data()?.participantUids : [];
+      if (participants.length !== 2 ||
+          !participants.includes(senderUid) ||
+          !participants.includes(recipientUid)) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Existing chat thread does not match this member pair"
+        );
+      }
+      return;
+    }
+
+    tx.create(threadRef, {
+      participantUids: pair,
+      lastMessage: "",
+      lastSentAt: 0,
+      preparedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true, threadId };
+});
+
+/**
  * Server-authoritative, idempotent chat send.
  *
  * The Android durable outbox keeps the client-generated message id stable across retries. Media is
