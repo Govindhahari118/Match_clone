@@ -25,6 +25,7 @@ export * from "./analytics";
 export * from "./health";
 export * from "./media";
 export * from "./calls";
+export * from "./dataExport";
 export * from "./profilePrivacyMigration";
 
 export * from "./ops";
