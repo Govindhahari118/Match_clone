@@ -100,13 +100,6 @@
       "requiredFlag": null
     },
     {
-      "path": "ui/community/CommunityBrowseScreen.kt",
-      "symbol": "CommunityBrowseScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
-      "requiredFlag": null
-    },
-    {
       "path": "ui/counselling/CounsellingScreen.kt",
       "symbol": "CounsellingScreen",
       "status": "POST_LAUNCH",
@@ -202,13 +195,6 @@
       "symbol": "LegalScreen",
       "status": "READY",
       "exposure": "reachable",
-      "requiredFlag": null
-    },
-    {
-      "path": "ui/likes/LikesScreen.kt",
-      "symbol": "LikesScreen",
-      "status": "POST_LAUNCH",
-      "exposure": "hidden",
       "requiredFlag": null
     },
     {
