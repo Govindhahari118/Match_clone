@@ -254,16 +254,20 @@ export const updateProfileReportStatus = functions.https.onCall(async (data, con
  * Returns counts and age buckets only; no member messages, report details, contact data or KYC data.
  */
 export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) => {
-  requireOpsRole(context, ["support", "moderator", "payment_ops", "ops_admin"]);
+  requireOpsRole(context, ["support", "moderator", "payment_ops", "kyc_reviewer", "ops_admin"]);
   const now = Date.now();
 
-  const [tickets, reports] = await Promise.all([
+  const [tickets, reports, verifications] = await Promise.all([
     db.collection("supportTickets")
       .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "ESCALATED"])
       .limit(1000)
       .get(),
     db.collection("profileReports")
       .where("status", "in", ["OPEN", "REVIEWING"])
+      .limit(1000)
+      .get(),
+    db.collection("verificationRequests")
+      .where("status", "==", "pending")
       .limit(1000)
       .get(),
   ]);
@@ -287,7 +291,8 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
     generatedAtMillis: now,
     support: summarize(tickets.docs),
     moderation: summarize(reports.docs),
-    truncated: tickets.size >= 1000 || reports.size >= 1000,
+    verification: summarize(verifications.docs),
+    truncated: tickets.size >= 1000 || reports.size >= 1000 || verifications.size >= 1000,
   };
 });
 
