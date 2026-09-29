@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db } from "./shared";
+import { hasActiveConsent } from "./consent";
 
 type FeedbackKind =
   | "PROFILE_OPEN"
@@ -34,6 +35,7 @@ async function recordPairFeedback(
   kind: FeedbackKind
 ): Promise<void> {
   if (!viewerUid || !targetUid || viewerUid === targetUid) return;
+  if (!(await hasActiveConsent(viewerUid, "personalization"))) return;
   const ref = db.collection("recommendationFeedback")
     .doc(viewerUid)
     .collection("targets")
@@ -60,6 +62,7 @@ export async function recordRecommendationImpressionBatch(
     .filter((uid) => uid && uid !== viewerUid)
     .slice(0, 50);
   if (!viewerUid || unique.length === 0) return;
+  if (!(await hasActiveConsent(viewerUid, "personalization"))) return;
 
   await db.collection("recommendationImpressionBatches").add({
     viewerUid,
