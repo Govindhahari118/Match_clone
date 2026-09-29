@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import {
   assertFails,
-  assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -47,15 +46,17 @@ beforeEach(async () => {
   });
 });
 
-test('feature documents remain readable to their owner where required', async () => {
+test('hidden legacy feature documents are not client-readable, even by their owner or participant', async () => {
   const db = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(getDoc(doc(db, 'eventRegistrations/alice_event1')));
-  await assertSucceeds(getDoc(doc(db, 'counsellingBookings/booking1')));
-  await assertSucceeds(getDoc(doc(db, 'referrals/ref1')));
-  await assertSucceeds(getDoc(doc(db, 'rmRequests/rm1')));
-  await assertSucceeds(getDoc(doc(db, 'backgroundChecks/bg1')));
-  await assertSucceeds(getDoc(doc(db, 'callRequests/call1')));
-  await assertSucceeds(getDoc(doc(db, 'communities/community1')));
+  await assertFails(getDoc(doc(db, 'events/event1')));
+  await assertFails(getDoc(doc(db, 'eventRegistrations/alice_event1')));
+  await assertFails(getDoc(doc(db, 'counsellingBookings/booking1')));
+  await assertFails(getDoc(doc(db, 'referrals/ref1')));
+  await assertFails(getDoc(doc(db, 'rmRequests/rm1')));
+  await assertFails(getDoc(doc(db, 'backgroundChecks/bg1')));
+  await assertFails(getDoc(doc(db, 'callRequests/call1')));
+  await assertFails(getDoc(doc(db, 'communities/community1')));
+  await assertFails(getDoc(doc(db, 'communities/community1/members/alice')));
 });
 
 test('clients cannot forge server-managed feature mutations', async () => {
@@ -77,12 +78,12 @@ test('clients cannot mutate counters or server-owned feature status after server
   await assertFails(updateDoc(doc(db, 'backgroundChecks/bg1'), { status: 'approved' }));
 });
 
-test('another user cannot read owner-only service requests', async () => {
+test('hidden service records stay closed to every other signed-in user', async () => {
   const db = env.authenticatedContext('bob').firestore();
   await assertFails(getDoc(doc(db, 'counsellingBookings/booking1')));
   await assertFails(getDoc(doc(db, 'referrals/ref1')));
   await assertFails(getDoc(doc(db, 'rmRequests/rm1')));
   await assertFails(getDoc(doc(db, 'backgroundChecks/bg1')));
-  // Bob is a call participant, so that relationship document is intentionally visible to him.
-  await assertSucceeds(getDoc(doc(db, 'callRequests/call1')));
+  await assertFails(getDoc(doc(db, 'callRequests/call1')));
+  await assertFails(getDoc(doc(db, 'communities/community1')));
 });
