@@ -312,6 +312,7 @@ fun MatchDetailScreen(
     onChat: () -> Unit,
     onPricing: () -> Unit = {},
     onKundli: () -> Unit = {},
+    onCompatibilityBreakdown: () -> Unit = {},
     vm: MatchDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(userId) { vm.load(userId) }
@@ -505,6 +506,13 @@ fun MatchDetailScreen(
 
                 TrustSummaryCard(ui.trustSummary)
                 ActualCompatibilityCard(ui)
+                MatreeSecondaryButton(
+                    text = "Compatibility breakdown",
+                    icon = Icons.Filled.Insights,
+                    onClick = onCompatibilityBreakdown,
+                    enabled = !ui.blocked,
+                    modifier = Modifier.fillMaxWidth().testTag("profile_compat_breakdown")
+                )
                 ProfileFacts(p)
 
                 if (p.bio.isNotBlank()) SectionCard("About") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
