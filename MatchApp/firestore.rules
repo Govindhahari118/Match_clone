@@ -50,8 +50,8 @@ service cloud.firestore {
              (!('isVerified' in request.resource.data) || request.resource.data.isVerified == false) &&
              (!('matrimonyId' in request.resource.data) || request.resource.data.matrimonyId == '') &&
              (!('verificationLevel' in request.resource.data) || request.resource.data.verificationLevel == 0) &&
-             (!('subscriptionPlan' in request.resource.data) || request.resource.data.subscriptionPlan == 'FREE') &&
-             (!('subscriptionExpiry' in request.resource.data) || request.resource.data.subscriptionExpiry == 0) &&
+             !('subscriptionPlan' in request.resource.data) &&
+             !('subscriptionExpiry' in request.resource.data) &&
              !('premiumPlan' in request.resource.data) &&
              !('premiumUntil' in request.resource.data) &&
              !('paymentId' in request.resource.data) &&
@@ -64,16 +64,18 @@ service cloud.firestore {
              !('profileViewCount' in request.resource.data) &&
              !('createdAt' in request.resource.data) &&
              (!('photoUrl' in request.resource.data) || request.resource.data.photoUrl == '') &&
-             (!('videoUrl' in request.resource.data) || request.resource.data.videoUrl == '');
+             (!('videoUrl' in request.resource.data) || request.resource.data.videoUrl == '') &&
+             (!('voiceBioUrl' in request.resource.data) || request.resource.data.voiceBioUrl == '');
     }
     function userServerFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'isPremium','isVerified','matrimonyId','verificationLevel','subscriptionPlan',
         'subscriptionExpiry','premiumPlan','premiumUntil','paymentId',
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
-        'lastActiveAt','boostActiveUntil','accountStatus','religion','religionId','religionLocked','religionConfirmedAt',
+        'lastActiveAt','boostActiveUntil','accountStatus','userPaused','matrimonyPaused','searchStatus','pausedAt',
+        'religion','religionId','religionLocked','religionConfirmedAt',
         'profileCompleteness','profileCompletenessUpdatedAt','matchScore','profileViewCount','createdAt',
-        'photoUrl','videoUrl'
+        'photoUrl','videoUrl','voiceBioUrl'
       ]);
     }
     function peerReadableAccount(data) {
@@ -294,15 +296,24 @@ service cloud.firestore {
       }
     }
 
-    match /events/{eventId} { allow read: if isSignedIn(); allow write: if false; }
-    match /eventRegistrations/{regId} { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
-    match /counsellingBookings/{bookingId} { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
-    match /referrals/{refId} { allow read: if isSignedIn() && resource.data.referrerUid == request.auth.uid; allow write: if false; }
-    match /rmRequests/{reqId} { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
-    match /backgroundChecks/{checkId} { allow read: if isSignedIn() && resource.data.requestedBy == request.auth.uid; allow write: if false; }
-    match /callRequests/{callId} { allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid); allow write: if false; }
-    match /profileAnalytics/{uid} { allow read: if isOwner(uid); allow write: if false; match /weekly/{weekId} { allow read: if isOwner(uid); allow write: if false; } }
-    match /communities/{communityId} { allow read: if isSignedIn(); allow write: if false; match /members/{memberId} { allow read: if isSignedIn(); allow write: if false; } }
+    // Retired/hidden product surfaces remain server-only. Keeping Kotlin prototypes in source is not
+    // authorization for a modified client to inspect legacy catalogue, service-request or analytics
+    // documents. A future promotion must introduce an audited callable/rules contract deliberately.
+    match /events/{eventId} { allow read, write: if false; }
+    match /eventRegistrations/{regId} { allow read, write: if false; }
+    match /counsellingBookings/{bookingId} { allow read, write: if false; }
+    match /referrals/{refId} { allow read, write: if false; }
+    match /rmRequests/{reqId} { allow read, write: if false; }
+    match /backgroundChecks/{checkId} { allow read, write: if false; }
+    match /callRequests/{callId} { allow read, write: if false; }
+    match /profileAnalytics/{uid} {
+      allow read, write: if false;
+      match /weekly/{weekId} { allow read, write: if false; }
+    }
+    match /communities/{communityId} {
+      allow read, write: if false;
+      match /members/{memberId} { allow read, write: if false; }
+    }
     match /verifications/{uid} { allow read: if isOwner(uid); allow write: if false; }
     match /verificationRequests/{uid} {
       allow read: if isOwner(uid);
@@ -374,6 +385,5 @@ service cloud.firestore {
     match /deletionRequests/{uid} { allow read, write: if false; }
     match /subscriptions/{uid}/{allPaths=**} { allow read, write: if false; }
     match /userLocations/{uid} { allow read, write: if false; }
-    match /videoModeration/{docId} { allow read, write: if false; }
   }
 }

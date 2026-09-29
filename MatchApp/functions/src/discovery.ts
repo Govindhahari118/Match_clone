@@ -11,6 +11,7 @@ import {
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
 import { recordRecommendationImpressionBatch } from "./recommendationFeedback";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -24,12 +25,12 @@ const PUBLIC_PROFILE_FIELDS = [
   "isVerified", "isPremium", "profileViewCount", "caste", "state", "subCaste", "gothra",
   "faithTradition", "faithSubTradition", "faithInstitution",
   "diet", "familyType", "fatherOccupation", "motherOccupation", "siblings", "smoking",
-  "drinking", "personalityType", "hobbies", "spokenLanguages", "videoUrl",
+  "drinking", "personalityType", "hobbies", "spokenLanguages",
   "residentialStatus", "hasChildren", "nativeState", "countryOfResidence", "visaStatus",
   "willingToRelocate", "createdAt", "isIncognito", "ageBucket", "familyValues", "aboutFamily",
   "weight", "complexion", "physicalStatus", "familyStatus", "educationField", "institution",
   "graduationYear", "occupationCategory", "employer", "employerType", "citizenship", "isNRI",
-  "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl", "profileCompleteness",
+  "fitnessActivities", "matrimonyId", "photoUrl", "profileCompleteness",
   "verificationLevel", "stealthMode", "showHoroscope", "incomeDisclosure",
 ] as const;
 
@@ -71,23 +72,12 @@ function boolFromAnyFilter(value: string, actual: boolean): boolean {
   return true;
 }
 
-function premiumExpiryMillis(data: FirebaseFirestore.DocumentData): number {
-  if (data.premiumUntil instanceof admin.firestore.Timestamp) {
-    return data.premiumUntil.toMillis();
-  }
-  const expiry = Number(data.subscriptionExpiry || 0);
-  return Number.isFinite(expiry) ? expiry : 0;
-}
-
-function premiumIsActive(data: FirebaseFirestore.DocumentData, now: number): boolean {
-  return data.isPremium === true && premiumExpiryMillis(data) > now;
-}
-
 function matchesServerFilters(
   candidate: FirebaseFirestore.DocumentData,
   data: unknown,
   now: number,
-  visibleLastActiveAt: number
+  visibleLastActiveAt: number,
+  premiumActive: boolean
 ): boolean {
   const textFields: Array<[string, string]> = [
     ["city", "city"], ["state", "state"], ["religion", "religion"],
@@ -109,7 +99,7 @@ function matchesServerFilters(
   if (verifiedOnly && candidate.isVerified !== true) return false;
   const verifiedLevel = filterInt(data, "verifiedLevel", 0, 100);
   if (verifiedLevel > 0 && Number(candidate.verificationLevel || 0) < verifiedLevel) return false;
-  if (filterBoolean(data, "premiumOnly") && !premiumIsActive(candidate, now)) return false;
+  if (filterBoolean(data, "premiumOnly") && !premiumActive) return false;
   if (filterBoolean(data, "withPhotoOnly") && !stringValue(candidate.photoUrl)) return false;
   if (filterBoolean(data, "willingToRelocate") && candidate.willingToRelocate !== true) return false;
 
@@ -188,13 +178,13 @@ function matchesKeyword(data: FirebaseFirestore.DocumentData, keyword: string): 
 function publicProfile(
   uid: string,
   data: FirebaseFirestore.DocumentData,
-  now: number
+  premiumActive: boolean
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { firebaseUid: uid };
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
     if (field === "isPremium") {
-      result[field] = premiumIsActive(data, now);
+      result[field] = premiumActive;
       continue;
     }
     const value = data[field];
@@ -366,6 +356,7 @@ export const discoverProfiles = functions
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
+    const subscriptionByUid = new Map<string, FirebaseFirestore.DocumentData>();
     const partnerPreferencesByUid = new Map<
       string,
       ReturnType<typeof normalizePartnerPreferences>
@@ -385,7 +376,9 @@ export const discoverProfiles = functions
       if (doc.exists && doc.data()?.profileHidden === true) hiddenFromViewer.add(candidates[index].id);
     });
     subscriptionDocs.forEach((doc, index) => {
-      const raw = Number(doc.data()?.boostUntil || 0);
+      const value = doc.data() || {};
+      subscriptionByUid.set(candidates[index].id, value);
+      const raw = Number(value.boostUntil || 0);
       boostUntilByUid.set(candidates[index].id, Number.isFinite(raw) ? raw : 0);
     });
     privateDocs.forEach((doc, index) => {
@@ -421,6 +414,7 @@ export const discoverProfiles = functions
       preferredFit: number | null;
       boosted: number;
       createdAt: number;
+      premiumActive: boolean;
     }> = [];
 
     for (const doc of candidates) {
@@ -441,6 +435,11 @@ export const discoverProfiles = functions
       if (!matchesKeyword(candidate, keyword)) continue;
 
       const privateData = privateFilterByUid.get(doc.id) || {};
+      const membership = resolveMembershipState(
+        subscriptionByUid.get(doc.id),
+        candidate,
+        now
+      );
       const filterCandidate = {
         ...candidate,
         incomeBand: privateData.incomeBand,
@@ -452,7 +451,8 @@ export const discoverProfiles = functions
         filterCandidate,
         data,
         now,
-        visibleLastActiveByUid.get(doc.id) || 0
+        visibleLastActiveByUid.get(doc.id) || 0,
+        membership.active
       )) continue;
 
       const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
@@ -470,6 +470,7 @@ export const discoverProfiles = functions
         ),
         boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
         createdAt: createdAtMillis(candidate),
+        premiumActive: membership.active,
       });
     }
 
@@ -485,8 +486,8 @@ export const discoverProfiles = functions
 
     const profiles = rankedCandidates
       .slice(0, RETURN_LIMIT)
-      .map(({ doc, preferredFit }) => {
-        const profile = publicProfile(doc.id, doc.data() || {}, now);
+      .map(({ doc, preferredFit, premiumActive }) => {
+        const profile = publicProfile(doc.id, doc.data() || {}, premiumActive);
         return preferredFit == null
           ? profile
           : {

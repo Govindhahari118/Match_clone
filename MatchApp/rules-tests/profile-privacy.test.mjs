@@ -111,3 +111,27 @@ test('client cannot read or write server-only presence', async () => {
   await assertFails(getDoc(doc(alice, 'presencePrivate/alice')));
   await assertFails(setDoc(doc(alice, 'presencePrivate/alice'), { lastActiveAt: Date.now() }));
 });
+
+
+test('retired video profile fields cannot be created or changed by a client', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({ videoUrl: 'videos/alice/legacy.mp4' })));
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({ voiceBioUrl: 'voicebios/alice/legacy.m4a' })));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice'), baseProfile({ videoUrl: 'legacy-video', voiceBioUrl: 'legacy-voice' }));
+  });
+  await assertFails(updateDoc(doc(alice, 'users/alice'), { videoUrl: 'videos/alice/new.mp4' }));
+  await assertFails(updateDoc(doc(alice, 'users/alice'), { voiceBioUrl: 'voicebios/alice/new.m4a' }));
+});
+
+
+test('public profile creation rejects billing metadata even when values look free', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({
+    subscriptionPlan: 'FREE',
+    subscriptionExpiry: 0,
+  })));
+  await assertFails(setDoc(doc(alice, 'users/alice'), baseProfile({
+    paymentId: 'client-value',
+  })));
+});

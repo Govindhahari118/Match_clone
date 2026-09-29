@@ -10,6 +10,7 @@ import {
 } from "./shared";
 import { shouldReassertPublicSuppression } from "./deletionPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import { userPauseTransition } from "./accountPausePolicy";
 import {
   calculateProfileCompletenessValue,
   PROFILE_COMPLETENESS_PRIVATE_FIELDS,
@@ -25,7 +26,6 @@ export const onUserCreate = functions.firestore
     await snap.ref.update({
       matrimonyId,
       verificationLevel: 1,
-      subscriptionPlan: "FREE",
       createdAt: Date.now(),
       profileRevision: Number(snap.data()?.profileRevision || 0),
     });
@@ -426,7 +426,6 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("profileReports").where("reporterUid", "==", uid));
         await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
         await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
-        await deleteQuery(db.collection("videoModeration").where("uid", "==", uid));
         await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
         await deleteQuery(
           db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
@@ -572,26 +571,40 @@ export const setMatrimonyPaused = functions.https.onCall(async (data, context) =
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
   const paused = data?.paused === true;
   const userRef = db.collection("users").doc(uid);
+  const enforcementRef = db.collection("accountEnforcements").doc(uid);
 
   const status = await db.runTransaction(async (tx) => {
-    const user = await tx.get(userRef);
+    const [user, enforcement] = await Promise.all([
+      tx.get(userRef),
+      tx.get(enforcementRef),
+    ]);
     if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
-    const current = String(user.data()?.accountStatus || "ACTIVE");
-    if (current === "DELETING" || current === "DELETED") {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Account deletion is already in progress"
-      );
+
+    const decision = userPauseTransition(
+      user.data()?.accountStatus,
+      enforcement.data()?.status,
+      paused
+    );
+    if (!decision.allowed) {
+      const message = decision.reason === "DELETION"
+        ? "Account deletion is already in progress"
+        : decision.reason === "ENFORCEMENT"
+          ? "Your matrimony availability is controlled by an active moderation review"
+          : "This account state cannot be changed from member settings";
+      throw new functions.https.HttpsError("failed-precondition", message);
     }
 
-    const next = paused ? "PAUSED" : "ACTIVE";
     tx.set(userRef, {
-      accountStatus: next,
-      searchStatus: paused ? "PAUSED" : "ACTIVE",
-      pausedAt: paused ? admin.firestore.FieldValue.serverTimestamp() : admin.firestore.FieldValue.delete(),
+      accountStatus: decision.nextStatus,
+      searchStatus: decision.paused ? "PAUSED" : "ACTIVE",
+      userPaused: decision.paused,
+      matrimonyPaused: decision.paused,
+      pausedAt: decision.paused
+        ? admin.firestore.FieldValue.serverTimestamp()
+        : admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    return next;
+    return decision.nextStatus;
   });
 
   return { accountStatus: status, paused: status === "PAUSED" };

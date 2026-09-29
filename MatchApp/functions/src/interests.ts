@@ -3,6 +3,11 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { declinedInterestAllowsNewRequest } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import {
+  normalizePartnerPreferences,
+  strictPreferencesAllow,
+} from "./partnerPreferencesPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -18,11 +23,11 @@ function matchId(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join("_");
 }
 
-function activePaidMembership(user: FirebaseFirestore.DocumentData): boolean {
-  const expiry = user.premiumUntil instanceof admin.firestore.Timestamp
-    ? user.premiumUntil.toMillis()
-    : Number(user.subscriptionExpiry || 0);
-  return user.isPremium === true && Number.isFinite(expiry) && expiry > Date.now();
+function activePaidMembership(
+  subscription: FirebaseFirestore.DocumentData | undefined,
+  user: FirebaseFirestore.DocumentData
+): boolean {
+  return resolveMembershipState(subscription, user).active;
 }
 
 function genderCompatible(
@@ -56,11 +61,14 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   const matchRef = db.collection("matches").doc(matchId(senderUid, targetUid));
   const responseRef = db.collection("interestResponses").doc(`${senderUid}_${targetUid}`);
   const usageDay = new Date().toISOString().slice(0, 10);
-  const usageRef = db.collection("subscriptions").doc(senderUid).collection("usage").doc(`interests_${usageDay}`);
+  const senderSubscriptionRef = db.collection("subscriptions").doc(senderUid);
+  const usageRef = senderSubscriptionRef.collection("usage").doc(`interests_${usageDay}`);
   const senderBlockRef = db.collection("blocks").doc(senderUid).collection("blocked").doc(targetUid);
   const targetBlockRef = db.collection("blocks").doc(targetUid).collection("blocked").doc(senderUid);
   const senderPrivacyRef = db.collection("privacyRelations").doc(senderUid).collection("members").doc(targetUid);
   const targetPrivacyRef = db.collection("privacyRelations").doc(targetUid).collection("members").doc(senderUid);
+  const senderPreferencesRef = db.collection("partnerPreferences").doc(senderUid);
+  const targetPreferencesRef = db.collection("partnerPreferences").doc(targetUid);
 
   return db.runTransaction(async (tx) => {
     const [
@@ -69,22 +77,28 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       outgoingSnap,
       reverseSnap,
       responseSnap,
+      senderSubscriptionSnap,
       usageSnap,
       senderBlock,
       targetBlock,
       senderPrivacy,
       targetPrivacy,
+      senderPreferencesSnap,
+      targetPreferencesSnap,
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(targetRef),
       tx.get(outgoingRef),
       tx.get(reverseRef),
       tx.get(responseRef),
+      tx.get(senderSubscriptionRef),
       tx.get(usageRef),
       tx.get(senderBlockRef),
       tx.get(targetBlockRef),
       tx.get(senderPrivacyRef),
       tx.get(targetPrivacyRef),
+      tx.get(senderPreferencesRef),
+      tx.get(targetPreferencesRef),
     ]);
 
     if (!senderSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
@@ -107,6 +121,18 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     if (!genderCompatible(sender, target)) {
       throw new functions.https.HttpsError("failed-precondition", "This profile is outside mutual partner preferences");
     }
+
+    const senderPreferences = normalizePartnerPreferences(senderPreferencesSnap.data());
+    const targetPreferences = normalizePartnerPreferences(targetPreferencesSnap.data());
+    if (
+      !strictPreferencesAllow(senderPreferences, target) ||
+      !strictPreferencesAllow(targetPreferences, sender)
+    ) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This profile is outside mutual strict partner preferences"
+      );
+    }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
     }
@@ -128,7 +154,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     }
 
     let interestsUsedToday = Number(usageSnap.data()?.count || 0);
-    if (!activePaidMembership(sender)) {
+    if (!activePaidMembership(senderSubscriptionSnap.data(), sender)) {
       if (interestsUsedToday >= FREE_DAILY_INTEREST_LIMIT) {
         throw new functions.https.HttpsError(
           "resource-exhausted",

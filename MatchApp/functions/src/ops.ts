@@ -5,6 +5,7 @@ import {
   enforcementSuppressesInteractions,
   normalizeEnforcementStatus,
 } from "./accountEnforcementPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const SUPPORT_STATUSES = new Set(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "RESOLVED", "CLOSED", "ESCALATED"]);
 const REPORT_STATUSES = new Set(["OPEN", "REVIEWING", "ACTIONED", "DISMISSED"]);
@@ -292,7 +293,7 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
   requireOpsRole(context, ["support", "moderator", "payment_ops", "kyc_reviewer", "ops_admin"]);
   const now = Date.now();
 
-  const [tickets, reports, verifications, photoModeration, videoModeration] = await Promise.all([
+  const [tickets, reports, verifications] = await Promise.all([
     db.collection("supportTickets")
       .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "ESCALATED"])
       .limit(1000)
@@ -303,14 +304,6 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
       .get(),
     db.collection("verificationRequests")
       .where("status", "==", "pending")
-      .limit(1000)
-      .get(),
-    db.collection("photoModeration")
-      .where("status", "==", "PENDING")
-      .limit(1000)
-      .get(),
-    db.collection("videoModeration")
-      .where("status", "==", "PENDING")
       .limit(1000)
       .get(),
   ]);
@@ -335,14 +328,7 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
     support: summarize(tickets.docs),
     moderation: summarize(reports.docs),
     verification: summarize(verifications.docs),
-    photoModeration: summarize(photoModeration.docs),
-    videoModeration: summarize(videoModeration.docs),
-    truncated:
-      tickets.size >= 1000 ||
-      reports.size >= 1000 ||
-      verifications.size >= 1000 ||
-      photoModeration.size >= 1000 ||
-      videoModeration.size >= 1000,
+    truncated: tickets.size >= 1000 || reports.size >= 1000 || verifications.size >= 1000,
   };
 });
 
@@ -371,6 +357,7 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
   ]);
   const userData = user.data() || {};
   const subscriptionData = subscription.data() || {};
+  const membership = resolveMembershipState(subscriptionData, userData);
 
   return {
     payment: {
@@ -391,9 +378,9 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
       voidedReason: typeof value.voidedReason === "string" ? value.voidedReason : null,
     },
     currentEntitlement: {
-      isPremium: userData.isPremium === true,
-      subscriptionPlan: String(userData.subscriptionPlan || "FREE"),
-      subscriptionExpiry: Number(userData.subscriptionExpiry || 0),
+      isPremium: membership.active,
+      subscriptionPlan: membership.planId,
+      subscriptionExpiry: membership.expiresAtMillis,
       boostUntil: Number(subscriptionData.boostUntil || 0),
     },
   };
@@ -498,16 +485,23 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
   const enforcementRef = db.collection("accountEnforcements").doc(targetUid);
   const auditRef = db.collection("opsAuditLog").doc();
 
-  const previousStatus = await db.runTransaction(async (tx) => {
+  const transition = await db.runTransaction(async (tx) => {
     const user = await tx.get(userRef);
     if (!user.exists) {
       throw new functions.https.HttpsError("not-found", "Account not found");
     }
     const before = String(user.data()?.accountStatus || "ACTIVE").toUpperCase();
+    const userPaused = user.data()?.userPaused === true || before === "PAUSED";
+    const effectiveAccountStatus =
+      nextStatus === "ACTIVE" && userPaused ? "PAUSED" : nextStatus;
+    const effectivePaused =
+      nextStatus === "ACTIVE" ? userPaused : enforcementSuppressesInteractions(nextStatus);
 
     tx.set(userRef, {
-      accountStatus: nextStatus,
-      matrimonyPaused: enforcementSuppressesInteractions(nextStatus),
+      accountStatus: effectiveAccountStatus,
+      userPaused,
+      matrimonyPaused: effectivePaused,
+      searchStatus: effectivePaused ? "PAUSED" : "ACTIVE",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
 
@@ -532,14 +526,18 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
       action: "ACCOUNT_ENFORCEMENT_UPDATED",
       targetCollection: "users",
       targetId: targetUid,
-      before: { accountStatus: before },
-      after: { accountStatus: nextStatus },
+      before: { accountStatus: before, userPaused },
+      after: {
+        accountStatus: effectiveAccountStatus,
+        enforcementStatus: nextStatus,
+        userPaused,
+      },
       reason,
       reportId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return before;
+    return { before, effectiveAccountStatus, userPaused };
   });
 
   if (nextStatus === "SUSPENDED") {
@@ -550,16 +548,19 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
     actorUid: actor.uid,
     actorRole: actor.role,
     targetUid,
-    previousStatus,
+    previousStatus: transition.before,
     nextStatus,
+    effectiveAccountStatus: transition.effectiveAccountStatus,
     reportId,
   });
 
   return {
     success: true,
     targetUid,
-    previousStatus,
+    previousStatus: transition.before,
     status: nextStatus,
+    accountStatus: transition.effectiveAccountStatus,
+    userPaused: transition.userPaused,
   };
 });
 
@@ -614,11 +615,12 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
   }
   if (!uid) throw new functions.https.HttpsError("not-found", "Account not found");
 
-  const [profile, verification, risk, enforcement] = await Promise.all([
+  const [profile, verification, risk, enforcement, subscription] = await Promise.all([
     db.collection("users").doc(uid).get(),
     db.collection("verifications").doc(uid).get(),
     db.collection("riskAssessments").doc(uid).get(),
     db.collection("accountEnforcements").doc(uid).get(),
+    db.collection("subscriptions").doc(uid).get(),
   ]);
   if (!profile.exists) throw new functions.https.HttpsError("not-found", "Account not found");
 
@@ -626,6 +628,7 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
   const v = verification.data() || {};
   const r = risk.data() || {};
   const e = enforcement.data() || {};
+  const membership = resolveMembershipState(subscription.data(), p);
   return {
     account: {
       uid,
@@ -637,8 +640,8 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
       isVerified: p.isVerified === true,
       verificationLevel: Number(p.verificationLevel || 0),
       profileCompleteness: Number(p.profileCompleteness || 0),
-      subscriptionPlan: String(p.subscriptionPlan || "FREE"),
-      subscriptionExpiry: Number(p.subscriptionExpiry || 0),
+      subscriptionPlan: membership.planId,
+      subscriptionExpiry: membership.expiresAtMillis,
       createdAtMillis: timestampMillis(p.createdAt) || Number(p.createdAt || 0),
     },
     verification: {

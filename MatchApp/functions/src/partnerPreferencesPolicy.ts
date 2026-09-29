@@ -10,6 +10,10 @@ export type PartnerPreferenceDocument = {
   heightMaxCm: number;
   religionMode: PreferenceMode;
   religions: string[];
+  casteMode: PreferenceMode;
+  castes: string[];
+  subCasteMode: PreferenceMode;
+  subCastes: string[];
   stateMode: PreferenceMode;
   states: string[];
   cityMode: PreferenceMode;
@@ -28,6 +32,24 @@ export type PartnerPreferenceDocument = {
   smoking: string[];
   drinkingMode: PreferenceMode;
   drinking: string[];
+  countryOfResidenceMode: PreferenceMode;
+  countriesOfResidence: string[];
+  citizenshipMode: PreferenceMode;
+  citizenships: string[];
+  childrenMode: PreferenceMode;
+  childrenStatuses: string[];
+  nriMode: PreferenceMode;
+  nriStatuses: string[];
+  relocationMode: PreferenceMode;
+  relocationStatuses: string[];
+  familyTypeMode: PreferenceMode;
+  familyTypes: string[];
+  familyValuesMode: PreferenceMode;
+  familyValues: string[];
+  physicalStatusMode: PreferenceMode;
+  physicalStatuses: string[];
+  residentialStatusMode: PreferenceMode;
+  residentialStatuses: string[];
 };
 
 export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
@@ -40,6 +62,10 @@ export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
   heightMaxCm: 250,
   religionMode: "NO_PREFERENCE",
   religions: [],
+  casteMode: "NO_PREFERENCE",
+  castes: [],
+  subCasteMode: "NO_PREFERENCE",
+  subCastes: [],
   stateMode: "NO_PREFERENCE",
   states: [],
   cityMode: "NO_PREFERENCE",
@@ -58,6 +84,24 @@ export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
   smoking: [],
   drinkingMode: "NO_PREFERENCE",
   drinking: [],
+  countryOfResidenceMode: "NO_PREFERENCE",
+  countriesOfResidence: [],
+  citizenshipMode: "NO_PREFERENCE",
+  citizenships: [],
+  childrenMode: "NO_PREFERENCE",
+  childrenStatuses: [],
+  nriMode: "NO_PREFERENCE",
+  nriStatuses: [],
+  relocationMode: "NO_PREFERENCE",
+  relocationStatuses: [],
+  familyTypeMode: "NO_PREFERENCE",
+  familyTypes: [],
+  familyValuesMode: "NO_PREFERENCE",
+  familyValues: [],
+  physicalStatusMode: "NO_PREFERENCE",
+  physicalStatuses: [],
+  residentialStatusMode: "NO_PREFERENCE",
+  residentialStatuses: [],
 };
 
 const MODES = new Set<PreferenceMode>(["STRICT", "PREFERRED", "NO_PREFERENCE"]);
@@ -89,6 +133,39 @@ function strings(value: unknown, maxItems = 20): string[] {
   return [...unique.values()];
 }
 
+function modeForValues(modeValue: unknown, valuesValue: unknown): PreferenceMode {
+  return strings(valuesValue).length > 0 ? mode(modeValue) : "NO_PREFERENCE";
+}
+
+function choiceStrings(value: unknown, allowed: readonly string[]): string[] {
+  if (!Array.isArray(value)) return [];
+  const byKey = new Map(allowed.map((item) => [item.toUpperCase(), item]));
+  const selected = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const canonical = byKey.get(item.trim().toUpperCase());
+    if (canonical) selected.add(canonical);
+  }
+  return [...selected];
+}
+
+function modeForChoices(
+  modeValue: unknown,
+  valuesValue: unknown,
+  allowed: readonly string[]
+): PreferenceMode {
+  return choiceStrings(valuesValue, allowed).length > 0
+    ? mode(modeValue)
+    : "NO_PREFERENCE";
+}
+
+const CHILDREN_CHOICES = ["HAS_CHILDREN", "NO_CHILDREN"] as const;
+const NRI_CHOICES = ["NRI", "INDIA_RESIDENT"] as const;
+const RELOCATION_CHOICES = [
+  "WILLING_TO_RELOCATE",
+  "NOT_WILLING_TO_RELOCATE",
+] as const;
+
 export function normalizePartnerPreferences(
   value: unknown
 ): PartnerPreferenceDocument {
@@ -112,26 +189,52 @@ export function normalizePartnerPreferences(
     heightMode: mode(raw.heightMode),
     heightMinCm,
     heightMaxCm,
-    religionMode: mode(raw.religionMode),
+    religionMode: modeForValues(raw.religionMode, raw.religions),
     religions: strings(raw.religions),
-    stateMode: mode(raw.stateMode),
+    casteMode: modeForValues(raw.casteMode, raw.castes),
+    castes: strings(raw.castes),
+    subCasteMode: modeForValues(raw.subCasteMode, raw.subCastes),
+    subCastes: strings(raw.subCastes),
+    stateMode: modeForValues(raw.stateMode, raw.states),
     states: strings(raw.states),
-    cityMode: mode(raw.cityMode),
+    cityMode: modeForValues(raw.cityMode, raw.cities),
     cities: strings(raw.cities),
-    motherTongueMode: mode(raw.motherTongueMode),
+    motherTongueMode: modeForValues(raw.motherTongueMode, raw.motherTongues),
     motherTongues: strings(raw.motherTongues),
-    maritalStatusMode: mode(raw.maritalStatusMode),
+    maritalStatusMode: modeForValues(raw.maritalStatusMode, raw.maritalStatuses),
     maritalStatuses: strings(raw.maritalStatuses),
-    educationMode: mode(raw.educationMode),
+    educationMode: modeForValues(raw.educationMode, raw.educationLevels),
     educationLevels: strings(raw.educationLevels),
-    occupationMode: mode(raw.occupationMode),
+    occupationMode: modeForValues(raw.occupationMode, raw.occupationCategories),
     occupationCategories: strings(raw.occupationCategories),
-    dietMode: mode(raw.dietMode),
+    dietMode: modeForValues(raw.dietMode, raw.diets),
     diets: strings(raw.diets),
-    smokingMode: mode(raw.smokingMode),
+    smokingMode: modeForValues(raw.smokingMode, raw.smoking),
     smoking: strings(raw.smoking),
-    drinkingMode: mode(raw.drinkingMode),
+    drinkingMode: modeForValues(raw.drinkingMode, raw.drinking),
     drinking: strings(raw.drinking),
+    countryOfResidenceMode: modeForValues(raw.countryOfResidenceMode, raw.countriesOfResidence),
+    countriesOfResidence: strings(raw.countriesOfResidence),
+    citizenshipMode: modeForValues(raw.citizenshipMode, raw.citizenships),
+    citizenships: strings(raw.citizenships),
+    childrenMode: modeForChoices(raw.childrenMode, raw.childrenStatuses, CHILDREN_CHOICES),
+    childrenStatuses: choiceStrings(raw.childrenStatuses, CHILDREN_CHOICES),
+    nriMode: modeForChoices(raw.nriMode, raw.nriStatuses, NRI_CHOICES),
+    nriStatuses: choiceStrings(raw.nriStatuses, NRI_CHOICES),
+    relocationMode: modeForChoices(
+      raw.relocationMode,
+      raw.relocationStatuses,
+      RELOCATION_CHOICES
+    ),
+    relocationStatuses: choiceStrings(raw.relocationStatuses, RELOCATION_CHOICES),
+    familyTypeMode: modeForValues(raw.familyTypeMode, raw.familyTypes),
+    familyTypes: strings(raw.familyTypes),
+    familyValuesMode: modeForValues(raw.familyValuesMode, raw.familyValues),
+    familyValues: strings(raw.familyValues),
+    physicalStatusMode: modeForValues(raw.physicalStatusMode, raw.physicalStatuses),
+    physicalStatuses: strings(raw.physicalStatuses),
+    residentialStatusMode: modeForValues(raw.residentialStatusMode, raw.residentialStatuses),
+    residentialStatuses: strings(raw.residentialStatuses),
   };
 }
 
@@ -163,6 +266,26 @@ function preferredListScore(
   return { earned: sameOne(expected, actual) ? 1 : 0, possible: 1 };
 }
 
+
+function residenceClass(subject: Record<string, unknown>): string {
+  const country = typeof subject.countryOfResidence === "string"
+    ? subject.countryOfResidence.trim().toLocaleLowerCase("en-IN")
+    : "";
+  return subject.isNRI === true || (country.length > 0 && country !== "india")
+    ? "NRI"
+    : "INDIA_RESIDENT";
+}
+
+function childrenClass(subject: Record<string, unknown>): string {
+  return subject.hasChildren === true ? "HAS_CHILDREN" : "NO_CHILDREN";
+}
+
+function relocationClass(subject: Record<string, unknown>): string {
+  return subject.willingToRelocate === true
+    ? "WILLING_TO_RELOCATE"
+    : "NOT_WILLING_TO_RELOCATE";
+}
+
 export function strictPreferencesAllow(
   preferences: PartnerPreferenceDocument,
   subject: Record<string, unknown>
@@ -182,6 +305,8 @@ export function strictPreferencesAllow(
   ) return false;
 
   return strictListAllows(preferences.religionMode, preferences.religions, subject.religion) &&
+    strictListAllows(preferences.casteMode, preferences.castes, subject.caste) &&
+    strictListAllows(preferences.subCasteMode, preferences.subCastes, subject.subCaste) &&
     strictListAllows(preferences.stateMode, preferences.states, subject.state) &&
     strictListAllows(preferences.cityMode, preferences.cities, subject.city) &&
     strictListAllows(
@@ -206,7 +331,32 @@ export function strictPreferencesAllow(
     ) &&
     strictListAllows(preferences.dietMode, preferences.diets, subject.diet) &&
     strictListAllows(preferences.smokingMode, preferences.smoking, subject.smoking) &&
-    strictListAllows(preferences.drinkingMode, preferences.drinking, subject.drinking);
+    strictListAllows(preferences.drinkingMode, preferences.drinking, subject.drinking) &&
+    strictListAllows(
+      preferences.countryOfResidenceMode,
+      preferences.countriesOfResidence,
+      subject.countryOfResidence
+    ) &&
+    strictListAllows(preferences.citizenshipMode, preferences.citizenships, subject.citizenship) &&
+    strictListAllows(preferences.childrenMode, preferences.childrenStatuses, childrenClass(subject)) &&
+    strictListAllows(preferences.nriMode, preferences.nriStatuses, residenceClass(subject)) &&
+    strictListAllows(
+      preferences.relocationMode,
+      preferences.relocationStatuses,
+      relocationClass(subject)
+    ) &&
+    strictListAllows(preferences.familyTypeMode, preferences.familyTypes, subject.familyType) &&
+    strictListAllows(preferences.familyValuesMode, preferences.familyValues, subject.familyValues) &&
+    strictListAllows(
+      preferences.physicalStatusMode,
+      preferences.physicalStatuses,
+      subject.physicalStatus
+    ) &&
+    strictListAllows(
+      preferences.residentialStatusMode,
+      preferences.residentialStatuses,
+      subject.residentialStatus
+    );
 }
 
 /**
@@ -242,6 +392,8 @@ export function preferredPreferenceFit(
 
   const listChecks = [
     preferredListScore(preferences.religionMode, preferences.religions, subject.religion),
+    preferredListScore(preferences.casteMode, preferences.castes, subject.caste),
+    preferredListScore(preferences.subCasteMode, preferences.subCastes, subject.subCaste),
     preferredListScore(preferences.stateMode, preferences.states, subject.state),
     preferredListScore(preferences.cityMode, preferences.cities, subject.city),
     preferredListScore(
@@ -267,6 +419,31 @@ export function preferredPreferenceFit(
     preferredListScore(preferences.dietMode, preferences.diets, subject.diet),
     preferredListScore(preferences.smokingMode, preferences.smoking, subject.smoking),
     preferredListScore(preferences.drinkingMode, preferences.drinking, subject.drinking),
+    preferredListScore(
+      preferences.countryOfResidenceMode,
+      preferences.countriesOfResidence,
+      subject.countryOfResidence
+    ),
+    preferredListScore(preferences.citizenshipMode, preferences.citizenships, subject.citizenship),
+    preferredListScore(preferences.childrenMode, preferences.childrenStatuses, childrenClass(subject)),
+    preferredListScore(preferences.nriMode, preferences.nriStatuses, residenceClass(subject)),
+    preferredListScore(
+      preferences.relocationMode,
+      preferences.relocationStatuses,
+      relocationClass(subject)
+    ),
+    preferredListScore(preferences.familyTypeMode, preferences.familyTypes, subject.familyType),
+    preferredListScore(preferences.familyValuesMode, preferences.familyValues, subject.familyValues),
+    preferredListScore(
+      preferences.physicalStatusMode,
+      preferences.physicalStatuses,
+      subject.physicalStatus
+    ),
+    preferredListScore(
+      preferences.residentialStatusMode,
+      preferences.residentialStatuses,
+      subject.residentialStatus
+    ),
   ];
   for (const result of listChecks) {
     earned += result.earned;

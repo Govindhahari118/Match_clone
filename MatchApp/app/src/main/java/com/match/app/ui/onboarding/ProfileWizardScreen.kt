@@ -125,7 +125,7 @@ fun ProfileWizardScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("You selected ${wizardState.religion}.")
-                    Text("Religion becomes protected profile information after profile creation because it affects community and compatibility information. Theme choice remains separate and can be changed later.")
+                    Text("Religion becomes protected profile information after profile creation. For supported religions, Matree starts discovery with the same religion as a strict partner preference so your first results stay relevant. You can broaden or remove that preference later. Theme choice remains separate and can be changed anytime.")
                     Text(
                         "If this selection is incorrect, review it now. A later correction uses the controlled account-review process rather than a casual profile edit.",
                         style = MaterialTheme.typography.bodySmall,

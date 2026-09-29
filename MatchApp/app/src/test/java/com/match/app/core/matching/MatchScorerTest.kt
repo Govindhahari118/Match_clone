@@ -93,6 +93,21 @@ class MatchScorerTest {
     }
 
     @Test
+    fun `trusted astrology override is used without exposing local horoscope fields`() {
+        val a = profile(1, "Hindu", rasi = "", nakshatra = "")
+        val b = profile(2, "Hindu", rasi = "", nakshatra = "")
+
+        val result = MatchScorer.explain(
+            a,
+            b,
+            astrologyScoreOverride = 0.82f
+        )
+
+        val astrology = result.factors.single { it.key == "astrology" }
+        assertEquals(0.82f, astrology.score)
+    }
+
+    @Test
     fun `unknown demographics are omitted instead of receiving a neutral bonus`() {
         val a = profile(1, "Other", education = "", occupation = "", diet = "")
         val b = profile(2, "Other", education = "", occupation = "", diet = "")
