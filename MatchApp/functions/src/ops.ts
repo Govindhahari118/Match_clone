@@ -1,6 +1,10 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { db, requireOpsRole } from "./shared";
+import {
+  enforcementSuppressesInteractions,
+  normalizeEnforcementStatus,
+} from "./accountEnforcementPolicy";
 
 const SUPPORT_STATUSES = new Set(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "RESOLVED", "CLOSED", "ESCALATED"]);
 const REPORT_STATUSES = new Set(["OPEN", "REVIEWING", "ACTIONED", "DISMISSED"]);
@@ -417,5 +421,98 @@ export const getModerationCase = functions.https.onCall(async (data, context) =>
         createdAtMillis: timestampMillis(entry.createdAt),
       };
     }),
+  };
+});
+
+
+/**
+ * Explicit account enforcement for moderation. The public user document receives only the
+ * interaction-relevant status; the operator reason remains in restricted operational records.
+ * Non-active states immediately fail the same lifecycle checks used by discovery, interests,
+ * Nearby, shared horoscope and other trusted backend paths.
+ */
+export const setAccountEnforcement = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["moderator", "ops_admin"]);
+  const targetUid = safeId(data?.targetUid, "account");
+  if (targetUid === actor.uid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Operators cannot enforce their own account"
+    );
+  }
+
+  const nextStatus = normalizeEnforcementStatus(data?.status);
+  if (!nextStatus) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid enforcement status");
+  }
+  const reason = safeReason(data?.reason);
+  const reportId = data?.reportId == null ? null : safeId(data.reportId, "profile report");
+
+  const userRef = db.collection("users").doc(targetUid);
+  const enforcementRef = db.collection("accountEnforcements").doc(targetUid);
+  const auditRef = db.collection("opsAuditLog").doc();
+
+  const previousStatus = await db.runTransaction(async (tx) => {
+    const user = await tx.get(userRef);
+    if (!user.exists) {
+      throw new functions.https.HttpsError("not-found", "Account not found");
+    }
+    const before = String(user.data()?.accountStatus || "ACTIVE").toUpperCase();
+
+    tx.set(userRef, {
+      accountStatus: nextStatus,
+      matrimonyPaused: enforcementSuppressesInteractions(nextStatus),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    tx.set(enforcementRef, {
+      targetUid,
+      status: nextStatus,
+      reason,
+      reportId,
+      lastActorUid: actor.uid,
+      lastActorRole: actor.role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(nextStatus === "ACTIVE" ? {
+        clearedAt: admin.firestore.FieldValue.serverTimestamp(),
+      } : {
+        clearedAt: admin.firestore.FieldValue.delete(),
+      }),
+    }, { merge: true });
+
+    tx.create(auditRef, {
+      actorUid: actor.uid,
+      actorRole: actor.role,
+      action: "ACCOUNT_ENFORCEMENT_UPDATED",
+      targetCollection: "users",
+      targetId: targetUid,
+      before: { accountStatus: before },
+      after: { accountStatus: nextStatus },
+      reason,
+      reportId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return before;
+  });
+
+  if (nextStatus === "SUSPENDED") {
+    await admin.auth().revokeRefreshTokens(targetUid);
+  }
+
+  functions.logger.info("Account enforcement updated", {
+    actorUid: actor.uid,
+    actorRole: actor.role,
+    targetUid,
+    previousStatus,
+    nextStatus,
+    reportId,
+  });
+
+  return {
+    success: true,
+    targetUid,
+    previousStatus,
+    status: nextStatus,
   };
 });
