@@ -47,6 +47,13 @@ class FirestoreFeatureService @Inject constructor() {
         return payload["request"] as? Map<String, Any?>
     }
 
+    suspend fun cancelRMRequest(uid: String) {
+        require(uid.isNotBlank())
+        functions.getHttpsCallable("cancelMyRelationshipManagerRequest")
+            .call()
+            .await()
+    }
+
     private fun com.google.firebase.functions.HttpsCallableResult.stringField(name: String): String {
         @Suppress("UNCHECKED_CAST")
         val payload = data as? Map<String, Any?> ?: error("Invalid server response")
