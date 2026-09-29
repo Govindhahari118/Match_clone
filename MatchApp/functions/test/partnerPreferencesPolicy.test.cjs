@@ -85,3 +85,70 @@ test("bilateral preferred fit averages both members without fabricating missing 
     null
   );
 });
+
+
+test("expanded durable preferences cover community, NRI, children, relocation and family criteria", () => {
+  const prefs = normalizePartnerPreferences({
+    casteMode: "STRICT",
+    castes: ["Reddy"],
+    subCasteMode: "PREFERRED",
+    subCastes: ["Pakanati"],
+    countryOfResidenceMode: "PREFERRED",
+    countriesOfResidence: ["United States"],
+    citizenshipMode: "PREFERRED",
+    citizenships: ["India"],
+    childrenMode: "STRICT",
+    childrenStatuses: ["NO_CHILDREN"],
+    nriMode: "STRICT",
+    nriStatuses: ["NRI"],
+    relocationMode: "PREFERRED",
+    relocationStatuses: ["WILLING_TO_RELOCATE"],
+    familyTypeMode: "PREFERRED",
+    familyTypes: ["Nuclear"],
+    familyValuesMode: "PREFERRED",
+    familyValues: ["Moderate"],
+    physicalStatusMode: "STRICT",
+    physicalStatuses: ["Normal"],
+    residentialStatusMode: "PREFERRED",
+    residentialStatuses: ["Work Visa"],
+  });
+
+  const matching = {
+    caste: "Reddy",
+    subCaste: "Pakanati",
+    countryOfResidence: "United States",
+    citizenship: "India",
+    hasChildren: false,
+    isNRI: true,
+    willingToRelocate: true,
+    familyType: "Nuclear",
+    familyValues: "Moderate",
+    physicalStatus: "Normal",
+    residentialStatus: "Work Visa",
+  };
+  assert.equal(strictPreferencesAllow(prefs, matching), true);
+  assert.equal(preferredPreferenceFit(prefs, matching), 1);
+
+  assert.equal(strictPreferencesAllow(prefs, { ...matching, hasChildren: true }), false);
+  assert.equal(strictPreferencesAllow(prefs, {
+    ...matching,
+    countryOfResidence: "India",
+    isNRI: false,
+  }), false);
+  assert.equal(strictPreferencesAllow(prefs, { ...matching, caste: "Other" }), false);
+});
+
+test("residence classification treats overseas country as NRI even before isNRI backfill", () => {
+  const prefs = normalizePartnerPreferences({
+    nriMode: "STRICT",
+    nriStatuses: ["NRI"],
+  });
+  assert.equal(
+    strictPreferencesAllow(prefs, { countryOfResidence: "UAE", isNRI: false }),
+    true
+  );
+  assert.equal(
+    strictPreferencesAllow(prefs, { countryOfResidence: "India", isNRI: false }),
+    false
+  );
+});
