@@ -68,8 +68,19 @@ export const submitProfilePhoto = functions.https.onCall(async (data, context) =
 
   const moderationId = moderationIdForPath(storagePath);
   const moderationRef = db.collection("photoModeration").doc(moderationId);
+  const rawFingerprint = typeof metadata.md5Hash === "string" ? metadata.md5Hash : "";
+  const fingerprintId = rawFingerprint
+    ? crypto.createHash("sha256").update(rawFingerprint).digest("hex")
+    : "";
+  const fingerprintRef = fingerprintId
+    ? db.collection("photoFingerprints").doc(fingerprintId)
+    : null;
+
   await db.runTransaction(async (tx) => {
-    const existing = await tx.get(moderationRef);
+    const [existing, fingerprint] = await Promise.all([
+      tx.get(moderationRef),
+      fingerprintRef ? tx.get(fingerprintRef) : Promise.resolve(null),
+    ]);
     if (existing.exists) {
       const value = existing.data() || {};
       if (value.uid !== uid || value.storagePath !== storagePath) {
@@ -78,16 +89,37 @@ export const submitProfilePhoto = functions.https.onCall(async (data, context) =
       return;
     }
 
+    const owners = fingerprint?.exists && Array.isArray(fingerprint.data()?.owners)
+      ? fingerprint.data()?.owners.filter((item: unknown): item is string =>
+        typeof item === "string" && item.length <= 128)
+      : [];
+    const duplicateAcrossAccounts = owners.some((owner: string) => owner !== uid);
+
     tx.create(moderationRef, {
       uid,
       storagePath,
       contentType,
       size,
+      duplicateAcrossAccounts,
       status: "PENDING",
       source: "ANDROID",
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    if (fingerprintRef && !owners.includes(uid)) {
+      tx.set(fingerprintRef, {
+        owners: [...owners.slice(0, 49), uid],
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    if (duplicateAcrossAccounts) {
+      tx.set(db.collection("riskSignals").doc(uid), {
+        duplicatePhotoSignalCount: admin.firestore.FieldValue.increment(1),
+        lastDuplicatePhotoSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
   });
 
   return { moderationId, status: "PENDING", storagePath };
