@@ -324,13 +324,6 @@
       "requiredFlag": null
     },
     {
-      "path": "ui/quiz/CompatibilityQuizScreen.kt",
-      "symbol": "CompatibilityQuizScreen",
-      "status": "STUB",
-      "exposure": "hidden",
-      "requiredFlag": null
-    },
-    {
       "path": "ui/recentlyjoined/RecentlyJoinedScreen.kt",
       "symbol": "RecentlyJoinedScreen",
       "status": "READY",
