@@ -39,6 +39,38 @@ jobs:
         run: python3 scripts/ci/truthfulness_scan.py
       - name: Release candidate repository scan
         run: python3 scripts/ci/release_candidate_scan.py
+      - name: Validate external production gate logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/ci/production_external_gate.py
+          if python3 scripts/ci/production_external_gate.py \
+              --evidence docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json \
+              --sha "$GITHUB_SHA" --mode prelaunch; then
+            echo "Template must never pass the external production gate."
+            exit 1
+          fi
+          python3 - "$GITHUB_SHA" <<'PY'
+          import json, pathlib, sys
+          sha=sys.argv[1]
+          gates=[
+            "productionFirebaseConfigured","productionSigningVerified","releaseCredentialsVerified",
+            "appCheckPlayIntegrityVerified","authReleaseDeviceMatrixPassed","billingLicensedMatrixPassed",
+            "physicalDeviceE2EPassed","accessibilityDeviceMatrixPassed","performanceSloPassed",
+            "penetrationTestPassed","legalAndDataSafetyApproved","playPreLaunchReportPassed",
+            "rollbackDrillPassed","controlledRolloutCompleted","postRolloutHealthPassed"
+          ]
+          data={"gitSha":sha,"evidence":{}}
+          for gate in gates:
+              data[gate]=True
+              data["evidence"][gate]="synthetic-ci-validator-reference"
+          pathlib.Path("/tmp/matree-external-gate-synthetic.json").write_text(
+              json.dumps(data), encoding="utf-8"
+          )
+          PY
+          python3 scripts/ci/production_external_gate.py \
+            --evidence /tmp/matree-external-gate-synthetic.json \
+            --sha "$GITHUB_SHA" --mode full
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
       - name: Android lint
