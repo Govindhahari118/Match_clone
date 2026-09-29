@@ -57,16 +57,9 @@ class FirebaseStorageService @Inject constructor(
         if (descriptorLength > 0L) {
             require(descriptorLength <= MAX_PROFILE_VIDEO_BYTES) { "Video must be 50 MB or smaller" }
         }
-        val contentType = context.contentResolver.getType(uri)
-            ?.takeIf { it.startsWith("video/") }
-            ?: "video/mp4"
-        require(contentType.startsWith("video/")) { "Only video files are supported" }
-        val extension = MimeTypeMap.getSingleton()
-            .getExtensionFromMimeType(contentType)
-            ?.take(8)
-            ?.takeIf { it.matches(Regex("[A-Za-z0-9]+")) }
-            ?: "mp4"
-        val ref = storage.reference.child("videos/$firebaseUid/" + UUID.randomUUID() + "." + extension)
+        val contentType = context.contentResolver.getType(uri)?.lowercase() ?: "video/mp4"
+        require(contentType == "video/mp4") { "Profile video must be an MP4 file" }
+        val ref = storage.reference.child("videos/$firebaseUid/" + UUID.randomUUID() + ".mp4")
         val metadata = StorageMetadata.Builder()
             .setContentType(contentType)
             .setCustomMetadata("ownerUid", firebaseUid)
