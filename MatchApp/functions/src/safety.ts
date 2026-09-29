@@ -177,3 +177,38 @@ export const submitSupportTicket = functions.https.onCall(async (data, context) 
   functions.logger.info("Support ticket submitted", { uid, ticketId: ticketRef.id, category });
   return { success: true, ticketId: ticketRef.id };
 });
+
+
+function supportTimestampMillis(value: unknown): number | null {
+  return value instanceof admin.firestore.Timestamp ? value.toMillis() : null;
+}
+
+/**
+ * Owner-only support history. Internal assignment, operator notes and escalation details stay in
+ * the role-gated operations API.
+ */
+export const listMySupportTickets = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const snapshot = await db.collection("supportTickets")
+    .where("uid", "==", uid)
+    .limit(50)
+    .get();
+
+  const tickets = snapshot.docs.map((doc) => {
+    const value = doc.data();
+    return {
+      id: doc.id,
+      category: String(value.category || ""),
+      message: String(value.message || ""),
+      status: String(value.status || "OPEN"),
+      createdAtMillis: supportTimestampMillis(value.createdAt),
+      updatedAtMillis: supportTimestampMillis(value.updatedAt),
+      resolvedAtMillis: supportTimestampMillis(value.resolvedAt),
+    };
+  }).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+
+  return { tickets };
+});
