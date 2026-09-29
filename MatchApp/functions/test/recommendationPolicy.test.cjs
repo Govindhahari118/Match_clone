@@ -34,8 +34,8 @@ test("viewer negative actions dominate positive engagement", () => {
 
 test("explicit preference fit remains the dominant bounded signal", () => {
   assert.equal(blendedRecommendationRelevance(0.8, 0), 0.8);
-  assert.equal(blendedRecommendationRelevance(0.8, 0.5), 0.86);
-  assert.equal(blendedRecommendationRelevance(0.8, -1), 0.68);
+  assert.ok(Math.abs(blendedRecommendationRelevance(0.8, 0.5) - 0.86) < 1e-12);
+  assert.ok(Math.abs(blendedRecommendationRelevance(0.8, -1) - 0.68) < 1e-12);
   assert.equal(blendedRecommendationRelevance(null, 0), 0.5);
   assert.equal(blendedRecommendationRelevance(1, 0.5), 1);
   assert.equal(blendedRecommendationRelevance(0, -1), 0);
