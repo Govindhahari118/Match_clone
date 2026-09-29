@@ -268,6 +268,7 @@ class VerificationViewModel @Inject constructor(
 @Composable
 fun VerificationScreen(
     onBack: () -> Unit = {},
+    onVerifyPhone: () -> Unit = {},
     vm: VerificationViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
@@ -326,6 +327,19 @@ fun VerificationScreen(
             )
             Text(t("verification_checklist", "Verification Checklist"), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             checks.forEach { item -> VerificationRow(item.icon, item.title, item.description, item.done) }
+
+            if (!ui.isPhoneVerified) {
+                MatreePrimaryButton(
+                    text = "Verify phone number",
+                    icon = Icons.Filled.PhoneAndroid,
+                    onClick = onVerifyPhone,
+                    modifier = Modifier.fillMaxWidth().testTag("verification_phone_btn")
+                )
+                MatreeInlineNotice(
+                    message = "Phone verification uses Firebase Phone Auth and is a separate account signal. It does not grant government-ID verification or increase your KYC level by itself.",
+                    icon = Icons.Filled.Info
+                )
+            }
 
             MatreeInlineNotice(
                 message = "Your raw ID file is stored in a protected KYC path and is not readable as profile media. Other members see only the final verification result.",
