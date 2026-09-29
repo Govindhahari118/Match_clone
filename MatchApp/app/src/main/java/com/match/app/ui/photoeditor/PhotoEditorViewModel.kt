@@ -16,7 +16,7 @@ import javax.inject.Inject
 data class PhotoEditorUiState(
     val loading: Boolean = false,
     val sourceUri: Uri? = null,
-    val saved: Boolean = false,
+    val submittedForReview: Boolean = false,
     val error: String? = null
 )
 
@@ -30,25 +30,47 @@ class PhotoEditorViewModel @Inject constructor(
     val ui = _ui.asStateFlow()
 
     fun setSourceUri(uri: Uri) {
-        _ui.update { it.copy(sourceUri = uri, saved = false, error = null) }
-    }
-
-    fun saveToProfile() = viewModelScope.launch {
-        val uri = _ui.value.sourceUri ?: return@launch
-        val userId = session.userId.firstOrNull() ?: return@launch
-        
-        _ui.update { it.copy(loading = true, error = null) }
-        
-        val result = photoRepo.import(userId, uri)
-        
-        if (result.isSuccess) {
-            _ui.update { it.copy(loading = false, saved = true) }
-        } else {
-            _ui.update { it.copy(loading = false, error = "Failed to save photo. Please try again.") }
+        _ui.update {
+            it.copy(
+                sourceUri = uri,
+                submittedForReview = false,
+                error = null
+            )
         }
     }
 
-    fun resetSaved() {
-        _ui.update { it.copy(saved = false) }
+    fun submitForReview() = viewModelScope.launch {
+        val uri = _ui.value.sourceUri ?: return@launch
+        val userId = session.userId.firstOrNull()
+        if (userId == null) {
+            _ui.update { it.copy(error = "Sign in before uploading a profile photo.") }
+            return@launch
+        }
+
+        _ui.update { it.copy(loading = true, error = null) }
+        photoRepo.import(userId, uri)
+            .onSuccess {
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        submittedForReview = true,
+                        error = null
+                    )
+                }
+            }
+            .onFailure { error ->
+                _ui.update {
+                    it.copy(
+                        loading = false,
+                        submittedForReview = false,
+                        error = error.message?.take(180)
+                            ?: "Photo submission failed. Please try again."
+                    )
+                }
+            }
+    }
+
+    fun chooseAnother() {
+        _ui.update { PhotoEditorUiState() }
     }
 }
