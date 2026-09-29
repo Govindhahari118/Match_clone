@@ -62,18 +62,22 @@ object Astrology {
         else -> 0.55f
     }
 
+    fun isValid(rasi: String, nakshatra: String): Boolean =
+        rasi in RASIS && nakshatra in NAKSHATRAS
+
     /**
-     * Returns a normalized compatibility signal in 0..1.
-     * Unknown values deliberately return a neutral value instead of inventing a result.
+     * Returns a normalized compatibility signal in 0..1, or null when any input is outside the
+     * canonical catalogue. Production callers should omit an invalid astrology dimension rather
+     * than inventing a neutral score.
      */
-    fun score(
+    fun scoreOrNull(
         rasiA: String, nakshatraA: String,
         rasiB: String, nakshatraB: String
-    ): Float {
-        val rA = RASIS.indexOf(rasiA).takeIf { it >= 0 } ?: return 0.5f
-        val rB = RASIS.indexOf(rasiB).takeIf { it >= 0 } ?: return 0.5f
-        val nA = NAKSHATRAS.indexOf(nakshatraA).takeIf { it >= 0 } ?: return 0.5f
-        val nB = NAKSHATRAS.indexOf(nakshatraB).takeIf { it >= 0 } ?: return 0.5f
+    ): Float? {
+        val rA = RASIS.indexOf(rasiA).takeIf { it >= 0 } ?: return null
+        val rB = RASIS.indexOf(rasiB).takeIf { it >= 0 } ?: return null
+        val nA = NAKSHATRAS.indexOf(nakshatraA).takeIf { it >= 0 } ?: return null
+        val nB = NAKSHATRAS.indexOf(nakshatraB).takeIf { it >= 0 } ?: return null
 
         // The scorer is symmetric and deterministic. Identical inputs should never be penalized
         // merely because simplified modulo approximations for Rajju/Vedha collide.
@@ -125,4 +129,10 @@ object Astrology {
 
         return (points / totalPossible).coerceIn(0f, 1f)
     }
+
+    /** Legacy convenience for non-production callers; invalid data remains explicitly neutral. */
+    fun score(
+        rasiA: String, nakshatraA: String,
+        rasiB: String, nakshatraB: String
+    ): Float = scoreOrNull(rasiA, nakshatraA, rasiB, nakshatraB) ?: 0.5f
 }
