@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
@@ -445,6 +446,86 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("AuthRepository", "Account deletion was not confirmed by server", e)
             AuthResult.Error("Account deletion could not be completed. Check your connection and retry.")
+        }
+    }
+
+    /**
+     * Firebase Phone Auth is both signup and login. Existing cloud profiles are hydrated; a new
+     * phone-only account receives only a minimal private/local shell and is immediately routed to
+     * the required profile wizard before discovery or messaging.
+     */
+    suspend fun signInWithPhoneCredential(credential: PhoneAuthCredential): AuthResult {
+        val previousUid = firebaseAuth.currentUser?.uid
+        return try {
+            val authResult = firebaseAuth.signInWithCredential(credential).await()
+            val firebaseUser = authResult.user
+                ?: return AuthResult.Error("Phone sign-in failed")
+            val firebaseUid = firebaseUser.uid
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
+
+            val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
+            val existingLocal = userDao.findByFirebaseUid(firebaseUid)
+            val localEmail = existingLocal?.email
+                ?.takeIf { it.isNotBlank() }
+                ?: "${firebaseUid}@cache.invalid"
+            val localId = when {
+                existingLocal != null -> {
+                    if (firestoreEntity != null) {
+                        userDao.update(
+                            firestoreEntity.copy(
+                                id = existingLocal.id,
+                                email = localEmail,
+                                passwordHash = "",
+                                phoneNumber = firebaseUser.phoneNumber
+                                    ?: firestoreEntity.phoneNumber,
+                                isSeed = false
+                            )
+                        )
+                    }
+                    existingLocal.id
+                }
+                firestoreEntity != null -> userDao.insert(
+                    firestoreEntity.copy(
+                        email = firestoreEntity.email.ifBlank { localEmail },
+                        passwordHash = "",
+                        phoneNumber = firebaseUser.phoneNumber
+                            ?: firestoreEntity.phoneNumber,
+                        isSeed = false
+                    )
+                )
+                else -> {
+                    val entity = UserEntity(
+                        firebaseUid = firebaseUid,
+                        email = localEmail,
+                        passwordHash = "",
+                        displayName = "Member",
+                        age = 0,
+                        gender = "OTHER",
+                        lookingFor = "ANY",
+                        city = "",
+                        bio = "",
+                        rasi = "",
+                        nakshatra = "",
+                        phoneNumber = firebaseUser.phoneNumber.orEmpty(),
+                        lastActiveAt = System.currentTimeMillis()
+                    )
+                    val id = userDao.insert(entity)
+                    val synced = firestoreProfile.pushProfile(entity.copy(id = id))
+                    userDao.update(synced)
+                    id
+                }
+            }
+
+            registerFcmToken(firebaseUid)
+            session.setUser(localId)
+            session.setFirebaseUid(firebaseUid)
+            AuthResult.Success(localId)
+        } catch (ex: Exception) {
+            Log.e("AuthRepository", "signInWithPhoneCredential failed", ex)
+            AuthResult.Error("Unable to verify this phone number. Please retry.")
         }
     }
 
