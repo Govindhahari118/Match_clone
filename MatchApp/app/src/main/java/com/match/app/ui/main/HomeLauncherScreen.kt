@@ -63,6 +63,8 @@ fun HomeLauncherScreen(
     onGoKundli:        () -> Unit,
     onGoPrivacyDash:   () -> Unit,
     onGoNearby:        () -> Unit,
+    kundaliEnabled:    Boolean = false,
+    nearbyEnabled:     Boolean = false,
     vm: HomeViewModel = hiltViewModel()
 ) {
     val ui by vm.ui.collectAsState()
@@ -122,9 +124,10 @@ fun HomeLauncherScreen(
         }
 
         val religion = ReligionCategory.fromReligion(p.religion)
-        HomeSectionTitle(if (religion == ReligionCategory.HINDU) "Special Home" else "Compatibility Home")
+        val showKundali = religion == ReligionCategory.HINDU && kundaliEnabled
+        HomeSectionTitle(if (showKundali) "Special Home" else "Compatibility Home")
         MatreeActionCard(
-            onClick = if (religion == ReligionCategory.HINDU) onGoKundli else onGoQuiz,
+            onClick = if (showKundali) onGoKundli else onGoQuiz,
             modifier = Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,11 +135,11 @@ fun HomeLauncherScreen(
                 Spacer(Modifier.width(MatreeDesign.spacing.sm))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (religion == ReligionCategory.HINDU) "Astrology-compatible matches" else "Preference-compatible matches",
+                        if (showKundali) "Astrology-compatible matches" else "Preference-compatible matches",
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        if (religion == ReligionCategory.HINDU)
+                        if (showKundali)
                             "Use birth details, Rasi, Nakshatra and Kundali compatibility when those details are available."
                         else
                             "Use values, lifestyle, family and partner preferences without forcing irrelevant astrology fields.",
@@ -152,9 +155,13 @@ fun HomeLauncherScreen(
             Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
             verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
-                EssentialButton(Icons.Filled.Search, "Discover", Modifier.weight(1f), onGoMatches)
-                EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f), onGoNearby)
+            if (nearbyEnabled) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    EssentialButton(Icons.Filled.Search, "Discover", Modifier.weight(1f), onGoMatches)
+                    EssentialButton(Icons.Filled.LocationOn, "Nearby", Modifier.weight(1f), onGoNearby)
+                }
+            } else {
+                EssentialButton(Icons.Filled.Search, "Discover", Modifier.fillMaxWidth(), onGoMatches)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                 EssentialButton(Icons.Filled.Chat, "Messages", Modifier.weight(1f), onGoMessages)
