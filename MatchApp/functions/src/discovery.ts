@@ -11,6 +11,12 @@ import {
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
 import { recordRecommendationImpressionBatch } from "./recommendationFeedback";
+import { hasActiveConsent } from "./consent";
+import {
+  DISCOVERY_RANKING_VERSION,
+  behavioralAdjustment,
+  blendedRecommendationRelevance,
+} from "./recommendationPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -314,11 +320,23 @@ export const discoverProfiles = functions
     const hiddenFromViewerRefs = candidates.map((doc) =>
       db.collection("privacyRelations").doc(doc.id).collection("members").doc(viewerUid)
     );
+    const viewerHiddenRefs = candidates.map((doc) =>
+      db.collection("privacyRelations").doc(viewerUid).collection("members").doc(doc.id)
+    );
     const subscriptionRefs = candidates.map((doc) => db.collection("subscriptions").doc(doc.id));
     const partnerPreferenceRefs = candidates.map((doc) =>
       db.collection("partnerPreferences").doc(doc.id)
     );
     const privateFilterRequested = needsPrivateFilterData(data);
+    const personalizationActive = !keyword &&
+      await hasActiveConsent(viewerUid, "personalization");
+    const recommendationFeedbackRefs = personalizationActive
+      ? candidates.map((doc) =>
+        db.collection("recommendationFeedback")
+          .doc(viewerUid)
+          .collection("targets")
+          .doc(doc.id))
+      : [];
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
     const privateRefs = privateFilterRequested
       ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
@@ -342,6 +360,7 @@ export const discoverProfiles = functions
     const [
       reverseDocs,
       privacyDocs,
+      viewerPrivacyDocs,
       subscriptionDocs,
       partnerPreferenceDocs,
       privateDocs,
@@ -350,9 +369,11 @@ export const discoverProfiles = functions
       outgoingInterestDocs,
       incomingInterestDocs,
       matchDocs,
+      recommendationFeedbackDocs,
     ] = await Promise.all([
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
+      viewerHiddenRefs.length ? db.getAll(...viewerHiddenRefs) : Promise.resolve([]),
       subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
       partnerPreferenceRefs.length ? db.getAll(...partnerPreferenceRefs) : Promise.resolve([]),
       privateRefs.length ? db.getAll(...privateRefs) : Promise.resolve([]),
@@ -361,10 +382,14 @@ export const discoverProfiles = functions
       outgoingInterestRefs.length ? db.getAll(...outgoingInterestRefs) : Promise.resolve([]),
       incomingInterestRefs.length ? db.getAll(...incomingInterestRefs) : Promise.resolve([]),
       matchRefs.length ? db.getAll(...matchRefs) : Promise.resolve([]),
+      recommendationFeedbackRefs.length
+        ? db.getAll(...recommendationFeedbackRefs)
+        : Promise.resolve([]),
     ]);
 
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
+    const hiddenByViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
     const partnerPreferencesByUid = new Map<
       string,
@@ -377,12 +402,19 @@ export const discoverProfiles = functions
       );
     });
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
+    const feedbackByUid = new Map<string, FirebaseFirestore.DocumentData>();
+    recommendationFeedbackDocs.forEach((doc, index) => {
+      if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
+    });
     const visibleLastActiveByUid = new Map<string, number>();
     reverseDocs.forEach((doc, index) => {
       if (doc.exists) reverseBlocked.add(candidates[index].id);
     });
     privacyDocs.forEach((doc, index) => {
       if (doc.exists && doc.data()?.profileHidden === true) hiddenFromViewer.add(candidates[index].id);
+    });
+    viewerPrivacyDocs.forEach((doc, index) => {
+      if (doc.exists && doc.data()?.profileHidden === true) hiddenByViewer.add(candidates[index].id);
     });
     subscriptionDocs.forEach((doc, index) => {
       const raw = Number(doc.data()?.boostUntil || 0);
@@ -420,11 +452,17 @@ export const discoverProfiles = functions
       doc: FirebaseFirestore.DocumentSnapshot;
       preferredFit: number | null;
       boosted: number;
+      behavior: number;
+      relevance: number;
       createdAt: number;
     }> = [];
 
     for (const doc of candidates) {
-      if (reverseBlocked.has(doc.id) || hiddenFromViewer.has(doc.id)) continue;
+      if (
+        reverseBlocked.has(doc.id) ||
+        hiddenFromViewer.has(doc.id) ||
+        hiddenByViewer.has(doc.id)
+      ) continue;
       const candidate = doc.data() || {};
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
@@ -460,15 +498,21 @@ export const discoverProfiles = functions
       if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
       if (!strictPreferencesAllow(candidatePartnerPreferences, viewer)) continue;
 
+      const preferredFit = bilateralPreferredFit(
+        viewerPartnerPreferences,
+        viewer,
+        candidatePartnerPreferences,
+        candidate
+      );
+      const behavior = personalizationActive
+        ? behavioralAdjustment(feedbackByUid.get(doc.id))
+        : 0;
       eligible.push({
         doc,
-        preferredFit: bilateralPreferredFit(
-          viewerPartnerPreferences,
-          viewer,
-          candidatePartnerPreferences,
-          candidate
-        ),
+        preferredFit,
         boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
+        behavior,
+        relevance: blendedRecommendationRelevance(preferredFit, behavior),
         createdAt: createdAtMillis(candidate),
       });
     }
@@ -476,9 +520,7 @@ export const discoverProfiles = functions
     const rankedCandidates = keyword
       ? eligible
       : eligible.sort((left, right) => {
-        const leftFit = left.preferredFit ?? -1;
-        const rightFit = right.preferredFit ?? -1;
-        if (leftFit !== rightFit) return rightFit - leftFit;
+        if (left.relevance !== right.relevance) return right.relevance - left.relevance;
         if (left.boosted !== right.boosted) return right.boosted - left.boosted;
         return right.createdAt - left.createdAt;
       });
@@ -505,5 +547,10 @@ export const discoverProfiles = functions
       keyword ? "SEARCH" : "DISCOVER"
     );
 
-    return { profiles, nextCursor };
+    return {
+      profiles,
+      nextCursor,
+      rankingVersion: DISCOVERY_RANKING_VERSION,
+      personalizationApplied: personalizationActive,
+    };
   });
