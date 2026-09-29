@@ -28,6 +28,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class AccountDeviceSession(
+    val deviceId: String,
+    val platform: String,
+    val appVersion: String,
+    val updatedAtMillis: Long?
+)
+
 sealed class AuthResult {
     data class Success(val userId: Long) : AuthResult()
     data class Error(val message: String) : AuthResult()
@@ -190,6 +197,39 @@ class AuthRepository @Inject constructor(
             Log.w("AuthRepository", "Firebase session refresh was unavailable", error)
             RemoteSessionStatus.UNAVAILABLE
         }
+    }
+
+    suspend fun listMyDevices(): Result<List<AccountDeviceSession>> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("listMyDevices")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        @Suppress("UNCHECKED_CAST")
+        val devices = payload["devices"] as? List<Map<String, Any?>> ?: emptyList()
+        devices.mapNotNull { value ->
+            val deviceId = value["deviceId"] as? String ?: return@mapNotNull null
+            AccountDeviceSession(
+                deviceId = deviceId,
+                platform = value["platform"] as? String ?: "unknown",
+                appVersion = value["appVersion"] as? String ?: "",
+                updatedAtMillis = (value["updatedAtMillis"] as? Number)?.toLong()
+            )
+        }
+    }
+
+    suspend fun signOutAllDevices(): Result<Int> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("revokeAllSessions")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        val revoked = (payload["revokedDeviceCount"] as? Number)?.toInt() ?: 0
+        firebaseAuth.signOut()
+        clearLocalAccountState()
+        revoked
     }
 
     suspend fun signOut() {
