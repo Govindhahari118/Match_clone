@@ -123,6 +123,41 @@ def main() -> int:
                     f"{relative}: payment/premium state must not affect trust or fraud heuristics",
                     failures)
 
+    privacy_policy = ROOT / "privacy-policy.html"
+    legal_screen = APP / "src/main/java/com/match/app/ui/legal/LegalScreen.kt"
+    legal_surfaces = [p for p in [privacy_policy, legal_screen] if p.exists()]
+    stale_legal_claims = [
+        ("end-to-end encryption claim", re.compile(r"end[- ]to[- ]end encrypted|\\bE2EE\\b", re.I)),
+        ("retired Razorpay claim", re.compile(r"\\bRazorpay\\b", re.I)),
+        ("retired BCrypt password claim", re.compile(r"\\bBCrypt\\b", re.I)),
+        ("invented fixed deletion period", re.compile(r"deleted within 30 days", re.I)),
+        ("invented fixed payment retention", re.compile(r"payment records are retained for 7 years", re.I)),
+        ("invented session expiry", re.compile(r"sessions expire automatically after 30 days", re.I)),
+        ("false no-GPS claim", re.compile(r"not GPS[- ]tracked", re.I)),
+    ]
+    for legal_surface in legal_surfaces:
+        data = text(legal_surface)
+        for label, pattern in stale_legal_claims:
+            require(
+                pattern.search(data) is None,
+                f"{legal_surface.relative_to(ROOT)}: {label}",
+                failures,
+            )
+
+    deprecated_integration_patterns = [
+        ("Firebase Dynamic Links", re.compile(r"FirebaseDynamicLinks|firebase-dynamic-links|page\\.link", re.I)),
+    ]
+    deprecated_roots = [APP / "src/main", ROOT / "functions/src"]
+    for base in deprecated_roots:
+        if not base.exists():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file() or p.suffix.lower() not in {".kt", ".java", ".ts", ".js", ".xml", ".json", ".kts"}:
+                continue
+            data = text(p)
+            for label, pattern in deprecated_integration_patterns:
+                require(pattern.search(data) is None, f"{p.relative_to(ROOT)}: retired {label} reference", failures)
+
     prod_roots = [APP / "src/main", ROOT / "functions/src"]
     forbidden = [
         ("emulator endpoint", re.compile(r"\b10\.0\.2\.2\b")),
