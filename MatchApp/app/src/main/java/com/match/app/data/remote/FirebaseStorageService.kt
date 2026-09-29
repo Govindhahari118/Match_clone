@@ -72,7 +72,7 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putFile(uri, metadata).await()
-        ref.toString()
+        ref.path
     }
 
     suspend fun deletePhoto(urlOrPath: String): Result<Unit> = deleteProtectedMedia(urlOrPath)
