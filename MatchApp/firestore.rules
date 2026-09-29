@@ -390,5 +390,8 @@ service cloud.firestore {
     match /dataExportRequests/{requestId} {
       allow read, write: if false;
     }
+    match /dataExportRateLimits/{uid} {
+      allow read, write: if false;
+    }
   }
 }
