@@ -165,3 +165,17 @@ test('block immediately prevents further chat media access and writes', async ()
     imageMetadata,
   ));
 });
+
+test('retired profile media paths reject new client uploads', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'videos/alice/profile.mp4'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'video/mp4' },
+  ));
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'voicebios/alice/bio.m4a'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'audio/mp4' },
+  ));
+});
