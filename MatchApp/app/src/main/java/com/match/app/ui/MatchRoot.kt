@@ -284,10 +284,12 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                                     onBack = null,
                                     onSaved = vm::markPartnerPreferencesConfigured
                                 )
-                            partnerPreferenceGate == RootViewModel.PartnerPreferenceGate.CHECKING ->
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator()
-                                }
+                            isOnline && partnerPreferenceGate in setOf(
+                                RootViewModel.PartnerPreferenceGate.UNKNOWN,
+                                RootViewModel.PartnerPreferenceGate.CHECKING
+                            ) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                             else -> MainShell()
                         }
                     }
