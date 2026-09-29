@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.PartnerPreferenceMode
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferences
@@ -33,6 +34,9 @@ import javax.inject.Inject
 data class PartnerPreferencesUi(
     val loading: Boolean = true,
     val saving: Boolean = false,
+    val consentSaving: Boolean = false,
+    val sensitiveConsentCurrent: Boolean = false,
+    val sensitiveConsentVersion: String = "",
     val value: PartnerPreferences = PartnerPreferences(),
     val message: String? = null,
     val error: String? = null
@@ -40,21 +44,26 @@ data class PartnerPreferencesUi(
 
 @HiltViewModel
 class PartnerPreferencesViewModel @Inject constructor(
-    private val repository: PartnerPreferenceRepository
+    private val repository: PartnerPreferenceRepository,
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(PartnerPreferencesUi())
     val ui: StateFlow<PartnerPreferencesUi> = _ui.asStateFlow()
 
     init {
         viewModelScope.launch {
-            runCatching { repository.load() }
-                .onSuccess { value -> _ui.value = PartnerPreferencesUi(loading = false, value = value) }
-                .onFailure { error ->
-                    _ui.value = PartnerPreferencesUi(
-                        loading = false,
-                        error = error.message ?: "Could not load partner preferences."
-                    )
-                }
+            val preferences = runCatching { repository.load() }
+            val consents = runCatching { consentRepository.getState() }
+            val consent = consents.getOrNull()
+                ?.firstOrNull { it.purpose == "sensitive_preferences" }
+            _ui.value = PartnerPreferencesUi(
+                loading = false,
+                value = preferences.getOrDefault(PartnerPreferences()),
+                sensitiveConsentCurrent = consent?.isCurrent == true,
+                sensitiveConsentVersion = consent?.noticeVersion.orEmpty(),
+                error = preferences.exceptionOrNull()?.message
+                    ?: consents.exceptionOrNull()?.message
+            )
         }
     }
 
@@ -62,8 +71,39 @@ class PartnerPreferencesViewModel @Inject constructor(
         _ui.update { it.copy(value = transform(it.value), error = null, message = null) }
     }
 
+    fun setSensitiveConsent(granted: Boolean) = viewModelScope.launch {
+        if (_ui.value.consentSaving) return@launch
+        _ui.update { it.copy(consentSaving = true, error = null, message = null) }
+        runCatching {
+            consentRepository.set("sensitive_preferences", granted)
+            consentRepository.getState()
+                .firstOrNull { it.purpose == "sensitive_preferences" }
+        }.onSuccess { state ->
+            _ui.update {
+                it.copy(
+                    consentSaving = false,
+                    sensitiveConsentCurrent = state?.isCurrent == true,
+                    sensitiveConsentVersion = state?.noticeVersion.orEmpty()
+                )
+            }
+        }.onFailure { error ->
+            _ui.update {
+                it.copy(
+                    consentSaving = false,
+                    error = error.message ?: "Could not update sensitive-preference consent."
+                )
+            }
+        }
+    }
+
     fun save() = viewModelScope.launch {
         if (_ui.value.saving) return@launch
+        if (!_ui.value.sensitiveConsentCurrent) {
+            _ui.update {
+                it.copy(error = "Review and enable sensitive-preference processing before saving.")
+            }
+            return@launch
+        }
         _ui.update { it.copy(saving = true, error = null, message = null) }
         runCatching { repository.save(_ui.value.value) }
             .onSuccess { saved ->
@@ -129,6 +169,38 @@ fun PartnerPreferencesScreen(
                 MatreeInlineNotice(
                     message = "Strict preferences exclude profiles in both directions. Preferred preferences improve ordering but do not hide otherwise eligible members."
                 )
+
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.padding(MatreeDesign.spacing.md),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Sensitive preference processing",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Some partner preferences can reveal sensitive personal choices. Enable this only if you want Matree to store and use these preferences for reciprocal discovery. You can withdraw this choice later in Privacy & visibility.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (ui.sensitiveConsentVersion.isNotBlank()) {
+                                Text(
+                                    "Notice version ${ui.sensitiveConsentVersion}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                        Switch(
+                            checked = ui.sensitiveConsentCurrent,
+                            onCheckedChange = vm::setSensitiveConsent,
+                            enabled = !ui.consentSaving
+                        )
+                    }
+                }
 
                 RangePreferenceCard(
                     title = "Age",
@@ -239,7 +311,7 @@ fun PartnerPreferencesScreen(
 
                 Button(
                     onClick = vm::save,
-                    enabled = !ui.saving,
+                    enabled = !ui.saving && !ui.consentSaving && ui.sensitiveConsentCurrent,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .testTag("partner_preferences_save")
                 ) {
