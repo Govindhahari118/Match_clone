@@ -34,6 +34,8 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.repo.ShortlistRepository
 import com.match.app.data.repo.SocialRepository
+import com.match.app.data.repo.TrustRepository
+import com.match.app.data.repo.TrustSummary
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
@@ -63,10 +65,14 @@ class ProfileViewModel @Inject constructor(
     private val photoRepo: PhotoRepository,
     private val social: SocialRepository,
     private val shortlistRepo: ShortlistRepository,
-    private val analyticsService: ProfileAnalyticsService
+    private val analyticsService: ProfileAnalyticsService,
+    private val trustRepository: TrustRepository
 ) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
+
+    private val _trustSummary = MutableStateFlow<TrustSummary?>(null)
+    val trustSummary: StateFlow<TrustSummary?> = _trustSummary.asStateFlow()
 
     val photos: StateFlow<List<PhotoEntity>> = session.userId.filterNotNull()
         .flatMapLatest { photoRepo.observe(it) }
@@ -99,6 +105,14 @@ class ProfileViewModel @Inject constructor(
                     0
                 } else {
                     runCatching { analyticsService.load().profileViews }.getOrDefault(0)
+                }
+            }
+        }
+        viewModelScope.launch {
+            session.firebaseUid.collectLatest { uid ->
+                _trustSummary.value = null
+                if (!uid.isNullOrBlank()) {
+                    _trustSummary.value = runCatching { trustRepository.load(uid) }.getOrNull()
                 }
             }
         }
@@ -140,6 +154,7 @@ fun ProfileScreen(
     val viewCount by vm.viewCount.collectAsState()
     val likeCount by vm.likeCount.collectAsState()
     val savedCount by vm.savedCount.collectAsState()
+    val trustSummary by vm.trustSummary.collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::importPhoto) }
 
     val p = profile
@@ -168,7 +183,7 @@ fun ProfileScreen(
         ReligionExperienceCard(profileReligion = p.religion, onRequestCorrection = onGoHelp)
 
         ProfileStats(viewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
-        TrustAndVerificationCard(p, photos.isNotEmpty(), onGoVerification)
+        TrustAndVerificationCard(p, photos.isNotEmpty(), trustSummary, onGoVerification)
 
         ProfileSection("Personal details") {
             InfoRow(Icons.Filled.Person, listOf("${p.age} years", p.maritalStatus).filter { it.isNotBlank() }.joinToString(" • "))
@@ -326,34 +341,64 @@ private fun StatCard(icon: ImageVector, label: String, value: String, modifier: 
 }
 
 @Composable
-private fun TrustAndVerificationCard(p: UserProfile, hasPhoto: Boolean, onVerify: () -> Unit) {
-    val checks = listOf(
+private fun TrustAndVerificationCard(
+    p: UserProfile,
+    hasPhoto: Boolean,
+    trust: TrustSummary?,
+    onVerify: () -> Unit
+) {
+    val verificationChecks = listOf(
         "Profile photo" to hasPhoto,
         "Profile details" to (p.bio.isNotBlank() && p.city.isNotBlank()),
-        "Phone/identity baseline" to (p.verificationLevel >= 1),
-        "Identity verified" to p.isVerified
+        "Identity verification" to p.isVerified
     )
-    val complete = checks.count { it.second }
+    val complete = verificationChecks.count { it.second }
+
     Column(
         Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.md),
         verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
     ) {
-        MatreeProgressCard(
-            title = "Trust & verification",
-            progress = complete / checks.size.toFloat(),
-            supportingText = "Only completed server-backed checks count here.",
-            valueLabel = "$complete/${checks.size}"
-        )
-        checks.forEach { (label, done) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = null,
-                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
-                    tint = if (done) MatreeDesign.colors.success else MaterialTheme.colorScheme.outline
-                )
-                Spacer(Modifier.width(MatreeDesign.spacing.xs))
-                Text(label, style = MaterialTheme.typography.bodySmall)
+        if (trust != null) {
+            MatreeProgressCard(
+                title = "Matree Trust Score",
+                progress = trust.score / 100f,
+                supportingText = "${trust.tierLabel} • server-authoritative",
+                valueLabel = "${trust.score}/100"
+            )
+            trust.factors.forEach { factor ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                        tint = MatreeDesign.colors.success
+                    )
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                    Text(factor, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            MatreeInlineNotice(
+                message = "Trust is based on verification, profile quality, account history and reviewed safety state. Membership purchases never increase this score.",
+                icon = Icons.Filled.VerifiedUser
+            )
+        } else {
+            MatreeProgressCard(
+                title = "Verification evidence",
+                progress = complete / verificationChecks.size.toFloat(),
+                supportingText = "Trust Score appears only when the trusted backend is available.",
+                valueLabel = "$complete/${verificationChecks.size}"
+            )
+            verificationChecks.forEach { (label, done) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (done) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                        contentDescription = null,
+                        modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                        tint = if (done) MatreeDesign.colors.success else MaterialTheme.colorScheme.outline
+                    )
+                    Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                    Text(label, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         if (!p.isVerified) {
