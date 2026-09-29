@@ -44,7 +44,6 @@ class SessionStore(private val context: Context) {
     private val KEY_THEME_PREFERENCE = stringPreferencesKey("appearance_theme_preference")
     private val KEY_MANUAL_THEME = stringPreferencesKey("appearance_manual_theme")
     private val KEY_DISPLAY_MODE = stringPreferencesKey("appearance_display_mode")
-    private val KEY_API_BASE  = stringPreferencesKey("api_base_url")
     private val KEY_BIOMETRIC = booleanPreferencesKey("biometric_lock")
     private val KEY_INCOME_MIN = stringPreferencesKey("filter_income_min")
     private val KEY_INCOME_MAX = stringPreferencesKey("filter_income_max")
@@ -194,7 +193,6 @@ class SessionStore(private val context: Context) {
             religionThemeEnabled = prefs[KEY_RELIGION_THEME] ?: false
         )
     }
-    val apiBaseUrl: Flow<String> = context.dataStore.data.map { it[KEY_API_BASE] ?: "" }
     val biometricLock: Flow<Boolean> = context.dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
     val uiLanguage: Flow<String> = context.dataStore.data.map { prefs -> normalizeUiLanguage(prefs[KEY_UI_LANG]) }
@@ -219,7 +217,6 @@ class SessionStore(private val context: Context) {
         val displayMode = prefs[KEY_DISPLAY_MODE]
         val legacyDarkMode = prefs[KEY_DARK]
         val biometricLock = prefs[KEY_BIOMETRIC]
-        val apiBaseUrl = prefs[KEY_API_BASE]
 
         prefs.clear()
 
@@ -227,7 +224,6 @@ class SessionStore(private val context: Context) {
         displayMode?.let { prefs[KEY_DISPLAY_MODE] = it }
         legacyDarkMode?.let { prefs[KEY_DARK] = it }
         biometricLock?.let { prefs[KEY_BIOMETRIC] = it }
-        apiBaseUrl?.let { prefs[KEY_API_BASE] = it }
     }
     suspend fun setMode(m: MatchMode) = context.dataStore.edit {
         it[KEY_MODE] = when (m) { MatchMode.QUESTIONNAIRE -> 0L; MatchMode.ASTROLOGY -> 1L; MatchMode.ADVANCED -> 2L }
@@ -333,7 +329,6 @@ class SessionStore(private val context: Context) {
         prefs[KEY_PALETTE] = key
         prefs[KEY_MANUAL_THEME] = key
     }
-    suspend fun setApiBaseUrl(url: String) = context.dataStore.edit { it[KEY_API_BASE] = url }
     suspend fun setBiometricLock(v: Boolean) = context.dataStore.edit { it[KEY_BIOMETRIC] = v }
     suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = normalizeUiLanguage(lang) }
     suspend fun setCommunitySetupDone(v: Boolean) = context.dataStore.edit { it[KEY_COMMUNITY_SETUP_DONE] = v }
