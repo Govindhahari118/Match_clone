@@ -41,6 +41,7 @@ import com.match.app.ui.biodata.BiodataScreen
 import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
 import com.match.app.ui.detail.MatchDetailScreen
+import com.match.app.ui.family.FamilyAccessScreen
 import com.match.app.ui.help.HelpScreen
 import com.match.app.ui.interests.InterestsScreen
 import com.match.app.ui.kundli.KundliScreen
@@ -91,6 +92,7 @@ object MainRoutes {
     const val BIODATA = "biodata"
     const val PRIVACY_DASH = "privacy_dash"
     const val PARTNER_PREFERENCES = "partner_preferences"
+    const val FAMILY_ACCESS = "family_access"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
@@ -424,11 +426,15 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onBack = { nav.popBackStack() },
                         onGoLanguage = { nav.navigate(MainRoutes.LANGUAGE_SELECT) },
                         onGoPartnerPreferences = { nav.navigate(MainRoutes.PARTNER_PREFERENCES) },
+                        onGoFamilyAccess = { nav.navigate(MainRoutes.FAMILY_ACCESS) },
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
                 composable(MainRoutes.PARTNER_PREFERENCES) {
                     PartnerPreferencesScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.FAMILY_ACCESS) {
+                    FamilyAccessScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
