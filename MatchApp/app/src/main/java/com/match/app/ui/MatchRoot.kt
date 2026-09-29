@@ -34,6 +34,7 @@ import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
+import com.match.app.ui.auth.PhoneAuthScreen
 import com.match.app.ui.i18n.LocalI18n
 import com.match.app.ui.i18n.rememberI18nCatalog
 import com.match.app.ui.main.MainShell
@@ -56,6 +57,7 @@ object Routes {
     const val AUTH_GRAPH  = "auth"
     const val SIGN_IN     = "sign_in"
     const val SIGN_UP     = "sign_up"
+    const val PHONE_AUTH  = "phone_auth"
     const val ONBOARDING  = "onboarding"
     const val MAIN_GRAPH  = "main"
 }
@@ -228,10 +230,16 @@ private fun AuthNav() {
     val nav: NavHostController = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.SIGN_IN) {
         composable(Routes.SIGN_IN) {
-            SignInScreen(onGoSignUp = { nav.navigate(Routes.SIGN_UP) })
+            SignInScreen(
+                onGoSignUp = { nav.navigate(Routes.SIGN_UP) },
+                onGoPhone = { nav.navigate(Routes.PHONE_AUTH) }
+            )
         }
         composable(Routes.SIGN_UP) {
             SignUpScreen(onBack = { nav.popBackStack() })
+        }
+        composable(Routes.PHONE_AUTH) {
+            PhoneAuthScreen(onBack = { nav.popBackStack() })
         }
     }
 }
