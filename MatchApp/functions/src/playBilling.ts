@@ -585,14 +585,14 @@ async function reconcileVoidedPurchase(
     const ledgerQuery = db.collection("payments")
       .where("uid", "==", uid)
       .where("entitlementType", "==", entitlementType);
-    const authorityRef = entitlementType === "MEMBERSHIP"
-      ? db.collection("users").doc(uid)
-      : db.collection("subscriptions").doc(uid);
-    const [ledgerSnap, authoritySnap] = await Promise.all([
+    const userRef = db.collection("users").doc(uid);
+    const subscriptionRef = db.collection("subscriptions").doc(uid);
+    const [ledgerSnap, userSnap, subscriptionSnap] = await Promise.all([
       tx.get(ledgerQuery),
-      tx.get(authorityRef),
+      tx.get(userRef),
+      tx.get(subscriptionRef),
     ]);
-    if (!authoritySnap.exists && entitlementType === "MEMBERSHIP") {
+    if (!userSnap.exists && entitlementType === "MEMBERSHIP") {
       throw new Error("Play entitlement user no longer exists");
     }
 
@@ -611,19 +611,30 @@ async function reconcileVoidedPurchase(
     });
 
     if (entitlementType === "MEMBERSHIP") {
-      tx.update(authorityRef, {
-        isPremium: stillActive,
-        premiumPlan: stillActive ? rebuilt.entitlementId : admin.firestore.FieldValue.delete(),
-        subscriptionPlan: stillActive ? rebuilt.entitlementId : "FREE",
-        premiumUntil: stillActive
-          ? admin.firestore.Timestamp.fromMillis(rebuilt.expiresAtMillis)
+      tx.set(subscriptionRef, {
+        membershipActive: stillActive,
+        membershipPlan: stillActive
+          ? rebuilt.entitlementId
           : admin.firestore.FieldValue.delete(),
-        subscriptionExpiry: stillActive ? rebuilt.expiresAtMillis : 0,
-        paymentId: stillActive ? rebuilt.paymentId : admin.firestore.FieldValue.delete(),
+        membershipUntilMillis: stillActive
+          ? rebuilt.expiresAtMillis
+          : admin.firestore.FieldValue.delete(),
+        membershipPaymentId: stillActive
+          ? rebuilt.paymentId
+          : admin.firestore.FieldValue.delete(),
+        membershipUpdatedAt: serverNow,
+      }, { merge: true });
+      tx.update(userRef, {
+        isPremium: stillActive,
+        premiumPlan: admin.firestore.FieldValue.delete(),
+        subscriptionPlan: admin.firestore.FieldValue.delete(),
+        premiumUntil: admin.firestore.FieldValue.delete(),
+        subscriptionExpiry: admin.firestore.FieldValue.delete(),
+        paymentId: admin.firestore.FieldValue.delete(),
         updatedAt: serverNow,
       });
     } else {
-      tx.set(authorityRef, {
+      tx.set(subscriptionRef, {
         boostUntil: stillActive ? rebuilt.expiresAtMillis : 0,
         boostUpdatedAt: serverNow,
       }, { merge: true });
@@ -775,29 +786,84 @@ export const reconcileExpiredGooglePlayEntitlements = functions.pubsub
   .schedule("every 60 minutes")
   .onRun(async () => {
     const nowMillis = Date.now();
-    let userPasses = 0;
-    while (userPasses < 20) {
-      const expiredUsers = await db.collection("users")
+
+    // Transitional migration: preserve active legacy entitlements in private subscriptions before
+    // deleting plan/expiry/payment metadata from peer-readable user documents.
+    let legacyPasses = 0;
+    while (legacyPasses < 20) {
+      const legacyUsers = await db.collection("users")
         .where("subscriptionExpiry", ">", 0)
-        .where("subscriptionExpiry", "<=", nowMillis)
         .limit(300)
         .get();
-      if (expiredUsers.empty) break;
+      if (legacyUsers.empty) break;
+      const subscriptionRefs = legacyUsers.docs.map((doc) =>
+        db.collection("subscriptions").doc(doc.id)
+      );
+      const subscriptionDocs = subscriptionRefs.length
+        ? await db.getAll(...subscriptionRefs)
+        : [];
       const batch = db.batch();
-      expiredUsers.docs.forEach((doc) => {
+      legacyUsers.docs.forEach((doc, index) => {
+        const state = resolveMembershipState(
+          subscriptionDocs[index]?.data(),
+          doc.data(),
+          nowMillis
+        );
+        const subscriptionRef = subscriptionRefs[index];
+        if (state.source === "LEGACY_PUBLIC_PROFILE" && state.active) {
+          batch.set(subscriptionRef, {
+            membershipActive: true,
+            membershipPlan: state.planId,
+            membershipUntilMillis: state.expiresAtMillis,
+            membershipPaymentId: state.paymentId,
+            membershipUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
         batch.update(doc.ref, {
-          isPremium: false,
+          isPremium: state.active,
           premiumPlan: admin.firestore.FieldValue.delete(),
-          subscriptionPlan: "FREE",
+          subscriptionPlan: admin.firestore.FieldValue.delete(),
           premiumUntil: admin.firestore.FieldValue.delete(),
-          subscriptionExpiry: 0,
+          subscriptionExpiry: admin.firestore.FieldValue.delete(),
           paymentId: admin.firestore.FieldValue.delete(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       });
       await batch.commit();
-      userPasses += 1;
-      if (expiredUsers.size < 300) break;
+      legacyPasses += 1;
+      if (legacyUsers.size < 300) break;
+    }
+
+    let membershipPasses = 0;
+    while (membershipPasses < 20) {
+      const expiredMemberships = await db.collection("subscriptions")
+        .where("membershipUntilMillis", ">", 0)
+        .where("membershipUntilMillis", "<=", nowMillis)
+        .limit(300)
+        .get();
+      if (expiredMemberships.empty) break;
+      const batch = db.batch();
+      expiredMemberships.docs.forEach((doc) => {
+        batch.set(doc.ref, {
+          membershipActive: false,
+          membershipPlan: admin.firestore.FieldValue.delete(),
+          membershipUntilMillis: admin.firestore.FieldValue.delete(),
+          membershipPaymentId: admin.firestore.FieldValue.delete(),
+          membershipUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        batch.set(db.collection("users").doc(doc.id), {
+          isPremium: false,
+          premiumPlan: admin.firestore.FieldValue.delete(),
+          subscriptionPlan: admin.firestore.FieldValue.delete(),
+          premiumUntil: admin.firestore.FieldValue.delete(),
+          subscriptionExpiry: admin.firestore.FieldValue.delete(),
+          paymentId: admin.firestore.FieldValue.delete(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
+      await batch.commit();
+      membershipPasses += 1;
+      if (expiredMemberships.size < 300) break;
     }
 
     let boostPasses = 0;
