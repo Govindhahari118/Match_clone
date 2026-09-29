@@ -19,7 +19,7 @@
 |---|---|---|
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
-| Nearby | BETA | Foreground-only location, private exact coordinates, server-derived coarse distance; production location/load evidence still required. |
+| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production route is fail-closed behind Remote Config `enable_nearby`; production location/load evidence is required before enabling. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
 | Messages list | READY | Real conversations only. |
@@ -31,7 +31,7 @@
 | Language | READY | Supported locale catalog only. |
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
-| Kundali | BETA | Available only where applicable; provider/production evidence required for any provider-backed interpretation. |
+| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
@@ -68,3 +68,11 @@ domain and matching `.well-known/assetlinks.json` exist. No placeholder domain i
 A hidden/BETA route may become READY/PREMIUM only when UI + state + authorization + persistence +
 failure/offline handling + tests + telemetry + provider/operator evidence (where relevant) all pass on
 the same release candidate.
+
+
+## Fail-closed release promotion
+
+BETA capability presence in source does not make it launch-visible. `enable_nearby` and
+`enable_kundali` default to `false` in the Android Remote Config contract. Drawer, Home, profile,
+interest and direct/deep navigation paths all enforce the same flags. A direct navigation attempt
+while disabled renders a truthful unavailable state rather than entering the feature.
