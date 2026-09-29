@@ -7,9 +7,9 @@ import kotlin.math.abs
 /**
  * Explainable, symmetric compatibility score used by production discovery.
  *
- * v2 fixes two truthfulness issues in the earlier formula:
- * - astrology is included only when both profiles are Hindu and both have usable birth-sign inputs;
- * - trust is mutual (average verification level), not a one-sided score of the candidate.
+ * v3 keeps applicability-aware astrology and mutual trust, and adds the backend-derived bilateral
+ * partner-preference fit as an optional pair-specific factor. Raw partner preferences never enter
+ * this client scorer; only the trusted 0..1 pair aggregate is accepted.
  *
  * Missing/inapplicable dimensions are excluded and the remaining configured weights are
  * renormalized. This prevents absent astrology/questionnaire data from becoming a fabricated
