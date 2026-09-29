@@ -244,32 +244,72 @@ test('only owner can configure global contact visibility', async () => {
   await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
 });
 
-test('chat thread requires server-created mutual interests and stops after a block', async () => {
+test('chat creation is server-only while participant reads and recipient receipts remain constrained', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  const thread = doc(aliceDb, 'chats/alice_bob');
+  const threadPath = 'chats/alice_bob';
+  const messagePath = threadPath + '/messages/server_message_0001';
 
   await seedInterest('alice', 'bob');
-  await assertFails(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-
   await seedInterest('bob', 'alice');
-  await assertSucceeds(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-  await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0001'), {
-    body: 'hello', sentAt: Date.now(), isRead: false,
-    fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
-    voiceUri: null, imageUri: null, voiceDurationMs: null,
+
+  await assertFails(setDoc(doc(aliceDb, threadPath), {
+    participantUids: ['alice', 'bob'],
+    lastMessage: 'forged preview',
+    lastSentAt: Date.now(),
+  }));
+  await assertFails(setDoc(doc(aliceDb, messagePath), {
+    body: 'forged',
+    sentAt: Date.now(),
+    isRead: false,
+    fromFirebaseUid: 'alice',
+    toFirebaseUid: 'bob',
+  }));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, threadPath), {
+      participantUids: ['alice', 'bob'],
+      lastMessage: 'hello',
+      lastSentAt: Date.now(),
+    });
+    await setDoc(doc(db, messagePath), {
+      body: 'hello',
+      sentAt: Date.now(),
+      isRead: false,
+      fromFirebaseUid: 'alice',
+      toFirebaseUid: 'bob',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(aliceDb, threadPath)));
+  await assertSucceeds(getDoc(doc(bobDb, threadPath)));
+  await assertSucceeds(getDoc(doc(bobDb, messagePath)));
+
+  // Only the recipient may acknowledge delivery/read, and read requires both timestamps.
+  await assertFails(updateDoc(doc(aliceDb, messagePath), {
+    deliveredAt: new Date(),
+  }));
+  await assertSucceeds(updateDoc(doc(bobDb, messagePath), {
+    deliveredAt: new Date(),
+  }));
+  await assertFails(updateDoc(doc(bobDb, messagePath), {
+    isRead: true,
+  }));
+  await assertSucceeds(updateDoc(doc(bobDb, messagePath), {
+    isRead: true,
+    deliveredAt: new Date(),
+    readAt: new Date(),
   }));
 
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
-      blockedUid: 'alice', blockedAt: Date.now(),
+      blockedUid: 'alice',
+      blockedAt: Date.now(),
     });
   });
-  await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0002'), {
-    body: 'blocked', sentAt: Date.now(), isRead: false,
-    fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
-    voiceUri: null, imageUri: null, voiceDurationMs: null,
-  }));
+  await assertFails(getDoc(doc(aliceDb, messagePath)));
+  await assertFails(getDoc(doc(bobDb, messagePath)));
 });
 
 test('users cannot write payment authority documents', async () => {
