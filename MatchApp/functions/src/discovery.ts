@@ -366,12 +366,16 @@ export const discoverProfiles = functions
     const reverseBlocked = new Set<string>();
     const hiddenFromViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
-    const partnerPreferencesByUid = new Map(
-      candidates.map((doc, index) => [
+    const partnerPreferencesByUid = new Map<
+      string,
+      ReturnType<typeof normalizePartnerPreferences>
+    >();
+    candidates.forEach((doc, index) => {
+      partnerPreferencesByUid.set(
         doc.id,
-        normalizePartnerPreferences(partnerPreferenceDocs[index]?.data()),
-      ])
-    );
+        normalizePartnerPreferences(partnerPreferenceDocs[index]?.data())
+      );
+    });
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
     const visibleLastActiveByUid = new Map<string, number>();
     reverseDocs.forEach((doc, index) => {
