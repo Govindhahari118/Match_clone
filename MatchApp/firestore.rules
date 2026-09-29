@@ -375,6 +375,18 @@ service cloud.firestore {
     match /subscriptions/{uid}/{allPaths=**} { allow read, write: if false; }
     match /userLocations/{uid} { allow read, write: if false; }
     match /videoModeration/{docId} { allow read, write: if false; }
+    match /familyDelegates/{ownerUid}/members/{delegateUid} {
+      allow read, write: if false;
+    }
+    match /familyDelegates/{ownerUid} {
+      allow read, write: if false;
+    }
+    match /familyInvites/{inviteHash} {
+      allow read, write: if false;
+    }
+    match /familyAccessAudit/{auditId} {
+      allow read, write: if false;
+    }
     match /dataExportRequests/{requestId} {
       allow read, write: if false;
     }
