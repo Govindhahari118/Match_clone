@@ -44,7 +44,7 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putBytes(bytes, metadata).await()
-        ref.toString()
+        ref.path
     }
 
     /**
