@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
+import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
 
 function isHindu(religion: unknown): boolean {
   return typeof religion === "string" && religion.trim().toLowerCase() === "hindu";
@@ -74,6 +75,16 @@ export const getSharedHoroscope = functions.https.onCall(async (data, context) =
     return { available: false, reason: "target_incomplete" };
   }
 
+  const compatibility = horoscopeCompatibility(
+    myRasi,
+    myNakshatra,
+    targetRasi,
+    targetNakshatra
+  );
+  if (!compatibility) {
+    return { available: false, reason: "invalid_reference_data" };
+  }
+
   return {
     available: true,
     targetUid,
@@ -82,5 +93,7 @@ export const getSharedHoroscope = functions.https.onCall(async (data, context) =
     myNakshatra,
     targetRasi,
     targetNakshatra,
+    compatibilityScore: compatibility.score,
+    formulaVersion: compatibility.formulaVersion,
   };
 });
