@@ -21,6 +21,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.ConsentPurposeState
+import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.remote.ActivityPrivacy
 import com.match.app.data.remote.ActivityVisibility
 import com.match.app.data.remote.ContactGrant
@@ -61,7 +63,8 @@ class PrivacyViewModel @Inject constructor(
     private val session: SessionStore,
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
-    private val privacy: FirestorePrivacyService
+    private val privacy: FirestorePrivacyService,
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
     val incognito = session.incognitoMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -117,6 +120,39 @@ class PrivacyViewModel @Inject constructor(
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _consents = MutableStateFlow<List<ConsentPurposeState>>(emptyList())
+    val consents: StateFlow<List<ConsentPurposeState>> = _consents.asStateFlow()
+
+    private val _consentLoading = MutableStateFlow(false)
+    val consentLoading: StateFlow<Boolean> = _consentLoading.asStateFlow()
+
+    init {
+        refreshConsents()
+    }
+
+    fun refreshConsents() = viewModelScope.launch {
+        _consentLoading.value = true
+        runCatching { consentRepository.list() }
+            .onSuccess { _consents.value = it }
+            .onFailure { _error.value = "Could not load data-processing choices. Please retry." }
+        _consentLoading.value = false
+    }
+
+    fun setConsent(purpose: String, granted: Boolean) = viewModelScope.launch {
+        _consentLoading.value = true
+        _error.value = null
+        runCatching {
+            consentRepository.set(purpose, granted)
+            consentRepository.list()
+        }.onSuccess {
+            _consents.value = it
+        }.onFailure {
+            _error.value = it.message?.take(180)
+                ?: "Could not update this data-processing choice."
+        }
+        _consentLoading.value = false
+    }
 
     fun setIncognito(value: Boolean) = viewModelScope.launch { session.setIncognitoMode(value) }
     fun setHoroscopeVisible(value: Boolean) = updateUser { it.copy(showHoroscope = value) }
@@ -198,6 +234,8 @@ fun PrivacyDashboardScreen(
     val contactVisibility by vm.contactVisibility.collectAsState()
     val activityPrivacy by vm.activityPrivacy.collectAsState()
     val saving by vm.saving.collectAsState()
+    val consents by vm.consents.collectAsState()
+    val consentLoading by vm.consentLoading.collectAsState()
     val error by vm.error.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     var manageVisibility by remember { mutableStateOf(false) }
@@ -382,6 +420,53 @@ fun PrivacyDashboardScreen(
             )
 
             HorizontalDivider()
+            Text("Data processing choices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "These choices are stored in Matree's server-authoritative consent ledger. Notice versions are controlled by the backend, so an outdated app cannot silently accept an old notice.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (consentLoading && consents.isEmpty()) {
+                MatreeInlineNotice(
+                    message = "Loading current consent choices…",
+                    icon = Icons.Filled.Sync
+                )
+            } else {
+                val labels = mapOf(
+                    "identity_verification" to Pair("Identity verification", "Allows new government-ID verification processing. Withdrawing does not fabricate or alter a past review decision."),
+                    "aadhaar_offline_verification" to Pair("Aadhaar offline verification", "Separate permission for an approved Aadhaar offline/provider flow. It remains unused while that provider capability is disabled."),
+                    "personalization" to Pair("Personalization", "Allows optional personalization beyond the core deterministic matchmaking service."),
+                    "marketing" to Pair("Marketing", "Controls optional promotional communication. Service and security messages are handled separately."),
+                    "location" to Pair("Nearby location", "Allows exact location to be processed for Nearby. Withdrawal also removes the stored exact Nearby point on the backend."),
+                    "media_processing" to Pair("Media processing", "Allows optional media processing needed for features that explicitly request it."),
+                    "sensitive_preferences" to Pair("Sensitive preferences", "Allows optional processing of sensitive preference fields when a feature explicitly requires it.")
+                )
+                consents.forEach { state ->
+                    val copy = labels[state.purpose] ?: Pair(state.purpose, "Optional data-processing purpose.")
+                    ConsentChoiceCard(
+                        state = state,
+                        title = copy.first,
+                        subtitle = copy.second,
+                        enabled = !consentLoading,
+                        onCheckedChange = { vm.setConsent(state.purpose, it) }
+                    )
+                }
+                MatreeSecondaryButton(
+                    text = "Refresh consent status",
+                    icon = Icons.Filled.Refresh,
+                    onClick = vm::refreshConsents,
+                    enabled = !consentLoading,
+                    modifier = Modifier.fillMaxWidth().testTag("refresh_consent_status")
+                )
+            }
+
+            MatreeInlineNotice(
+                message = "Withdrawing a purpose stops new processing that requires that consent. Data already processed may still follow the product's configured deletion or retention workflow; the app does not claim immediate deletion unless the backend actually performs it.",
+                icon = Icons.Filled.Info,
+                tone = MatreeStatusTone.NEUTRAL
+            )
+
+            HorizontalDivider()
             Text("Account data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             MatreeInfoCard {
                 Text(
@@ -405,6 +490,47 @@ fun PrivacyDashboardScreen(
                 )
             }
             Spacer(Modifier.height(MatreeDesign.spacing.xl))
+        }
+    }
+}
+
+@Composable
+private fun ConsentChoiceCard(
+    state: ConsentPurposeState,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    MatreeInfoCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (state.isCurrent) Icons.Filled.CheckCircle else Icons.Filled.PrivacyTip,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (state.granted && !state.isCurrent) {
+                    Text(
+                        "The notice version changed; review and grant again before this purpose can be used.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            Spacer(Modifier.width(MatreeDesign.spacing.xs))
+            Switch(
+                checked = state.isCurrent,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled
+            )
         }
     }
 }
