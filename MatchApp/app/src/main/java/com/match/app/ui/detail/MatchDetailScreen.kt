@@ -164,25 +164,23 @@ class MatchDetailViewModel @Inject constructor(
                 nakshatra = ""
             )
 
+            var serverAstrologyScore: Float? = null
             if (profile.showHoroscope && profile.firebaseUid.isNotBlank()) {
                 val shared = kundliRepo.getSharedHoroscope(profile.firebaseUid).getOrNull()
                 if (shared?.available == true) {
-                    scorerMe = scorerMe.copy(
-                        rasi = shared.myRasi,
-                        nakshatra = shared.myNakshatra
-                    )
-                    scorerTarget = scorerTarget.copy(
-                        rasi = shared.targetRasi,
-                        nakshatra = shared.targetNakshatra
-                    )
-                } else {
-                    scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+                    serverAstrologyScore = shared.compatibilityScore
                 }
-            } else {
-                scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
             }
+            // Peer-private astrology never enters the local scorer. If the trusted backend does
+            // not provide a valid score, the astrology factor is omitted rather than fabricated.
+            scorerMe = scorerMe.copy(rasi = "", nakshatra = "")
+            scorerTarget = scorerTarget.copy(rasi = "", nakshatra = "")
 
-            val result = MatchScorer.explain(scorerMe, scorerTarget)
+            val result = MatchScorer.explain(
+                scorerMe,
+                scorerTarget,
+                astrologyScoreOverride = serverAstrologyScore
+            )
             val factors = result.factors.map {
                 CompatibilityFactor(
                     key = it.key,
