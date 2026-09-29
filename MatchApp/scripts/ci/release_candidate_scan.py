@@ -98,6 +98,16 @@ def main() -> int:
     require("libs.jbcrypt" not in gradle,
             "obsolete BCrypt dependency must not ship in production", failures)
 
+    for relative in [
+        "src/main/java/com/match/app/core/trust/TrustScoreEngine.kt",
+        "src/main/java/com/match/app/core/security/FakeProfileDetector.kt",
+    ]:
+        candidate = APP / relative
+        if candidate.exists():
+            require("isPremium" not in text(candidate),
+                    f"{relative}: payment/premium state must not affect trust or fraud heuristics",
+                    failures)
+
     prod_roots = [APP / "src/main", ROOT / "functions/src"]
     forbidden = [
         ("emulator endpoint", re.compile(r"\b10\.0\.2\.2\b")),
