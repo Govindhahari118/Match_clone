@@ -37,6 +37,7 @@ import com.match.app.core.config.RemoteConfigManager
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.assisted.AssistedServiceScreen
 import com.match.app.ui.biodata.BiodataScreen
 import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
@@ -97,6 +98,7 @@ object MainRoutes {
     const val PRIVACY_DASH = "privacy_dash"
     const val PARTNER_PREFERENCES = "partner_preferences"
     const val FAMILY_ACCESS = "family_access"
+    const val ASSISTED = "assisted_matchmaking"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
@@ -175,6 +177,7 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.VERIFICATION, "Verification", "Identity verification", Icons.Filled.Verified),
             DrawerItem(MainRoutes.PRIVACY_DASH, "Privacy", "Visibility and account privacy", Icons.Filled.PrivacyTip),
             DrawerItem(MainRoutes.PRICING, "Membership", "Google Play membership plans", Icons.Filled.WorkspacePremium),
+            DrawerItem(MainRoutes.ASSISTED, "Assisted matchmaking", "Request human matchmaking support", Icons.Filled.SupportAgent),
             DrawerItem(MainRoutes.SETTINGS, "Settings", "Language, security and account", Icons.Filled.Settings),
             DrawerItem(MainRoutes.HELP, "Help", "Support and guidance", Icons.AutoMirrored.Filled.Help)
         )),
@@ -446,6 +449,9 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
                 composable(MainRoutes.FAMILY_ACCESS) {
                     FamilyAccessScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.ASSISTED) {
+                    AssistedServiceScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
