@@ -61,7 +61,7 @@ class MatchingRepository @Inject constructor(
                 )
             }
         ).flow.map { data ->
-            data.map { remote -> cacheRemoteCandidate(remote).toProfile() }
+            data.map { remote -> cacheRemoteCandidate(remote.profile).toProfile() }
         }
     }
 
@@ -77,8 +77,8 @@ class MatchingRepository @Inject constructor(
         filter: MatchFilter = MatchFilter()
     ): List<MatchResult> {
         val seekerEntity = userDao.findById(seekerId) ?: return emptyList()
-        val authorizedUids = syncRemoteCandidates(seekerEntity, filter)
-        if (authorizedUids.isEmpty()) return emptyList()
+        val authorizedCandidates = syncRemoteCandidates(seekerEntity, filter)
+        if (authorizedCandidates.isEmpty()) return emptyList()
 
         return withContext(Dispatchers.Default) {
             val blockedIds = social.blockedIds(seekerId).toSet()
@@ -88,7 +88,7 @@ class MatchingRepository @Inject constructor(
             userDao.allExcluding(seekerId)
                 .asSequence()
                 .filter { !it.isSeed }
-                .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedUids }
+                .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedCandidates.keys }
                 .filter { it.id !in blockedIds }
                 .filter { !it.stealthMode }
                 .filter { genderFilter(seekerEntity, it) }
@@ -170,7 +170,11 @@ class MatchingRepository @Inject constructor(
                     ) {
                         Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
                     } else 0f
-                    val combined = MatchScorer.explain(seekerProfile, candidateProfile)
+                    val combined = MatchScorer.explain(
+                        seekerProfile,
+                        candidateProfile,
+                        authorizedCandidates[candidate.firebaseUid]
+                    )
                     MatchResult(
                         user = candidateProfile,
                         questionnaireScore = qScore,
@@ -194,11 +198,16 @@ class MatchingRepository @Inject constructor(
         }
     }
 
-    private suspend fun syncRemoteCandidates(seeker: UserEntity, filter: MatchFilter): Set<String> {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() } ?: return emptySet()
+    private suspend fun syncRemoteCandidates(
+        seeker: UserEntity,
+        filter: MatchFilter
+    ): Map<String, Float?> {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+            ?.takeIf { it.isNotBlank() }
+            ?: return emptyMap()
         val blocked = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
         val liked = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
-        val authorized = linkedSetOf<String>()
+        val authorized = linkedMapOf<String, Float?>()
         var cursor: String? = null
 
         repeat(MAX_DISCOVERY_PAGES_PER_REFRESH) {
@@ -220,8 +229,11 @@ class MatchingRepository @Inject constructor(
             when (result) {
                 is PagingSource.LoadResult.Page -> {
                     result.data.forEach { remote ->
-                        if (remote.firebaseUid.isNotBlank()) authorized += remote.firebaseUid
-                        cacheRemoteCandidate(remote)
+                        val entity = remote.profile
+                        if (entity.firebaseUid.isNotBlank()) {
+                            authorized[entity.firebaseUid] = remote.pairPreferenceFit
+                        }
+                        cacheRemoteCandidate(entity)
                     }
                     cursor = result.nextKey
                     if (cursor == null) return authorized
