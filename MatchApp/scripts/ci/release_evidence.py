@@ -30,6 +30,8 @@ def main() -> int:
       ("Play Integrity/App Check enforcement","EXTERNAL EVIDENCE REQUIRED"),
       ("App Links domain verification","EXTERNAL EVIDENCE REQUIRED"),
       ("Play Console/Data Safety/legal approval","EXTERNAL EVIDENCE REQUIRED"),
+      ("External prelaunch gate","Run scripts/ci/production_external_gate.py --mode prelaunch against exact-SHA operator evidence"),
+      ("External full-release gate","Run scripts/ci/production_external_gate.py --mode full after controlled rollout and health review"),
     ]
     a.output.parent.mkdir(parents=True,exist_ok=True)
     a.output.write_text("# Matree Release Evidence\n\nExact-SHA evidence; no historical run certifies a newer commit.\n\n"+"\n".join(f"- **{k}:** {v}" for k,v in rows)+"\n",encoding="utf-8")
