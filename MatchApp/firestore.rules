@@ -63,7 +63,8 @@ service cloud.firestore {
              !('matchScore' in request.resource.data) &&
              !('profileViewCount' in request.resource.data) &&
              !('createdAt' in request.resource.data) &&
-             (!('photoUrl' in request.resource.data) || request.resource.data.photoUrl == '');
+             (!('photoUrl' in request.resource.data) || request.resource.data.photoUrl == '') &&
+             (!('videoUrl' in request.resource.data) || request.resource.data.videoUrl == '');
     }
     function userServerFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -72,7 +73,7 @@ service cloud.firestore {
         'contactsRevealedThisMonth','contactsResetAt','username','usernameNormalized',
         'lastActiveAt','boostActiveUntil','accountStatus','religion','religionId','religionLocked','religionConfirmedAt',
         'profileCompleteness','profileCompletenessUpdatedAt','matchScore','profileViewCount','createdAt',
-        'photoUrl'
+        'photoUrl','videoUrl'
       ]);
     }
     function peerReadableAccount(data) {
@@ -330,6 +331,8 @@ service cloud.firestore {
     match /riskActivity/{uid}/days/{day} { allow read, write: if false; }
     match /photoFingerprints/{fingerprintId} { allow read, write: if false; }
     match /photoModeration/{caseId} { allow read, write: if false; }
+    match /videoModeration/{caseId} { allow read, write: if false; }
+    match /profileVideoState/{uid} { allow read, write: if false; }
     match /accountEnforcements/{uid} { allow read, write: if false; }
     match /securityEvents/{eventId} { allow read, write: if false; }
     match /notifications/{notifId} { allow read: if isSignedIn() && resource.data.userId == request.auth.uid; allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']); allow create, delete: if false; }
