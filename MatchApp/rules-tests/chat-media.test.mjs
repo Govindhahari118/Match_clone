@@ -53,23 +53,23 @@ const imageMetadata = {
 test('chat participant can upload and both participants can read media', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
-  const object = ref(aliceStorage, 'chat-media/thread123/message.jpg');
+  const object = ref(aliceStorage, 'chat-media/thread123/message_1234567890123456.jpg');
   await assertSucceeds(uploadBytes(object, new Uint8Array([1, 2, 3]), imageMetadata));
   await assertSucceeds(getBytes(object));
-  await assertSucceeds(getBytes(ref(bobStorage, 'chat-media/thread123/message.jpg')));
+  await assertSucceeds(getBytes(ref(bobStorage, 'chat-media/thread123/message_1234567890123456.jpg')));
 });
 
 test('outsider cannot upload into or read an existing chat thread', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const malloryStorage = env.authenticatedContext('mallory').storage();
   await assertSucceeds(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/message.jpg'),
+    ref(aliceStorage, 'chat-media/thread123/message_1234567890123456.jpg'),
     new Uint8Array([1, 2, 3]),
     imageMetadata,
   ));
-  await assertFails(getBytes(ref(malloryStorage, 'chat-media/thread123/message.jpg')));
+  await assertFails(getBytes(ref(malloryStorage, 'chat-media/thread123/message_1234567890123456.jpg')));
   await assertFails(uploadBytes(
-    ref(malloryStorage, 'chat-media/thread123/forged.jpg'),
+    ref(malloryStorage, 'chat-media/thread123/forged_1234567890123456.jpg'),
     new Uint8Array([9, 9, 9]),
     {
       contentType: 'image/jpeg',
@@ -84,7 +84,7 @@ test('participant cannot forge chat media ownership or recipient metadata', asyn
   const aliceStorage = env.authenticatedContext('alice').storage();
 
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/forged-sender.jpg'),
+    ref(aliceStorage, 'chat-media/thread123/forged_sender_1234567890123456.jpg'),
     new Uint8Array([1, 2, 3]),
     {
       contentType: 'image/jpeg',
@@ -95,7 +95,7 @@ test('participant cannot forge chat media ownership or recipient metadata', asyn
   ));
 
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/forged-recipient.jpg'),
+    ref(aliceStorage, 'chat-media/thread123/forged_recipient_1234567890123456.jpg'),
     new Uint8Array([1, 2, 3]),
     {
       contentType: 'image/jpeg',
@@ -106,7 +106,7 @@ test('participant cannot forge chat media ownership or recipient metadata', asyn
   ));
 
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/forged-thread.jpg'),
+    ref(aliceStorage, 'chat-media/thread123/forged_thread_1234567890123456.jpg'),
     new Uint8Array([1, 2, 3]),
     {
       contentType: 'image/jpeg',
@@ -120,7 +120,7 @@ test('participant cannot forge chat media ownership or recipient metadata', asyn
 test('chat media kind must agree with its content type', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/not-really-voice.m4a'),
+    ref(aliceStorage, 'chat-media/thread123/not_really_voice_1234567890123456.m4a'),
     new Uint8Array([1, 2, 3]),
     {
       contentType: 'image/jpeg',
@@ -134,7 +134,7 @@ test('chat media kind must agree with its content type', async () => {
 test('signed-in user cannot invent a non-existent chat thread using forged metadata', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/fake-thread/message.jpg'),
+    ref(aliceStorage, 'chat-media/fake-thread/message_1234567890123456.jpg'),
     new Uint8Array([4, 5, 6]),
     {
       contentType: 'image/jpeg',
@@ -149,7 +149,7 @@ test('block immediately prevents further chat media access and writes', async ()
   const aliceDb = env.authenticatedContext('alice').firestore();
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
-  const object = ref(aliceStorage, 'chat-media/thread123/message.jpg');
+  const object = ref(aliceStorage, 'chat-media/thread123/message_1234567890123456.jpg');
   await assertSucceeds(uploadBytes(object, new Uint8Array([7, 8, 9]), imageMetadata));
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'blocks/alice/blocked/bob'), {
@@ -158,10 +158,53 @@ test('block immediately prevents further chat media access and writes', async ()
     });
   });
   await assertFails(getBytes(object));
-  await assertFails(getBytes(ref(bobStorage, 'chat-media/thread123/message.jpg')));
+  await assertFails(getBytes(ref(bobStorage, 'chat-media/thread123/message_1234567890123456.jpg')));
   await assertFails(uploadBytes(
-    ref(aliceStorage, 'chat-media/thread123/after-block.jpg'),
+    ref(aliceStorage, 'chat-media/thread123/after_block_1234567890123456.jpg'),
     new Uint8Array([1]),
     imageMetadata,
+  ));
+});
+
+test('chat media rejects broad MIME aliases and extension mismatches', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'chat-media/thread123/png_payload_1234567890123456.jpg'),
+    new Uint8Array([1, 2, 3]),
+    {
+      contentType: 'image/png',
+      customMetadata: {
+        senderUid: 'alice', recipientUid: 'bob', threadId: 'thread123', kind: 'image',
+      },
+    },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'chat-media/thread123/jpeg_wrong_ext_1234567890123456.png'),
+    new Uint8Array([1, 2, 3]),
+    imageMetadata,
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'chat-media/thread123/mp3_voice_1234567890123456.m4a'),
+    new Uint8Array([1, 2, 3]),
+    {
+      contentType: 'audio/mpeg',
+      customMetadata: {
+        senderUid: 'alice', recipientUid: 'bob', threadId: 'thread123', kind: 'voice',
+      },
+    },
+  ));
+
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'chat-media/thread123/voice_message_1234567890123456.m4a'),
+    new Uint8Array([1, 2, 3]),
+    {
+      contentType: 'audio/mp4',
+      customMetadata: {
+        senderUid: 'alice', recipientUid: 'bob', threadId: 'thread123', kind: 'voice',
+      },
+    },
   ));
 });
