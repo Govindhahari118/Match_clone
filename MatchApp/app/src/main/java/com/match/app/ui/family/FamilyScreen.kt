@@ -47,6 +47,7 @@ class FamilyViewModel @Inject constructor(
     private val _info = MutableStateFlow(FamilyInfo())
     val info: StateFlow<FamilyInfo> = _info.asStateFlow()
     val isSaved = MutableStateFlow(false)
+    val saveError = MutableStateFlow<String?>(null)
 
     init {
         // Load the member's current persisted profile values; missing attributes remain unspecified.
@@ -71,19 +72,26 @@ class FamilyViewModel @Inject constructor(
     fun save() = viewModelScope.launch {
         val uid = session.userId.first() ?: return@launch
         val info = _info.value
-        auth.updateFamilyDetails(
-            userId = uid,
-            fatherOccupation = info.fatherOccupation,
-            motherOccupation = info.motherOccupation,
-            siblings = info.siblings,
-            familyType = info.familyType,
-            familyStatus = info.familyStatus,
-            familyValues = info.familyValues,
-            nativeState = info.nativePlace,
-            gotra = info.gotra,
-            aboutFamily = info.aboutFamily
-        )
-        isSaved.value = true
+        saveError.value = null
+        runCatching {
+            auth.updateFamilyDetails(
+                userId = uid,
+                fatherOccupation = info.fatherOccupation.trim().take(160),
+                motherOccupation = info.motherOccupation.trim().take(160),
+                siblings = info.siblings.coerceIn(0, 20),
+                familyType = info.familyType,
+                familyStatus = info.familyStatus,
+                familyValues = info.familyValues,
+                nativeState = info.nativePlace.trim().take(160),
+                gotra = info.gotra.trim().take(160),
+                aboutFamily = info.aboutFamily.trim().take(1000)
+            )
+        }.onSuccess {
+            isSaved.value = true
+        }.onFailure {
+            saveError.value =
+                "Family details were not saved to the server. Refresh and try again."
+        }
     }
 }
 
@@ -95,6 +103,7 @@ fun FamilyScreen(
 ) {
     val info by vm.info.collectAsState()
     val saved by vm.isSaved.collectAsState()
+    val saveError by vm.saveError.collectAsState()
 
     var father by remember(info) { mutableStateOf(info.fatherOccupation) }
     var mother by remember(info) { mutableStateOf(info.motherOccupation) }
@@ -108,10 +117,16 @@ fun FamilyScreen(
 
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(saved) {
-        if (saved) {
-            snackbar.showSnackbar("Family details saved!")
-            vm.isSaved.value = false
+    LaunchedEffect(saved, saveError) {
+        when {
+            saved -> {
+                snackbar.showSnackbar("Family details saved.")
+                vm.isSaved.value = false
+            }
+            saveError != null -> {
+                snackbar.showSnackbar(saveError.orEmpty())
+                vm.saveError.value = null
+            }
         }
     }
 
@@ -171,7 +186,8 @@ fun FamilyScreen(
                 singleLine = true
             )
             OutlinedTextField(
-                value = siblings, onValueChange = { siblings = it },
+                value = siblings,
+                onValueChange = { siblings = it.filter(Char::isDigit).take(2) },
                 label = { Text("Number of siblings") },
                 leadingIcon = { Icon(Icons.Filled.People, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_siblings"),
@@ -236,7 +252,7 @@ fun FamilyScreen(
                     vm.update(
                         FamilyInfo(
                             fatherOccupation = father, motherOccupation = mother,
-                            siblings = siblings.toIntOrNull() ?: 0,
+                            siblings = (siblings.toIntOrNull() ?: 0).coerceIn(0, 20),
                             familyType = familyType.takeUnless { it == "Not specified" }.orEmpty(),
                             familyStatus = familyStatus.takeUnless { it == "Not specified" }.orEmpty(),
                             familyValues = familyValues.takeUnless { it == "Not specified" }.orEmpty(), nativePlace = nativePlace,
