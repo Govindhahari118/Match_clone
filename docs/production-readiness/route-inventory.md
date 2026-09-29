@@ -39,6 +39,7 @@
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative government-ID statuses; production KYC/provider evidence required for provider-backed advanced identity methods. |
 | Phone verification | READY | Firebase Phone Auth credential linking plus backend confirmation; explicitly separate from government-ID/KYC verification. |
+| Video profile | BETA / OFF BY DEFAULT | Consented protected upload, server-owned moderation, audited review and backend-only publication/removal. Route is fail-closed behind `show_video_profiles` until real-device upload/playback and moderation-operations evidence pass. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
 | Help | READY | Support/help navigation; support operations depend on backend records where shown. |
 | Terms / Privacy / Guidelines / Security / Refunds | READY | Static legal/support surfaces; final operator/legal approval is external. |
@@ -55,7 +56,7 @@ their end-to-end provider/data/entitlement contract passes the same Definition o
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
 `Referral`, `Regions`, `Daily Rewards`, `Safety Center
 standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
-`Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
+`Testimonials`, `Relationship Timeline`, and `Wedding Planner`.
 
 `Video Profile` now has consented protected upload, server-owned moderation, audited operator review and backend-only publication/removal in source, but it remains hidden/off by default until real-device playback/upload, moderation-operations and performance evidence pass.
 
