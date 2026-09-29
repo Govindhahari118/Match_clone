@@ -26,7 +26,6 @@ export const onUserCreate = functions.firestore
     await snap.ref.update({
       matrimonyId,
       verificationLevel: 1,
-      subscriptionPlan: "FREE",
       createdAt: Date.now(),
       profileRevision: Number(snap.data()?.profileRevision || 0),
     });
