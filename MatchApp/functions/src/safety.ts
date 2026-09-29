@@ -144,6 +144,7 @@ const SUPPORT_CATEGORIES = new Set([
   "Payment",
   "Privacy",
   "Safety",
+  "Appeal",
   "Technical issue",
   "Other",
 ]);
