@@ -385,5 +385,6 @@ service cloud.firestore {
     match /deletionRequests/{uid} { allow read, write: if false; }
     match /subscriptions/{uid}/{allPaths=**} { allow read, write: if false; }
     match /userLocations/{uid} { allow read, write: if false; }
+    match /videoModeration/{docId} { allow read, write: if false; }
   }
 }
