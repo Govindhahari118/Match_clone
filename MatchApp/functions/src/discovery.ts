@@ -24,12 +24,12 @@ const PUBLIC_PROFILE_FIELDS = [
   "isVerified", "isPremium", "profileViewCount", "caste", "state", "subCaste", "gothra",
   "faithTradition", "faithSubTradition", "faithInstitution",
   "diet", "familyType", "fatherOccupation", "motherOccupation", "siblings", "smoking",
-  "drinking", "personalityType", "hobbies", "spokenLanguages", "videoUrl",
+  "drinking", "personalityType", "hobbies", "spokenLanguages",
   "residentialStatus", "hasChildren", "nativeState", "countryOfResidence", "visaStatus",
   "willingToRelocate", "createdAt", "isIncognito", "ageBucket", "familyValues", "aboutFamily",
   "weight", "complexion", "physicalStatus", "familyStatus", "educationField", "institution",
   "graduationYear", "occupationCategory", "employer", "employerType", "citizenship", "isNRI",
-  "fitnessActivities", "matrimonyId", "photoUrl", "voiceBioUrl", "profileCompleteness",
+  "fitnessActivities", "matrimonyId", "photoUrl", "profileCompleteness",
   "verificationLevel", "stealthMode", "showHoroscope", "incomeDisclosure",
 ] as const;
 
