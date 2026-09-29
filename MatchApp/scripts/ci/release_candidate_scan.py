@@ -89,6 +89,46 @@ def main() -> int:
     ignore = gitignore + "\n" + local_gitignore
     require("keystore.properties" in ignore, "keystore.properties must be ignored", failures)
 
+    # Legacy one-shot legal copy must not return. Consent is purpose-specific, versioned and
+    # backend-owned; hard-coded infrastructure/legal claims in an Android dialog drift silently.
+    legacy_consent = APP / "src/main/java/com/match/app/ui/consent/DpdpConsentDialog.kt"
+    require(not legacy_consent.exists(),
+            "legacy hard-coded DPDP consent dialog must not ship", failures)
+
+    nri_screen = APP / "src/main/java/com/match/app/ui/nri/NRIMatchScreen.kt"
+    if nri_screen.exists():
+        nri = text(nri_screen)
+        for forbidden_copy in [
+            "NRIProfile(",
+            "profiles: Int",
+            "41K+",
+            "verified NRI profiles across",
+            "Featured NRI Profiles",
+        ]:
+            require(forbidden_copy not in nri,
+                    f"NRI screen contains synthetic/demo inventory copy: {forbidden_copy}", failures)
+
+    remote_config = APP / "src/main/java/com/match/app/core/config/RemoteConfigManager.kt"
+    if remote_config.exists():
+        rc = text(remote_config)
+        require("KEY_ENABLE_NRI_FEATURES to false" in rc,
+                "NRI route must remain fail-closed by default", failures)
+
+    family_screen = APP / "src/main/java/com/match/app/ui/family/FamilyScreen.kt"
+    if family_screen.exists():
+        family = text(family_screen)
+        for unsaved_field in ["familyIncome", "propertyDetails", "brothersMarried", "sistersMarried"]:
+            require(unsaved_field not in family,
+                    f"family UI must not show an unpersisted field: {unsaved_field}", failures)
+
+    consent_backend = ROOT / "functions/src/consent.ts"
+    recommendation_backend = ROOT / "functions/src/recommendationFeedback.ts"
+    if consent_backend.exists() and recommendation_backend.exists():
+        require("onPersonalizationConsentChanged" in text(consent_backend),
+                "personalization withdrawal must purge optional recommendation telemetry", failures)
+        require('hasActiveConsent(viewerUid, "personalization")' in text(recommendation_backend),
+                "recommendation telemetry must honor current personalization consent", failures)
+
     # Production builds must not regain demo-account/password authority. Firebase Auth is the
     # only password authority and synthetic users/interactions belong in test/debug fixtures only.
     require(not (APP / "src/main/java/com/match/app/data/seed").exists(),
