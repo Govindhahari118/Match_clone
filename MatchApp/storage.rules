@@ -84,7 +84,7 @@ service firebase.storage {
       allow read: if publishedPhotoReadable(uid, fileName);
       allow create: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
-        request.resource.contentType.matches('image/.*') &&
+        request.resource.contentType == 'image/jpeg' &&
         request.resource.metadata.keys().hasOnly(['ownerUid']) &&
         request.resource.metadata.ownerUid == uid;
       allow update: if false;
@@ -94,7 +94,7 @@ service firebase.storage {
       allow read: if publishedVideoReadable(uid, fileName);
       allow create: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
-        request.resource.contentType.matches('video/.*') &&
+        request.resource.contentType == 'video/mp4' &&
         request.resource.metadata.keys().hasOnly(['ownerUid']) &&
         request.resource.metadata.ownerUid == uid;
       allow update: if false;
@@ -114,7 +114,10 @@ service firebase.storage {
       allow read: if false;
       allow create, update: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
-        (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+        request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] &&
+        request.resource.metadata.keys().hasOnly(['ownerUid','docType']) &&
+        request.resource.metadata.ownerUid == uid &&
+        request.resource.metadata.docType in ['Passport','Driving Licence','PAN Card','Voter ID'];
       allow delete: if false;
     }
     match /chat-media/{threadId}/{fileName} {
