@@ -20,6 +20,7 @@
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
 | Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production route is fail-closed behind Remote Config `enable_nearby`; production location/load evidence is required before enabling. |
+| NRI discovery | BETA / OFF BY DEFAULT | Real server-authorized NRI filtering with reciprocal preferences/privacy and no synthetic inventory. Fail-closed behind `enable_nri_features`; market inventory, load and device evidence are required before enabling. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
 | Messages list | READY | Real conversations only. |
@@ -48,7 +49,7 @@ their end-to-end provider/data/entitlement contract passes the same Definition o
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
 `Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`, `Family tools`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
-`NRI discovery`, `Referral`, `Regions`, `Daily Rewards`, `Safety Center
+`Referral`, `Regions`, `Daily Rewards`, `Safety Center
 standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
 `Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
 
@@ -74,7 +75,6 @@ the same release candidate.
 
 ## Fail-closed release promotion
 
-BETA capability presence in source does not make it launch-visible. `enable_nearby` and
-`enable_kundali` default to `false` in the Android Remote Config contract. Drawer, Home, profile,
+BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali` and `enable_nri_features` default to `false` in the Android Remote Config contract. Drawer, Home, profile,
 interest and direct/deep navigation paths all enforce the same flags. A direct navigation attempt
 while disabled renders a truthful unavailable state rather than entering the feature.
