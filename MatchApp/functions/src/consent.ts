@@ -151,3 +151,44 @@ export const onLocationConsentChanged = functions.firestore
     if (after?.granted === true) return;
     await db.collection("userLocations").doc(context.params.uid).delete();
   });
+
+
+async function deleteQueryInBatches(query: FirebaseFirestore.Query): Promise<void> {
+  while (true) {
+    const snapshot = await query.limit(300).get();
+    if (snapshot.empty) return;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    if (snapshot.size < 300) return;
+  }
+}
+
+/** Withdrawing personalization removes the signed-in user's optional ranking-feedback history. */
+export const onPersonalizationConsentChanged = functions.firestore
+  .document("consents/{uid}/items/personalization")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (after?.granted === true &&
+        after?.noticeVersion === currentConsentVersion("personalization")) return;
+    const uid = context.params.uid;
+    await Promise.all([
+      deleteQueryInBatches(
+        db.collection("recommendationFeedback").doc(uid).collection("targets")
+      ),
+      deleteQueryInBatches(
+        db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
+      ),
+    ]);
+    await db.collection("recommendationFeedback").doc(uid).delete();
+  });
+
+/** Withdrawing sensitive-preference consent removes durable partner-preference processing input. */
+export const onSensitivePreferencesConsentChanged = functions.firestore
+  .document("consents/{uid}/items/sensitive_preferences")
+  .onWrite(async (change, context) => {
+    const after = change.after.exists ? change.after.data() : undefined;
+    if (after?.granted === true &&
+        after?.noticeVersion === currentConsentVersion("sensitive_preferences")) return;
+    await db.collection("partnerPreferences").doc(context.params.uid).delete();
+  });
