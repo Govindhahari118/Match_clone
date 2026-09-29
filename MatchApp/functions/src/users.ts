@@ -598,6 +598,7 @@ export const setMatrimonyPaused = functions.https.onCall(async (data, context) =
     tx.set(userRef, {
       accountStatus: decision.nextStatus,
       searchStatus: decision.paused ? "PAUSED" : "ACTIVE",
+      userPaused: decision.paused,
       matrimonyPaused: decision.paused,
       pausedAt: decision.paused
         ? admin.firestore.FieldValue.serverTimestamp()
