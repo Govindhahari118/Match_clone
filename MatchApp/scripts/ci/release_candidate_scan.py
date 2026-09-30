@@ -140,7 +140,7 @@ def main() -> int:
     privacy_functions = text(ROOT / "functions/src/privacy.ts")
     discovery_functions = text(ROOT / "functions/src/discovery.ts")
     users_functions = text(ROOT / "functions/src/users.ts")
-    require('"membershipActive"' in play_billing and 'getMyMembershipStatus' in play_billing,
+    require('membershipActive:' in play_billing and 'getMyMembershipStatus' in play_billing,
             "Play billing must persist and expose private membership authority", failures)
     require('resolveMembershipState' in interests_functions,
             "interest quota authorization must resolve private membership state", failures)
