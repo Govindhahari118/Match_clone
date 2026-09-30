@@ -135,8 +135,21 @@ def main() -> int:
             "Kundali backend callable must enforce the rollout gate", failures)
 
     media_functions = text(ROOT / "functions/src/media.ts")
-    require(media_functions.count('requireProductionFeature("video_profiles")') >= 2,
-            "Video profile submission and approval must enforce the backend rollout gate", failures)
+    video_submit = media_functions.split("export const submitProfileVideo", 1)[1].split(
+        "export const listPendingVideoModeration", 1
+    )[0]
+    video_review = media_functions.split("export const reviewProfileVideo", 1)[1].split(
+        "export const removeProfileVideo", 1
+    )[0]
+    photo_review = media_functions.split("export const reviewProfilePhoto", 1)[1].split(
+        "export const setPrimaryApprovedPhoto", 1
+    )[0]
+    require('requireProductionFeature("video_profiles")' in video_submit,
+            "Video profile submission must enforce the backend rollout gate", failures)
+    require('requireProductionFeature("video_profiles")' in video_review,
+            "Video profile approval must enforce the backend rollout gate", failures)
+    require('requireProductionFeature("video_profiles")' not in photo_review,
+            "Video rollout gating must never block ordinary profile-photo moderation", failures)
     require("onProfileVideoUploaded" in media_functions and
             "productionFeatureEnabled" in media_functions,
             "Video profile Storage uploads must be purged while the backend feature is disabled", failures)
@@ -145,9 +158,6 @@ def main() -> int:
             "Unsubmitted profile-video uploads must have bounded orphan cleanup", failures)
     photo_submit = media_functions.split("export const submitProfilePhoto", 1)[1].split(
         "export const listPendingPhotoModeration", 1
-    )[0]
-    video_submit = media_functions.split("export const submitProfileVideo", 1)[1].split(
-        "export const listPendingVideoModeration", 1
     )[0]
     require("profileVideoOrphans" not in photo_submit,
             "Video orphan cleanup must not be wired into profile-photo submission", failures)
