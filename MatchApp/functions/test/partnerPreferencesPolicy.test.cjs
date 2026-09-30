@@ -170,3 +170,21 @@ test("empty list modes normalize to no preference and finite choice values are w
   assert.deepEqual(prefs.nriStatuses, ["NRI"]);
   assert.equal(prefs.relocationMode, "NO_PREFERENCE");
 });
+
+
+test("strict finite-choice preferences reject profiles with missing data", () => {
+  const prefs = normalizePartnerPreferences({
+    childrenMode: "STRICT",
+    childrenStatuses: ["NO_CHILDREN"],
+    nriMode: "STRICT",
+    nriStatuses: ["INDIA_RESIDENT"],
+    relocationMode: "STRICT",
+    relocationStatuses: ["NOT_WILLING_TO_RELOCATE"],
+  });
+  assert.equal(
+    strictPreferencesAllow(prefs, {
+      countryOfResidence: "",
+    }),
+    false
+  );
+});
