@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { requireActiveConsent } from "./consent";
+import { hasActiveConsent, requireActiveConsent } from "./consent";
 import { db, requireAppCheck } from "./shared";
 import {
   nearbyAccountIsActive,
@@ -151,6 +151,10 @@ export const getNearbyStatus = functions.https.onCall(async (_data, context) => 
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
   const ref = db.collection("userLocations").doc(uid);
+  if (!await hasActiveConsent(uid, "location")) {
+    await ref.delete();
+    return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
+  }
   const snap = await ref.get();
   if (!snap.exists) return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
 
