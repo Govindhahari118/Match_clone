@@ -202,6 +202,10 @@ fun PartnerPreferencesScreen(
                     }
                 }
 
+                PreferenceSectionHeader(
+                    title = "Core preferences",
+                    subtitle = "Start with the few criteria that matter most. Every item remains optional."
+                )
                 RangePreferenceCard(
                     title = "Age",
                     mode = ui.value.ageMode,
@@ -228,6 +232,10 @@ fun PartnerPreferencesScreen(
                     }
                 )
 
+                PreferenceSectionHeader(
+                    title = "Community & faith",
+                    subtitle = "Use only the religious or community details that matter to you."
+                )
                 ListPreferenceCard(
                     title = "Religion",
                     mode = ui.value.religionMode,
@@ -283,6 +291,10 @@ fun PartnerPreferencesScreen(
                     hint = "Optional church, jamaat, samaj or institution",
                     onMode = { mode -> vm.update { it.copy(faithInstitutionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(faithInstitutions = values) } }
+                )
+                PreferenceSectionHeader(
+                    title = "Location & residence",
+                    subtitle = "Set geography, citizenship, overseas residence and relocation choices."
                 )
                 ListPreferenceCard(
                     title = "State / region",
@@ -361,6 +373,10 @@ fun PartnerPreferencesScreen(
                     ),
                     onMode = { mode -> vm.update { it.copy(relocationMode = mode) } },
                     onSelected = { values -> vm.update { it.copy(relocationStatuses = values) } }
+                )
+                PreferenceSectionHeader(
+                    title = "Language, family & career",
+                    subtitle = "Refine life-stage, education, work and family-background preferences."
                 )
                 ListPreferenceCard(
                     title = "Mother tongue",
@@ -445,6 +461,10 @@ fun PartnerPreferencesScreen(
                     onMode = { mode -> vm.update { it.copy(familyValuesMode = mode) } },
                     onValues = { values -> vm.update { it.copy(familyValues = values) } }
                 )
+                PreferenceSectionHeader(
+                    title = "Lifestyle & wellbeing",
+                    subtitle = "Optional lifestyle criteria. Leave them at No preference to keep discovery broad."
+                )
                 ListPreferenceCard(
                     title = "Physical status",
                     mode = ui.value.physicalStatusMode,
@@ -499,6 +519,25 @@ fun PartnerPreferencesScreen(
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
         }
+    }
+}
+
+@Composable
+private fun PreferenceSectionHeader(
+    title: String,
+    subtitle: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
