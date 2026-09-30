@@ -20,6 +20,16 @@ export function requireAppCheck(context: functions.https.CallableContext): void 
   }
 }
 
+export function requestIdFromContext(
+  context: functions.https.CallableContext
+): string {
+  const incoming = context.rawRequest?.get("x-request-id")?.trim();
+  if (incoming && incoming.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(incoming)) {
+    return incoming;
+  }
+  return crypto.randomUUID();
+}
+
 export type OpsRole =
   | "support"
   | "moderator"
@@ -37,7 +47,7 @@ export function resolveOpsRole(raw: unknown, allowed: OpsRole[]): OpsRole | unde
 export function requireOpsRole(
   context: functions.https.CallableContext,
   allowed: OpsRole[]
-): { uid: string; role: OpsRole } {
+): { uid: string; role: OpsRole; requestId: string } {
   requireAppCheck(context);
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -49,7 +59,7 @@ export function requireOpsRole(
       "Your operations role does not permit this action"
     );
   }
-  return { uid, role: matched };
+  return { uid, role: matched, requestId: requestIdFromContext(context) };
 }
 
 export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system" | "critical";
