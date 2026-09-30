@@ -158,6 +158,7 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "SUPPORT_TICKET_STATUS_UPDATED",
       targetCollection: "supportTickets",
       targetId: ticketId,
@@ -270,6 +271,7 @@ export const updateProfileReportStatus = functions.https.onCall(async (data, con
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "PROFILE_REPORT_STATUS_UPDATED",
       targetCollection: "profileReports",
       targetId: reportId,
@@ -535,6 +537,7 @@ export const setAccountEnforcement = functions.https.onCall(async (data, context
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "ACCOUNT_ENFORCEMENT_UPDATED",
       targetCollection: "users",
       targetId: targetUid,
@@ -712,6 +715,7 @@ export const getVerificationReviewCase = functions.https.onCall(async (data, con
   await db.collection("opsAuditLog").add({
     actorUid: actor.uid,
     actorRole: actor.role,
+    requestId: actor.requestId,
     action: "VERIFICATION_DOCUMENT_ACCESSED",
     targetCollection: "verificationRequests",
     targetId: targetUid,
