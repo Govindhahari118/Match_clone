@@ -30,6 +30,14 @@ export function requestIdFromContext(
   return crypto.randomUUID();
 }
 
+export function operatorMfaSatisfied(token: unknown): boolean {
+  if (!token || typeof token !== "object") return false;
+  const firebaseClaim = (token as { firebase?: unknown }).firebase;
+  if (!firebaseClaim || typeof firebaseClaim !== "object") return false;
+  const factor = (firebaseClaim as { sign_in_second_factor?: unknown }).sign_in_second_factor;
+  return typeof factor === "string" && factor.trim().length > 0;
+}
+
 export type OpsRole =
   | "support"
   | "moderator"
@@ -59,6 +67,15 @@ export function requireOpsRole(
       "Your operations role does not permit this action"
     );
   }
+
+  const enforceOpsMfa = functions.config().security?.enforce_ops_mfa === "true";
+  if (enforceOpsMfa && !operatorMfaSatisfied(context.auth?.token)) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Operations access requires multi-factor authentication"
+    );
+  }
+
   return { uid, role: matched, requestId: requestIdFromContext(context) };
 }
 
