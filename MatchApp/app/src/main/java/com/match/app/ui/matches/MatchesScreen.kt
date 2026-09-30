@@ -373,6 +373,20 @@ private fun QuickFilters(filter: MatchFilter, onChange: (MatchFilter) -> Unit, o
         }
         item {
             FilterChip(
+                selected = filter.minMutualMatchPercent >= 90,
+                onClick = {
+                    onChange(
+                        filter.copy(
+                            minMutualMatchPercent =
+                                if (filter.minMutualMatchPercent >= 90) 0 else 90
+                        )
+                    )
+                },
+                label = { Text("90%+ mutual") }
+            )
+        }
+        item {
+            FilterChip(
                 selected = filter.verifiedOnly,
                 onClick = { onChange(filter.copy(verifiedOnly = !filter.verifiedOnly)) },
                 label = { Text("Verified") }
@@ -497,6 +511,10 @@ private fun DiscoveryCard(
         .filter { it.isNotBlank() }
         .joinToString(" • ")
     val supporting = buildList {
+        result.mutualPreferenceScore?.let { score ->
+            val percent = (score.coerceIn(0f, 1f) * 100f).toInt()
+            add(if (percent >= 90) "${percent}% strong mutual match" else "${percent}% mutual preferences")
+        }
         if (p.education.isNotBlank()) add(p.education)
         if (p.maritalStatus.isNotBlank()) add(p.maritalStatus)
         if (p.heightCm > 0) add("${p.heightCm} cm")
@@ -739,6 +757,7 @@ private fun recentlyJoinedLabel(days: Int) = when (days) { 7 -> "Last 7 days"; 3
 private fun activeFilterCount(f: MatchFilter): Int = listOf(
     f.ageMin != 18 || f.ageMax != 70,
     f.heightMinCm != 90 || f.heightMaxCm != 250,
+    f.minMutualMatchPercent > 0,
     f.city.isNotBlank(), f.state.isNotBlank(), f.caste.isNotBlank(), f.subCaste.isNotBlank(),
     f.religion.isNotBlank(), f.faithTradition.isNotBlank(), f.faithSubTradition.isNotBlank(),
     f.faithInstitution.isNotBlank(), f.motherTongue.isNotBlank(), f.maritalStatus.isNotBlank(),
