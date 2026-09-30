@@ -33,3 +33,5 @@ export * from "./familyDelegation";
 export * from "./profilePrivacyMigration";
 
 export * from "./ops";
+
+export * from "./questionnaire";
