@@ -295,16 +295,6 @@ export const discoverProfiles = functions
         "Discovery is unavailable while your matrimony account is not active"
       );
     }
-    if (!discoveryActorReady(
-      viewer,
-      viewerPrivateDoc.data() || {},
-      viewerPreferencesDoc.data()
-    )) {
-      throw new functions.https.HttpsError(
-        "failed-precondition",
-        "Complete your required profile and partner preferences first"
-      );
-    }
     const viewerPartnerPreferences = normalizePartnerPreferences(
       viewerPreferencesRaw
     );
