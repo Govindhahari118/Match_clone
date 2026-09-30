@@ -712,10 +712,9 @@ export function bilateralPreferenceMatch(
 ): BilateralPreferenceMatch {
   const forward = activePreferenceFit(viewerPreferences, candidate);
   const reverse = activePreferenceFit(candidatePreferences, viewer);
-  let mutual: number | null = null;
-  if (forward != null && reverse != null) mutual = Math.min(forward, reverse);
-  else if (forward != null) mutual = forward;
-  else if (reverse != null) mutual = reverse;
+  const mutual = forward != null && reverse != null
+    ? Math.min(forward, reverse)
+    : null;
   return {
     forward,
     reverse,
