@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck, requireProductionFeature } from "./shared";
+import { db, requireAppCheck } from "./shared";
 import {
   activityVisibilityAllows,
   normalizeActivityVisibility,
