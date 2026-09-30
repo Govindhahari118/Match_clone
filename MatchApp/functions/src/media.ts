@@ -199,7 +199,6 @@ export const reviewProfilePhoto = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("invalid-argument", "Invalid photo moderation case");
   }
   const decision = reviewDecision(data?.decision);
-  if (decision === "APPROVED") requireProductionFeature("video_profiles");
   const reason = reviewReason(data?.reason);
 
   const moderationRef = db.collection("photoModeration").doc(moderationId);
