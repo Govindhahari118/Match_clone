@@ -1,10 +1,12 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import { createHash } from "crypto";
 import { db, requireAppCheck, requireOpsRole } from "./shared";
 import { computeTrustPolicy, normalizeRiskLevel, TrustRiskLevel } from "./trustPolicy";
 import {
   PROFILE_MUTATION_REVIEW_THRESHOLD_PER_DAY,
   profileMutationFieldsChanged,
+  normalizeBioForDuplicateReview,
 } from "./riskSignalPolicy";
 
 function millis(value: unknown): number {
@@ -226,6 +228,74 @@ export const onRapidProfileMutationRiskSignal = functions.firestore
         tx.set(signalRef, {
           rapidProfileMutationDayCount: admin.firestore.FieldValue.increment(1),
           lastRapidProfileMutationSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    });
+  });
+
+
+function bioFingerprint(value: unknown): string | undefined {
+  const normalized = normalizeBioForDuplicateReview(value);
+  return normalized
+    ? createHash("sha256").update(normalized, "utf8").digest("hex")
+    : undefined;
+}
+
+/**
+ * Detects substantially identical long bios across accounts using a one-way normalized fingerprint.
+ * No bio text is copied to the risk collection and duplicate evidence never punishes automatically.
+ * Deleted/changed bios remove the owner from the previous fingerprint.
+ */
+export const onProfileBioDuplicateRiskSignal = functions.firestore
+  .document("users/{uid}")
+  .onWrite(async (change, context) => {
+    const uid = context.params.uid;
+    const beforeHash = change.before.exists ? bioFingerprint(change.before.data()?.bio) : undefined;
+    const afterHash = change.after.exists ? bioFingerprint(change.after.data()?.bio) : undefined;
+    if (beforeHash === afterHash) return;
+
+    const beforeRef = beforeHash ? db.collection("bioFingerprints").doc(beforeHash) : null;
+    const afterRef = afterHash ? db.collection("bioFingerprints").doc(afterHash) : null;
+    const signalRef = db.collection("riskSignals").doc(uid);
+
+    await db.runTransaction(async (tx) => {
+      const [beforeSnap, afterSnap] = await Promise.all([
+        beforeRef ? tx.get(beforeRef) : Promise.resolve(null),
+        afterRef ? tx.get(afterRef) : Promise.resolve(null),
+      ]);
+
+      if (beforeRef && beforeSnap?.exists) {
+        const previousOwners = Array.isArray(beforeSnap.data()?.owners)
+          ? beforeSnap.data()?.owners.filter((owner: unknown): owner is string =>
+            typeof owner === "string" && owner !== uid && owner.length <= 128)
+          : [];
+        if (previousOwners.length) {
+          tx.set(beforeRef, {
+            owners: previousOwners.slice(0, 50),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        } else {
+          tx.delete(beforeRef);
+        }
+      }
+
+      if (!afterRef) return;
+      const owners = afterSnap?.exists && Array.isArray(afterSnap.data()?.owners)
+        ? afterSnap.data()?.owners.filter((owner: unknown): owner is string =>
+          typeof owner === "string" && owner.length <= 128)
+        : [];
+      const duplicateAcrossAccounts = owners.some((owner: string) => owner !== uid);
+      if (!owners.includes(uid)) {
+        tx.set(afterRef, {
+          owners: [...owners.slice(0, 49), uid],
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      if (duplicateAcrossAccounts) {
+        tx.set(signalRef, {
+          duplicateBioSignalCount: admin.firestore.FieldValue.increment(1),
+          lastDuplicateBioSignalAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
       }
