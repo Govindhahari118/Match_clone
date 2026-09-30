@@ -183,6 +183,14 @@ def main() -> int:
     require('subscriptionPlan: "FREE"' not in users_functions,
             "new user creation must not seed public billing metadata", failures)
 
+    require("profileVideoOrphans" in users_functions,
+            "account deletion must remove profile-video orphan records", failures)
+    require('chatMediaOrphans").where("senderUid", "==", uid)' in users_functions and
+            'chatMediaOrphans").where("recipientUid", "==", uid)' in users_functions,
+            "account deletion must erase chat-media orphan ownership in both directions", failures)
+    require("removeUidFromBioFingerprints(uid)" in users_functions,
+            "account deletion must remove copied-bio fingerprint ownership deterministically", failures)
+
 
     verification_functions = text(ROOT / "functions/src/verification.ts")
     verification_screen = text(
