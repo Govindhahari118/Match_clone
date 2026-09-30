@@ -22,6 +22,15 @@ The following may be committed because they contain no production secret: Fireba
 Remote Config key names/defaults, public package IDs, feature flag names, API contracts, and templates
 whose production values are blank/false.
 
+## Current Cloud Functions secret names
+
+The Google Play verification runtime expects these deployment secrets:
+
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL`
+- `GOOGLE_PLAY_PRIVATE_KEY`
+
+They are backend-only and must never be exposed to Android, Remote Config, logs or release artifacts.
+
 ## Cloud Functions runtime configuration
 
 The code currently reads `security.enforce_app_check` as the staged callable-enforcement switch.
