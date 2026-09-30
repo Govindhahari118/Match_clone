@@ -8,7 +8,7 @@ const {
 } = require("../lib/recommendationPolicy");
 
 test("behavioral reranking is versioned and bounded", () => {
-  assert.equal(DISCOVERY_RANKING_VERSION, "discovery-v3-consented-behavioral");
+  assert.equal(DISCOVERY_RANKING_VERSION, "discovery-v4-reciprocal-preferences");
   assert.equal(behavioralAdjustment(undefined), 0);
   assert.equal(
     behavioralAdjustment({
