@@ -76,8 +76,35 @@ service cloud.firestore {
         'photoUrl','videoUrl'
       ]);
     }
+    function publicDiscoveryProfileReady(data) {
+      return data.get('username', '') is string &&
+             data.get('username', '').size() >= 3 &&
+             data.get('displayName', '') is string &&
+             data.get('displayName', '').size() >= 2 &&
+             data.get('age', 0) is int &&
+             data.get('age', 0) >= 18 &&
+             data.get('age', 0) <= 99 &&
+             data.get('state', '') is string &&
+             data.get('state', '').size() > 0 &&
+             data.get('city', '') is string &&
+             data.get('city', '').size() >= 2 &&
+             data.get('motherTongue', '') is string &&
+             data.get('motherTongue', '').size() > 0 &&
+             data.get('religion', '') is string &&
+             data.get('religion', '').size() > 0 &&
+             data.get('education', '') is string &&
+             data.get('education', '').size() > 0 &&
+             data.get('profession', '') is string &&
+             data.get('profession', '').size() >= 2 &&
+             data.get('maritalStatus', '') is string &&
+             data.get('maritalStatus', '').size() > 0 &&
+             data.get('heightCm', 0) is int &&
+             data.get('heightCm', 0) >= 90 &&
+             data.get('heightCm', 0) <= 250;
+    }
     function peerReadableAccount(data) {
-      return !('accountStatus' in data) || data.accountStatus == 'ACTIVE';
+      return (!('accountStatus' in data) || data.accountStatus == 'ACTIVE') &&
+             publicDiscoveryProfileReady(data);
     }
     function activeAccount(uid) {
       return exists(/databases/$(database)/documents/users/$(uid)) &&
