@@ -11,7 +11,6 @@ import com.match.app.service.MatchFcmService
 import com.match.app.ui.common.ProtectedFirebaseStorageFetcher
 import com.match.app.ui.common.ProtectedFirebaseStorageKeyer
 import com.match.app.ui.common.ProtectedFirebaseStorageMapper
-import com.match.app.worker.DailyMatchDigestWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -49,7 +48,6 @@ class AppEntry : Application(), Configuration.Provider, ImageLoaderFactory {
 
         FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
         MatchFcmService.createNotificationChannel(this)
-        DailyMatchDigestWorker.schedule(this)
         remoteConfig.fetchAndActivate()
     }
 }
