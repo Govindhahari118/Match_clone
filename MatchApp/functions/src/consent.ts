@@ -153,8 +153,10 @@ export const getConsentState = functions.https.onCall(async (_data, context) => 
 export const onLocationConsentChanged = functions.firestore
   .document("consents/{uid}/items/location")
   .onWrite(async (change, context) => {
-    const after = change.after.exists ? change.after.data() : undefined;
-    if (after?.granted === true) return;
+    const after = change.after.exists
+      ? change.after.data() as Record<string, unknown>
+      : undefined;
+    if (isCurrentConsentRecord("location", after)) return;
     await db.collection("userLocations").doc(context.params.uid).delete();
   });
 
