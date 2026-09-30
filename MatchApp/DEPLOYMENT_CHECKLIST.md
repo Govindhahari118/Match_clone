@@ -95,6 +95,7 @@ Google Play Billing is server-authoritative. Do not trust a client purchase call
 - [x] Remote user media paths use Firebase Auth UID, not local Room numeric IDs.
 - [x] Chat image/voice media has authenticated participant metadata/rules.
 - [ ] Test profile photo upload → moderation queue → short-lived operator review → approve/reject → approved primary-photo publication between devices.
+- [ ] Keep Video Profile fail-closed with Remote Config `show_video_profiles=false` and backend Functions config `features.video_profiles=false` until real-device upload/playback and moderation evidence pass; disabled direct uploads are expected to be purged server-side.
 - [ ] Test chat image and voice upload/download between two release devices.
 - [ ] Test retry after temporary network loss and verify failed uploads are not shown as successful cloud media.
 - [x] Backend records valid unreferenced chat-media uploads in a server-only orphan ledger and scheduled cleanup re-checks the canonical message before deleting stale bytes.
@@ -113,7 +114,7 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Server filters self, stale locations, either-direction blocks, stealth profiles and incompatible gender preferences.
 - [x] User can explicitly stop sharing and delete the stored location.
 - [x] Exact location expires after 24 hours without refresh and is deleted immediately on stop-sharing, consent withdrawal or account deletion.
-- [ ] Keep Remote Config `enable_nearby=false` until production location/security/load evidence passes; deploy and validate location Functions before enabling.
+- [ ] Keep Remote Config `enable_nearby=false` **and** backend Functions config `features.nearby=false` until production location/security/load evidence passes; enable both only after validating the location Functions on the exact release.
 - [ ] Real-device test: denied permission, approximate permission, precise permission, GPS/network provider, location services off, no results, 5/25/100 km radii, block/stealth behavior and stop-sharing.
 - [x] Repository Privacy/Data Safety drafts explicitly describe opt-in foreground Nearby location, approximate/precise behavior, server-only exact coordinates, purpose, stop-sharing and deletion behavior.
 - [ ] Final legal/Data Safety wording and retention obligations are approved against the exact production deployment.
@@ -123,6 +124,7 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Durable partner preferences are separate from transient discovery filters and support STRICT / PREFERRED / NO_PREFERENCE.
 - [x] Discovery enforces strict preferences bilaterally and uses bilateral preferred fit for ordering.
 - [ ] Test partner preferences across devices, including strict exclusion, preferred ordering and deliberate no-preference choices.
+- [ ] Keep Kundali fail-closed with Remote Config `enable_kundali=false` and backend Functions config `features.kundali=false` until the versioned Rasi/Nakshatra reference policy is independently validated.
 - [ ] Discovery on a fresh second device shows authorized server-backed profiles without relying on demo/seed Room data.
 - [ ] Sent/received interests and mutual matches stay consistent across two devices.
 - [ ] Shortlists stay consistent across devices.
