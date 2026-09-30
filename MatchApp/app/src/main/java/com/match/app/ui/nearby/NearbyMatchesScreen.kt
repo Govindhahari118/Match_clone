@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.LocationRepository
 import com.match.app.data.repo.NearbyProfile
 import com.match.app.ui.components.MatreeHero
@@ -60,12 +61,16 @@ data class NearbyUiState(
     val permissionGranted: Boolean = false,
     val precisePermission: Boolean = false,
     val locationServicesEnabled: Boolean = true,
+    val locationConsentCurrent: Boolean = false,
+    val locationConsentVersion: String = "",
+    val consentSaving: Boolean = false,
     val error: String? = null
 )
 
 @HiltViewModel
 class NearbyViewModel @Inject constructor(
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(
         NearbyUiState(
@@ -89,18 +94,38 @@ class NearbyViewModel @Inject constructor(
     fun loadStatus(radiusKm: Int) = viewModelScope.launch {
         syncPermissionState()
         _ui.update { it.copy(statusLoading = true, error = null) }
+        val consentResult = runCatching {
+            consentRepository.getState().firstOrNull { it.purpose == "location" }
+        }
+        val consent = consentResult.getOrNull()
+        _ui.update {
+            it.copy(
+                locationConsentCurrent = consent?.isCurrent == true,
+                locationConsentVersion = consent?.noticeVersion.orEmpty()
+            )
+        }
+        if (consentResult.isFailure) {
+            _ui.update {
+                it.copy(
+                    statusLoading = false,
+                    error = "Unable to load the current Nearby privacy choice."
+                )
+            }
+            return@launch
+        }
+
         runCatching { locationRepository.getSharingStatus() }
             .onSuccess { status ->
                 _ui.update {
                     it.copy(
                         statusLoading = false,
-                        sharingLocation = status.sharing,
-                        lastSharedAt = status.updatedAtMillis,
-                        expiresAt = status.expiresAtMillis,
+                        sharingLocation = status.sharing && it.locationConsentCurrent,
+                        lastSharedAt = if (status.sharing && it.locationConsentCurrent) status.updatedAtMillis else 0L,
+                        expiresAt = if (status.sharing && it.locationConsentCurrent) status.expiresAtMillis else 0L,
                         error = null
                     )
                 }
-                if (status.sharing) searchStored(radiusKm)
+                if (status.sharing && _ui.value.locationConsentCurrent) searchStored(radiusKm)
             }
             .onFailure { error ->
                 _ui.update {
@@ -112,8 +137,44 @@ class NearbyViewModel @Inject constructor(
             }
     }
 
+    fun setLocationConsent(granted: Boolean) = viewModelScope.launch {
+        if (_ui.value.consentSaving) return@launch
+        _ui.update { it.copy(consentSaving = true, error = null) }
+        runCatching {
+            if (!granted) {
+                runCatching { locationRepository.stopSharingLocation() }
+            }
+            consentRepository.set("location", granted)
+            consentRepository.getState().firstOrNull { it.purpose == "location" }
+        }.onSuccess { state ->
+            _ui.update {
+                it.copy(
+                    consentSaving = false,
+                    locationConsentCurrent = state?.isCurrent == true,
+                    locationConsentVersion = state?.noticeVersion.orEmpty(),
+                    sharingLocation = if (state?.isCurrent == true) it.sharingLocation else false,
+                    matches = if (state?.isCurrent == true) it.matches else emptyList(),
+                    lastSharedAt = if (state?.isCurrent == true) it.lastSharedAt else 0L,
+                    expiresAt = if (state?.isCurrent == true) it.expiresAt else 0L
+                )
+            }
+        }.onFailure { error ->
+            _ui.update {
+                it.copy(
+                    consentSaving = false,
+                    error = error.message?.take(200)
+                        ?: "Unable to update the Nearby privacy choice."
+                )
+            }
+        }
+    }
+
     fun enableSharing(radiusKm: Int) = viewModelScope.launch {
         syncPermissionState()
+        if (!_ui.value.locationConsentCurrent) {
+            _ui.update { it.copy(error = "Review and enable the current Nearby location-processing choice first.") }
+            return@launch
+        }
         if (!_ui.value.permissionGranted) {
             _ui.update { it.copy(error = "Allow approximate or precise location to enable Nearby.") }
             return@launch
@@ -195,18 +256,29 @@ class NearbyViewModel @Inject constructor(
 
     fun stopSharing() = viewModelScope.launch {
         _ui.update { it.copy(loading = true, error = null) }
-        runCatching { locationRepository.stopSharingLocation() }
-            .onSuccess {
-                _ui.update {
-                    it.copy(
-                        matches = emptyList(), loading = false, sharingLocation = false,
-                        lastSharedAt = 0L, expiresAt = 0L, error = null
-                    )
-                }
+        runCatching {
+            locationRepository.stopSharingLocation()
+            consentRepository.set("location", false)
+        }.onSuccess {
+            _ui.update {
+                it.copy(
+                    matches = emptyList(),
+                    loading = false,
+                    sharingLocation = false,
+                    locationConsentCurrent = false,
+                    lastSharedAt = 0L,
+                    expiresAt = 0L,
+                    error = null
+                )
             }
-            .onFailure { error ->
-                _ui.update { it.copy(loading = false, error = error.message?.take(200) ?: "Unable to stop location sharing.") }
+        }.onFailure { error ->
+            _ui.update {
+                it.copy(
+                    loading = false,
+                    error = error.message?.take(200) ?: "Unable to stop location sharing."
+                )
             }
+        }
     }
 }
 
@@ -229,7 +301,7 @@ fun NearbyMatchesScreen(
         vm.syncPermissionState()
         val granted = grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
             grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        if (granted) vm.enableSharing(radius.toInt())
+        if (granted) vm.syncPermissionState()
     }
 
     LaunchedEffect(Unit) { vm.loadStatus(radius.toInt()) }
@@ -286,17 +358,48 @@ fun NearbyMatchesScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Nearby location processing",
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "Enable this choice if you want Matree to store your current Nearby point for up to 24 hours and use it to return coarse distance ranges.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (ui.locationConsentVersion.isNotBlank()) {
+                                    Text(
+                                        "Notice version ${ui.locationConsentVersion}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                            Switch(
+                                checked = ui.locationConsentCurrent,
+                                onCheckedChange = vm::setLocationConsent,
+                                enabled = !ui.consentSaving && !ui.loading,
+                                modifier = Modifier.testTag("nearby_location_consent")
+                            )
+                        }
                         if (ui.permissionGranted) {
                             MatreePrimaryButton(
                                 text = "Enable Nearby",
                                 icon = Icons.Filled.MyLocation,
                                 onClick = { vm.enableSharing(radius.toInt()) },
-                                enabled = !ui.loading && ui.locationServicesEnabled,
+                                enabled = !ui.loading && !ui.consentSaving &&
+                                    ui.locationServicesEnabled && ui.locationConsentCurrent,
                                 modifier = Modifier.fillMaxWidth().testTag("nearby_enable")
                             )
                         } else {
                             MatreePrimaryButton(
-                                text = "Allow location & enable",
+                                text = "Allow location permission",
                                 icon = Icons.Filled.MyLocation,
                                 onClick = {
                                     permissionLauncher.launch(
@@ -306,7 +409,7 @@ fun NearbyMatchesScreen(
                                         )
                                     )
                                 },
-                                enabled = !ui.loading,
+                                enabled = !ui.loading && !ui.consentSaving && ui.locationConsentCurrent,
                                 modifier = Modifier.fillMaxWidth().testTag("nearby_enable_location")
                             )
                             if (requestedPermission) {
