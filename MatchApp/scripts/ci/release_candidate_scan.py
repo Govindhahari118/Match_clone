@@ -134,6 +134,23 @@ def main() -> int:
     require('requireProductionFeature("kundali")' in horoscope_functions,
             "Kundali backend callable must enforce the rollout gate", failures)
 
+
+    play_billing = text(ROOT / "functions/src/playBilling.ts")
+    interests_functions = text(ROOT / "functions/src/interests.ts")
+    privacy_functions = text(ROOT / "functions/src/privacy.ts")
+    discovery_functions = text(ROOT / "functions/src/discovery.ts")
+    users_functions = text(ROOT / "functions/src/users.ts")
+    require('"membershipActive"' in play_billing and 'getMyMembershipStatus' in play_billing,
+            "Play billing must persist and expose private membership authority", failures)
+    require('resolveMembershipState' in interests_functions,
+            "interest quota authorization must resolve private membership state", failures)
+    require('resolveMembershipState' in privacy_functions,
+            "contact reveal authorization must resolve private membership state", failures)
+    require('resolveMembershipState' in discovery_functions,
+            "discovery premium badge/filter must resolve private membership state", failures)
+    require('subscriptionPlan: "FREE"' not in users_functions,
+            "new user creation must not seed public billing metadata", failures)
+
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
     ignore = gitignore + "\n" + local_gitignore
