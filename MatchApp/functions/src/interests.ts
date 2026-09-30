@@ -8,6 +8,10 @@ import {
   discoveryCandidateReady,
 } from "./discoveryEligibilityPolicy";
 import {
+  normalizePartnerPreferences,
+  strictPreferencesAllow,
+} from "./partnerPreferencesPolicy";
+import {
   HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD,
   MAX_DAILY_INTERESTS_SAFETY,
   crossesThreshold,
@@ -146,6 +150,18 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     }
     if (!genderCompatible(sender, target)) {
       throw new functions.https.HttpsError("failed-precondition", "This profile is outside mutual partner preferences");
+    }
+
+    const senderPreferences = normalizePartnerPreferences(senderPreferencesSnap.data());
+    const targetPreferences = normalizePartnerPreferences(targetPreferencesSnap.data());
+    if (
+      !strictPreferencesAllow(senderPreferences, target) ||
+      !strictPreferencesAllow(targetPreferences, sender)
+    ) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This profile is outside mutual strict partner preferences"
+      );
     }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
