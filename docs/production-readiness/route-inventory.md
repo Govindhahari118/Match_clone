@@ -20,7 +20,7 @@
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
 | Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production is fail-closed behind Android Remote Config `enable_nearby` **and** backend Functions config `features.nearby=true`; production location/load evidence is required before enabling both. |
-| NRI discovery | BETA / OFF BY DEFAULT | Real server-authorized NRI filtering with reciprocal preferences/privacy and no synthetic inventory. Dedicated NRI filters are fail-closed behind Android Remote Config `enable_nri_features` **and** backend Functions config `features.nri_features=true`; ordinary country fields and saved NRI partner preferences remain core matching data. |
+| NRI discovery | BETA / OFF BY DEFAULT | Convenience route over Matree's normal server-authorized NRI/country filters with reciprocal preferences/privacy and no synthetic inventory. The dedicated route is hidden behind Android Remote Config `enable_nri_features`; NRI/country filters themselves remain core discovery and saved-preference capabilities. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
 | Messages list | READY | Real conversations only. |
@@ -95,4 +95,4 @@ the same release candidate.
 
 ## Fail-closed release promotion
 
-BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. Nearby, Kundali, dedicated NRI discovery and Video Profile additionally require explicit backend Functions feature flags, so a modified client cannot promote those capabilities by invoking callables directly. Video uploads made while the backend feature is disabled are deleted by a Storage trigger. A direct navigation attempt while disabled renders a truthful unavailable state rather than entering the feature.
+BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. Nearby, Kundali and Video Profile additionally require explicit backend Functions feature flags, so a modified client cannot promote those capabilities by invoking callables directly. Video uploads made while the backend feature is disabled are deleted by a Storage trigger. A direct navigation attempt while disabled renders a truthful unavailable state rather than entering the feature.
