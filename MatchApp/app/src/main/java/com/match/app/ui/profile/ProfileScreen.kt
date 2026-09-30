@@ -31,6 +31,7 @@ import coil.compose.AsyncImage
 import com.match.app.data.local.entity.PhotoEntity
 import com.match.app.data.remote.ProfileAnalyticsService
 import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.repo.ShortlistRepository
 import com.match.app.data.repo.SocialRepository
@@ -42,6 +43,7 @@ import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
 import com.match.app.ui.components.MatreeActionCard
+import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
@@ -49,6 +51,7 @@ import com.match.app.ui.components.MatreeProfileHeader
 import com.match.app.ui.components.MatreeProgressCard
 import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeProfileSection
+import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -66,13 +69,26 @@ class ProfileViewModel @Inject constructor(
     private val social: SocialRepository,
     private val shortlistRepo: ShortlistRepository,
     private val analyticsService: ProfileAnalyticsService,
-    private val trustRepository: TrustRepository
+    private val trustRepository: TrustRepository,
+    private val consentRepository: ConsentRepository
 ) : ViewModel() {
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
 
     private val _trustSummary = MutableStateFlow<TrustSummary?>(null)
     val trustSummary: StateFlow<TrustSummary?> = _trustSummary.asStateFlow()
+
+    private val _mediaConsentCurrent = MutableStateFlow(false)
+    val mediaConsentCurrent: StateFlow<Boolean> = _mediaConsentCurrent.asStateFlow()
+
+    private val _mediaConsentVersion = MutableStateFlow("")
+    val mediaConsentVersion: StateFlow<String> = _mediaConsentVersion.asStateFlow()
+
+    private val _mediaConsentSaving = MutableStateFlow(false)
+    val mediaConsentSaving: StateFlow<Boolean> = _mediaConsentSaving.asStateFlow()
+
+    private val _photoError = MutableStateFlow<String?>(null)
+    val photoError: StateFlow<String?> = _photoError.asStateFlow()
 
     val photos: StateFlow<List<PhotoEntity>> = session.userId.filterNotNull()
         .flatMapLatest { photoRepo.observe(it) }
@@ -116,11 +132,51 @@ class ProfileViewModel @Inject constructor(
                 }
             }
         }
+        refreshMediaConsent()
+    }
+
+    private fun refreshMediaConsent() = viewModelScope.launch {
+        runCatching {
+            consentRepository.getState().firstOrNull { it.purpose == "media_processing" }
+        }.onSuccess { state ->
+            _mediaConsentCurrent.value = state?.isCurrent == true
+            _mediaConsentVersion.value = state?.noticeVersion.orEmpty()
+        }.onFailure {
+            _mediaConsentCurrent.value = false
+            _photoError.value = "Could not load the current media-processing choice."
+        }
+    }
+
+    fun setMediaConsent(granted: Boolean) = viewModelScope.launch {
+        if (_mediaConsentSaving.value) return@launch
+        _mediaConsentSaving.value = true
+        _photoError.value = null
+        runCatching {
+            consentRepository.set("media_processing", granted)
+            consentRepository.getState().firstOrNull { it.purpose == "media_processing" }
+        }.onSuccess { state ->
+            _mediaConsentCurrent.value = state?.isCurrent == true
+            _mediaConsentVersion.value = state?.noticeVersion.orEmpty()
+        }.onFailure {
+            _photoError.value = "Could not update media-processing consent. Please try again."
+        }
+        _mediaConsentSaving.value = false
     }
 
     fun importPhoto(uri: Uri) = viewModelScope.launch {
+        if (!_mediaConsentCurrent.value) {
+            _photoError.value = "Enable media processing before uploading a profile photo."
+            return@launch
+        }
         val uid = session.userId.first() ?: return@launch
         photoRepo.import(uid, uri)
+            .onFailure { error ->
+                _photoError.value = error.message?.take(180) ?: "Photo upload failed."
+            }
+    }
+
+    fun clearPhotoError() {
+        _photoError.value = null
     }
 
     fun setPrimary(photo: PhotoEntity) = viewModelScope.launch { photoRepo.setPrimary(photo.userId, photo.id) }
@@ -157,6 +213,10 @@ fun ProfileScreen(
     val likeCount by vm.likeCount.collectAsState()
     val savedCount by vm.savedCount.collectAsState()
     val trustSummary by vm.trustSummary.collectAsState()
+    val mediaConsentCurrent by vm.mediaConsentCurrent.collectAsState()
+    val mediaConsentVersion by vm.mediaConsentVersion.collectAsState()
+    val mediaConsentSaving by vm.mediaConsentSaving.collectAsState()
+    val photoError by vm.photoError.collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::importPhoto) }
 
     val p = profile
@@ -245,7 +305,17 @@ fun ProfileScreen(
 
         if (p.bio.isNotBlank()) ProfileSection("About me") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
 
-        PhotosSection(photos, picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, vm = vm)
+        PhotosSection(
+            photos = photos,
+            mediaConsentCurrent = mediaConsentCurrent,
+            mediaConsentVersion = mediaConsentVersion,
+            mediaConsentSaving = mediaConsentSaving,
+            photoError = photoError,
+            onMediaConsentChange = vm::setMediaConsent,
+            onDismissError = vm::clearPhotoError,
+            picker = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            vm = vm
+        )
 
         Column(Modifier.padding(horizontal = spacing.md), verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
             MatreePrimaryButton(
@@ -447,13 +517,68 @@ private fun InfoRow(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun PhotosSection(photos: List<PhotoEntity>, picker: () -> Unit, vm: ProfileViewModel) {
+private fun PhotosSection(
+    photos: List<PhotoEntity>,
+    mediaConsentCurrent: Boolean,
+    mediaConsentVersion: String,
+    mediaConsentSaving: Boolean,
+    photoError: String?,
+    onMediaConsentChange: (Boolean) -> Unit,
+    onDismissError: () -> Unit,
+    picker: () -> Unit,
+    vm: ProfileViewModel
+) {
     Column(Modifier.padding(horizontal = MatreeDesign.spacing.md)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Photos", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = picker, modifier = Modifier.testTag("btn_add_photo")) { Icon(Icons.Filled.AddAPhoto, null, Modifier.size(16.dp)); Spacer(Modifier.size(4.dp)); Text("Add") }
+            OutlinedButton(
+                onClick = picker,
+                enabled = mediaConsentCurrent && !mediaConsentSaving,
+                modifier = Modifier.testTag("btn_add_photo")
+            ) {
+                Icon(Icons.Filled.AddAPhoto, null, Modifier.size(16.dp))
+                Spacer(Modifier.size(4.dp))
+                Text("Add")
+            }
         }
         Spacer(Modifier.height(MatreeDesign.spacing.xs))
+
+        MatreeInfoCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Media processing", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Profile photos are uploaded to protected storage and reviewed before publication. Enable this choice only if you want Matree to process uploaded profile media.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (mediaConsentVersion.isNotBlank()) {
+                        Text(
+                            "Notice version $mediaConsentVersion",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                Switch(
+                    checked = mediaConsentCurrent,
+                    onCheckedChange = onMediaConsentChange,
+                    enabled = !mediaConsentSaving,
+                    modifier = Modifier.testTag("profile_media_consent")
+                )
+            }
+        }
+
+        if (photoError != null) {
+            MatreeInlineNotice(
+                message = photoError,
+                icon = Icons.Filled.ErrorOutline,
+                tone = MatreeStatusTone.ERROR
+            )
+            TextButton(onClick = onDismissError) { Text("Dismiss") }
+        }
+
         if (photos.isEmpty()) {
             MatreeInlineNotice(
                 message = "Add clear recent photos to improve trust.",
