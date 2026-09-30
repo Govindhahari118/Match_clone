@@ -737,6 +737,7 @@ export const onChatMediaUploaded = functions.storage.object().onFinalize(async (
         messageId,
         extension,
         senderUid,
+        recipientUid,
         createdAtMillis,
         expiresAt: admin.firestore.Timestamp.fromMillis(
           createdAtMillis + CHAT_MEDIA_ORPHAN_TTL_MS
