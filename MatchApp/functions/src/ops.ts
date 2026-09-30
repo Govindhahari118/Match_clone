@@ -749,6 +749,7 @@ export const listRiskReviewQueue = functions.https.onCall(async (data, context) 
         uid: doc.id,
         reportSignalCount: Number(value.reportSignalCount || 0),
         duplicatePhotoSignalCount: Number(value.duplicatePhotoSignalCount || 0),
+        duplicateBioSignalCount: Number(value.duplicateBioSignalCount || 0),
         highVolumeInterestDayCount: Number(value.highVolumeInterestDayCount || 0),
         highVolumeMessageDayCount: Number(value.highVolumeMessageDayCount || 0),
         externalLinkMessageCount: Number(value.externalLinkMessageCount || 0),
