@@ -9,7 +9,10 @@ import kotlinx.coroutines.tasks.await
 
 data class DiscoveryProfileCandidate(
     val profile: UserEntity,
-    val pairPreferenceFit: Float?
+    val pairPreferenceFit: Float?,
+    val forwardPreferenceFit: Float? = null,
+    val reversePreferenceFit: Float? = null,
+    val mutualPreferenceFit: Float? = null
 )
 
 /**
@@ -45,6 +48,7 @@ class FirestorePagingSource(
             "ageMax" to filter.ageMax,
             "heightMinCm" to filter.heightMinCm,
             "heightMaxCm" to filter.heightMaxCm,
+            "minMutualMatchPercent" to filter.minMutualMatchPercent.coerceIn(0, 100),
             "withPhotoOnly" to filter.withPhotoOnly,
             "verifiedOnly" to filter.verifiedOnly,
             "premiumOnly" to filter.premiumOnly,
@@ -180,6 +184,15 @@ class FirestorePagingSource(
             DiscoveryProfileCandidate(
                 profile = entity,
                 pairPreferenceFit = (raw["pairPreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                forwardPreferenceFit = (raw["forwardPreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                reversePreferenceFit = (raw["reversePreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                mutualPreferenceFit = (raw["mutualPreferenceFit"] as? Number)
                     ?.toFloat()
                     ?.coerceIn(0f, 1f)
             )
