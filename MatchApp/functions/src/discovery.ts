@@ -6,7 +6,7 @@ import {
   normalizeActivityVisibility,
 } from "./activityVisibilityPolicy";
 import {
-  bilateralPreferredFit,
+  bilateralPreferenceMatch,
   normalizePartnerPreferences,
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
@@ -274,6 +274,7 @@ export const discoverProfiles = functions
     const requireQuestionnaireFit = filterBoolean(data, "requireQuestionnaireFit");
     const includeAstrologyFit = filterBoolean(data, "includeAstrologyFit");
     const requireAstrologyFit = filterBoolean(data, "requireAstrologyFit");
+    const minMutualMatchPercent = filterInt(data, "minMutualMatchPercent", 0, 100);
 
     const [viewerDoc, viewerPreferencesDoc, viewerPrivateDoc] = await Promise.all([
       db.collection("users").doc(viewerUid).get(),
@@ -370,7 +371,10 @@ export const discoverProfiles = functions
       ? candidates.map((doc) => db.collection("questionnaires").doc(doc.id))
       : [];
     const privateFilterRequested =
-      needsPrivateFilterData(data) || includeAstrologyFit || requireAstrologyFit;
+      needsPrivateFilterData(data) ||
+      viewerPartnerPreferences.incomeBandMode !== "NO_PREFERENCE" ||
+      includeAstrologyFit ||
+      requireAstrologyFit;
     const personalizationActive = !keyword &&
       await hasActiveConsent(viewerUid, "personalization");
     const recommendationFeedbackRefs = personalizationActive
@@ -532,7 +536,9 @@ export const discoverProfiles = functions
     const now = Date.now();
     const eligible: Array<{
       doc: FirebaseFirestore.DocumentSnapshot;
-      preferredFit: number | null;
+      forwardPreferenceFit: number | null;
+      reversePreferenceFit: number | null;
+      mutualPreferenceFit: number | null;
       boosted: number;
       behavior: number;
       relevance: number;
@@ -585,26 +591,37 @@ export const discoverProfiles = functions
 
       const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
         normalizePartnerPreferences(undefined);
-      if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
-      if (!strictPreferencesAllow(candidatePartnerPreferences, viewer)) continue;
+      const viewerForPreferences = {
+        ...viewer,
+        incomeBand: viewerPrivate.incomeBand,
+      };
+      if (!strictPreferencesAllow(viewerPartnerPreferences, filterCandidate)) continue;
+      if (!strictPreferencesAllow(candidatePartnerPreferences, viewerForPreferences)) continue;
       if (requireQuestionnaireFit && !questionnaireFitByUid.has(doc.id)) continue;
       if (requireAstrologyFit && !astrologyFitByUid.has(doc.id)) continue;
 
-      const preferredFit = bilateralPreferredFit(
+      const pairPreferenceMatch = bilateralPreferenceMatch(
         viewerPartnerPreferences,
-        viewer,
+        viewerForPreferences,
         candidatePartnerPreferences,
-        candidate
+        filterCandidate
       );
+      if (
+        minMutualMatchPercent > 0 &&
+        (pairPreferenceMatch.mutual == null ||
+          pairPreferenceMatch.mutual * 100 < minMutualMatchPercent)
+      ) continue;
       const behavior = personalizationActive
         ? behavioralAdjustment(feedbackByUid.get(doc.id))
         : 0;
       eligible.push({
         doc,
-        preferredFit,
+        forwardPreferenceFit: pairPreferenceMatch.forward,
+        reversePreferenceFit: pairPreferenceMatch.reverse,
+        mutualPreferenceFit: pairPreferenceMatch.mutual,
         boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
         behavior,
-        relevance: blendedRecommendationRelevance(preferredFit, behavior),
+        relevance: blendedRecommendationRelevance(pairPreferenceMatch.mutual, behavior),
         createdAt: createdAtMillis(candidate),
       });
     }
@@ -619,15 +636,27 @@ export const discoverProfiles = functions
 
     const profiles = rankedCandidates
       .slice(0, RETURN_LIMIT)
-      .map(({ doc, preferredFit }) => {
+      .map(({
+        doc,
+        forwardPreferenceFit,
+        reversePreferenceFit,
+        mutualPreferenceFit,
+      }) => {
         const profile = publicProfile(
           doc.id,
           doc.data() || {},
           membershipActiveByUid.get(doc.id) === true
         );
         const signals: Record<string, number> = {};
-        if (preferredFit != null) {
-          signals.pairPreferenceFit = Math.round(preferredFit * 1000) / 1000;
+        if (mutualPreferenceFit != null) {
+          signals.pairPreferenceFit = Math.round(mutualPreferenceFit * 1000) / 1000;
+          signals.mutualPreferenceFit = Math.round(mutualPreferenceFit * 1000) / 1000;
+        }
+        if (forwardPreferenceFit != null) {
+          signals.forwardPreferenceFit = Math.round(forwardPreferenceFit * 1000) / 1000;
+        }
+        if (reversePreferenceFit != null) {
+          signals.reversePreferenceFit = Math.round(reversePreferenceFit * 1000) / 1000;
         }
         const questionnaireFit = questionnaireFitByUid.get(doc.id);
         if (questionnaireFit != null) {
