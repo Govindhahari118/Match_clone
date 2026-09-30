@@ -155,9 +155,6 @@ export const submitProfilePhoto = functions.https.onCall(async (data, context) =
     }
   });
 
-  await db.collection("profileVideoOrphans").doc(moderationId)
-    .delete()
-    .catch(() => undefined);
   return { moderationId, status: "PENDING", storagePath };
 });
 
@@ -431,6 +428,9 @@ export const submitProfileVideo = functions.https.onCall(async (data, context) =
     });
   });
 
+  await db.collection("profileVideoOrphans").doc(moderationId)
+    .delete()
+    .catch(() => undefined);
   return { moderationId, status: "PENDING", storagePath };
 });
 
