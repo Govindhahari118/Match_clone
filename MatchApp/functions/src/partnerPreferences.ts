@@ -11,7 +11,7 @@ function publicPayload(value: unknown) {
   const normalized = normalizePartnerPreferences(value);
   return {
     ...normalized,
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
 }
 
@@ -27,7 +27,7 @@ export const getPartnerPreferences = functions.https.onCall(async (_data, contex
   const snapshot = await db.collection("partnerPreferences").doc(uid).get();
   return snapshot.exists
     ? publicPayload(snapshot.data())
-    : { ...DEFAULT_PARTNER_PREFERENCES, schemaVersion: 3 };
+    : { ...DEFAULT_PARTNER_PREFERENCES, schemaVersion: 4 };
 });
 
 /**
@@ -50,7 +50,7 @@ export const setPartnerPreferences = functions.https.onCall(async (data, context
 
   await ref.set({
     ...normalized,
-    schemaVersion: 3,
+    schemaVersion: 4,
     createdAt: existing.data()?.createdAt || admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: false });
