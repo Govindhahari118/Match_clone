@@ -25,6 +25,8 @@ store and never written here.
 
 - `security.enforce_app_check=false` during validated pre-enforcement observation.
 - Change to `true` only after the exact release's App Check / Play Integrity device matrix passes.
+- `security.enforce_ops_mfa=false` until every production operator account is enrolled and the
+  console MFA matrix passes; then set it to `true` before production moderation access.
 
 ## Remote Config safe baseline
 
