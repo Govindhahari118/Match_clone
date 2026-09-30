@@ -321,6 +321,7 @@ service cloud.firestore {
     match /riskActivity/{uid}/days/{day} { allow read, write: if false; }
     match /riskActivity/{uid}/messageEvents/{eventId} { allow read, write: if false; }
     match /photoFingerprints/{fingerprintId} { allow read, write: if false; }
+    match /bioFingerprints/{fingerprintId} { allow read, write: if false; }
     match /photoModeration/{caseId} { allow read, write: if false; }
     match /accountEnforcements/{uid} { allow read, write: if false; }
     match /securityEvents/{eventId} { allow read, write: if false; }
