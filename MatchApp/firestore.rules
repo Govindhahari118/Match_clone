@@ -108,7 +108,7 @@ service cloud.firestore {
     }
     function activeAccount(uid) {
       return exists(/databases/$(database)/documents/users/$(uid)) &&
-             peerReadableAccount(get(/databases/$(database)/documents/users/$(uid)).data);
+             get(/databases/$(database)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
     }
     function activePair(uidA, uidB) {
       return activeAccount(uidA) && activeAccount(uidB);
