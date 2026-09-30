@@ -17,6 +17,10 @@ import {
   behavioralAdjustment,
   blendedRecommendationRelevance,
 } from "./recommendationPolicy";
+import {
+  discoveryActorReady,
+  discoveryCandidateReady,
+} from "./discoveryEligibilityPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -259,14 +263,31 @@ export const discoverProfiles = functions
       : "";
     const normalizedUsername = keyword.replace(/^@+/, "");
 
-    const [viewerDoc, viewerPreferencesDoc] = await Promise.all([
+    const [viewerDoc, viewerPreferencesDoc, viewerPrivateDoc] = await Promise.all([
       db.collection("users").doc(viewerUid).get(),
       db.collection("partnerPreferences").doc(viewerUid).get(),
+      db.collection("userPrivate").doc(viewerUid).get(),
     ]);
     if (!viewerDoc.exists) {
       throw new functions.https.HttpsError("failed-precondition", "Complete your profile first");
     }
     const viewer = viewerDoc.data() || {};
+    const viewerPreferencesRaw = viewerPreferencesDoc.exists
+      ? viewerPreferencesDoc.data() as Record<string, unknown>
+      : undefined;
+    const viewerPrivate = viewerPrivateDoc.exists
+      ? viewerPrivateDoc.data() as Record<string, unknown>
+      : {};
+    if (!discoveryActorReady(
+      viewer as Record<string, unknown>,
+      viewerPrivate,
+      viewerPreferencesRaw
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Complete your required profile and partner preferences before using discovery"
+      );
+    }
     const viewerAccountStatus = stringValue(viewer.accountStatus).toUpperCase() || "ACTIVE";
     if (viewerAccountStatus !== "ACTIVE" || viewer.matrimonyPaused === true) {
       throw new functions.https.HttpsError(
@@ -275,7 +296,7 @@ export const discoverProfiles = functions
       );
     }
     const viewerPartnerPreferences = normalizePartnerPreferences(
-      viewerPreferencesDoc.data()
+      viewerPreferencesRaw
     );
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
@@ -491,6 +512,14 @@ export const discoverProfiles = functions
         data,
         now,
         visibleLastActiveByUid.get(doc.id) || 0
+      )) continue;
+
+      const candidatePreferencesRaw = partnerPreferenceDocs[
+        candidates.findIndex((candidateDoc) => candidateDoc.id === doc.id)
+      ]?.data() as Record<string, unknown> | undefined;
+      if (!discoveryCandidateReady(
+        candidate as Record<string, unknown>,
+        candidatePreferencesRaw
       )) continue;
 
       const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
