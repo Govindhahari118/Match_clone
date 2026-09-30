@@ -439,6 +439,9 @@ private fun ActiveFilterSummary(filter: MatchFilter, count: Int, onClear: () -> 
         if (filter.caste.isNotBlank()) add(filter.caste)
         if (filter.subCaste.isNotBlank()) add(filter.subCaste)
         if (filter.ageMin != 18 || filter.ageMax != 70) add("${filter.ageMin}-${filter.ageMax} yrs")
+        if (filter.heightMinCm != 90 || filter.heightMaxCm != 250) {
+            add("${filter.heightMinCm}-${filter.heightMaxCm} cm")
+        }
         if (filter.lastActiveWithinDays > 0) add("Active ≤ ${filter.lastActiveWithinDays}d")
     }
     if (summary.isEmpty() && count == 0) return
@@ -706,11 +709,14 @@ private fun activityLabel(days: Int) = when (days) { 1 -> "Online / today"; 7 ->
 
 private fun activeFilterCount(f: MatchFilter): Int = listOf(
     f.ageMin != 18 || f.ageMax != 70,
+    f.heightMinCm != 90 || f.heightMaxCm != 250,
     f.city.isNotBlank(), f.state.isNotBlank(), f.caste.isNotBlank(), f.subCaste.isNotBlank(),
-    f.religion.isNotBlank(), f.motherTongue.isNotBlank(), f.maritalStatus.isNotBlank(),
+    f.religion.isNotBlank(), f.faithTradition.isNotBlank(), f.faithSubTradition.isNotBlank(),
+    f.faithInstitution.isNotBlank(), f.motherTongue.isNotBlank(), f.maritalStatus.isNotBlank(),
     f.verifiedOnly, f.incomeMin.isNotBlank(), f.incomeMax.isNotBlank(), f.educationLevel.isNotBlank(),
     f.diet.isNotBlank(), f.residentialStatus.isNotBlank(), f.gothra.isNotBlank(), f.nativeState.isNotBlank(),
-    f.countryOfResidence.isNotBlank(), f.nriOnly, f.willingToRelocate, f.recentlyJoinedDays > 0,
+    f.countryOfResidence.isNotBlank(), f.visaStatus.isNotBlank(), f.nriOnly,
+    f.willingToRelocate, f.recentlyJoinedDays > 0,
     f.smoking.isNotBlank(), f.drinking.isNotBlank(), f.familyType.isNotBlank(), f.familyStatus.isNotBlank(),
     f.physicalStatus.isNotBlank(), f.citizenship.isNotBlank(), f.educationField.isNotBlank(),
     f.occupationCategory.isNotBlank(), f.employerType.isNotBlank(), f.nakshatra.isNotBlank(),
