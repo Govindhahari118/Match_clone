@@ -281,6 +281,7 @@ export const approveVerification = functions.https.onCall(async (data, context) 
   batch.set(db.collection("adminAudit").doc(), {
     actorUid: reviewerUid,
     actorRole: reviewer.role,
+    requestId: reviewer.requestId,
     action: "verification.review",
     targetUid,
     before: {
