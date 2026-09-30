@@ -186,6 +186,9 @@ export const onProfileReportRiskSignal = functions.firestore
 // Interest-volume and message-safety signals are owned by interests.ts and messageSafety.ts.
 // Keeping a second Firestore-triggered counter here would double-count the same authoritative
 // action. riskDayKey remains for independent profile-mutation review signals.
+function riskDayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /**
  * Counts rapid edits to member-controlled profile fields as a private review signal. Server-owned
