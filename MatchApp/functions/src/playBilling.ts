@@ -591,10 +591,9 @@ async function reconcileVoidedPurchase(
       .where("entitlementType", "==", entitlementType);
     const userRef = db.collection("users").doc(uid);
     const subscriptionRef = db.collection("subscriptions").doc(uid);
-    const [ledgerSnap, userSnap, subscriptionSnap] = await Promise.all([
+    const [ledgerSnap, userSnap] = await Promise.all([
       tx.get(ledgerQuery),
       tx.get(userRef),
-      tx.get(subscriptionRef),
     ]);
     if (!userSnap.exists && entitlementType === "MEMBERSHIP") {
       throw new Error("Play entitlement user no longer exists");
