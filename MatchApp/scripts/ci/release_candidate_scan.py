@@ -126,6 +126,28 @@ def main() -> int:
     require('"Sensitive preference processing"' in preference_screen,
             "partner preferences must expose explicit sensitive-processing consent", failures)
 
+    preference_policy = text(ROOT / "functions/src/partnerPreferencesPolicy.ts")
+    preference_callable = text(ROOT / "functions/src/partnerPreferences.ts")
+    require("schemaVersion: 3" in preference_callable,
+            "partner-preference schema must remain v3 for the expanded durable contract", failures)
+    for preference_field in [
+        "gothraMode",
+        "faithTraditionMode",
+        "faithSubTraditionMode",
+        "faithInstitutionMode",
+        "nativeStateMode",
+        "educationFieldMode",
+        "employerTypeMode",
+        "familyStatusMode",
+        "visaStatusMode",
+    ]:
+        require(preference_field in preference_policy,
+                f"backend partner-preference contract missing {preference_field}", failures)
+        require(preference_field in partner_repo,
+                f"Android partner-preference contract missing {preference_field}", failures)
+        require(preference_field in preference_screen,
+                f"partner-preference UI missing {preference_field}", failures)
+
 
     location_functions = text(ROOT / "functions/src/location.ts")
     horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
