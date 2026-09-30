@@ -6,6 +6,7 @@ const {
   strictPreferencesAllow,
   preferredPreferenceFit,
   bilateralPreferredFit,
+  bilateralPreferenceMatch,
 } = require("../lib/partnerPreferencesPolicy");
 
 test("normalizes invalid ranges and unknown modes safely", () => {
@@ -60,7 +61,7 @@ test("preferred fit scores only explicitly preferred dimensions", () => {
   }), 0.5);
 });
 
-test("bilateral preferred fit averages both members without fabricating missing sides", () => {
+test("bilateral reciprocal fit is limited by the weaker direction", () => {
   const a = normalizePartnerPreferences({
     cityMode: "PREFERRED",
     cities: ["Hyderabad"],
@@ -69,6 +70,16 @@ test("bilateral preferred fit averages both members without fabricating missing 
     educationMode: "PREFERRED",
     educationLevels: ["Masters"],
   });
+  const reciprocal = bilateralPreferenceMatch(
+    a,
+    { city: "Hyderabad", education: "Bachelors" },
+    b,
+    { city: "Hyderabad", education: "Masters" }
+  );
+  assert.equal(reciprocal.forward, 1);
+  assert.equal(reciprocal.reverse, 0);
+  assert.equal(reciprocal.mutual, 0);
+  assert.equal(reciprocal.formulaVersion, "partner-preferences-v4-reciprocal-min");
   assert.equal(
     bilateralPreferredFit(
       a,
@@ -76,7 +87,7 @@ test("bilateral preferred fit averages both members without fabricating missing 
       b,
       { city: "Hyderabad", education: "Masters" }
     ),
-    0.5
+    0
   );
 
   const none = normalizePartnerPreferences({});
@@ -254,4 +265,73 @@ test("empty new list preferences normalize back to no preference", () => {
   assert.equal(prefs.nativeStateMode, "PREFERRED");
   assert.deepEqual(prefs.nativeStates, ["Telangana"]);
   assert.equal(prefs.visaStatusMode, "NO_PREFERENCE");
+});
+
+
+test("profile body, income and optional complexion preferences participate in reciprocal matching", () => {
+  const prefs = normalizePartnerPreferences({
+    weightMode: "STRICT",
+    weightMinKg: 50,
+    weightMaxKg: 75,
+    incomeBandMode: "PREFERRED",
+    incomeBands: ["₹15–25L"],
+    complexionMode: "PREFERRED",
+    complexions: ["Fair"],
+  });
+  assert.equal(
+    strictPreferencesAllow(prefs, {
+      weight: 62,
+      incomeBand: "₹15–25L",
+      complexion: "Fair",
+    }),
+    true
+  );
+  assert.equal(
+    strictPreferencesAllow(prefs, {
+      weight: 90,
+      incomeBand: "₹15–25L",
+      complexion: "Fair",
+    }),
+    false
+  );
+  assert.equal(
+    preferredPreferenceFit(prefs, {
+      weight: 62,
+      incomeBand: "₹15–25L",
+      complexion: "Fair",
+    }),
+    1
+  );
+  assert.equal(
+    preferredPreferenceFit(prefs, {
+      weight: 62,
+      incomeBand: "₹5–10L",
+      complexion: "Fair",
+    }),
+    0.5
+  );
+});
+
+test("strong mutual score cannot hide one-sided preference mismatch", () => {
+  const a = normalizePartnerPreferences({
+    cityMode: "PREFERRED",
+    cities: ["Hyderabad"],
+    educationMode: "PREFERRED",
+    educationLevels: ["Masters"],
+  });
+  const b = normalizePartnerPreferences({
+    cityMode: "PREFERRED",
+    cities: ["Hyderabad"],
+    occupationMode: "PREFERRED",
+    occupationCategories: ["Doctor"],
+  });
+  const score = bilateralPreferenceMatch(
+    a,
+    { city: "Hyderabad", occupationCategory: "Engineer" },
+    b,
+    { city: "Hyderabad", education: "Masters" }
+  );
+  assert.equal(score.forward, 1);
+  assert.equal(score.reverse, 0.5);
+  assert.equal(score.mutual, 0.5);
 });
