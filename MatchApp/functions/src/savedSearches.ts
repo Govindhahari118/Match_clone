@@ -29,14 +29,25 @@ function sanitizeFilter(raw: unknown): Record<string, string | number | boolean>
   if (ageMin < 18 || ageMax > 99 || ageMin > ageMax) {
     throw new functions.https.HttpsError("invalid-argument", "Invalid age range");
   }
+  const heightMinCm = integer(f, "heightMinCm", 90);
+  const heightMaxCm = integer(f, "heightMaxCm", 250);
+  if (heightMinCm < 90 || heightMaxCm > 250 || heightMinCm > heightMaxCm) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid height range");
+  }
 
   return {
     ageMin,
     ageMax,
+    heightMinCm,
+    heightMaxCm,
     city: text(f, "city", 80),
     state: text(f, "state", 80),
     caste: text(f, "caste", 80),
     subCaste: text(f, "subCaste", 80),
+    faithTradition: text(f, "faithTradition", 80),
+    faithSubTradition: text(f, "faithSubTradition", 80),
+    faithInstitution: text(f, "faithInstitution", 100),
+    visaStatus: text(f, "visaStatus", 80),
     minScore: Math.max(0, Math.min(1, number(f, "minScore", 0))),
     religion: text(f, "religion", 80),
     motherTongue: text(f, "motherTongue", 80),
