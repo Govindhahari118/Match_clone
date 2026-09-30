@@ -5,6 +5,7 @@ import {
   enforcementSuppressesInteractions,
   normalizeEnforcementStatus,
 } from "./accountEnforcementPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const SUPPORT_STATUSES = new Set(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "RESOLVED", "CLOSED", "ESCALATED"]);
 const REPORT_STATUSES = new Set(["OPEN", "REVIEWING", "ACTIONED", "DISMISSED"]);
@@ -379,6 +380,7 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
   ]);
   const userData = user.data() || {};
   const subscriptionData = subscription.data() || {};
+  const membership = resolveMembershipState(subscriptionData, userData);
 
   return {
     payment: {
@@ -399,9 +401,9 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
       voidedReason: typeof value.voidedReason === "string" ? value.voidedReason : null,
     },
     currentEntitlement: {
-      isPremium: userData.isPremium === true,
-      subscriptionPlan: String(userData.subscriptionPlan || "FREE"),
-      subscriptionExpiry: Number(userData.subscriptionExpiry || 0),
+      isPremium: membership.active,
+      subscriptionPlan: membership.planId,
+      subscriptionExpiry: membership.expiresAtMillis,
       boostUntil: Number(subscriptionData.boostUntil || 0),
     },
   };
@@ -623,11 +625,12 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
   }
   if (!uid) throw new functions.https.HttpsError("not-found", "Account not found");
 
-  const [profile, verification, risk, enforcement] = await Promise.all([
+  const [profile, verification, risk, enforcement, subscription] = await Promise.all([
     db.collection("users").doc(uid).get(),
     db.collection("verifications").doc(uid).get(),
     db.collection("riskAssessments").doc(uid).get(),
     db.collection("accountEnforcements").doc(uid).get(),
+    db.collection("subscriptions").doc(uid).get(),
   ]);
   if (!profile.exists) throw new functions.https.HttpsError("not-found", "Account not found");
 
@@ -635,6 +638,7 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
   const v = verification.data() || {};
   const r = risk.data() || {};
   const e = enforcement.data() || {};
+  const membershipState = resolveMembershipState(subscription.data(), p);
   return {
     account: {
       uid,
@@ -646,8 +650,8 @@ export const lookupOpsAccount = functions.https.onCall(async (data, context) => 
       isVerified: p.isVerified === true,
       verificationLevel: Number(p.verificationLevel || 0),
       profileCompleteness: Number(p.profileCompleteness || 0),
-      subscriptionPlan: String(p.subscriptionPlan || "FREE"),
-      subscriptionExpiry: Number(p.subscriptionExpiry || 0),
+      subscriptionPlan: membershipState.planId,
+      subscriptionExpiry: membershipState.expiresAtMillis,
       createdAtMillis: timestampMillis(p.createdAt) || Number(p.createdAt || 0),
     },
     verification: {
