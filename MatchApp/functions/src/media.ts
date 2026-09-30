@@ -498,6 +498,7 @@ export const reviewProfileVideo = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("invalid-argument", "Invalid video moderation case");
   }
   const decision = reviewDecision(data?.decision);
+  if (decision === "APPROVED") requireProductionFeature("video_profiles");
   const reason = reviewReason(data?.reason);
   const moderationRef = db.collection("videoModeration").doc(moderationId);
   const auditRef = db.collection("opsAuditLog").doc();
