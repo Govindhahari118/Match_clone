@@ -124,7 +124,7 @@ Nearby is foreground-only and should remain opt-in.
 - [x] Durable partner preferences are separate from transient discovery filters and support STRICT / PREFERRED / NO_PREFERENCE.
 - [x] Discovery enforces strict preferences bilaterally and uses bilateral preferred fit for ordering.
 - [ ] Test partner preferences across devices, including strict exclusion, preferred ordering and deliberate no-preference choices.
-- [ ] Keep dedicated NRI discovery fail-closed with Remote Config `enable_nri_features=false` and backend Functions config `features.nri_features=false` until inventory/load/device evidence passes. This does not disable ordinary country or saved NRI partner preferences.
+- [ ] Keep the dedicated NRI discovery convenience route hidden with Remote Config `enable_nri_features=false` until inventory/load/device evidence passes. Ordinary NRI/country filters and saved partner preferences remain part of core discovery.
 - [ ] Keep Kundali fail-closed with Remote Config `enable_kundali=false` and backend Functions config `features.kundali=false` until the versioned Rasi/Nakshatra reference policy is independently validated.
 - [ ] Discovery on a fresh second device shows authorized server-backed profiles without relying on demo/seed Room data.
 - [ ] Sent/received interests and mutual matches stay consistent across two devices.
