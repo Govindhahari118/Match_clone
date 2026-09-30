@@ -107,7 +107,10 @@ data class MatchResult(
     val combinedScore: Float,
     val mode: MatchMode,
     val formulaVersion: String = "",
-    val factors: List<CompatibilityFactor> = emptyList()
+    val factors: List<CompatibilityFactor> = emptyList(),
+    val forwardPreferenceScore: Float? = null,
+    val reversePreferenceScore: Float? = null,
+    val mutualPreferenceScore: Float? = null
 ) {
     val displayScore: Int get() = (primary() * 100f).toInt()
     fun primary(): Float = when (mode) {
