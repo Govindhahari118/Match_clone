@@ -4,6 +4,10 @@ import { db, requireAppCheck } from "./shared";
 import { declinedInterestAllowsNewRequest } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import {
+  discoveryActorReady,
+  discoveryCandidateReady,
+} from "./discoveryEligibilityPolicy";
+import {
   HIGH_VOLUME_INTEREST_SIGNAL_THRESHOLD,
   MAX_DAILY_INTERESTS_SAFETY,
   crossesThreshold,
@@ -58,6 +62,9 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
 
   const senderRef = db.collection("users").doc(senderUid);
   const targetRef = db.collection("users").doc(targetUid);
+  const senderPrivateRef = db.collection("userPrivate").doc(senderUid);
+  const senderPreferencesRef = db.collection("partnerPreferences").doc(senderUid);
+  const targetPreferencesRef = db.collection("partnerPreferences").doc(targetUid);
   const outgoingRef = db.collection("interests").doc(`${senderUid}_${targetUid}`);
   const reverseRef = db.collection("interests").doc(`${targetUid}_${senderUid}`);
   const matchRef = db.collection("matches").doc(matchId(senderUid, targetUid));
@@ -75,6 +82,9 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     const [
       senderSnap,
       targetSnap,
+      senderPrivateSnap,
+      senderPreferencesSnap,
+      targetPreferencesSnap,
       outgoingSnap,
       reverseSnap,
       responseSnap,
@@ -87,6 +97,9 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(targetRef),
+      tx.get(senderPrivateRef),
+      tx.get(senderPreferencesRef),
+      tx.get(targetPreferencesRef),
       tx.get(outgoingRef),
       tx.get(reverseRef),
       tx.get(responseRef),
@@ -113,6 +126,22 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Interest is unavailable while an account is not active"
+      );
+    }
+    if (!discoveryActorReady(
+      sender,
+      senderPrivateSnap.data() || {},
+      senderPreferencesSnap.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Complete your required profile and partner preferences before sending interests"
+      );
+    }
+    if (!discoveryCandidateReady(target, targetPreferencesSnap.data())) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "This member is not yet available for interests"
       );
     }
     if (!genderCompatible(sender, target)) {
