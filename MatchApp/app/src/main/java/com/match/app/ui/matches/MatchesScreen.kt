@@ -747,7 +747,7 @@ private fun activeFilterCount(f: MatchFilter): Int = listOf(
     f.countryOfResidence.isNotBlank(), f.visaStatus.isNotBlank(), f.nriOnly,
     f.willingToRelocate, f.recentlyJoinedDays > 0,
     f.smoking.isNotBlank(), f.drinking.isNotBlank(), f.familyType.isNotBlank(), f.familyStatus.isNotBlank(),
-    f.physicalStatus.isNotBlank(), f.citizenship.isNotBlank(), f.educationField.isNotBlank(),
+    f.hasChildrenFilter.isNotBlank(), f.physicalStatus.isNotBlank(), f.citizenship.isNotBlank(), f.educationField.isNotBlank(),
     f.occupationCategory.isNotBlank(), f.employerType.isNotBlank(), f.nakshatra.isNotBlank(),
     f.rasi.isNotBlank(), f.manglik.isNotBlank(), f.hobbies.isNotBlank(), !f.withPhotoOnly,
     f.verifiedLevel > 0, f.premiumOnly, f.lastActiveWithinDays > 0, f.hasHoroscope.isNotBlank(), f.keyword.isNotBlank()
