@@ -8,6 +8,13 @@ export type PartnerPreferenceDocument = {
   heightMode: PreferenceMode;
   heightMinCm: number;
   heightMaxCm: number;
+  weightMode: PreferenceMode;
+  weightMinKg: number;
+  weightMaxKg: number;
+  incomeBandMode: PreferenceMode;
+  incomeBands: string[];
+  complexionMode: PreferenceMode;
+  complexions: string[];
   religionMode: PreferenceMode;
   religions: string[];
   casteMode: PreferenceMode;
@@ -78,6 +85,13 @@ export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
   heightMode: "NO_PREFERENCE",
   heightMinCm: 90,
   heightMaxCm: 250,
+  weightMode: "NO_PREFERENCE",
+  weightMinKg: 30,
+  weightMaxKg: 250,
+  incomeBandMode: "NO_PREFERENCE",
+  incomeBands: [],
+  complexionMode: "NO_PREFERENCE",
+  complexions: [],
   religionMode: "NO_PREFERENCE",
   religions: [],
   casteMode: "NO_PREFERENCE",
@@ -216,6 +230,11 @@ export function normalizePartnerPreferences(
     heightMinCm,
     integer(raw.heightMaxCm, 250, 90, 250)
   );
+  const weightMinKg = integer(raw.weightMinKg, 30, 30, 250);
+  const weightMaxKg = Math.max(
+    weightMinKg,
+    integer(raw.weightMaxKg, 250, 30, 250)
+  );
 
   return {
     configured: raw.configured === true,
@@ -225,6 +244,13 @@ export function normalizePartnerPreferences(
     heightMode: mode(raw.heightMode),
     heightMinCm,
     heightMaxCm,
+    weightMode: mode(raw.weightMode),
+    weightMinKg,
+    weightMaxKg,
+    incomeBandMode: modeForValues(raw.incomeBandMode, raw.incomeBands),
+    incomeBands: strings(raw.incomeBands),
+    complexionMode: modeForValues(raw.complexionMode, raw.complexions),
+    complexions: strings(raw.complexions),
     religionMode: modeForValues(raw.religionMode, raw.religions),
     religions: strings(raw.religions),
     casteMode: modeForValues(raw.casteMode, raw.castes),
@@ -372,7 +398,17 @@ export function strictPreferencesAllow(
       height > preferences.heightMaxCm)
   ) return false;
 
-  return strictListAllows(preferences.religionMode, preferences.religions, subject.religion) &&
+  const weight = Number(subject.weight || 0);
+  if (
+    preferences.weightMode === "STRICT" &&
+    (!Number.isFinite(weight) ||
+      weight < preferences.weightMinKg ||
+      weight > preferences.weightMaxKg)
+  ) return false;
+
+  return strictListAllows(preferences.incomeBandMode, preferences.incomeBands, subject.incomeBand) &&
+    strictListAllows(preferences.complexionMode, preferences.complexions, subject.complexion) &&
+    strictListAllows(preferences.religionMode, preferences.religions, subject.religion) &&
     strictListAllows(preferences.casteMode, preferences.castes, subject.caste) &&
     strictListAllows(preferences.subCasteMode, preferences.subCastes, subject.subCaste) &&
     strictListAllows(preferences.gothraMode, preferences.gothras, subject.gothra) &&
@@ -483,7 +519,19 @@ export function preferredPreferenceFit(
     ) earned += 1;
   }
 
+  const weight = Number(subject.weight || 0);
+  if (preferences.weightMode === "PREFERRED") {
+    possible += 1;
+    if (
+      Number.isFinite(weight) &&
+      weight >= preferences.weightMinKg &&
+      weight <= preferences.weightMaxKg
+    ) earned += 1;
+  }
+
   const listChecks = [
+    preferredListScore(preferences.incomeBandMode, preferences.incomeBands, subject.incomeBand),
+    preferredListScore(preferences.complexionMode, preferences.complexions, subject.complexion),
     preferredListScore(preferences.religionMode, preferences.religions, subject.religion),
     preferredListScore(preferences.casteMode, preferences.castes, subject.caste),
     preferredListScore(preferences.subCasteMode, preferences.subCastes, subject.subCaste),
@@ -571,16 +619,122 @@ export function preferredPreferenceFit(
   return possible > 0 ? earned / possible : null;
 }
 
+function activePreferenceFit(
+  preferences: PartnerPreferenceDocument,
+  subject: Record<string, unknown>
+): number | null {
+  let earned = 0;
+  let possible = 0;
+  const scoreRange = (
+    prefMode: PreferenceMode,
+    value: number,
+    min: number,
+    max: number
+  ) => {
+    if (prefMode === "NO_PREFERENCE") return;
+    possible += 1;
+    if (Number.isFinite(value) && value >= min && value <= max) earned += 1;
+  };
+  const scoreList = (
+    prefMode: PreferenceMode,
+    expected: string[],
+    actual: unknown
+  ) => {
+    if (prefMode === "NO_PREFERENCE" || expected.length === 0) return;
+    possible += 1;
+    if (sameOne(expected, actual)) earned += 1;
+  };
+
+  scoreRange(preferences.ageMode, Number(subject.age || 0), preferences.ageMin, preferences.ageMax);
+  scoreRange(
+    preferences.heightMode,
+    Number(subject.heightCm || 0),
+    preferences.heightMinCm,
+    preferences.heightMaxCm
+  );
+  scoreRange(
+    preferences.weightMode,
+    Number(subject.weight || 0),
+    preferences.weightMinKg,
+    preferences.weightMaxKg
+  );
+
+  const listRules: Array<[PreferenceMode, string[], unknown]> = [
+    [preferences.incomeBandMode, preferences.incomeBands, subject.incomeBand],
+    [preferences.complexionMode, preferences.complexions, subject.complexion],
+    [preferences.religionMode, preferences.religions, subject.religion],
+    [preferences.casteMode, preferences.castes, subject.caste],
+    [preferences.subCasteMode, preferences.subCastes, subject.subCaste],
+    [preferences.gothraMode, preferences.gothras, subject.gothra],
+    [preferences.faithTraditionMode, preferences.faithTraditions, subject.faithTradition],
+    [preferences.faithSubTraditionMode, preferences.faithSubTraditions, subject.faithSubTradition],
+    [preferences.faithInstitutionMode, preferences.faithInstitutions, subject.faithInstitution],
+    [preferences.stateMode, preferences.states, subject.state],
+    [preferences.nativeStateMode, preferences.nativeStates, subject.nativeState],
+    [preferences.cityMode, preferences.cities, subject.city],
+    [preferences.motherTongueMode, preferences.motherTongues, subject.motherTongue],
+    [preferences.maritalStatusMode, preferences.maritalStatuses, subject.maritalStatus],
+    [preferences.educationMode, preferences.educationLevels, subject.education],
+    [preferences.educationFieldMode, preferences.educationFields, subject.educationField],
+    [preferences.occupationMode, preferences.occupationCategories, subject.occupationCategory],
+    [preferences.employerTypeMode, preferences.employerTypes, subject.employerType],
+    [preferences.dietMode, preferences.diets, subject.diet],
+    [preferences.smokingMode, preferences.smoking, subject.smoking],
+    [preferences.drinkingMode, preferences.drinking, subject.drinking],
+    [preferences.countryOfResidenceMode, preferences.countriesOfResidence, subject.countryOfResidence],
+    [preferences.citizenshipMode, preferences.citizenships, subject.citizenship],
+    [preferences.childrenMode, preferences.childrenStatuses, childrenClass(subject)],
+    [preferences.nriMode, preferences.nriStatuses, residenceClass(subject)],
+    [preferences.relocationMode, preferences.relocationStatuses, relocationClass(subject)],
+    [preferences.familyTypeMode, preferences.familyTypes, subject.familyType],
+    [preferences.familyStatusMode, preferences.familyStatuses, subject.familyStatus],
+    [preferences.familyValuesMode, preferences.familyValues, subject.familyValues],
+    [preferences.physicalStatusMode, preferences.physicalStatuses, subject.physicalStatus],
+    [preferences.residentialStatusMode, preferences.residentialStatuses, subject.residentialStatus],
+    [preferences.visaStatusMode, preferences.visaStatuses, subject.visaStatus],
+  ];
+  listRules.forEach(([prefMode, expected, actual]) => scoreList(prefMode, expected, actual));
+  return possible > 0 ? earned / possible : null;
+}
+
+export type BilateralPreferenceMatch = {
+  forward: number | null;
+  reverse: number | null;
+  mutual: number | null;
+  formulaVersion: "partner-preferences-v4-reciprocal-min";
+};
+
+export function bilateralPreferenceMatch(
+  viewerPreferences: PartnerPreferenceDocument,
+  viewer: Record<string, unknown>,
+  candidatePreferences: PartnerPreferenceDocument,
+  candidate: Record<string, unknown>
+): BilateralPreferenceMatch {
+  const forward = activePreferenceFit(viewerPreferences, candidate);
+  const reverse = activePreferenceFit(candidatePreferences, viewer);
+  let mutual: number | null = null;
+  if (forward != null && reverse != null) mutual = Math.min(forward, reverse);
+  else if (forward != null) mutual = forward;
+  else if (reverse != null) mutual = reverse;
+  return {
+    forward,
+    reverse,
+    mutual,
+    formulaVersion: "partner-preferences-v4-reciprocal-min",
+  };
+}
+
+/** Backward-compatible scalar used by older ranking callers. */
 export function bilateralPreferredFit(
   viewerPreferences: PartnerPreferenceDocument,
   viewer: Record<string, unknown>,
   candidatePreferences: PartnerPreferenceDocument,
   candidate: Record<string, unknown>
 ): number | null {
-  const forward = preferredPreferenceFit(viewerPreferences, candidate);
-  const reverse = preferredPreferenceFit(candidatePreferences, viewer);
-  if (forward == null && reverse == null) return null;
-  if (forward == null) return reverse;
-  if (reverse == null) return forward;
-  return (forward + reverse) / 2;
+  return bilateralPreferenceMatch(
+    viewerPreferences,
+    viewer,
+    candidatePreferences,
+    candidate
+  ).mutual;
 }
