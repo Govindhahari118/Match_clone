@@ -40,3 +40,15 @@ preserved.
 - `ops_admin`: explicitly privileged administrative operations.
 
 The callable backend remains authoritative: possessing the web console URL does not grant access.
+
+
+## MFA enforcement
+
+Operations callables support a centralized staged MFA gate. Enroll every production operator in a
+supported Firebase Auth second factor, verify that the issued ID token contains Firebase's
+`sign_in_second_factor` claim, and then set `security.enforce_ops_mfa=true` in the production
+Functions configuration. Once enabled, a valid role claim without an MFA-authenticated token is
+rejected by `requireOpsRole`.
+
+Do not enable the switch before enrollment/testing is complete; do not leave it disabled for
+production moderation once the operator MFA external gate is approved.
