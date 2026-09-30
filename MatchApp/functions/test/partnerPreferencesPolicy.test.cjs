@@ -188,3 +188,70 @@ test("strict finite-choice preferences reject profiles with missing data", () =>
     false
   );
 });
+
+
+test("remaining stable matrimony criteria participate in strict and preferred matching", () => {
+  const prefs = normalizePartnerPreferences({
+    gothraMode: "STRICT",
+    gothras: ["Bharadwaja"],
+    faithTraditionMode: "PREFERRED",
+    faithTraditions: ["Vaishnava"],
+    faithSubTraditionMode: "PREFERRED",
+    faithSubTraditions: ["Sri Vaishnava"],
+    faithInstitutionMode: "PREFERRED",
+    faithInstitutions: ["Local Samaj"],
+    nativeStateMode: "STRICT",
+    nativeStates: ["Telangana"],
+    educationFieldMode: "PREFERRED",
+    educationFields: ["Engineering"],
+    employerTypeMode: "PREFERRED",
+    employerTypes: ["Private"],
+    familyStatusMode: "PREFERRED",
+    familyStatuses: ["Upper Middle Class"],
+    visaStatusMode: "STRICT",
+    visaStatuses: ["H-1B"],
+  });
+
+  const matching = {
+    gothra: "Bharadwaja",
+    faithTradition: "Vaishnava",
+    faithSubTradition: "Sri Vaishnava",
+    faithInstitution: "Local Samaj",
+    nativeState: "Telangana",
+    educationField: "Engineering",
+    employerType: "Private",
+    familyStatus: "Upper Middle Class",
+    visaStatus: "H-1B",
+  };
+
+  assert.equal(strictPreferencesAllow(prefs, matching), true);
+  assert.equal(preferredPreferenceFit(prefs, matching), 1);
+  assert.equal(
+    strictPreferencesAllow(prefs, { ...matching, gothra: "Kashyapa" }),
+    false
+  );
+  assert.equal(
+    strictPreferencesAllow(prefs, { ...matching, visaStatus: "Citizen" }),
+    false
+  );
+  assert.equal(
+    preferredPreferenceFit(prefs, { ...matching, employerType: "Government" }),
+    0.8
+  );
+});
+
+test("empty new list preferences normalize back to no preference", () => {
+  const prefs = normalizePartnerPreferences({
+    gothraMode: "STRICT",
+    gothras: [],
+    nativeStateMode: "PREFERRED",
+    nativeStates: ["Telangana"],
+    visaStatusMode: "STRICT",
+    visaStatuses: [],
+  });
+
+  assert.equal(prefs.gothraMode, "NO_PREFERENCE");
+  assert.equal(prefs.nativeStateMode, "PREFERRED");
+  assert.deepEqual(prefs.nativeStates, ["Telangana"]);
+  assert.equal(prefs.visaStatusMode, "NO_PREFERENCE");
+});
