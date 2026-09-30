@@ -91,11 +91,13 @@ function matchesServerFilters(
 ): boolean {
   const textFields: Array<[string, string]> = [
     ["city", "city"], ["state", "state"], ["religion", "religion"],
-    ["caste", "caste"], ["subCaste", "subCaste"], ["motherTongue", "motherTongue"],
+    ["caste", "caste"], ["subCaste", "subCaste"], ["faithTradition", "faithTradition"],
+    ["faithSubTradition", "faithSubTradition"], ["faithInstitution", "faithInstitution"],
+    ["motherTongue", "motherTongue"],
     ["maritalStatus", "maritalStatus"], ["diet", "diet"], ["educationLevel", "education"],
     ["educationField", "educationField"], ["occupationCategory", "occupationCategory"],
     ["employerType", "employerType"], ["residentialStatus", "residentialStatus"],
-    ["nativeState", "nativeState"], ["countryOfResidence", "countryOfResidence"],
+    ["visaStatus", "visaStatus"], ["nativeState", "nativeState"], ["countryOfResidence", "countryOfResidence"],
     ["citizenship", "citizenship"], ["gothra", "gothra"], ["smoking", "smoking"],
     ["drinking", "drinking"], ["familyType", "familyType"], ["familyStatus", "familyStatus"],
     ["physicalStatus", "physicalStatus"], ["rasi", "rasi"], ["nakshatra", "nakshatra"],
@@ -247,6 +249,16 @@ export const discoverProfiles = functions
     const ageMaxRaw = Number(data?.ageMax ?? 70);
     const ageMin = Math.max(18, Math.min(99, Number.isFinite(ageMinRaw) ? Math.trunc(ageMinRaw) : 18));
     const ageMax = Math.max(ageMin, Math.min(99, Number.isFinite(ageMaxRaw) ? Math.trunc(ageMaxRaw) : 70));
+    const heightMinRaw = Number(data?.heightMinCm ?? 90);
+    const heightMaxRaw = Number(data?.heightMaxCm ?? 250);
+    const heightMinCm = Math.max(
+      90,
+      Math.min(250, Number.isFinite(heightMinRaw) ? Math.trunc(heightMinRaw) : 90)
+    );
+    const heightMaxCm = Math.max(
+      heightMinCm,
+      Math.min(250, Number.isFinite(heightMaxRaw) ? Math.trunc(heightMaxRaw) : 250)
+    );
     const cursor = typeof data?.cursor === "string" && data.cursor.length <= 128 ? data.cursor : "";
     const keyword = typeof data?.keyword === "string"
       ? data.keyword.trim().toLocaleLowerCase("en-IN").slice(0, MAX_KEYWORD_LENGTH)
@@ -492,6 +504,12 @@ export const discoverProfiles = functions
 
       const candidateAge = Number(candidate.age || 0);
       if (!Number.isFinite(candidateAge) || candidateAge < ageMin || candidateAge > ageMax) continue;
+      const candidateHeight = Number(candidate.heightCm || 0);
+      if (
+        !Number.isFinite(candidateHeight) ||
+        candidateHeight < heightMinCm ||
+        candidateHeight > heightMaxCm
+      ) continue;
 
       const candidateGender = stringValue(candidate.gender).toUpperCase();
       const candidateLookingFor = stringValue(candidate.lookingFor).toUpperCase() || "ANY";
