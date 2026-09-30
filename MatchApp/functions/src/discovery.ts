@@ -295,6 +295,16 @@ export const discoverProfiles = functions
         "Discovery is unavailable while your matrimony account is not active"
       );
     }
+    if (!discoveryActorReady(
+      viewer,
+      viewerPrivateDoc.data() || {},
+      viewerPreferencesDoc.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Complete your required profile and partner preferences first"
+      );
+    }
     const viewerPartnerPreferences = normalizePartnerPreferences(
       viewerPreferencesRaw
     );
@@ -416,10 +426,16 @@ export const discoverProfiles = functions
       string,
       ReturnType<typeof normalizePartnerPreferences>
     >();
+    const rawPartnerPreferencesByUid = new Map<
+      string,
+      FirebaseFirestore.DocumentData | undefined
+    >();
     candidates.forEach((doc, index) => {
+      const raw = partnerPreferenceDocs[index]?.data();
+      rawPartnerPreferencesByUid.set(doc.id, raw);
       partnerPreferencesByUid.set(
         doc.id,
-        normalizePartnerPreferences(partnerPreferenceDocs[index]?.data())
+        normalizePartnerPreferences(raw)
       );
     });
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
@@ -487,6 +503,7 @@ export const discoverProfiles = functions
       const candidate = doc.data() || {};
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
+      if (!discoveryCandidateReady(candidate, rawPartnerPreferencesByUid.get(doc.id))) continue;
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
