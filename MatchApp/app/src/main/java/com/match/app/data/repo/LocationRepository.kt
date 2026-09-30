@@ -48,8 +48,7 @@ data class NearbySharingStatus(
 class LocationRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val userDao: UserDao,
-    private val profileService: FirestoreProfileService,
-    private val consentRepository: ConsentRepository
+    private val profileService: FirestoreProfileService
 ) {
     private val functions = FirebaseFunctions.getInstance()
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -105,7 +104,6 @@ class LocationRepository @Inject constructor(
     }
 
     suspend fun refreshAndFindNearby(radiusKm: Int): List<NearbyProfile> = withContext(Dispatchers.IO) {
-        consentRepository.set("location", true)
         val location = currentLocation()
         updateRemoteLocation(location)
         findNearby(radiusKm)
@@ -149,7 +147,6 @@ class LocationRepository @Inject constructor(
 
     suspend fun stopSharingLocation() = withContext(Dispatchers.IO) {
         functions.getHttpsCallable("clearMyLocation").call().await()
-        consentRepository.set("location", false)
         Unit
     }
 
