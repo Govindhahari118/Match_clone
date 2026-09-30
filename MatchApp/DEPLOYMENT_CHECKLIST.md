@@ -24,8 +24,10 @@ This checklist describes the current production architecture on canonical `main`
 - [x] `targetSdk = 36`
 - [x] Java/Kotlin JVM target 17
 - [x] Release minification and resource shrinking enabled
-- [ ] Release signing uses Play App Signing / protected CI secrets. Never commit keystores or passwords.
-- [ ] Increment `versionCode` and set the intended `versionName`.
+- [x] Release Gradle configuration accepts protected CI signing inputs via `MATREE_KEYSTORE_*` with local `keystore.properties` fallback and rejects partial signing configuration.
+- [x] Release Gradle configuration accepts `MATREE_VERSION_CODE` / `MATREE_VERSION_NAME`; the production build script requires explicit values.
+- [ ] Release signing uses Play App Signing / protected CI secrets in the actual release environment. Never commit keystores or passwords.
+- [ ] Set the final intended `MATREE_VERSION_CODE` / `MATREE_VERSION_NAME` for the Play candidate and verify the code exceeds every previously uploaded build.
 - [ ] Install the signed release build on physical devices covering Android 7+ and current Android releases.
 - [ ] Validate fresh install, upgrade install, process death and offline/online recovery.
 
@@ -40,6 +42,7 @@ Use a production Firebase project separate from development/staging.
 - [ ] Deploy `firestore.rules` and `firestore.indexes.json`.
 - [ ] Enable Firebase Storage and deploy `storage.rules`.
 - [ ] Deploy Cloud Functions from `functions/` using Node 22.
+- [x] Repository Firebase deploy scripts require explicit `MATREE_FIREBASE_PROJECT_ID` and never rely on an ambient `firebase use` selection.
 - [ ] Enable FCM, Crashlytics, Analytics and Remote Config only where the application actually consumes them.
 - [ ] Set Firebase/Google Cloud billing alerts and budget monitoring.
 
@@ -94,7 +97,8 @@ Google Play Billing is server-authoritative. Do not trust a client purchase call
 - [ ] Test profile photo upload → moderation queue → short-lived operator review → approve/reject → approved primary-photo publication between devices.
 - [ ] Test chat image and voice upload/download between two release devices.
 - [ ] Test retry after temporary network loss and verify failed uploads are not shown as successful cloud media.
-- [ ] Verify Storage lifecycle/cost policy for abandoned chat/media files.
+- [x] Backend records valid unreferenced chat-media uploads in a server-only orphan ledger and scheduled cleanup re-checks the canonical message before deleting stale bytes.
+- [ ] Verify the orphan-cleanup schedule, deletion metrics and Storage cost behavior in the production project.
 
 ## 9. Nearby / location
 

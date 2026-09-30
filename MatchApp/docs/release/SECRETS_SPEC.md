@@ -22,6 +22,22 @@ The following may be committed because they contain no production secret: Fireba
 Remote Config key names/defaults, public package IDs, feature flag names, API contracts, and templates
 whose production values are blank/false.
 
+## Release-pipeline input names
+
+The Android release build accepts these names only from the protected release environment (or the
+uncommitted local signing-properties file):
+
+- `MATREE_KEYSTORE_PATH`
+- `MATREE_KEYSTORE_PASSWORD`
+- `MATREE_KEY_ALIAS`
+- `MATREE_KEY_PASSWORD`
+- `MATREE_VERSION_CODE`
+- `MATREE_VERSION_NAME`
+- `MATREE_FIREBASE_PROJECT_ID`
+
+Version/project identifiers are configuration rather than secrets, but they are intentionally explicit
+release inputs so a build/deploy cannot silently inherit the wrong target.
+
 ## Current Cloud Functions secret names
 
 The Google Play verification runtime expects these deployment secrets:

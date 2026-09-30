@@ -1,37 +1,40 @@
 @echo off
-:: Full Firebase deploy: Firestore rules + indexes + Storage rules + Functions.
-:: Run from MatchApp\ directory.
-::
-:: Prerequisites:
-::   npm install -g firebase-tools
-::   firebase login
-::   firebase use <your-project-id>
-::
-:: Usage: scripts\deploy\firebase-full.bat
+setlocal
+:: Production Firebase deploy. Run from MatchApp\.
+:: Never relies on "firebase use"; the exact target project must be explicit.
+
+if "%MATREE_FIREBASE_PROJECT_ID%"=="" (
+  echo [ERROR] MATREE_FIREBASE_PROJECT_ID is required.
+  exit /b 1
+)
+
+echo Target Firebase project: %MATREE_FIREBASE_PROJECT_ID%
 
 echo [1/4] Deploying Firestore rules ...
-firebase deploy --only firestore:rules
+firebase deploy --non-interactive --project "%MATREE_FIREBASE_PROJECT_ID%" --only firestore:rules
 if errorlevel 1 goto :err
 
 echo [2/4] Deploying Firestore indexes ...
-firebase deploy --only firestore:indexes
+firebase deploy --non-interactive --project "%MATREE_FIREBASE_PROJECT_ID%" --only firestore:indexes
 if errorlevel 1 goto :err
 
 echo [3/4] Deploying Storage rules ...
-firebase deploy --only storage
+firebase deploy --non-interactive --project "%MATREE_FIREBASE_PROJECT_ID%" --only storage
 if errorlevel 1 goto :err
 
-echo [4/4] Building + deploying Cloud Functions ...
-firebase deploy --only functions
+echo [4/4] Building and deploying Cloud Functions ...
+firebase deploy --non-interactive --project "%MATREE_FIREBASE_PROJECT_ID%" --only functions
 if errorlevel 1 goto :err
 
-echo.
-echo ==============================
-echo  Firebase deploy complete!
-echo ==============================
-goto :eof
+if /I "%MATREE_DEPLOY_HOSTING%"=="1" (
+  echo Deploying operator Hosting because MATREE_DEPLOY_HOSTING=1 ...
+  firebase deploy --non-interactive --project "%MATREE_FIREBASE_PROJECT_ID%" --only hosting
+  if errorlevel 1 goto :err
+)
+
+echo Firebase deploy complete for %MATREE_FIREBASE_PROJECT_ID%.
+exit /b 0
 
 :err
-echo.
-echo [ERROR] Deploy step failed. Check output above.
+echo [ERROR] Firebase deploy failed.
 exit /b 1

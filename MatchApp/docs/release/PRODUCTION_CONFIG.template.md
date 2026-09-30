@@ -7,10 +7,30 @@ owned by deployment/release operations. Do not commit the completed production c
 
 - Git SHA: `<exact release SHA>`
 - Android application ID: `com.match.app`
-- Version code: `<release-owner decision>`
-- Version name: `<release-owner decision>`
+- Version code: set `MATREE_VERSION_CODE=<positive integer greater than every prior Play upload>`
+- Version name: set `MATREE_VERSION_NAME=<release version>`
 - Firebase production project: `<external>`
 - Google Play application: `com.match.app`
+
+## Android release signing inputs
+
+The release build accepts a protected CI environment or local uncommitted `keystore.properties`.
+For CI, supply all four together:
+
+- `MATREE_KEYSTORE_PATH`
+- `MATREE_KEYSTORE_PASSWORD`
+- `MATREE_KEY_ALIAS`
+- `MATREE_KEY_PASSWORD`
+
+The Gradle configuration rejects partial signing input. The production build script also refuses to
+build without a production `google-services.json` and explicit version inputs.
+
+## Firebase deployment target
+
+Set `MATREE_FIREBASE_PROJECT_ID` to the exact production project before using
+`scripts/deploy/firebase-full.sh` or `.bat`. The scripts always pass `--project` explicitly and
+never trust an ambient Firebase CLI project selection. Set `MATREE_DEPLOY_HOSTING=1` only when the
+operator console is approved for that deployment.
 
 ## Backend secrets
 

@@ -29,9 +29,12 @@ REQUIRED = (
     "scripts/ci/release_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/screen_classification_scan.py",
+    "scripts/deploy/build-release.sh",
+    "scripts/deploy/firebase-full.sh",
     "scripts/ci/callable_contract_scan.py",
     "scripts/perf/discovery-load.mjs",
     "functions/src/health.ts",
+    "functions/src/chatMediaOrphanPolicy.ts",
     "firestore.rules",
     "firestore.indexes.json",
     "storage.rules",
@@ -73,6 +76,26 @@ def main() -> int:
     for exported in ("healthLive", "healthReady"):
         if not re.search(rf"export\s+const\s+{exported}\b", health):
             fail(f"health contract missing export {exported}", failures)
+
+    gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
+    for release_input in (
+        "MATREE_VERSION_CODE",
+        "MATREE_VERSION_NAME",
+        "MATREE_KEYSTORE_PATH",
+        "MATREE_KEYSTORE_PASSWORD",
+        "MATREE_KEY_ALIAS",
+        "MATREE_KEY_PASSWORD",
+    ):
+        if release_input not in gradle:
+            fail(f"Android release configuration omits {release_input}", failures)
+
+    firebase_deploy = (ROOT / "scripts/deploy/firebase-full.sh").read_text(encoding="utf-8")
+    if "MATREE_FIREBASE_PROJECT_ID" not in firebase_deploy or "--project" not in firebase_deploy:
+        fail("Firebase production deploy must require an explicit project id", failures)
+
+    media = (ROOT / "functions/src/media.ts").read_text(encoding="utf-8")
+    if "cleanupAbandonedChatMedia" not in media or "chatMediaOrphans" not in media:
+        fail("chat-media orphan cleanup contract is missing", failures)
 
     migrations = (ROOT / "app/src/main/java/com/match/app/data/local/Migrations.kt").read_text(
         encoding="utf-8"

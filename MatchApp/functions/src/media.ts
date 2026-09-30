@@ -8,6 +8,11 @@ import {
   PROFILE_PHOTO_MIME_TYPES,
   PROFILE_VIDEO_MIME_TYPES,
 } from "./fileSignaturePolicy";
+import {
+  CHAT_MEDIA_ORPHAN_TTL_MS,
+  chatMediaOrphanId,
+  parseChatMediaPath,
+} from "./chatMediaOrphanPolicy";
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024;
@@ -594,13 +599,10 @@ export const onProfileVideoDeleted = functions.storage.object().onDelete(async (
  */
 export const onChatMediaUploaded = functions.storage.object().onFinalize(async (object) => {
   const storagePath = object.name || "";
-  const match = storagePath.match(
-    /^chat-media\/([a-f0-9]{64})\/([A-Za-z0-9_-]{16,128})\.(jpg|m4a)$/
-  );
-  if (!match) return;
+  const parsed = parseChatMediaPath(storagePath);
+  if (!parsed) return;
 
-  const threadId = match[1];
-  const extension = match[3];
+  const { threadId, messageId, extension } = parsed;
   const metadata = object.metadata || {};
   const senderUid = String(metadata.senderUid || "");
   const recipientUid = String(metadata.recipientUid || "");
@@ -633,7 +635,28 @@ export const onChatMediaUploaded = functions.storage.object().onFinalize(async (
     }
   }
 
-  if (valid) return;
+  if (valid) {
+    const message = await db.collection("chats").doc(threadId)
+      .collection("messages").doc(messageId).get();
+    if (!message.exists) {
+      const parsedCreatedAt = Date.parse(String(object.timeCreated || ""));
+      const createdAtMillis = Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : Date.now();
+      await db.collection("chatMediaOrphans").doc(chatMediaOrphanId(parsed)).set({
+        bucket: object.bucket,
+        storagePath,
+        threadId,
+        messageId,
+        extension,
+        senderUid,
+        createdAtMillis,
+        expiresAt: admin.firestore.Timestamp.fromMillis(
+          createdAtMillis + CHAT_MEDIA_ORPHAN_TTL_MS
+        ),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    return;
+  }
 
   await file.delete({ ignoreNotFound: true });
   if (senderUid) {
@@ -650,3 +673,67 @@ export const onChatMediaUploaded = functions.storage.object().onFinalize(async (
     kind,
   });
 });
+
+
+const CHAT_MEDIA_ORPHAN_DELETE_BATCH = 200;
+
+/**
+ * Deletes chat-media uploads that never became an immutable Firestore message.
+ * Existing message attachments are retained; malformed markers never authorize byte deletion.
+ */
+export const cleanupAbandonedChatMedia = functions.pubsub
+  .schedule("every 6 hours")
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    let deletedObjects = 0;
+    let retainedMessages = 0;
+    let discardedMarkers = 0;
+    let passes = 0;
+
+    while (passes < 20) {
+      const stale = await db.collection("chatMediaOrphans")
+        .where("expiresAt", "<=", now)
+        .limit(CHAT_MEDIA_ORPHAN_DELETE_BATCH)
+        .get();
+      if (stale.empty) break;
+
+      for (const marker of stale.docs) {
+        const value = marker.data() || {};
+        const storagePath = String(value.storagePath || "");
+        const parsed = parseChatMediaPath(storagePath);
+        const bucketName = String(value.bucket || "");
+        if (!parsed ||
+            parsed.threadId !== String(value.threadId || "") ||
+            parsed.messageId !== String(value.messageId || "") ||
+            !bucketName) {
+          await marker.ref.delete();
+          discardedMarkers += 1;
+          continue;
+        }
+
+        const message = await db.collection("chats").doc(parsed.threadId)
+          .collection("messages").doc(parsed.messageId).get();
+        if (message.exists) {
+          await marker.ref.delete();
+          retainedMessages += 1;
+          continue;
+        }
+
+        await admin.storage().bucket(bucketName).file(storagePath)
+          .delete({ ignoreNotFound: true });
+        await marker.ref.delete();
+        deletedObjects += 1;
+      }
+
+      passes += 1;
+      if (stale.size < CHAT_MEDIA_ORPHAN_DELETE_BATCH) break;
+    }
+
+    functions.logger.info("Chat media orphan cleanup complete", {
+      deletedObjects,
+      retainedMessages,
+      discardedMarkers,
+      passes,
+    });
+    return null;
+  });
