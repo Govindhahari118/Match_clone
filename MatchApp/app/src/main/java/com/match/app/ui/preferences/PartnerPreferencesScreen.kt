@@ -292,6 +292,35 @@ fun PartnerPreferencesScreen(
                         vm.update { it.copy(heightMinCm = min, heightMaxCm = max) }
                     }
                 )
+                RangePreferenceCard(
+                    title = "Weight",
+                    mode = ui.value.weightMode,
+                    min = ui.value.weightMinKg,
+                    max = ui.value.weightMaxKg,
+                    minAllowed = 30,
+                    maxAllowed = 250,
+                    suffix = "kg",
+                    onMode = { mode -> vm.update { it.copy(weightMode = mode) } },
+                    onRange = { min, max ->
+                        vm.update { it.copy(weightMinKg = min, weightMaxKg = max) }
+                    }
+                )
+                ListPreferenceCard(
+                    title = "Annual income range",
+                    mode = ui.value.incomeBandMode,
+                    values = ui.value.incomeBands,
+                    hint = "₹10–15L, ₹15–25L…",
+                    onMode = { mode -> vm.update { it.copy(incomeBandMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(incomeBands = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Complexion",
+                    mode = ui.value.complexionMode,
+                    values = ui.value.complexions,
+                    hint = "Optional appearance preference",
+                    onMode = { mode -> vm.update { it.copy(complexionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(complexions = values) } }
+                )
 
                 PreferenceSectionHeader(
                     title = "Community & faith",
