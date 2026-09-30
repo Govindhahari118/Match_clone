@@ -142,8 +142,8 @@ def main() -> int:
 
     preference_policy = text(ROOT / "functions/src/partnerPreferencesPolicy.ts")
     preference_callable = text(ROOT / "functions/src/partnerPreferences.ts")
-    require("schemaVersion: 3" in preference_callable,
-            "partner-preference schema must remain v3 for the expanded durable contract", failures)
+    require("schemaVersion: 4" in preference_callable,
+            "partner-preference schema must remain v4 for reciprocal profile-preference matching", failures)
     for preference_field in [
         "gothraMode",
         "faithTraditionMode",
@@ -154,6 +154,9 @@ def main() -> int:
         "employerTypeMode",
         "familyStatusMode",
         "visaStatusMode",
+        "weightMode",
+        "incomeBandMode",
+        "complexionMode",
     ]:
         require(preference_field in preference_policy,
                 f"backend partner-preference contract missing {preference_field}", failures)
@@ -161,7 +164,15 @@ def main() -> int:
                 f"Android partner-preference contract missing {preference_field}", failures)
         require(preference_field in preference_screen,
                 f"partner-preference UI missing {preference_field}", failures)
+    require("partner-preferences-v4-reciprocal-min" in preference_policy,
+            "reciprocal preference scoring must remain versioned and weaker-side bounded", failures)
+    require("Math.min(forward, reverse)" in preference_policy,
+            "mutual preference score must be limited by the weaker direction", failures)
 
+    discovery_functions = text(ROOT / "functions/src/discovery.ts")
+    require('"minMutualMatchPercent"' in discovery_functions and
+            "mutualPreferenceFit" in discovery_functions,
+            "discovery must support server-authoritative strong mutual-match thresholds", failures)
 
     location_functions = text(ROOT / "functions/src/location.ts")
     horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
