@@ -151,6 +151,7 @@ export const updateRiskAssessment = functions.https.onCall(async (data, context)
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "RISK_ASSESSMENT_UPDATED",
       targetCollection: "riskAssessments",
       targetId: targetUid,
