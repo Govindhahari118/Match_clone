@@ -77,9 +77,9 @@ class SubscriptionRepository @Inject constructor(
                 trySend(false)
                 return@addSnapshotListener
             }
-            val expiry = snap?.getTimestamp("premiumUntil")?.toDate()?.time
-                ?: snap?.getLong("subscriptionExpiry") ?: 0L
-            trySend((snap?.getBoolean("isPremium") == true) && expiry > System.currentTimeMillis())
+            // The public document carries only a lightweight badge. Detailed plan and expiry
+            // are private and refreshed through getMyMembershipStatus.
+            trySend(snap?.getBoolean("isPremium") == true)
         }
         awaitClose { reg.remove() }
     }
@@ -91,41 +91,49 @@ class SubscriptionRepository @Inject constructor(
         false
     }
 
+    private data class MembershipStatus(
+        val active: Boolean,
+        val planId: String,
+        val expiresAtMillis: Long
+    )
+
+    private suspend fun fetchMembershipStatus(): MembershipStatus {
+        if (FirebaseAuth.getInstance().currentUser?.uid.isNullOrBlank()) {
+            return MembershipStatus(false, "FREE", 0L)
+        }
+        val result = functions.getHttpsCallable("getMyMembershipStatus").call().await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid membership status response")
+        val active = data["active"] as? Boolean ?: false
+        val expiry = (data["expiresAtMillis"] as? Number)?.toLong() ?: 0L
+        val planId = if (active) data["planId"] as? String ?: "FREE" else "FREE"
+        return MembershipStatus(active, planId, if (active) expiry else 0L)
+    }
+
     private suspend fun syncPremiumStatusFromServer(): Boolean {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return false
-        val doc = db.collection("users").document(uid).get().await()
-        val expiry = doc.getTimestamp("premiumUntil")?.toDate()?.time
-            ?: doc.getLong("subscriptionExpiry") ?: 0L
-        val active = (doc.getBoolean("isPremium") == true) && expiry > System.currentTimeMillis()
+        val status = fetchMembershipStatus()
+        session.setSubscriptionPlan(status.planId)
         val localId = session.userId.first()
         if (localId != null) {
             val user = userDao.findById(localId)
             if (user != null) {
                 userDao.update(
                     user.copy(
-                        isPremium = active,
-                        subscriptionPlan = if (active) {
-                            doc.getString("subscriptionPlan") ?: "FREE"
-                        } else {
-                            "FREE"
-                        },
-                        subscriptionExpiry = if (active) expiry else 0L
+                        isPremium = status.active,
+                        subscriptionPlan = status.planId,
+                        subscriptionExpiry = status.expiresAtMillis
                     )
                 )
             }
         }
-        return active
+        return status.active
     }
 
-    suspend fun getPremiumExpiry(): Long {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return 0L
-        return try {
-            val doc = db.collection("users").document(uid).get().await()
-            doc.getTimestamp("premiumUntil")?.toDate()?.time
-                ?: doc.getLong("subscriptionExpiry") ?: 0L
-        } catch (_: Exception) {
-            0L
-        }
+    suspend fun getPremiumExpiry(): Long = try {
+        fetchMembershipStatus().expiresAtMillis
+    } catch (e: Exception) {
+        Log.w("SubscriptionRepo", "Failed to refresh premium expiry", e)
+        0L
     }
 
     /**
