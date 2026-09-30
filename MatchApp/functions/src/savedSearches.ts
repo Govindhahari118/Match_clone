@@ -49,6 +49,10 @@ function sanitizeFilter(raw: unknown): Record<string, string | number | boolean>
     faithInstitution: text(f, "faithInstitution", 100),
     visaStatus: text(f, "visaStatus", 80),
     minScore: Math.max(0, Math.min(1, number(f, "minScore", 0))),
+    minMutualMatchPercent: Math.max(
+      0,
+      Math.min(100, integer(f, "minMutualMatchPercent", 0))
+    ),
     religion: text(f, "religion", 80),
     motherTongue: text(f, "motherTongue", 80),
     maritalStatus: text(f, "maritalStatus", 80),
