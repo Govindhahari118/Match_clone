@@ -310,6 +310,9 @@ fun MatchesScreen(
                             DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO -> {
                                 { vm.setFilter(ui.filter.copy(withPhotoOnly = false)); Unit }
                             }
+                            DiscoveryEmptyState.Action.RELAX_MUTUAL_MATCH -> {
+                                { vm.setFilter(ui.filter.copy(minMutualMatchPercent = 0)); Unit }
+                            }
                             DiscoveryEmptyState.Action.NONE -> null
                         }
                     )
