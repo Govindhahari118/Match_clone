@@ -249,6 +249,21 @@ def main() -> int:
                     f"{relative}: payment/premium state must not affect trust or fraud heuristics",
                     failures)
 
+    legacy_local_trust_files = {
+        APP / "src/main/java/com/match/app/core/trust/TrustScoreEngine.kt",
+        APP / "src/main/java/com/match/app/core/security/FakeProfileDetector.kt",
+    }
+    for source in (APP / "src/main/java").rglob("*.kt"):
+        if source in legacy_local_trust_files:
+            continue
+        source_text = text(source)
+        require("TrustScoreEngine" not in source_text,
+                f"{source.relative_to(ROOT)}: production code must use server TrustRepository, not TrustScoreEngine",
+                failures)
+        require("FakeProfileDetector" not in source_text,
+                f"{source.relative_to(ROOT)}: production code must not use device-local fake-profile authority",
+                failures)
+
     privacy_policy = ROOT / "privacy-policy.html"
     legal_screen = APP / "src/main/java/com/match/app/ui/legal/LegalScreen.kt"
     legal_surfaces = [p for p in [privacy_policy, legal_screen] if p.exists()]
