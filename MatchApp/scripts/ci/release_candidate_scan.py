@@ -84,6 +84,20 @@ def main() -> int:
     require("DebugAppCheckProviderFactory" not in release_appcheck,
             "debug App Check provider leaked into release source set", failures)
 
+    appearance_model = text(APP / "src/main/java/com/match/app/domain/model/AppearancePreference.kt")
+    appearance_resolver = text(APP / "src/main/java/com/match/app/ui/theme/AppearanceThemeResolver.kt")
+    settings_screen = text(APP / "src/main/java/com/match/app/ui/settings/SettingsScreen.kt")
+    require("ThemePreference.NEUTRAL" in appearance_model and
+            'val themePreference: ThemePreference = ThemePreference.NEUTRAL' in appearance_model,
+            "appearance must remain Neutral-first for new accounts", failures)
+    require('"AUTOMATIC" -> NEUTRAL' in appearance_model,
+            "legacy automatic appearance must migrate to Neutral instead of inferring religion consent", failures)
+    require("ThemePreference.AUTOMATIC" in appearance_resolver and
+            "profileReligion" in appearance_resolver,
+            "religion-following appearance must remain an explicit resolver mode", failures)
+    require("Appearance changes presentation only; it never changes identity, matching, trust or authorization." in settings_screen,
+            "settings must explain that visual theme is independent from matching and identity", failures)
+
     remote_config = text(APP / "src/main/java/com/match/app/core/config/RemoteConfigManager.kt")
     for flag in [
         "KEY_SHOW_VIDEO_PROFILES",
