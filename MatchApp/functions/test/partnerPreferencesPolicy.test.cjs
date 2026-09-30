@@ -335,3 +335,21 @@ test("strong mutual score cannot hide one-sided preference mismatch", () => {
   assert.equal(score.reverse, 0.5);
   assert.equal(score.mutual, 0.5);
 });
+
+
+test("mutual score is unavailable unless both members express scorable preferences", () => {
+  const a = normalizePartnerPreferences({
+    cityMode: "PREFERRED",
+    cities: ["Hyderabad"],
+  });
+  const none = normalizePartnerPreferences({});
+  const score = bilateralPreferenceMatch(
+    a,
+    { city: "Hyderabad" },
+    none,
+    { city: "Hyderabad" }
+  );
+  assert.equal(score.forward, 1);
+  assert.equal(score.reverse, null);
+  assert.equal(score.mutual, null);
+});
