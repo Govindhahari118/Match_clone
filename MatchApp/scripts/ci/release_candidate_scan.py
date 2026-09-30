@@ -99,6 +99,26 @@ def main() -> int:
             failures,
         )
 
+    # Consent must be an explicit user choice, never an implicit repository side effect.
+    photo_repo = text(APP / "src/main/java/com/match/app/data/repo/PhotoRepository.kt")
+    location_repo = text(APP / "src/main/java/com/match/app/data/repo/LocationRepository.kt")
+    partner_repo = text(APP / "src/main/java/com/match/app/data/repo/PartnerPreferenceRepository.kt")
+    profile_screen = text(APP / "src/main/java/com/match/app/ui/profile/ProfileScreen.kt")
+    nearby_screen = text(APP / "src/main/java/com/match/app/ui/nearby/NearbyMatchesScreen.kt")
+    preference_screen = text(APP / "src/main/java/com/match/app/ui/preferences/PartnerPreferencesScreen.kt")
+    require('consentRepository.set("media_processing", true)' not in photo_repo,
+            "profile photo repository must not auto-grant media-processing consent", failures)
+    require('consentRepository.set("location", true)' not in location_repo,
+            "location repository must not auto-grant location consent", failures)
+    require('consentRepository.set("sensitive_preferences", true)' not in partner_repo,
+            "partner preference repository must not auto-grant sensitive-preference consent", failures)
+    require('"profile_media_consent"' in profile_screen,
+            "profile photo flow must expose an explicit media-processing consent control", failures)
+    require('"nearby_location_consent"' in nearby_screen,
+            "Nearby must expose an explicit location-processing consent control", failures)
+    require('"Sensitive preference processing"' in preference_screen,
+            "partner preferences must expose explicit sensitive-processing consent", failures)
+
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
     ignore = gitignore + "\n" + local_gitignore
