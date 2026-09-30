@@ -233,6 +233,7 @@ export const reviewProfilePhoto = functions.https.onCall(async (data, context) =
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "PROFILE_PHOTO_REVIEWED",
       targetCollection: "photoModeration",
       targetId: moderationId,
@@ -335,6 +336,7 @@ export const getPhotoModerationReviewCase = functions.https.onCall(async (data, 
   await db.collection("opsAuditLog").add({
     actorUid: actor.uid,
     actorRole: actor.role,
+    requestId: actor.requestId,
     action: "PROFILE_PHOTO_ACCESSED",
     targetCollection: "photoModeration",
     targetId: moderationId,
@@ -465,6 +467,7 @@ export const getVideoModerationReviewCase = functions.https.onCall(async (data, 
   await db.collection("opsAuditLog").add({
     actorUid: actor.uid,
     actorRole: actor.role,
+    requestId: actor.requestId,
     action: "PROFILE_VIDEO_ACCESSED",
     targetCollection: "videoModeration",
     targetId: moderationId,
@@ -518,6 +521,7 @@ export const reviewProfileVideo = functions.https.onCall(async (data, context) =
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "PROFILE_VIDEO_REVIEWED",
       targetCollection: "videoModeration",
       targetId: moderationId,
