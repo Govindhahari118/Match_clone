@@ -52,8 +52,31 @@ class QuestionnaireViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val uid = session.userId.first()
-            val has = uid?.let { repo.hasQuestionnaire(it) } == true
-            _state.update { it.copy(loading = false, saved = has) }
+            if (uid == null) {
+                _state.update { it.copy(loading = false, message = "Sign in to use the questionnaire.") }
+                return@launch
+            }
+            runCatching { repo.load(uid) }
+                .onSuccess { answers ->
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            saved = answers != null,
+                            selfLikert = answers?.selfLikert.orEmpty(),
+                            selfInterests = answers?.selfInterests.orEmpty(),
+                            partnerLikert = answers?.partnerLikert.orEmpty(),
+                            partnerInterests = answers?.partnerInterests.orEmpty()
+                        )
+                    }
+                }
+                .onFailure {
+                    _state.update {
+                        it.copy(
+                            loading = false,
+                            message = "Could not load your questionnaire. Check your connection and try again."
+                        )
+                    }
+                }
         }
     }
 
@@ -75,12 +98,30 @@ class QuestionnaireViewModel @Inject constructor(
         if (uid == null) {
             _state.update { it.copy(saving = false, message = "Not signed in") }; return@launch
         }
-        repo.save(
-            userId = uid,
-            selfLikert = s.selfLikert, selfInterests = s.selfInterests,
-            partnerLikert = s.partnerLikert, partnerInterests = s.partnerInterests
-        )
-        _state.update { it.copy(saving = false, saved = true, message = "Saved. Your matches will refresh.") }
+        runCatching {
+            repo.save(
+                userId = uid,
+                selfLikert = s.selfLikert,
+                selfInterests = s.selfInterests,
+                partnerLikert = s.partnerLikert,
+                partnerInterests = s.partnerInterests
+            )
+        }.onSuccess {
+            _state.update {
+                it.copy(
+                    saving = false,
+                    saved = true,
+                    message = "Saved securely. Your values compatibility will refresh."
+                )
+            }
+        }.onFailure {
+            _state.update {
+                it.copy(
+                    saving = false,
+                    message = "Could not save your questionnaire. Check your connection and try again."
+                )
+            }
+        }
     }
 
     fun clearMessage() = _state.update { it.copy(message = null) }
