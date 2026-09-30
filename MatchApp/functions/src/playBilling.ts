@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import * as https from "https";
 import { db, requireAppCheck } from "./shared";
+import { playAccountOwnershipMismatch } from "./riskSignalPolicy";
 import {
   isVoidedPaymentStatus,
   rebuildEntitlementLedger,
@@ -335,7 +336,12 @@ export const verifyGooglePlayPurchase = functions
       throw new functions.https.HttpsError("invalid-argument", "Unexpected purchase quantity");
     }
 
-    if (purchase.obfuscatedExternalAccountId !== sha256(uid)) {
+    if (playAccountOwnershipMismatch(sha256(uid), purchase.obfuscatedExternalAccountId)) {
+      await db.collection("riskSignals").doc(uid).set({
+        paymentAccountMismatchCount: admin.firestore.FieldValue.increment(1),
+        lastPaymentAccountMismatchAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
       throw new functions.https.HttpsError("permission-denied", "Purchase belongs to another account");
     }
 
