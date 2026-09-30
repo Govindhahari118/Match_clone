@@ -129,10 +129,13 @@ def main() -> int:
 
     location_functions = text(ROOT / "functions/src/location.ts")
     horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
+    discovery_functions = text(ROOT / "functions/src/discovery.ts")
     require(location_functions.count('requireProductionFeature("nearby")') >= 2,
             "Nearby backend update/discovery callables must enforce the rollout gate", failures)
     require('requireProductionFeature("kundali")' in horoscope_functions,
             "Kundali backend callable must enforce the rollout gate", failures)
+    require('requireProductionFeature("nri_features")' in discovery_functions,
+            "Dedicated NRI discovery filters must enforce the backend rollout gate", failures)
 
     media_functions = text(ROOT / "functions/src/media.ts")
     video_submit = media_functions.split("export const submitProfileVideo", 1)[1].split(
@@ -168,7 +171,6 @@ def main() -> int:
     play_billing = text(ROOT / "functions/src/playBilling.ts")
     interests_functions = text(ROOT / "functions/src/interests.ts")
     privacy_functions = text(ROOT / "functions/src/privacy.ts")
-    discovery_functions = text(ROOT / "functions/src/discovery.ts")
     users_functions = text(ROOT / "functions/src/users.ts")
     require('membershipActive:' in play_billing and 'getMyMembershipStatus' in play_billing,
             "Play billing must persist and expose private membership authority", failures)
