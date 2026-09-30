@@ -34,14 +34,20 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), {
-      firebaseUid: 'alice', displayName: 'Alice', age: 28, gender: 'FEMALE', lookingFor: 'MALE',
-      city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
+      firebaseUid: 'alice', username: 'alice123', displayName: 'Alice', age: 28,
+      gender: 'FEMALE', lookingFor: 'MALE', state: 'Telangana', city: 'Hyderabad',
+      motherTongue: 'Telugu', religion: 'Hindu', education: 'B.Tech',
+      profession: 'Engineer', maritalStatus: 'Never Married', heightCm: 165,
+      isPremium: false, isVerified: false, verificationLevel: 0,
+      subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'users/bob'), {
-      firebaseUid: 'bob', displayName: 'Bob', age: 30, gender: 'MALE', lookingFor: 'FEMALE',
-      city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
+      firebaseUid: 'bob', username: 'bob123', displayName: 'Bob', age: 30,
+      gender: 'MALE', lookingFor: 'FEMALE', state: 'Telangana', city: 'Hyderabad',
+      motherTongue: 'Telugu', religion: 'Hindu', education: 'B.Tech',
+      profession: 'Engineer', maritalStatus: 'Never Married', heightCm: 175,
+      isPremium: false, isVerified: false, verificationLevel: 0,
+      subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'userPrivate/alice'), { phoneNumber: '9999999999', email: 'alice@example.test' });
   });
