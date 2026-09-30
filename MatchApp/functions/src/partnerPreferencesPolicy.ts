@@ -283,17 +283,19 @@ function residenceClass(subject: Record<string, unknown>): string {
   const country = typeof subject.countryOfResidence === "string"
     ? subject.countryOfResidence.trim().toLocaleLowerCase("en-IN")
     : "";
-  return subject.isNRI === true || (country.length > 0 && country !== "india")
-    ? "NRI"
-    : "INDIA_RESIDENT";
+  if (subject.isNRI === true) return "NRI";
+  if (!country) return "UNKNOWN";
+  return country === "india" ? "INDIA_RESIDENT" : "NRI";
 }
 
 function childrenClass(subject: Record<string, unknown>): string {
-  return subject.hasChildren === true ? "HAS_CHILDREN" : "NO_CHILDREN";
+  if (typeof subject.hasChildren !== "boolean") return "UNKNOWN";
+  return subject.hasChildren ? "HAS_CHILDREN" : "NO_CHILDREN";
 }
 
 function relocationClass(subject: Record<string, unknown>): string {
-  return subject.willingToRelocate === true
+  if (typeof subject.willingToRelocate !== "boolean") return "UNKNOWN";
+  return subject.willingToRelocate
     ? "WILLING_TO_RELOCATE"
     : "NOT_WILLING_TO_RELOCATE";
 }
