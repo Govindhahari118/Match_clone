@@ -16,10 +16,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.PartnerPreferenceMode
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferences
+import com.match.app.data.session.SessionStore
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.MatreeDesign
@@ -27,6 +29,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -37,6 +40,7 @@ data class PartnerPreferencesUi(
     val consentSaving: Boolean = false,
     val sensitiveConsentCurrent: Boolean = false,
     val sensitiveConsentVersion: String = "",
+    val profileReligion: String = "",
     val value: PartnerPreferences = PartnerPreferences(),
     val message: String? = null,
     val error: String? = null
@@ -45,7 +49,9 @@ data class PartnerPreferencesUi(
 @HiltViewModel
 class PartnerPreferencesViewModel @Inject constructor(
     private val repository: PartnerPreferenceRepository,
-    private val consentRepository: ConsentRepository
+    private val consentRepository: ConsentRepository,
+    private val session: SessionStore,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(PartnerPreferencesUi())
     val ui: StateFlow<PartnerPreferencesUi> = _ui.asStateFlow()
@@ -54,10 +60,16 @@ class PartnerPreferencesViewModel @Inject constructor(
         viewModelScope.launch {
             val preferences = runCatching { repository.load() }
             val consents = runCatching { consentRepository.getState() }
+            val profileReligion = runCatching {
+                session.userId.first()?.let { userId ->
+                    authRepository.currentProfile(userId)?.religion
+                }.orEmpty()
+            }.getOrDefault("")
             val consent = consents.getOrNull()
                 ?.firstOrNull { it.purpose == "sensitive_preferences" }
             _ui.value = PartnerPreferencesUi(
                 loading = false,
+                profileReligion = profileReligion,
                 value = preferences.getOrDefault(PartnerPreferences()),
                 sensitiveConsentCurrent = consent?.isCurrent == true,
                 sensitiveConsentVersion = consent?.noticeVersion.orEmpty(),
@@ -93,6 +105,29 @@ class PartnerPreferencesViewModel @Inject constructor(
                     error = error.message ?: "Could not update sensitive-preference consent."
                 )
             }
+        }
+    }
+
+    fun useMyConfirmedReligion() {
+        val religion = _ui.value.profileReligion.trim()
+        if (religion.isBlank()) {
+            _ui.update { it.copy(error = "Your profile does not have a confirmed religion to use.") }
+            return
+        }
+        if (!_ui.value.sensitiveConsentCurrent) {
+            _ui.update {
+                it.copy(error = "Enable sensitive-preference processing before using this preset.")
+            }
+            return
+        }
+        update {
+            it.copy(
+                religionMode = PartnerPreferenceMode.STRICT,
+                religions = listOf(religion)
+            )
+        }
+        _ui.update {
+            it.copy(message = "Using your confirmed religion as a strict preference. Save to apply it.")
         }
     }
 
@@ -199,6 +234,32 @@ fun PartnerPreferencesScreen(
                             onCheckedChange = vm::setSensitiveConsent,
                             enabled = !ui.consentSaving
                         )
+                    }
+                }
+
+                if (ui.profileReligion.isNotBlank()) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(
+                            Modifier.padding(MatreeDesign.spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+                        ) {
+                            Text(
+                                "Quick setup",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Your confirmed profile religion is ${ui.profileReligion}. Matching does not use it automatically.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FilledTonalButton(
+                                onClick = vm::useMyConfirmedReligion,
+                                enabled = ui.sensitiveConsentCurrent
+                            ) {
+                                Text("Use my confirmed religion")
+                            }
+                        }
                     }
                 }
 
