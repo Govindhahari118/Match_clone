@@ -40,6 +40,12 @@ class MatchingRepository @Inject constructor(
     private val interestService: FirestoreInterestService
 ) {
 
+    private data class ReciprocalPreferenceScores(
+        val forward: Float?,
+        val reverse: Float?,
+        val mutual: Float?
+    )
+
     suspend fun discoverPaged(filter: MatchFilter = MatchFilter()): Flow<PagingData<UserProfile>> {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
         val me = uid.let { userDao.findByFirebaseUid(it) }
@@ -187,8 +193,9 @@ class MatchingRepository @Inject constructor(
                     val combined = MatchScorer.explain(
                         seekerProfile,
                         candidateProfile,
-                        authorizedCandidates[candidate.firebaseUid]
+                        authorizedCandidates[candidate.firebaseUid]?.mutual
                     )
+                    val preferenceScores = authorizedCandidates[candidate.firebaseUid]
                     MatchResult(
                         user = candidateProfile,
                         questionnaireScore = qScore ?: 0f,
@@ -202,7 +209,10 @@ class MatchingRepository @Inject constructor(
                                 score = it.score,
                                 configuredWeight = it.configuredWeight
                             )
-                        }
+                        },
+                        forwardPreferenceScore = preferenceScores?.forward,
+                        reversePreferenceScore = preferenceScores?.reverse,
+                        mutualPreferenceScore = preferenceScores?.mutual
                     )
                 }
                 .filter { filter.minScore <= 0f || it.primary() >= filter.minScore }
@@ -219,13 +229,13 @@ class MatchingRepository @Inject constructor(
     private suspend fun syncRemoteCandidates(
         seeker: UserEntity,
         filter: MatchFilter
-    ): Map<String, Float?> {
+    ): Map<String, ReciprocalPreferenceScores> {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?.takeIf { it.isNotBlank() }
             ?: return emptyMap()
         val blocked = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
         val liked = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
-        val authorized = linkedMapOf<String, Float?>()
+        val authorized = linkedMapOf<String, ReciprocalPreferenceScores>()
         var cursor: String? = null
 
         repeat(MAX_DISCOVERY_PAGES_PER_REFRESH) {
@@ -249,7 +259,11 @@ class MatchingRepository @Inject constructor(
                     result.data.forEach { remote ->
                         val entity = remote.profile
                         if (entity.firebaseUid.isNotBlank()) {
-                            authorized[entity.firebaseUid] = remote.pairPreferenceFit
+                            authorized[entity.firebaseUid] = ReciprocalPreferenceScores(
+                                forward = remote.forwardPreferenceFit,
+                                reverse = remote.reversePreferenceFit,
+                                mutual = remote.mutualPreferenceFit ?: remote.pairPreferenceFit
+                            )
                         }
                         cacheRemoteCandidate(entity)
                     }
