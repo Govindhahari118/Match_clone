@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { requestIdFromContext } = require("../lib/shared");
+const { requestIdFromContext, operatorMfaSatisfied } = require("../lib/shared");
 
 function contextWith(header) {
   return {
@@ -28,4 +28,15 @@ test("rejects unsafe or oversized correlation ids", () => {
 
 test("generates id when no correlation header exists", () => {
   assert.match(requestIdFromContext(contextWith(undefined)), /^[0-9a-f-]{36}$/i);
+});
+
+
+test("recognizes Firebase second-factor claim for operator MFA", () => {
+  assert.equal(operatorMfaSatisfied({
+    firebase: { sign_in_second_factor: "phone" },
+  }), true);
+  assert.equal(operatorMfaSatisfied({
+    firebase: { sign_in_provider: "password" },
+  }), false);
+  assert.equal(operatorMfaSatisfied(undefined), false);
 });
