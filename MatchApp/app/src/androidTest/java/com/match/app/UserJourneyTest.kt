@@ -1,10 +1,7 @@
 package com.match.app
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -12,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -43,9 +41,7 @@ class UserJourneyTest {
 
     @Test
     fun freshLaunchShowsProductionAuthEntryOnly() {
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodes(hasTestTag("signin_screen")).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForTag("signin_screen")
 
         compose.onNodeWithTag("signin_screen").assertIsDisplayed()
         compose.onNodeWithTag("signin_email").assertIsDisplayed()
@@ -53,20 +49,16 @@ class UserJourneyTest {
         compose.onNodeWithTag("signin_submit").assertIsDisplayed()
         compose.onNodeWithTag("signin_go_signup").assertIsDisplayed()
         compose.onNodeWithTag("signin_phone").assertIsDisplayed()
-        compose.onNodeWithTag("bottom_bar").assertDoesNotExist()
+        assertTagDoesNotExist("bottom_bar")
     }
 
     @Test
     fun phoneOtpEntryIsReachableWithoutDemoIdentity() {
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodes(hasTestTag("signin_phone")).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForTag("signin_phone")
 
         compose.onNodeWithTag("signin_phone").performClick()
 
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodes(hasTestTag("phone_auth_screen")).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForTag("phone_auth_screen")
         compose.onNodeWithTag("phone_auth_screen").assertIsDisplayed()
         compose.onNodeWithTag("phone_auth_number").assertIsDisplayed()
         compose.onNodeWithTag("phone_auth_send").assertIsDisplayed()
@@ -74,13 +66,27 @@ class UserJourneyTest {
 
     @Test
     fun authEntryDoesNotExposeRetiredDemoNavigation() {
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodes(hasTestTag("signin_screen")).fetchSemanticsNodes().isNotEmpty()
-        }
+        waitForTag("signin_screen")
 
-        compose.onNodeWithText("Demo", substring = true).assertDoesNotExist()
-        compose.onNodeWithTag("drawer_regions").assertDoesNotExist()
-        compose.onNodeWithTag("drawer_circles").assertDoesNotExist()
-        compose.onNodeWithTag("drawer_stories").assertDoesNotExist()
+        assertTrue(
+            "Auth entry must not expose retired demo navigation",
+            runCatching { compose.onNodeWithText("Demo", substring = true).fetchSemanticsNode() }.isFailure
+        )
+        assertTagDoesNotExist("drawer_regions")
+        assertTagDoesNotExist("drawer_circles")
+        assertTagDoesNotExist("drawer_stories")
+    }
+
+    private fun waitForTag(tag: String) {
+        compose.waitUntil(timeoutMillis = 10_000) {
+            runCatching { compose.onNodeWithTag(tag).fetchSemanticsNode() }.isSuccess
+        }
+    }
+
+    private fun assertTagDoesNotExist(tag: String) {
+        assertTrue(
+            "Expected no semantics node with tag '$tag'",
+            runCatching { compose.onNodeWithTag(tag).fetchSemanticsNode() }.isFailure
+        )
     }
 }
