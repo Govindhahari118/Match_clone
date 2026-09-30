@@ -7,7 +7,7 @@ import kotlin.math.abs
 /**
  * Explainable, symmetric compatibility score used by production discovery.
  *
- * v3 keeps applicability-aware astrology and mutual trust, and adds the backend-derived bilateral
+ * v4 keeps applicability-aware astrology and mutual trust, and uses the backend-derived reciprocal
  * partner-preference fit as an optional pair-specific factor. Raw partner preferences never enter
  * this client scorer; only the trusted 0..1 pair aggregate is accepted.
  *
@@ -17,7 +17,7 @@ import kotlin.math.abs
  */
 object MatchScorer {
 
-    const val FORMULA_VERSION = "match-v3-bilateral-preferences"
+    const val FORMULA_VERSION = "match-v4-reciprocal-preferences"
 
     data class Factor(
         val key: String,
