@@ -41,6 +41,7 @@ class SessionStore(private val context: Context) {
     private val KEY_FAITH_INSTITUTION = stringPreferencesKey("filter_faith_institution")
     private val KEY_VISA_STATUS = stringPreferencesKey("filter_visa_status")
     private val KEY_MIN_SCORE = floatPreferencesKey("filter_min_score")
+    private val KEY_MIN_MUTUAL_MATCH = intPreferencesKey("filter_min_mutual_match_percent")
     private val KEY_RELIGION  = stringPreferencesKey("filter_religion")
     private val KEY_TONGUE    = stringPreferencesKey("filter_tongue")
     private val KEY_MARITAL   = stringPreferencesKey("filter_marital")
@@ -128,6 +129,7 @@ class SessionStore(private val context: Context) {
             faithInstitution = it[KEY_FAITH_INSTITUTION] ?: "",
             visaStatus = it[KEY_VISA_STATUS] ?: "",
             minScore = it[KEY_MIN_SCORE] ?: 0f,
+            minMutualMatchPercent = it[KEY_MIN_MUTUAL_MATCH] ?: 0,
             religion = it[KEY_RELIGION] ?: "",
             motherTongue = it[KEY_TONGUE] ?: "",
             maritalStatus = it[KEY_MARITAL] ?: "",
@@ -255,6 +257,7 @@ class SessionStore(private val context: Context) {
         it[KEY_FAITH_INSTITUTION] = f.faithInstitution
         it[KEY_VISA_STATUS] = f.visaStatus
         it[KEY_MIN_SCORE] = f.minScore
+        it[KEY_MIN_MUTUAL_MATCH] = f.minMutualMatchPercent.coerceIn(0, 100)
         it[KEY_RELIGION] = f.religion
         it[KEY_TONGUE] = f.motherTongue
         it[KEY_MARITAL] = f.maritalStatus
