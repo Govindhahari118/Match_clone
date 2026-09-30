@@ -134,6 +134,26 @@ def main() -> int:
     require('requireProductionFeature("kundali")' in horoscope_functions,
             "Kundali backend callable must enforce the rollout gate", failures)
 
+    media_functions = text(ROOT / "functions/src/media.ts")
+    require(media_functions.count('requireProductionFeature("video_profiles")') >= 2,
+            "Video profile submission and approval must enforce the backend rollout gate", failures)
+    require("onProfileVideoUploaded" in media_functions and
+            "productionFeatureEnabled" in media_functions,
+            "Video profile Storage uploads must be purged while the backend feature is disabled", failures)
+    require("cleanupAbandonedProfileVideos" in media_functions and
+            "profileVideoOrphans" in media_functions,
+            "Unsubmitted profile-video uploads must have bounded orphan cleanup", failures)
+    photo_submit = media_functions.split("export const submitProfilePhoto", 1)[1].split(
+        "export const listPendingPhotoModeration", 1
+    )[0]
+    video_submit = media_functions.split("export const submitProfileVideo", 1)[1].split(
+        "export const listPendingVideoModeration", 1
+    )[0]
+    require("profileVideoOrphans" not in photo_submit,
+            "Video orphan cleanup must not be wired into profile-photo submission", failures)
+    require("profileVideoOrphans" in video_submit,
+            "Video submission must clear its unregistered-upload orphan record", failures)
+
 
     play_billing = text(ROOT / "functions/src/playBilling.ts")
     interests_functions = text(ROOT / "functions/src/interests.ts")
