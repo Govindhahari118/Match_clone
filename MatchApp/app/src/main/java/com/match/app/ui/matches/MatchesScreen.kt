@@ -605,12 +605,28 @@ private fun AllIndiaFilterSheet(
                         valueRange = 18f..70f,
                         steps = 51
                     )
+                    Text("Height ${f.heightMinCm}–${f.heightMaxCm} cm")
+                    RangeSlider(
+                        value = f.heightMinCm.toFloat()..f.heightMaxCm.toFloat(),
+                        onValueChange = {
+                            f = f.copy(
+                                heightMinCm = it.start.toInt(),
+                                heightMaxCm = it.endInclusive.toInt()
+                            )
+                        },
+                        valueRange = 90f..250f,
+                        steps = 159
+                    )
                     OptionDropdown("Marital status", f.maritalStatus, listOf("Any") + IndiaProfileCatalog.maritalStatuses) { f = f.copy(maritalStatus = anyToBlank(it)) }
                     OptionDropdown("Last active", activityLabel(f.lastActiveWithinDays), listOf("Any time", "Online / today", "Last 7 days", "Last 30 days")) {
                         f = f.copy(lastActiveWithinDays = when (it) { "Online / today" -> 1; "Last 7 days" -> 7; "Last 30 days" -> 30; else -> 0 })
                     }
+                    OptionDropdown("Recently joined", recentlyJoinedLabel(f.recentlyJoinedDays), listOf("Any time", "Last 7 days", "Last 30 days", "Last 90 days")) {
+                        f = f.copy(recentlyJoinedDays = when (it) { "Last 7 days" -> 7; "Last 30 days" -> 30; "Last 90 days" -> 90; else -> 0 })
+                    }
                     ToggleRow("Verified profiles only", f.verifiedOnly) { f = f.copy(verifiedOnly = it) }
                     ToggleRow("Profiles with photo", f.withPhotoOnly) { f = f.copy(withPhotoOnly = it) }
+                    ToggleRow("Paid members only", f.premiumOnly) { f = f.copy(premiumOnly = it) }
                 }
 
                 FilterBlock("Location") {
@@ -619,6 +635,10 @@ private fun AllIndiaFilterSheet(
                     }
                     OutlinedTextField(f.city, { f = f.copy(city = it.take(80)) }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OptionDropdown("Native state", f.nativeState, listOf("Any") + IndiaProfileCatalog.statesAndUnionTerritories) { f = f.copy(nativeState = anyToBlank(it)) }
+                    OutlinedTextField(f.countryOfResidence, { f = f.copy(countryOfResidence = it.take(80)) }, label = { Text("Country of residence") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.citizenship, { f = f.copy(citizenship = it.take(80)) }, label = { Text("Citizenship") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OptionDropdown("Residential status", f.residentialStatus, listOf("Any") + IndiaProfileCatalog.residentialStatuses) { f = f.copy(residentialStatus = anyToBlank(it)) }
+                    OutlinedTextField(f.visaStatus, { f = f.copy(visaStatus = it.take(80)) }, label = { Text("Visa / permit status") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     ToggleRow("NRI only", f.nriOnly) { f = f.copy(nriOnly = it) }
                     ToggleRow("Willing to relocate", f.willingToRelocate) { f = f.copy(willingToRelocate = it) }
                 }
@@ -636,6 +656,9 @@ private fun AllIndiaFilterSheet(
                     OutlinedTextField(f.caste, { f = f.copy(caste = it.take(80)) }, label = { Text("Community / caste") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(f.subCaste, { f = f.copy(subCaste = it.take(80)) }, label = { Text("Sub-community / sub-caste") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(f.gothra, { f = f.copy(gothra = it.take(80)) }, label = { Text("Gothra / clan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithTradition, { f = f.copy(faithTradition = it.take(80)) }, label = { Text("Faith tradition / denomination") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithSubTradition, { f = f.copy(faithSubTradition = it.take(80)) }, label = { Text("Faith sub-tradition") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithInstitution, { f = f.copy(faithInstitution = it.take(100)) }, label = { Text("Faith institution / community") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
 
                 FilterBlock("Education & career") {
@@ -651,7 +674,12 @@ private fun AllIndiaFilterSheet(
                     OptionDropdown("Smoking", f.smoking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(smoking = anyToBlank(it)) }
                     OptionDropdown("Drinking", f.drinking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(drinking = anyToBlank(it)) }
                     OptionDropdown("Family type", f.familyType, listOf("Any") + IndiaProfileCatalog.familyTypes) { f = f.copy(familyType = anyToBlank(it)) }
+                    OptionDropdown("Family status", f.familyStatus, listOf("Any") + IndiaProfileCatalog.familyStatuses) { f = f.copy(familyStatus = anyToBlank(it)) }
+                    OptionDropdown("Children", f.hasChildrenFilter.ifBlank { "Don't mind" }, listOf("Don't mind", "No children", "Has children")) {
+                        f = f.copy(hasChildrenFilter = if (it == "Don't mind") "" else it)
+                    }
                     OptionDropdown("Physical status", f.physicalStatus, listOf("Any") + IndiaProfileCatalog.physicalStatuses) { f = f.copy(physicalStatus = anyToBlank(it)) }
+                    OutlinedTextField(f.hobbies, { f = f.copy(hobbies = it.take(200)) }, label = { Text("Hobby / interest keyword") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
 
                 if (astrologyApplicable) {
@@ -706,6 +734,7 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 
 private fun anyToBlank(value: String) = if (value == "Any" || value == "Any time") "" else value
 private fun activityLabel(days: Int) = when (days) { 1 -> "Online / today"; 7 -> "Last 7 days"; 30 -> "Last 30 days"; else -> "Any time" }
+private fun recentlyJoinedLabel(days: Int) = when (days) { 7 -> "Last 7 days"; 30 -> "Last 30 days"; 90 -> "Last 90 days"; else -> "Any time" }
 
 private fun activeFilterCount(f: MatchFilter): Int = listOf(
     f.ageMin != 18 || f.ageMax != 70,
