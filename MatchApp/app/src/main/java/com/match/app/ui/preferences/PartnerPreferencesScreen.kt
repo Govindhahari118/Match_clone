@@ -253,12 +253,52 @@ fun PartnerPreferencesScreen(
                     onValues = { values -> vm.update { it.copy(subCastes = values) } }
                 )
                 ListPreferenceCard(
+                    title = "Gothra / lineage",
+                    mode = ui.value.gothraMode,
+                    values = ui.value.gothras,
+                    hint = "Optional lineage preference",
+                    onMode = { mode -> vm.update { it.copy(gothraMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(gothras = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith tradition",
+                    mode = ui.value.faithTraditionMode,
+                    values = ui.value.faithTraditions,
+                    hint = "Denomination, sect, tradition…",
+                    onMode = { mode -> vm.update { it.copy(faithTraditionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithTraditions = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith sub-tradition",
+                    mode = ui.value.faithSubTraditionMode,
+                    values = ui.value.faithSubTraditions,
+                    hint = "Optional sub-tradition",
+                    onMode = { mode -> vm.update { it.copy(faithSubTraditionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithSubTraditions = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith institution / community",
+                    mode = ui.value.faithInstitutionMode,
+                    values = ui.value.faithInstitutions,
+                    hint = "Optional church, jamaat, samaj or institution",
+                    onMode = { mode -> vm.update { it.copy(faithInstitutionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithInstitutions = values) } }
+                )
+                ListPreferenceCard(
                     title = "State / region",
                     mode = ui.value.stateMode,
                     values = ui.value.states,
                     hint = "Telangana, Karnataka…",
                     onMode = { mode -> vm.update { it.copy(stateMode = mode) } },
                     onValues = { values -> vm.update { it.copy(states = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Native state",
+                    mode = ui.value.nativeStateMode,
+                    values = ui.value.nativeStates,
+                    hint = "Telangana, Andhra Pradesh…",
+                    onMode = { mode -> vm.update { it.copy(nativeStateMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(nativeStates = values) } }
                 )
                 ListPreferenceCard(
                     title = "City",
@@ -291,6 +331,14 @@ fun PartnerPreferencesScreen(
                     hint = "Citizen, Permanent Resident, Work Visa…",
                     onMode = { mode -> vm.update { it.copy(residentialStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(residentialStatuses = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Visa status",
+                    mode = ui.value.visaStatusMode,
+                    values = ui.value.visaStatuses,
+                    hint = "Citizen, PR, H-1B, student visa…",
+                    onMode = { mode -> vm.update { it.copy(visaStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(visaStatuses = values) } }
                 )
                 ChoicePreferenceCard(
                     title = "Residence class",
@@ -350,6 +398,14 @@ fun PartnerPreferencesScreen(
                     onValues = { values -> vm.update { it.copy(educationLevels = values) } }
                 )
                 ListPreferenceCard(
+                    title = "Education field",
+                    mode = ui.value.educationFieldMode,
+                    values = ui.value.educationFields,
+                    hint = "Engineering, Medicine, Commerce…",
+                    onMode = { mode -> vm.update { it.copy(educationFieldMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(educationFields = values) } }
+                )
+                ListPreferenceCard(
                     title = "Occupation",
                     mode = ui.value.occupationMode,
                     values = ui.value.occupationCategories,
@@ -358,12 +414,28 @@ fun PartnerPreferencesScreen(
                     onValues = { values -> vm.update { it.copy(occupationCategories = values) } }
                 )
                 ListPreferenceCard(
+                    title = "Employer type",
+                    mode = ui.value.employerTypeMode,
+                    values = ui.value.employerTypes,
+                    hint = "Private, Government, Self-employed…",
+                    onMode = { mode -> vm.update { it.copy(employerTypeMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(employerTypes = values) } }
+                )
+                ListPreferenceCard(
                     title = "Family type",
                     mode = ui.value.familyTypeMode,
                     values = ui.value.familyTypes,
                     hint = "Nuclear, Joint…",
                     onMode = { mode -> vm.update { it.copy(familyTypeMode = mode) } },
                     onValues = { values -> vm.update { it.copy(familyTypes = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Family status",
+                    mode = ui.value.familyStatusMode,
+                    values = ui.value.familyStatuses,
+                    hint = "Middle class, Upper middle class…",
+                    onMode = { mode -> vm.update { it.copy(familyStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(familyStatuses = values) } }
                 )
                 ListPreferenceCard(
                     title = "Family values",
