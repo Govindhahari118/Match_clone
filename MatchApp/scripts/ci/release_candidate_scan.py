@@ -181,6 +181,25 @@ def main() -> int:
     require('subscriptionPlan: "FREE"' not in users_functions,
             "new user creation must not seed public billing metadata", failures)
 
+
+    verification_functions = text(ROOT / "functions/src/verification.ts")
+    verification_screen = text(
+        APP / "src/main/java/com/match/app/ui/verification/VerificationScreen.kt"
+    )
+    storage_rules = text(ROOT / "storage.rules")
+    require("const AADHAAR_OFFLINE_PROVIDER_IMPLEMENTED = false" in verification_functions,
+            "Aadhaar must remain unavailable until a registered offline-verification adapter exists", failures)
+    require("const SELFIE_PROVIDER_IMPLEMENTED = false" in verification_functions and
+            "const LIVENESS_PROVIDER_IMPLEMENTED = false" in verification_functions and
+            "const FACE_SIMILARITY_PROVIDER_IMPLEMENTED = false" in verification_functions,
+            "biometric verification claims must remain unavailable until validated provider adapters exist", failures)
+    require('docType.toLowerCase().includes("aadhaar")' in verification_functions,
+            "generic government-ID submission must explicitly reject Aadhaar", failures)
+    require("Aadhaar is not accepted as a generic card/image upload" in verification_screen,
+            "verification UI must truthfully explain that Aadhaar is unavailable", failures)
+    require("'Aadhaar" not in storage_rules and '"Aadhaar' not in storage_rules,
+            "Storage rules must not accept Aadhaar as a generic KYC document type", failures)
+
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
     ignore = gitignore + "\n" + local_gitignore
