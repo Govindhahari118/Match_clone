@@ -61,6 +61,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
   const senderRef = db.collection("users").doc(senderUid);
   const targetRef = db.collection("users").doc(targetUid);
   const senderPrivateRef = db.collection("userPrivate").doc(senderUid);
+  const targetPrivateRef = db.collection("userPrivate").doc(targetUid);
   const senderPreferencesRef = db.collection("partnerPreferences").doc(senderUid);
   const targetPreferencesRef = db.collection("partnerPreferences").doc(targetUid);
   const outgoingRef = db.collection("interests").doc(`${senderUid}_${targetUid}`);
@@ -82,6 +83,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       senderSnap,
       targetSnap,
       senderPrivateSnap,
+      targetPrivateSnap,
       senderPreferencesSnap,
       targetPreferencesSnap,
       outgoingSnap,
@@ -98,6 +100,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(senderRef),
       tx.get(targetRef),
       tx.get(senderPrivateRef),
+      tx.get(targetPrivateRef),
       tx.get(senderPreferencesRef),
       tx.get(targetPreferencesRef),
       tx.get(outgoingRef),
@@ -151,9 +154,17 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
 
     const senderPreferences = normalizePartnerPreferences(senderPreferencesSnap.data());
     const targetPreferences = normalizePartnerPreferences(targetPreferencesSnap.data());
+    const senderForPreferences = {
+      ...sender,
+      incomeBand: senderPrivateSnap.data()?.incomeBand,
+    };
+    const targetForPreferences = {
+      ...target,
+      incomeBand: targetPrivateSnap.data()?.incomeBand,
+    };
     if (
-      !strictPreferencesAllow(senderPreferences, target) ||
-      !strictPreferencesAllow(targetPreferences, sender)
+      !strictPreferencesAllow(senderPreferences, targetForPreferences) ||
+      !strictPreferencesAllow(targetPreferences, senderForPreferences)
     ) {
       throw new functions.https.HttpsError(
         "failed-precondition",
