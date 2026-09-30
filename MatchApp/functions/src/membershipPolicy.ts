@@ -35,7 +35,7 @@ const CAPABILITIES: Record<MembershipCapability, ReadonlySet<MembershipPlanId>> 
   VIDEO_CALL: new Set(["PLATINUM_12M"]),
   RM_ASSISTANCE: new Set(["PLATINUM_12M"]),
   PRIORITY_SUPPORT: new Set(["GOLD_6M", "PLATINUM_12M"]),
-  READ_RECEIPTS: new Set(["GOLD_6M", "PLATINUM_12M"]),
+  READ_RECEIPTS: new Set(["FREE", "SILVER_3M", "GOLD_6M", "PLATINUM_12M"]),
   STEALTH_BROWSE: new Set(["GOLD_6M", "PLATINUM_12M"]),
 };
 
