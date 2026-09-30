@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import * as crypto from "crypto";
+import { productionFeatureEnabled, ProductionFeature } from "./featureFlagPolicy";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -17,6 +18,20 @@ export function requireAppCheck(context: functions.https.CallableContext): void 
   const enforce = functions.config().security?.enforce_app_check === "true";
   if (enforce && !context.app) {
     throw new functions.https.HttpsError("failed-precondition", "Valid App Check token required");
+  }
+}
+
+/**
+ * Second-layer rollout authority for provider/validation-sensitive capabilities.
+ * The client controls discoverability; this backend flag prevents direct callable bypass.
+ */
+export function requireProductionFeature(feature: ProductionFeature): void {
+  const raw = functions.config().features?.[feature];
+  if (!productionFeatureEnabled(raw)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This feature is not enabled in production"
+    );
   }
 }
 
