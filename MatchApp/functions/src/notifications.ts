@@ -5,6 +5,7 @@ import {
   persistAndSendNotification,
   requireAppCheck,
 } from "./shared";
+import { deviceAccountSwitchIsReviewSignal } from "./riskSignalPolicy";
 
 type NotificationPayload = {
   userId: string;
@@ -54,8 +55,13 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
   await db.runTransaction(async (tx) => {
     const owner = await tx.get(ownerRef);
     const priorUid = owner.data()?.uid;
-    if (typeof priorUid === "string" && priorUid && priorUid !== uid) {
-      tx.delete(db.collection("fcmTokens").doc(priorUid).collection("devices").doc(deviceId));
+    if (deviceAccountSwitchIsReviewSignal(priorUid, uid)) {
+      tx.delete(db.collection("fcmTokens").doc(String(priorUid)).collection("devices").doc(deviceId));
+      tx.set(db.collection("riskSignals").doc(uid), {
+        sharedDeviceAccountSwitchCount: admin.firestore.FieldValue.increment(1),
+        lastSharedDeviceSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
 
     tx.set(deviceRef, {
