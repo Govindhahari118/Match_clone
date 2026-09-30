@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.billingclient.api.BillingClient
 import com.match.app.data.billing.PlayBillingManager
+import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreePrimaryButton
@@ -33,6 +34,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private data class Plan(
@@ -73,6 +75,7 @@ private val PLANS = listOf(
 @HiltViewModel
 class PricingViewModel @Inject constructor(
     val billing: PlayBillingManager,
+    private val subscriptionRepository: SubscriptionRepository,
     session: SessionStore
 ) : ViewModel() {
     val offers = billing.offers
@@ -83,9 +86,17 @@ class PricingViewModel @Inject constructor(
 
     init {
         billing.connect()
+        viewModelScope.launch {
+            subscriptionRepository.checkPremiumStatus()
+        }
     }
 
-    fun refresh() = billing.refresh()
+    fun refresh() {
+        billing.refresh()
+        viewModelScope.launch {
+            subscriptionRepository.checkPremiumStatus()
+        }
+    }
 
     fun purchase(activity: Activity, planId: String): Int {
         return billing.launchPurchase(activity, planId).responseCode
