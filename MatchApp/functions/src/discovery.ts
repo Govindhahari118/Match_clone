@@ -22,6 +22,8 @@ import {
   discoveryCandidateReady,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
+import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -50,6 +52,10 @@ function stringValue(value: unknown): string {
 
 function normalizedSearchValue(value: unknown): string {
   return stringValue(value).trim().toLocaleLowerCase("en-IN");
+}
+
+function isHinduReligion(value: unknown): boolean {
+  return normalizedSearchValue(value) === "hindu";
 }
 
 function filterString(data: unknown, key: string, max = 100): string {
@@ -264,6 +270,10 @@ export const discoverProfiles = functions
       ? data.keyword.trim().toLocaleLowerCase("en-IN").slice(0, MAX_KEYWORD_LENGTH)
       : "";
     const normalizedUsername = keyword.replace(/^@+/, "");
+    const includeQuestionnaireFit = filterBoolean(data, "includeQuestionnaireFit");
+    const requireQuestionnaireFit = filterBoolean(data, "requireQuestionnaireFit");
+    const includeAstrologyFit = filterBoolean(data, "includeAstrologyFit");
+    const requireAstrologyFit = filterBoolean(data, "requireAstrologyFit");
 
     const [viewerDoc, viewerPreferencesDoc, viewerPrivateDoc] = await Promise.all([
       db.collection("users").doc(viewerUid).get(),
@@ -302,6 +312,12 @@ export const discoverProfiles = functions
     );
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
+    const viewerQuestionnaireDoc = includeQuestionnaireFit || requireQuestionnaireFit
+      ? await db.collection("questionnaires").doc(viewerUid).get()
+      : null;
+    const viewerQuestionnaire = viewerQuestionnaireDoc?.exists
+      ? viewerQuestionnaireDoc.data() || {}
+      : {};
 
     let query: FirebaseFirestore.Query = db.collection("users")
       .orderBy("createdAt", "desc")
@@ -350,7 +366,11 @@ export const discoverProfiles = functions
     const partnerPreferenceRefs = candidates.map((doc) =>
       db.collection("partnerPreferences").doc(doc.id)
     );
-    const privateFilterRequested = needsPrivateFilterData(data);
+    const questionnaireRefs = includeQuestionnaireFit || requireQuestionnaireFit
+      ? candidates.map((doc) => db.collection("questionnaires").doc(doc.id))
+      : [];
+    const privateFilterRequested =
+      needsPrivateFilterData(data) || includeAstrologyFit || requireAstrologyFit;
     const personalizationActive = !keyword &&
       await hasActiveConsent(viewerUid, "personalization");
     const recommendationFeedbackRefs = personalizationActive
@@ -386,6 +406,7 @@ export const discoverProfiles = functions
       viewerPrivacyDocs,
       subscriptionDocs,
       partnerPreferenceDocs,
+      questionnaireDocs,
       privateDocs,
       presenceDocs,
       activitySettingsDocs,
@@ -399,6 +420,7 @@ export const discoverProfiles = functions
       viewerHiddenRefs.length ? db.getAll(...viewerHiddenRefs) : Promise.resolve([]),
       subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
       partnerPreferenceRefs.length ? db.getAll(...partnerPreferenceRefs) : Promise.resolve([]),
+      questionnaireRefs.length ? db.getAll(...questionnaireRefs) : Promise.resolve([]),
       privateRefs.length ? db.getAll(...privateRefs) : Promise.resolve([]),
       presenceRefs.length ? db.getAll(...presenceRefs) : Promise.resolve([]),
       activitySettingsRefs.length ? db.getAll(...activitySettingsRefs) : Promise.resolve([]),
@@ -432,6 +454,18 @@ export const discoverProfiles = functions
       );
     });
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
+    const questionnaireFitByUid = new Map<string, number>();
+    const astrologyFitByUid = new Map<string, number>();
+    questionnaireDocs.forEach((doc, index) => {
+      if (!doc.exists || !viewerQuestionnaireDoc?.exists) return;
+      const score = questionnaireCompatibility(
+        viewerQuestionnaire.selfVector,
+        viewerQuestionnaire.partnerVector,
+        doc.data()?.selfVector,
+        doc.data()?.partnerVector
+      );
+      if (score) questionnaireFitByUid.set(candidates[index].id, score.score);
+    });
     const feedbackByUid = new Map<string, FirebaseFirestore.DocumentData>();
     recommendationFeedbackDocs.forEach((doc, index) => {
       if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
@@ -456,6 +490,21 @@ export const discoverProfiles = functions
     privateDocs.forEach((doc, index) => {
       if (doc.exists) privateFilterByUid.set(candidates[index].id, doc.data() || {});
     });
+    if ((includeAstrologyFit || requireAstrologyFit) &&
+        isHinduReligion(viewer.religion)) {
+      candidates.forEach((candidateDoc) => {
+        const candidate = candidateDoc.data() || {};
+        if (!isHinduReligion(candidate.religion) || candidate.showHoroscope !== true) return;
+        const privateData = privateFilterByUid.get(candidateDoc.id) || {};
+        const compatibility = horoscopeCompatibility(
+          viewerPrivate.rasi,
+          viewerPrivate.nakshatra,
+          privateData.rasi,
+          privateData.nakshatra
+        );
+        if (compatibility) astrologyFitByUid.set(candidateDoc.id, compatibility.score);
+      });
+    }
     if (lastActiveFilterDays > 0) {
       candidates.forEach((candidateDoc, index) => {
         const relationship = {
@@ -538,6 +587,8 @@ export const discoverProfiles = functions
         normalizePartnerPreferences(undefined);
       if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
       if (!strictPreferencesAllow(candidatePartnerPreferences, viewer)) continue;
+      if (requireQuestionnaireFit && !questionnaireFitByUid.has(doc.id)) continue;
+      if (requireAstrologyFit && !astrologyFitByUid.has(doc.id)) continue;
 
       const preferredFit = bilateralPreferredFit(
         viewerPartnerPreferences,
@@ -574,12 +625,21 @@ export const discoverProfiles = functions
           doc.data() || {},
           membershipActiveByUid.get(doc.id) === true
         );
-        return preferredFit == null
+        const signals: Record<string, number> = {};
+        if (preferredFit != null) {
+          signals.pairPreferenceFit = Math.round(preferredFit * 1000) / 1000;
+        }
+        const questionnaireFit = questionnaireFitByUid.get(doc.id);
+        if (questionnaireFit != null) {
+          signals.pairQuestionnaireFit = Math.round(questionnaireFit * 1000) / 1000;
+        }
+        const astrologyFit = astrologyFitByUid.get(doc.id);
+        if (astrologyFit != null) {
+          signals.pairAstrologyFit = Math.round(astrologyFit * 1000) / 1000;
+        }
+        return Object.keys(signals).length === 0
           ? profile
-          : {
-            ...profile,
-            pairPreferenceFit: Math.round(preferredFit * 1000) / 1000,
-          };
+          : { ...profile, ...signals };
       });
 
     const nextCursor = scan.docs.length === SCAN_LIMIT
