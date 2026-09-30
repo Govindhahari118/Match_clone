@@ -236,7 +236,7 @@ test("remaining stable matrimony criteria participate in strict and preferred ma
   );
   assert.equal(
     preferredPreferenceFit(prefs, { ...matching, employerType: "Government" }),
-    0.8
+    5 / 6
   );
 });
 
