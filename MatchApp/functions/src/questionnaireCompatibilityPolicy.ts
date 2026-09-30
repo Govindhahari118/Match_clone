@@ -59,8 +59,14 @@ export function questionnaireCompatibility(
 
   const aToB = (cosine(a.partnerVector, b.selfVector) + 1) / 2;
   const bToA = (cosine(b.partnerVector, a.selfVector) + 1) / 2;
+  const rawScore = Math.max(0, Math.min(1, (aToB + bToA) / 2));
+  const score = rawScore < Number.EPSILON * 16
+    ? 0
+    : 1 - rawScore < Number.EPSILON * 16
+      ? 1
+      : rawScore;
   return {
-    score: Math.max(0, Math.min(1, (aToB + bToA) / 2)),
+    score,
     formulaVersion: QUESTIONNAIRE_FORMULA_VERSION,
   };
 }
