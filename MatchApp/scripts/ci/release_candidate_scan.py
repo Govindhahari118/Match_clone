@@ -140,6 +140,29 @@ def main() -> int:
     require("libs.jbcrypt" not in gradle,
             "obsolete BCrypt dependency must not ship in production", failures)
 
+    # Analytics must never regain member identifiers or sensitive payload fields. Typed telemetry
+    # has its own unit contract; this static gate protects retained legacy compatibility facades.
+    analytics_sources = [
+        APP / "src/main/java/com/match/app/core/analytics/AnalyticsManager.kt",
+        APP / "src/main/java/com/match/app/util/AnalyticsTracker.kt",
+        APP / "src/main/java/com/match/app/core/telemetry/MatreeTelemetry.kt",
+    ]
+    forbidden_analytics_keys = [
+        "viewed_uid", "target_uid", "user_id", "firebase_uid", "phone", "email",
+        "message_body", "purchase_token", "latitude", "longitude", "exact_location",
+        "document_number", "aadhaar_number", "date_of_birth",
+    ]
+    for analytics_source in analytics_sources:
+        if not analytics_source.exists():
+            continue
+        analytics_text = text(analytics_source).lower()
+        for forbidden_key in forbidden_analytics_keys:
+            require(
+                f'"{forbidden_key}"' not in analytics_text,
+                f"{analytics_source.relative_to(ROOT)}: analytics privacy boundary exposes {forbidden_key}",
+                failures,
+            )
+
     for relative in [
         "src/main/java/com/match/app/core/trust/TrustScoreEngine.kt",
         "src/main/java/com/match/app/core/security/FakeProfileDetector.kt",
