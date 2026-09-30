@@ -65,6 +65,8 @@ Do not reopen these areas unless CI, testing, or a concrete audit exposes a defe
 - Partner-preference authority and explainable versioned matching.
 - Interests, decline/withdraw, mutual-match state and shortlist consistency.
 - Server-authoritative chat creation/message send, text/image/voice media binding, retry/outbox and constrained receipts.
+- Valid unreferenced chat-media uploads enter a server-only orphan ledger; scheduled cleanup re-checks the
+  canonical Firestore message before deleting stale Storage bytes.
 - Notification persistence, preferences, FCM lifecycle and server-owned notification authority.
 - Privacy dashboard, contact visibility, hidden relationships, pause/deletion lifecycle and exact-location cleanup.
 - Trust summary and reviewed risk architecture; payment does not increase Trust.
@@ -82,6 +84,9 @@ Do not reopen these areas unless CI, testing, or a concrete audit exposes a defe
 - Room registered migration matrix and emulator-backed migration CI.
 - Production truthfulness, screen-classification, callable-contract, release-candidate, handoff-package and external-gate
   CI scans.
+- Release Gradle configuration accepts explicit version and protected signing inputs; production build scripts refuse
+  missing production Firebase config and incomplete signing input.
+- Firebase deploy scripts require an explicit production project ID instead of trusting ambient CLI selection.
 - Environment, secrets, API, database-schema, feature-flag, known-issues, GO/NO-GO, rollback and Play handoff docs.
 
 ## 5. Launch route policy
