@@ -126,6 +126,14 @@ def main() -> int:
     require('"Sensitive preference processing"' in preference_screen,
             "partner preferences must expose explicit sensitive-processing consent", failures)
 
+
+    location_functions = text(ROOT / "functions/src/location.ts")
+    horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
+    require(location_functions.count('requireProductionFeature("nearby")') >= 2,
+            "Nearby backend update/discovery callables must enforce the rollout gate", failures)
+    require('requireProductionFeature("kundali")' in horoscope_functions,
+            "Kundali backend callable must enforce the rollout gate", failures)
+
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
     ignore = gitignore + "\n" + local_gitignore
