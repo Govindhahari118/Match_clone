@@ -2,6 +2,10 @@ import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import { db, requireAppCheck, requireOpsRole } from "./shared";
 import { computeTrustPolicy, normalizeRiskLevel, TrustRiskLevel } from "./trustPolicy";
+import {
+  PROFILE_MUTATION_REVIEW_THRESHOLD_PER_DAY,
+  profileMutationFieldsChanged,
+} from "./riskSignalPolicy";
 
 function millis(value: unknown): number {
   if (value instanceof admin.firestore.Timestamp) return value.toMillis();
@@ -271,4 +275,47 @@ export const onMessageBehaviorRiskSignal = functions.firestore
       update.lastMoneyRequestSignalAt = admin.firestore.FieldValue.serverTimestamp();
     }
     await db.collection("riskSignals").doc(uid).set(update, { merge: true });
+  });
+
+
+/**
+ * Counts rapid edits to member-controlled profile fields as a private review signal. Server-owned
+ * entitlement/moderation/completeness writes are excluded by the field policy and no enforcement is
+ * automatic.
+ */
+export const onRapidProfileMutationRiskSignal = functions.firestore
+  .document("users/{uid}")
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+    if (!profileMutationFieldsChanged(before, after)) return;
+
+    const uid = context.params.uid;
+    const day = riskDayKey();
+    const activityRef = db.collection("riskActivity").doc(uid).collection("days").doc(day);
+    const signalRef = db.collection("riskSignals").doc(uid);
+
+    await db.runTransaction(async (tx) => {
+      const activity = await tx.get(activityRef);
+      const current = Number(activity.data()?.profileMutationCount || 0);
+      const next = current + 1;
+      const alreadyFlagged = activity.data()?.profileMutationVolumeFlagged === true;
+
+      tx.set(activityRef, {
+        day,
+        profileMutationCount: next,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...(next >= PROFILE_MUTATION_REVIEW_THRESHOLD_PER_DAY
+          ? { profileMutationVolumeFlagged: true }
+          : {}),
+      }, { merge: true });
+
+      if (next >= PROFILE_MUTATION_REVIEW_THRESHOLD_PER_DAY && !alreadyFlagged) {
+        tx.set(signalRef, {
+          rapidProfileMutationDayCount: admin.firestore.FieldValue.increment(1),
+          lastRapidProfileMutationSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    });
   });
