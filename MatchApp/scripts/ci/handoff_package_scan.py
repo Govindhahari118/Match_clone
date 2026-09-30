@@ -20,6 +20,8 @@ REQUIRED = (
     "docs/release/MASTER_DATA.md",
     "docs/release/KNOWN_ISSUES.md",
     "docs/release/GO_NO_GO.md",
+    "docs/release/PRODUCTION_CONFIG.template.md",
+    "docs/release/FEATURE_FLAGS.md",
     "docs/release/ROLLBACK_RUNBOOK.md",
     "docs/release/PLAY_STORE_HANDOFF.md",
     "docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json",
