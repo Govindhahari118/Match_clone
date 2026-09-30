@@ -521,14 +521,6 @@ export const discoverProfiles = functions
         visibleLastActiveByUid.get(doc.id) || 0
       )) continue;
 
-      const candidatePreferencesRaw = partnerPreferenceDocs[
-        candidates.findIndex((candidateDoc) => candidateDoc.id === doc.id)
-      ]?.data() as Record<string, unknown> | undefined;
-      if (!discoveryCandidateReady(
-        candidate as Record<string, unknown>,
-        candidatePreferencesRaw
-      )) continue;
-
       const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
         normalizePartnerPreferences(undefined);
       if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
