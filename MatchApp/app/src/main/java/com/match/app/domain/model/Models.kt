@@ -128,6 +128,7 @@ data class MatchFilter(
     val state: String = "",
     val caste: String = "",
     val minScore: Float = 0f,
+    val minMutualMatchPercent: Int = 0,
     val religion: String = "",
     val motherTongue: String = "",
     val maritalStatus: String = "",
