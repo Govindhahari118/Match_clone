@@ -19,7 +19,7 @@
 |---|---|---|
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
-| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production route is fail-closed behind Remote Config `enable_nearby`; production location/load evidence is required before enabling. |
+| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production is fail-closed behind Android Remote Config `enable_nearby` **and** backend Functions config `features.nearby=true`; production location/load evidence is required before enabling both. |
 | NRI discovery | BETA / OFF BY DEFAULT | Real server-authorized NRI filtering with reciprocal preferences/privacy and no synthetic inventory. Fail-closed behind `enable_nri_features`; market inventory, load and device evidence are required before enabling. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
@@ -40,11 +40,11 @@
 | Match insights | READY | Browse real eligible recommendations with computed questionnaire/astrology signals only; no invented personality traits, relationship timelines or success predictions. |
 | Compatibility breakdown | READY | Per-profile view of the real versioned compatibility factors used by matching, with missing dimensions omitted/renormalized and astrology explicitly labeled beta. |
 | Safety Center | READY | Truthful guidance over real block/report/privacy/location/verification controls; no invented fraud statistics or unsupported encryption claims. |
-| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Production route is fail-closed behind Remote Config `enable_kundali`; validation/provider evidence is required before enabling. |
+| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Compatibility is calculated by a versioned trusted backend policy. Production is fail-closed behind Android Remote Config `enable_kundali` **and** backend Functions config `features.kundali=true`; independent reference validation is required before enabling both. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
 | Verification | BETA | Server-authoritative government-ID statuses; production KYC/provider evidence required for provider-backed advanced identity methods. |
 | Phone verification | READY | Firebase Phone Auth credential linking plus backend confirmation; explicitly separate from government-ID/KYC verification. |
-| Video profile | BETA / OFF BY DEFAULT | Consented protected upload, server-owned moderation, audited review and backend-only publication/removal. Route is fail-closed behind `show_video_profiles` until real-device upload/playback and moderation-operations evidence pass. |
+| Video profile | BETA / OFF BY DEFAULT | Consented protected upload, server-owned moderation, audited review and backend-only publication/removal. New uploads/approvals are fail-closed behind Android Remote Config `show_video_profiles` **and** backend Functions config `features.video_profiles=true`; disabled uploads are purged server-side and unsubmitted enabled uploads expire through orphan cleanup. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
 | Help | READY | Support/help navigation; support operations depend on backend records where shown. |
 | Terms / Privacy / Guidelines / Security / Refunds | READY | Static legal/support surfaces; final operator/legal approval is external. |
@@ -95,5 +95,4 @@ the same release candidate.
 
 ## Fail-closed release promotion
 
-BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. A direct navigation attempt
-while disabled renders a truthful unavailable state rather than entering the feature.
+BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. Nearby, Kundali and Video Profile additionally require explicit backend Functions feature flags, so a modified client cannot promote those capabilities by invoking callables directly. Video uploads made while the backend feature is disabled are deleted by a Storage trigger. A direct navigation attempt while disabled renders a truthful unavailable state rather than entering the feature.
