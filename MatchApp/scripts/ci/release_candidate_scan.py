@@ -99,6 +99,13 @@ def main() -> int:
             failures,
         )
 
+    # Abuse/risk counters must have one canonical writer per authoritative action.
+    trust_functions = text(ROOT / "functions/src/trust.ts")
+    require("onInterestBehaviorRiskSignal" not in trust_functions,
+            "legacy duplicate interest risk trigger must not return; interests.ts owns it", failures)
+    require("onMessageBehaviorRiskSignal" not in trust_functions,
+            "legacy duplicate message risk trigger must not return; messageSafety.ts owns it", failures)
+
     # Consent must be an explicit user choice, never an implicit repository side effect.
     photo_repo = text(APP / "src/main/java/com/match/app/data/repo/PhotoRepository.kt")
     location_repo = text(APP / "src/main/java/com/match/app/data/repo/LocationRepository.kt")
