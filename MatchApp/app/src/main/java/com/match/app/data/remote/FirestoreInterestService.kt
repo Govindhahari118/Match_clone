@@ -23,10 +23,22 @@ class FirestoreInterestService @Inject constructor() {
      * creation. fromUid is retained in the signature for repository compatibility but is never
      * trusted by the backend; Firebase Auth is authoritative.
      */
-    suspend fun sendInterest(fromUid: String, toUid: String, isSuperLike: Boolean = false): Boolean {
+    suspend fun sendInterest(
+        fromUid: String,
+        toUid: String,
+        isSuperLike: Boolean = false,
+        introNote: String = ""
+    ): Boolean {
         require(fromUid.isNotBlank() && toUid.isNotBlank() && fromUid != toUid) { "Invalid interest participants" }
+        require(introNote.length <= 280) { "Keep your introduction within 280 characters" }
         val result = functions.getHttpsCallable("sendInterest")
-            .call(mapOf("targetUid" to toUid, "isSuperLike" to isSuperLike))
+            .call(
+                mapOf(
+                    "targetUid" to toUid,
+                    "isSuperLike" to isSuperLike,
+                    "introNote" to introNote
+                )
+            )
             .await()
         @Suppress("UNCHECKED_CAST")
         val payload = result.data as? Map<String, Any?> ?: emptyMap()
@@ -84,7 +96,8 @@ class FirestoreInterestService @Inject constructor() {
                     InterestDoc(
                         fromUid = doc.getString("fromUid") ?: return@mapNotNull null,
                         toUid = myUid,
-                        createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L
+                        createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
+                        introNote = doc.getString("introNote").orEmpty()
                     )
                 } ?: emptyList()
                 trySend(interests)
@@ -101,7 +114,8 @@ class FirestoreInterestService @Inject constructor() {
                     InterestDoc(
                         fromUid = myUid,
                         toUid = doc.getString("toUid") ?: return@mapNotNull null,
-                        createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L
+                        createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
+                        introNote = doc.getString("introNote").orEmpty()
                     )
                 } ?: emptyList()
                 trySend(interests)
@@ -130,5 +144,6 @@ data class MatchDoc(
 data class InterestDoc(
     val fromUid: String,
     val toUid: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val introNote: String = ""
 )
