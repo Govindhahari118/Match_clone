@@ -1,4 +1,4 @@
-export const DISCOVERY_RANKING_VERSION = "discovery-v4-reciprocal-preferences";
+export const DISCOVERY_RANKING_VERSION = "discovery-v5-reciprocal-freshness";
 
 export type RecommendationFeedbackSummary = {
   profileOpenCount?: unknown;
@@ -44,6 +44,17 @@ export function behavioralAdjustment(value: RecommendationFeedbackSummary | unde
  * Preference fit remains dominant. Consented behavior may move a candidate only within a narrow
  * band so feedback cannot silently override the user's explicit partner criteria.
  */
+/**
+ * Down-rank profiles that appeared in the viewer's immediately preceding discovery batches.
+ * This is intentionally small: novelty improves inventory rotation but never overrides strict
+ * eligibility or a materially stronger reciprocal preference fit.
+ */
+export function recentImpressionAdjustment(batchIndex: number | undefined): number {
+  if (batchIndex == null || !Number.isInteger(batchIndex) || batchIndex < 0) return 0;
+  const penalties = [-0.14, -0.10, -0.07, -0.04, -0.02];
+  return penalties[Math.min(batchIndex, penalties.length - 1)];
+}
+
 export function blendedRecommendationRelevance(
   preferredFit: number | null,
   behavior: number
