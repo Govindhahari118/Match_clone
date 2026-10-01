@@ -1,28 +1,27 @@
 package com.match.app.ui.consent
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
- * DPDP Act 2023 consent dialog.
- * Shown once on first app launch. User must accept before proceeding.
+ * Legacy entry-point retained for binary/source compatibility.
  *
- * Covers:
- *  - Purpose of data collection (matchmaking only)
- *  - Types of data collected
- *  - User rights (access, correction, erasure)
- *  - Grievance officer contact
- *  - Cross-border transfer disclosure (Firebase US servers)
+ * This dialog deliberately avoids hard-coded legal, residency, retention or response-time claims.
+ * Current purpose-specific consent is recorded by ConsentRepository against backend-owned notice
+ * versions and can be reviewed/withdrawn from the Privacy Dashboard.
  */
 @Composable
 fun DpdpConsentDialog(
@@ -30,98 +29,43 @@ fun DpdpConsentDialog(
     onDecline: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = { /* Cannot dismiss */ },
+        onDismissRequest = {},
         confirmButton = {
-            Button(
-                onClick = onAccept,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("I Agree & Continue")
+            Button(onClick = onAccept, shape = RoundedCornerShape(8.dp)) {
+                Text("Review choices & continue")
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDecline,
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Decline")
+            OutlinedButton(onClick = onDecline, shape = RoundedCornerShape(8.dp)) {
+                Text("Not now")
             }
         },
-        title = {
-            Text(
-                "Data Protection Consent",
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
-            )
-        },
+        title = { Text("Privacy choices", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
-                    .heightIn(max = 400.dp)
+                    .heightIn(max = 360.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    "As per the Digital Personal Data Protection Act, 2023 (DPDP Act), " +
-                    "we need your consent to collect and process your personal data.",
-                    fontSize = 14.sp
+                    "Matree uses purpose-specific privacy choices instead of one blanket approval. " +
+                        "Sensitive features such as identity verification, location, media processing " +
+                        "and personalization ask for the current notice before processing starts."
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-                SectionHeader("Purpose of Data Collection")
-                BulletPoint("To match you with compatible life partners")
-                BulletPoint("To display your profile to other registered users")
-                BulletPoint("To verify your identity for safety")
-                BulletPoint("To send relevant match notifications")
-
-                Spacer(modifier = Modifier.height(12.dp))
-                SectionHeader("Data We Collect")
-                BulletPoint("Name, age, gender, contact details")
-                BulletPoint("Photos, education, occupation, family details")
-                BulletPoint("Religion, caste, horoscope information")
-                BulletPoint("Location (city-level only)")
-                BulletPoint("Device information for security")
-
-                Spacer(modifier = Modifier.height(12.dp))
-                SectionHeader("Your Rights")
-                BulletPoint("Right to access your data (Settings → Export Data)")
-                BulletPoint("Right to correct your data (Edit Profile anytime)")
-                BulletPoint("Right to delete your account (Settings → Delete Account)")
-                BulletPoint("Right to withdraw consent (stop using the app)")
-
-                Spacer(modifier = Modifier.height(12.dp))
-                SectionHeader("Data Storage")
-                BulletPoint("Data stored on Google Firebase servers (US/Mumbai)")
-                BulletPoint("All data encrypted in transit and at rest")
-                BulletPoint("Cross-border transfer: India ↔ US (Firebase infrastructure)")
-
-                Spacer(modifier = Modifier.height(12.dp))
-                SectionHeader("Grievance Officer")
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "For any data-related concerns, contact:\n" +
-                    "Email: grievance@matrimonyconnect.app\n" +
-                    "Response within 72 hours as per IT Rules 2021",
-                    fontSize = 13.sp
+                    "You can review or withdraw optional choices from Privacy & visibility. " +
+                        "Withdrawing a choice stops the corresponding optional processing where the " +
+                        "feature supports it; for example, withdrawing location consent removes the " +
+                        "stored Nearby location."
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "The app's Privacy Policy and in-product notices are the source for current " +
+                        "operator, retention and legal disclosures."
                 )
             }
         },
         shape = RoundedCornerShape(16.dp)
     )
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        modifier = Modifier.padding(bottom = 4.dp)
-    )
-}
-
-@Composable
-private fun BulletPoint(text: String) {
-    Row(modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) {
-        Text("• ", fontSize = 13.sp)
-        Text(text, fontSize = 13.sp)
-    }
 }

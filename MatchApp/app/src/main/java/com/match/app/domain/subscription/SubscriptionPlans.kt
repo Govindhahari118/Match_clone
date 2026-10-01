@@ -21,7 +21,7 @@ object SubscriptionPlans {
         val readReceipts: Boolean,
         val stealthBrowse: Boolean,
     ) {
-        FREE("FREE", "Free", 0, 0, 5, 0, false, false, false, false, false, false, false, false, false, false),
+        FREE("FREE", "Free", 0, 0, 5, 0, false, false, false, false, false, false, false, false, true, false),
         SILVER_3M("SILVER_3M", "Silver", 3, 299900, Int.MAX_VALUE, 75, true, true, true, false, false, false, false, true, true, false),
         GOLD_6M("GOLD_6M", "Gold", 6, 499900, Int.MAX_VALUE, 150, true, true, true, true, false, false, true, true, true, true),
         PLATINUM_12M("PLATINUM_12M", "Platinum", 12, 749900, Int.MAX_VALUE, 300, true, true, true, true, true, true, true, true, true, true);
@@ -43,7 +43,9 @@ object SubscriptionPlans {
             Feature.RM_ASSISTANCE -> plan.hasRMAssistance
             Feature.PRIORITY_SUPPORT -> plan.prioritySupport
             Feature.ADVANCED_FILTERS -> plan.advancedFilters
-            Feature.READ_RECEIPTS -> plan.readReceipts
+            // Receipt state is part of the shared chat protocol and is not field-redactable in
+            // Firestore. Treat it as a core capability instead of advertising a bypassable paywall.
+            Feature.READ_RECEIPTS -> true
             Feature.STEALTH_BROWSE -> plan.stealthBrowse
         }
     }

@@ -35,9 +35,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.match.app.data.local.dao.UserDao
-import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.MatchingRepository
+import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.model.MatchFilter
+import com.match.app.domain.model.MatchMode
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -51,8 +53,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SwipeDiscoveryViewModel @Inject constructor(
     private val session: SessionStore,
-    private val auth: AuthRepository,
-    private val userDao: UserDao
+    private val matching: MatchingRepository,
+    private val social: SocialRepository
 ) : ViewModel() {
 
     private val _profiles = MutableStateFlow<List<UserProfile>>(emptyList())
@@ -64,29 +66,76 @@ class SwipeDiscoveryViewModel @Inject constructor(
     private val _passedCount = MutableStateFlow(0)
     val passedCount = _passedCount.asStateFlow()
 
-    init { loadProfiles() }
+    private val _matchedProfile = MutableStateFlow<UserProfile?>(null)
+    val matchedProfile = _matchedProfile.asStateFlow()
 
-    private fun loadProfiles() = viewModelScope.launch {
-        val uid = session.userId.first() ?: return@launch
-        val entities = userDao.allExcluding(uid).takeLast(50).reversed()
-        val list = mutableListOf<UserProfile>()
-        for (e in entities) { auth.currentProfile(e.id)?.let { list.add(it) } }
-        _profiles.value = list
+    private val _submitting = MutableStateFlow(false)
+    val submitting = _submitting.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
+
+    init { refresh() }
+
+    fun refresh() = viewModelScope.launch {
+        val userId = session.userId.first()
+        if (userId == null) {
+            _profiles.value = emptyList()
+            _error.value = "Sign in to use swipe discovery."
+            return@launch
+        }
+        _error.value = null
+        _profiles.value = runCatching {
+            matching.recommendations(
+                seekerId = userId,
+                mode = MatchMode.ADVANCED,
+                filter = MatchFilter()
+            ).map { it.user }.take(50)
+        }.getOrElse {
+            _error.value = "Unable to load authorized discovery profiles."
+            emptyList()
+        }
     }
 
-    fun onLike(profile: UserProfile) = viewModelScope.launch {
-        _likedCount.value++
-        _profiles.value = _profiles.value.drop(1)
+    fun onLike(profile: UserProfile) = send(profile, isSuperLike = false)
+
+    fun onSuperLike(profile: UserProfile) = send(profile, isSuperLike = true)
+
+    private fun send(profile: UserProfile, isSuperLike: Boolean) = viewModelScope.launch {
+        if (_submitting.value) return@launch
+        val userId = session.userId.first()
+        if (userId == null) {
+            _error.value = "Sign in before sending an interest."
+            return@launch
+        }
+
+        _submitting.value = true
+        _error.value = null
+        runCatching {
+            social.sendInterest(userId, profile.id, isSuperLike)
+        }.onSuccess { mutual ->
+            _likedCount.value += 1
+            _profiles.value = _profiles.value.filterNot { it.id == profile.id }
+            if (mutual) _matchedProfile.value = profile
+        }.onFailure { throwable ->
+            _error.value = throwable.message?.take(180)
+                ?: "Interest could not be sent. Please try again."
+        }
+        _submitting.value = false
     }
 
-    fun onPass(profile: UserProfile) = viewModelScope.launch {
-        _passedCount.value++
-        _profiles.value = _profiles.value.drop(1)
+    fun onPass(profile: UserProfile) {
+        if (_submitting.value) return
+        _passedCount.value += 1
+        _profiles.value = _profiles.value.filterNot { it.id == profile.id }
     }
 
-    fun onSuperLike(profile: UserProfile) = viewModelScope.launch {
-        _likedCount.value++
-        _profiles.value = _profiles.value.drop(1)
+    fun consumeMatch() {
+        _matchedProfile.value = null
+    }
+
+    fun dismissError() {
+        _error.value = null
     }
 }
 
@@ -100,20 +149,20 @@ fun SwipeDiscoveryScreen(
     val profiles by vm.profiles.collectAsState()
     val likedCount by vm.likedCount.collectAsState()
     val passedCount by vm.passedCount.collectAsState()
+    val matchedProfile by vm.matchedProfile.collectAsState()
+    val submitting by vm.submitting.collectAsState()
+    val error by vm.error.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
 
-    // "It's a Match!" overlay state
-    var matchOverlayProfile by remember { mutableStateOf<UserProfile?>(null) }
-    LaunchedEffect(likedCount) {
-        if (likedCount > 0) {
-            // Show overlay for 2.5 seconds then auto-dismiss
-            kotlinx.coroutines.delay(100)
-            if (matchOverlayProfile == null) {
-                // we show the overlay for the last liked profile
-            }
+    LaunchedEffect(error) {
+        error?.let {
+            snackbar.showSnackbar(it)
+            vm.dismissError()
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(t("discover", "Discover")) },
@@ -151,13 +200,22 @@ fun SwipeDiscoveryScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("🎉", fontSize = 64.sp)
-                        Text(t("youve_seen_everyone", "You've seen everyone!"), style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                        Text(t("check_back_later", "Check back later for new profiles"),
+                        Text(
+                            "No more eligible profiles in this result set",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "Swipe Discovery only shows profiles returned by the current server-authorized matching flow.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center)
-                        Button(onClick = onBack) { Text(t("browse_all_matches", "Browse All Matches")) }
+                            textAlign = TextAlign.Center
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = vm::refresh) { Text("Refresh") }
+                            Button(onClick = onBack) { Text(t("browse_all_matches", "Browse All Matches")) }
+                        }
                     }
                 }
             } else {
@@ -187,10 +245,7 @@ fun SwipeDiscoveryScreen(
                     profiles.firstOrNull()?.let { profile ->
                         SwipeCard(
                             profile = profile,
-                            onLike = {
-                                matchOverlayProfile = profile
-                                vm.onLike(profile)
-                            },
+                            onLike = { vm.onLike(profile) },
                             onPass = { vm.onPass(profile) },
                             onTap = { onOpenProfile(profile.id) }
                         )
@@ -206,6 +261,7 @@ fun SwipeDiscoveryScreen(
                     // Pass
                     FilledIconButton(
                         onClick = { profiles.firstOrNull()?.let { vm.onPass(it) } },
+                        enabled = !submitting,
                         modifier = Modifier.size(60.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Color(0xFFF5F5F5)
@@ -216,6 +272,7 @@ fun SwipeDiscoveryScreen(
                     // Super Like
                     FilledIconButton(
                         onClick = { profiles.firstOrNull()?.let { vm.onSuperLike(it) } },
+                        enabled = !submitting,
                         modifier = Modifier.size(52.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Color(0xFFE3F2FD)
@@ -226,6 +283,7 @@ fun SwipeDiscoveryScreen(
                     // Like
                     FilledIconButton(
                         onClick = { profiles.firstOrNull()?.let { vm.onLike(it) } },
+                        enabled = !submitting,
                         modifier = Modifier.size(60.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = Color(0xFFFCE4EC)
@@ -262,20 +320,20 @@ fun SwipeDiscoveryScreen(
 
     // ── "It's a Match!" overlay ────────────────────────────────────────────
     AnimatedVisibility(
-        visible = matchOverlayProfile != null,
+        visible = matchedProfile != null,
         enter = fadeIn(tween(300)) + scaleIn(tween(300), initialScale = 0.85f),
         exit  = fadeOut(tween(400)) + scaleOut(tween(400))
     ) {
-        matchOverlayProfile?.let { matched ->
+        matchedProfile?.let { matched ->
             MatchCelebrationOverlay(
                 matchedName = matched.displayName,
                 matchedId   = matched.id,
-                onMessage   = { onOpenProfile(matched.id); matchOverlayProfile = null },
-                onDismiss   = { matchOverlayProfile = null }
+                onMessage   = { onOpenProfile(matched.id); vm.consumeMatch() },
+                onDismiss   = vm::consumeMatch
             )
             LaunchedEffect(matched.id) {
                 kotlinx.coroutines.delay(3000)
-                matchOverlayProfile = null
+                vm.consumeMatch()
             }
         }
     }

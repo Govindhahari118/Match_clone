@@ -86,7 +86,11 @@ class ChatRepository @Inject constructor(
             return
         }
         try {
-            val threadId = FirestoreChatService.threadId(myUid, peerUid)
+            val threadId = if (type == "IMAGE" || type == "VOICE") {
+                firestoreChat.prepareThread(myUid, peerUid)
+            } else {
+                FirestoreChatService.threadId(myUid, peerUid)
+            }
             var voicePath: String? = null
             var imagePath: String? = null
             when (type) {

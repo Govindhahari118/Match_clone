@@ -28,8 +28,6 @@ function baseProfile(overrides = {}) {
     isPremium: false,
     isVerified: false,
     verificationLevel: 0,
-    subscriptionPlan: 'FREE',
-    subscriptionExpiry: 0,
     stealthMode: false,
     profileRevision: 0,
     ...overrides,

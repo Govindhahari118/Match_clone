@@ -6,18 +6,19 @@ import javax.inject.Singleton
 import kotlin.math.roundToInt
 
 /**
- * AI-powered fake profile detection using heuristic signals.
+ * Legacy device-local heuristic retained for compatibility with existing code.
  *
- * Scores range from 0 (definitely fake) to 100 (highly trustworthy).
- * Profiles scoring below 30 are flagged for manual review.
+ * This is not an AI fraud model and must not be used as production authority for suspension,
+ * verification, public Trust Score or punitive moderation. Production risk decisions belong to
+ * the reviewed server-side risk workflow. Payment or premium membership must never improve risk
+ * or trust classification.
  *
- * Signals evaluated:
- * - Profile completeness (all fields filled)
- * - Photo presence and count
- * - Bio quality (length, keywords)
+ * Signals evaluated locally:
+ * - Profile completeness
+ * - Photo presence/count
+ * - Bio quality
  * - Verification status
  * - Account age
- * - Behavioral patterns (will be enhanced with ML Kit later)
  */
 @Singleton
 class FakeProfileDetector @Inject constructor() {
@@ -45,7 +46,7 @@ class FakeProfileDetector @Inject constructor() {
         BASIC,          // Email verified only
         PHONE_VERIFIED, // Phone + email verified
         ID_VERIFIED,    // Government ID verified (blue tick)
-        PREMIUM_TRUST   // ID + premium + high completeness
+        PREMIUM_TRUST   // Legacy enum name: ID + strong completeness/photo evidence; no payment signal
     }
 
     fun analyze(
@@ -89,7 +90,7 @@ class FakeProfileDetector @Inject constructor() {
         ).roundToInt().coerceIn(0, 100)
 
         val badgeTier = when {
-            user.isVerified && user.isPremium && completenessScore > 80 -> BadgeTier.PREMIUM_TRUST
+            user.isVerified && completenessScore > 80 && photoCount >= 3 -> BadgeTier.PREMIUM_TRUST
             user.isVerified -> BadgeTier.ID_VERIFIED
             user.email.isNotBlank() && completenessScore > 50 -> BadgeTier.PHONE_VERIFIED
             user.email.isNotBlank() -> BadgeTier.BASIC
@@ -212,8 +213,7 @@ class FakeProfileDetector @Inject constructor() {
             else -> { flags.add("Account created very recently"); -10 }
         }
 
-        // Premium users get trust bonus
-        if (user.isPremium) score += 20
+        // Payment/subscription state is deliberately excluded from trust/risk heuristics.
 
         return score.coerceIn(0, 100)
     }

@@ -2,6 +2,12 @@ import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { db, requireAppCheck } from "./shared";
+import {
+  MAX_DAILY_REPORTS,
+  MAX_DAILY_SUPPORT_TICKETS,
+  safeUsageCount,
+  usageAllowed,
+} from "./abusePolicy";
 
 const REPORT_REASONS = new Set([
   "Fake identity",
@@ -107,16 +113,27 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
   }
 
   const targetRef = db.collection("users").doc(targetUid);
-  const reportRef = db.collection("profileReports").doc(stableId(reporterUid, targetUid, dayKey()));
+  const day = dayKey();
+  const reportRef = db.collection("profileReports").doc(stableId(reporterUid, targetUid, day));
+  const activityRef = db.collection("riskActivity").doc(reporterUid).collection("days").doc(day);
   const created = await db.runTransaction(async (tx) => {
-    const [target, existing] = await Promise.all([
+    const [target, existing, activity] = await Promise.all([
       tx.get(targetRef),
       tx.get(reportRef),
+      tx.get(activityRef),
     ]);
     if (!target.exists) {
       throw new functions.https.HttpsError("not-found", "Profile not found");
     }
     if (existing.exists) return false;
+
+    const reportCount = safeUsageCount(activity.data()?.reportCount);
+    if (!usageAllowed(reportCount, MAX_DAILY_REPORTS)) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Daily report safety limit reached. Use Block for immediate protection or contact support."
+      );
+    }
 
     tx.create(reportRef, {
       reporterUid,
@@ -127,6 +144,10 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    tx.set(activityRef, {
+      reportCount: reportCount + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
     return true;
   });
 
@@ -138,9 +159,13 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
 
 const SUPPORT_CATEGORIES = new Set([
   "Account",
-  "Membership",
   "Verification",
+  "Match/search",
+  "Membership",
+  "Payment",
+  "Privacy",
   "Safety",
+  "Appeal",
   "Technical issue",
   "Other",
 ]);
@@ -160,16 +185,67 @@ export const submitSupportTicket = functions.https.onCall(async (data, context) 
   }
 
   const ticketRef = db.collection("supportTickets").doc();
-  await ticketRef.set({
-    uid,
-    category,
-    message,
-    status: "OPEN",
-    source: "ANDROID",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  const activityRef = db.collection("riskActivity").doc(uid).collection("days").doc(dayKey());
+  await db.runTransaction(async (tx) => {
+    const activity = await tx.get(activityRef);
+    const supportTicketCount = safeUsageCount(activity.data()?.supportTicketCount);
+    if (!usageAllowed(supportTicketCount, MAX_DAILY_SUPPORT_TICKETS)) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Daily support request limit reached. Please continue an existing ticket where possible."
+      );
+    }
+
+    tx.create(ticketRef, {
+      uid,
+      category,
+      message,
+      status: "OPEN",
+      source: "ANDROID",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.set(activityRef, {
+      supportTicketCount: supportTicketCount + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
   });
 
   functions.logger.info("Support ticket submitted", { uid, ticketId: ticketRef.id, category });
   return { success: true, ticketId: ticketRef.id };
+});
+
+
+function supportTimestampMillis(value: unknown): number | null {
+  return value instanceof admin.firestore.Timestamp ? value.toMillis() : null;
+}
+
+/**
+ * Owner-only support history. Internal assignment, operator notes and escalation details stay in
+ * the role-gated operations API.
+ */
+export const listMySupportTickets = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const snapshot = await db.collection("supportTickets")
+    .where("uid", "==", uid)
+    .limit(50)
+    .get();
+
+  const tickets = snapshot.docs.map((doc) => {
+    const value = doc.data();
+    return {
+      id: doc.id,
+      category: String(value.category || ""),
+      message: String(value.message || ""),
+      status: String(value.status || "OPEN"),
+      createdAtMillis: supportTimestampMillis(value.createdAt),
+      updatedAtMillis: supportTimestampMillis(value.updatedAt),
+      resolvedAtMillis: supportTimestampMillis(value.resolvedAt),
+    };
+  }).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+
+  return { tickets };
 });

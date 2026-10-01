@@ -107,7 +107,13 @@ data class MatchResult(
     val combinedScore: Float,
     val mode: MatchMode,
     val formulaVersion: String = "",
-    val factors: List<CompatibilityFactor> = emptyList()
+    val factors: List<CompatibilityFactor> = emptyList(),
+    val forwardPreferenceScore: Float? = null,
+    val reversePreferenceScore: Float? = null,
+    val mutualPreferenceScore: Float? = null,
+    val forwardPreferenceCriteria: Int = 0,
+    val reversePreferenceCriteria: Int = 0,
+    val mutualPreferenceCriteria: Int = 0
 ) {
     val displayScore: Int get() = (primary() * 100f).toInt()
     fun primary(): Float = when (mode) {
@@ -122,10 +128,13 @@ enum class MatchMode { QUESTIONNAIRE, ASTROLOGY, ADVANCED }
 data class MatchFilter(
     val ageMin: Int = 18,
     val ageMax: Int = 70,
+    val heightMinCm: Int = 90,
+    val heightMaxCm: Int = 250,
     val city: String = "",
     val state: String = "",
     val caste: String = "",
     val minScore: Float = 0f,
+    val minMutualMatchPercent: Int = 0,
     val religion: String = "",
     val motherTongue: String = "",
     val maritalStatus: String = "",
@@ -155,6 +164,10 @@ data class MatchFilter(
     val occupationCategory: String = "",
     val employerType: String = "",
     val subCaste: String = "",
+    val faithTradition: String = "",
+    val faithSubTradition: String = "",
+    val faithInstitution: String = "",
+    val visaStatus: String = "",
     val nakshatra: String = "",
     val rasi: String = "",
     val manglik: String = "",

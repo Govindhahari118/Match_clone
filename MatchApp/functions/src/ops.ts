@@ -1,6 +1,11 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
-import { db, requireOpsRole } from "./shared";
+import { db, persistAndSendNotification, requireOpsRole } from "./shared";
+import {
+  enforcementSuppressesInteractions,
+  normalizeEnforcementStatus,
+} from "./accountEnforcementPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const SUPPORT_STATUSES = new Set(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "RESOLVED", "CLOSED", "ESCALATED"]);
 const REPORT_STATUSES = new Set(["OPEN", "REVIEWING", "ACTIONED", "DISMISSED"]);
@@ -120,7 +125,7 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
   const ticketRef = db.collection("supportTickets").doc(ticketId);
   const auditRef = db.collection("opsAuditLog").doc();
 
-  await db.runTransaction(async (tx) => {
+  const transition = await db.runTransaction(async (tx) => {
     const snapshot = await tx.get(ticketRef);
     if (!snapshot.exists) {
       throw new functions.https.HttpsError("not-found", "Support ticket not found");
@@ -154,6 +159,7 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "SUPPORT_TICKET_STATUS_UPDATED",
       targetCollection: "supportTickets",
       targetId: ticketId,
@@ -162,7 +168,38 @@ export const updateSupportTicketStatus = functions.https.onCall(async (data, con
       reason,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    return {
+      previousStatus,
+      ownerUid: String(current.uid || ""),
+    };
   });
+
+  if (transition.ownerUid && transition.previousStatus !== nextStatus) {
+    try {
+      await persistAndSendNotification({
+        notificationId: `support_${ticketId}_${nextStatus}`,
+        userId: transition.ownerUid,
+        type: "SYSTEM",
+        title: "Support request updated",
+        body: nextStatus === "RESOLVED" || nextStatus === "CLOSED"
+          ? "Your support request has been resolved. Open Help & Support to review its status."
+          : "Your support request status changed. Open Help & Support to review it.",
+        entityType: "support",
+        entityId: ticketId,
+        deepLink: "matrimonyconnect://notifications",
+        pushType: "support_status",
+        preferenceKey: "critical",
+        priority: "high",
+      });
+    } catch (error) {
+      functions.logger.warn("Support status notification delivery failed", {
+        ticketId,
+        nextStatus,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   return { success: true, ticketId, status: nextStatus };
 });
@@ -235,6 +272,7 @@ export const updateProfileReportStatus = functions.https.onCall(async (data, con
     tx.create(auditRef, {
       actorUid: actor.uid,
       actorRole: actor.role,
+      requestId: actor.requestId,
       action: "PROFILE_REPORT_STATUS_UPDATED",
       targetCollection: "profileReports",
       targetId: reportId,
@@ -254,16 +292,32 @@ export const updateProfileReportStatus = functions.https.onCall(async (data, con
  * Returns counts and age buckets only; no member messages, report details, contact data or KYC data.
  */
 export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) => {
-  requireOpsRole(context, ["support", "moderator", "payment_ops", "ops_admin"]);
+  requireOpsRole(context, ["support", "moderator", "payment_ops", "kyc_reviewer", "ops_admin"]);
   const now = Date.now();
 
-  const [tickets, reports] = await Promise.all([
+  const [tickets, assisted, reports, verifications, photoModeration, videoModeration] = await Promise.all([
     db.collection("supportTickets")
       .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_USER", "ESCALATED"])
       .limit(1000)
       .get(),
+    db.collection("rmRequests")
+      .where("status", "in", ["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_ON_MEMBER"])
+      .limit(1000)
+      .get(),
     db.collection("profileReports")
       .where("status", "in", ["OPEN", "REVIEWING"])
+      .limit(1000)
+      .get(),
+    db.collection("verificationRequests")
+      .where("status", "==", "pending")
+      .limit(1000)
+      .get(),
+    db.collection("photoModeration")
+      .where("status", "==", "PENDING")
+      .limit(1000)
+      .get(),
+    db.collection("videoModeration")
+      .where("status", "==", "PENDING")
       .limit(1000)
       .get(),
   ]);
@@ -286,8 +340,18 @@ export const getOpsQueueMetrics = functions.https.onCall(async (_data, context) 
   return {
     generatedAtMillis: now,
     support: summarize(tickets.docs),
+    assisted: summarize(assisted.docs),
     moderation: summarize(reports.docs),
-    truncated: tickets.size >= 1000 || reports.size >= 1000,
+    verification: summarize(verifications.docs),
+    photoModeration: summarize(photoModeration.docs),
+    videoModeration: summarize(videoModeration.docs),
+    truncated:
+      tickets.size >= 1000 ||
+      assisted.size >= 1000 ||
+      reports.size >= 1000 ||
+      verifications.size >= 1000 ||
+      photoModeration.size >= 1000 ||
+      videoModeration.size >= 1000,
   };
 });
 
@@ -316,6 +380,7 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
   ]);
   const userData = user.data() || {};
   const subscriptionData = subscription.data() || {};
+  const membership = resolveMembershipState(subscriptionData, userData);
 
   return {
     payment: {
@@ -336,9 +401,9 @@ export const getPaymentReconciliationCase = functions.https.onCall(async (data, 
       voidedReason: typeof value.voidedReason === "string" ? value.voidedReason : null,
     },
     currentEntitlement: {
-      isPremium: userData.isPremium === true,
-      subscriptionPlan: String(userData.subscriptionPlan || "FREE"),
-      subscriptionExpiry: Number(userData.subscriptionExpiry || 0),
+      isPremium: membership.active,
+      subscriptionPlan: membership.planId,
+      subscriptionExpiry: membership.expiresAtMillis,
       boostUntil: Number(subscriptionData.boostUntil || 0),
     },
   };
@@ -410,6 +475,330 @@ export const getModerationCase = functions.https.onCall(async (data, context) =>
         action: String(entry.action || ""),
         reason: String(entry.reason || ""),
         createdAtMillis: timestampMillis(entry.createdAt),
+      };
+    }),
+  };
+});
+
+
+/**
+ * Explicit account enforcement for moderation. The public user document receives only the
+ * interaction-relevant status; the operator reason remains in restricted operational records.
+ * Non-active states immediately fail the same lifecycle checks used by discovery, interests,
+ * Nearby, shared horoscope and other trusted backend paths.
+ */
+export const setAccountEnforcement = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["moderator", "ops_admin"]);
+  const targetUid = safeId(data?.targetUid, "account");
+  if (targetUid === actor.uid) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Operators cannot enforce their own account"
+    );
+  }
+
+  const nextStatus = normalizeEnforcementStatus(data?.status);
+  if (!nextStatus) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid enforcement status");
+  }
+  const reason = safeReason(data?.reason);
+  const reportId = data?.reportId == null ? null : safeId(data.reportId, "profile report");
+
+  const userRef = db.collection("users").doc(targetUid);
+  const enforcementRef = db.collection("accountEnforcements").doc(targetUid);
+  const auditRef = db.collection("opsAuditLog").doc();
+
+  const previousStatus = await db.runTransaction(async (tx) => {
+    const user = await tx.get(userRef);
+    if (!user.exists) {
+      throw new functions.https.HttpsError("not-found", "Account not found");
+    }
+    const before = String(user.data()?.accountStatus || "ACTIVE").toUpperCase();
+
+    tx.set(userRef, {
+      accountStatus: nextStatus,
+      matrimonyPaused: enforcementSuppressesInteractions(nextStatus),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    tx.set(enforcementRef, {
+      targetUid,
+      status: nextStatus,
+      reason,
+      reportId,
+      lastActorUid: actor.uid,
+      lastActorRole: actor.role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(nextStatus === "ACTIVE" ? {
+        clearedAt: admin.firestore.FieldValue.serverTimestamp(),
+      } : {
+        clearedAt: admin.firestore.FieldValue.delete(),
+      }),
+    }, { merge: true });
+
+    tx.create(auditRef, {
+      actorUid: actor.uid,
+      actorRole: actor.role,
+      requestId: actor.requestId,
+      action: "ACCOUNT_ENFORCEMENT_UPDATED",
+      targetCollection: "users",
+      targetId: targetUid,
+      before: { accountStatus: before },
+      after: { accountStatus: nextStatus },
+      reason,
+      reportId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return before;
+  });
+
+  if (nextStatus === "SUSPENDED") {
+    await admin.auth().revokeRefreshTokens(targetUid);
+  }
+
+  functions.logger.info("Account enforcement updated", {
+    actorUid: actor.uid,
+    actorRole: actor.role,
+    targetUid,
+    previousStatus,
+    nextStatus,
+    reportId,
+  });
+
+  return {
+    success: true,
+    targetUid,
+    previousStatus,
+    status: nextStatus,
+  };
+});
+
+
+const ALL_OPS_ROLES = ["support", "moderator", "kyc_reviewer", "payment_ops", "ops_admin"] as const;
+
+/** Minimal bootstrap contract for the separate operator console. */
+export const getMyOpsAccess = functions.https.onCall(async (_data, context) => {
+  const actor = requireOpsRole(context, [...ALL_OPS_ROLES]);
+  const raw = Array.isArray(context.auth?.token?.roles)
+    ? context.auth?.token?.roles.filter((value): value is string => typeof value === "string")
+    : [];
+  const roles = ALL_OPS_ROLES.filter((role) => raw.includes(role));
+  return { uid: actor.uid, roles };
+});
+
+/**
+ * Exact operational account lookup. Search is deliberately not fuzzy and never returns raw KYC,
+ * contact numbers, messages, private astrology or payment tokens.
+ */
+export const lookupOpsAccount = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, [...ALL_OPS_ROLES]);
+  const query = typeof data?.query === "string" ? data.query.trim() : "";
+  if (!query || query.length > 254) {
+    throw new functions.https.HttpsError("invalid-argument", "Enter an account identifier");
+  }
+
+  let uid = "";
+  if (/^@[a-z0-9][a-z0-9._]{2,29}$/i.test(query)) {
+    const normalized = query.slice(1).toLowerCase();
+    const registry = await db.collection("usernames").doc(normalized).get();
+    uid = String(registry.data()?.uid || "");
+  } else if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(query)) {
+    try {
+      uid = (await admin.auth().getUserByEmail(query.toLowerCase())).uid;
+    } catch {
+      throw new functions.https.HttpsError("not-found", "Account not found");
+    }
+  } else if (/^MAT-[A-F0-9]+$/i.test(query)) {
+    const registry = await db.collection("matrimonyIds").doc(query.toUpperCase()).get();
+    uid = String(registry.data()?.uid || "");
+  } else if (/^[a-zA-Z0-9._-]{3,128}$/.test(query)) {
+    const normalized = query.toLowerCase();
+    if (/^[a-z0-9][a-z0-9._]{2,29}$/.test(normalized)) {
+      const registry = await db.collection("usernames").doc(normalized).get();
+      uid = String(registry.data()?.uid || "");
+    }
+    if (!uid) {
+      const direct = await db.collection("users").doc(query).get();
+      if (direct.exists) uid = direct.id;
+    }
+  }
+  if (!uid) throw new functions.https.HttpsError("not-found", "Account not found");
+
+  const [profile, verification, risk, enforcement, subscription] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("verifications").doc(uid).get(),
+    db.collection("riskAssessments").doc(uid).get(),
+    db.collection("accountEnforcements").doc(uid).get(),
+    db.collection("subscriptions").doc(uid).get(),
+  ]);
+  if (!profile.exists) throw new functions.https.HttpsError("not-found", "Account not found");
+
+  const p = profile.data() || {};
+  const v = verification.data() || {};
+  const r = risk.data() || {};
+  const e = enforcement.data() || {};
+  const membershipState = resolveMembershipState(subscription.data(), p);
+  return {
+    account: {
+      uid,
+      displayName: String(p.displayName || ""),
+      username: String(p.username || ""),
+      matrimonyId: String(p.matrimonyId || ""),
+      accountStatus: String(p.accountStatus || "ACTIVE"),
+      matrimonyPaused: p.matrimonyPaused === true,
+      isVerified: p.isVerified === true,
+      verificationLevel: Number(p.verificationLevel || 0),
+      profileCompleteness: Number(p.profileCompleteness || 0),
+      subscriptionPlan: membershipState.planId,
+      subscriptionExpiry: membershipState.expiresAtMillis,
+      createdAtMillis: timestampMillis(p.createdAt) || Number(p.createdAt || 0),
+    },
+    verification: {
+      phoneStatus: String(v.phoneStatus || ""),
+      status: String(v.status || ""),
+      updatedAtMillis: timestampMillis(v.updatedAt),
+    },
+    risk: {
+      level: String(r.level || "LOW"),
+      standing: String(r.standing || "UNREVIEWED"),
+      updatedAtMillis: timestampMillis(r.updatedAt),
+    },
+    enforcement: enforcement.exists ? {
+      status: String(e.status || ""),
+      updatedAtMillis: timestampMillis(e.updatedAt),
+      clearedAtMillis: timestampMillis(e.clearedAt),
+    } : null,
+  };
+});
+
+/** KYC queue metadata; raw document bytes are never included in list responses. */
+export const listPendingVerificationRequests = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["kyc_reviewer", "ops_admin"]);
+  const limit = pageSize(data?.limit);
+  const snapshot = await db.collection("verificationRequests")
+    .where("status", "==", "pending")
+    .limit(limit)
+    .get();
+  return {
+    requests: snapshot.docs.map((doc) => {
+      const value = doc.data();
+      return {
+        uid: doc.id,
+        docType: String(value.docType || ""),
+        verificationMethod: String(value.verificationMethod || ""),
+        submittedAtMillis: timestampMillis(value.submittedAt),
+        updatedAtMillis: timestampMillis(value.updatedAt),
+      };
+    }),
+  };
+});
+
+/**
+ * Short-lived, audited raw-document access for an assigned KYC reviewer. This avoids ever making
+ * verification Storage objects member-readable or exposing permanent download tokens.
+ */
+export const getVerificationReviewCase = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["kyc_reviewer", "ops_admin"]);
+  const targetUid = safeId(data?.targetUid, "verification account");
+  const request = await db.collection("verificationRequests").doc(targetUid).get();
+  if (!request.exists || String(request.data()?.status || "").toLowerCase() !== "pending") {
+    throw new functions.https.HttpsError("not-found", "Pending verification request not found");
+  }
+
+  const value = request.data() || {};
+  const documentPath = String(value.documentPath || "");
+  if (!documentPath.startsWith(`verifications/${targetUid}/`) || documentPath.includes("..")) {
+    throw new functions.https.HttpsError("failed-precondition", "Verification document path is invalid");
+  }
+
+  const [signedUrl] = await admin.storage().bucket().file(documentPath).getSignedUrl({
+    action: "read",
+    expires: Date.now() + 5 * 60 * 1000,
+  });
+  await db.collection("opsAuditLog").add({
+    actorUid: actor.uid,
+    actorRole: actor.role,
+    requestId: actor.requestId,
+    action: "VERIFICATION_DOCUMENT_ACCESSED",
+    targetCollection: "verificationRequests",
+    targetId: targetUid,
+    reason: "KYC_REVIEW",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return {
+    uid: targetUid,
+    docType: String(value.docType || ""),
+    verificationMethod: String(value.verificationMethod || ""),
+    submittedAtMillis: timestampMillis(value.submittedAt),
+    documentUrl: signedUrl,
+    expiresAtMillis: Date.now() + 5 * 60 * 1000,
+  };
+});
+
+/** Private fraud-review queue. Signals are evidence for human review, never automatic punishment. */
+export const listRiskReviewQueue = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["moderator", "ops_admin"]);
+  const limit = pageSize(data?.limit);
+  const snapshot = await db.collection("riskSignals")
+    .orderBy("updatedAt", "desc")
+    .limit(limit)
+    .get();
+
+  const assessments = snapshot.docs.length
+    ? await db.getAll(...snapshot.docs.map((doc) => db.collection("riskAssessments").doc(doc.id)))
+    : [];
+  return {
+    cases: snapshot.docs.map((doc, index) => {
+      const value = doc.data();
+      const assessment = assessments[index]?.data() || {};
+      return {
+        uid: doc.id,
+        reportSignalCount: Number(value.reportSignalCount || 0),
+        duplicatePhotoSignalCount: Number(value.duplicatePhotoSignalCount || 0),
+        duplicateBioSignalCount: Number(value.duplicateBioSignalCount || 0),
+        highVolumeInterestDayCount: Number(value.highVolumeInterestDayCount || 0),
+        highVolumeMessageDayCount: Number(value.highVolumeMessageDayCount || 0),
+        externalLinkMessageCount: Number(value.externalLinkMessageCount || 0),
+        moneyRequestSignalCount: Number(value.moneyRequestSignalCount || 0),
+        sharedDeviceAccountSwitchCount: Number(value.sharedDeviceAccountSwitchCount || 0),
+        rapidProfileMutationDayCount: Number(value.rapidProfileMutationDayCount || 0),
+        paymentAccountMismatchCount: Number(value.paymentAccountMismatchCount || 0),
+        updatedAtMillis: timestampMillis(value.updatedAt),
+        reviewedLevel: String(assessment.level || "LOW"),
+        reviewedStanding: String(assessment.standing || "UNREVIEWED"),
+        reviewedAtMillis: timestampMillis(assessment.updatedAt),
+      };
+    }),
+  };
+});
+
+/** Role-scoped payment history for an account; provider purchase tokens are never returned. */
+export const listAccountPayments = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["payment_ops", "ops_admin"]);
+  const uid = safeId(data?.uid, "account");
+  const limit = pageSize(data?.limit);
+  const snapshot = await db.collection("payments")
+    .where("uid", "==", uid)
+    .limit(limit)
+    .get();
+
+  return {
+    payments: snapshot.docs.map((doc) => {
+      const value = doc.data();
+      return {
+        id: doc.id,
+        status: String(value.status || ""),
+        provider: String(value.provider || ""),
+        productId: String(value.productId || ""),
+        entitlementType: String(value.entitlementType || ""),
+        entitlementId: String(value.entitlementId || value.planId || value.boostId || ""),
+        orderId: typeof value.orderId === "string" ? value.orderId : null,
+        grantedAtMillis: Number(value.grantedAtMillis || 0),
+        expiresAtMillis: Number(value.expiresAtMillis || 0),
+        verifiedAtMillis: timestampMillis(value.verifiedAt),
+        voidedAtMillis: Number(value.voidedAtMillis || 0) || timestampMillis(value.voidedAt),
       };
     }),
   };

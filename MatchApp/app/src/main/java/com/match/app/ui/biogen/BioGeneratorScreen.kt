@@ -1,21 +1,35 @@
 package com.match.app.ui.biogen
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -23,264 +37,190 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.session.SessionStore
-import com.match.app.ui.i18n.t
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class BioDraftUiState(
+    val loading: Boolean = true,
+    val name: String = "",
+    val age: String = "",
+    val profession: String = "",
+    val education: String = "",
+    val religion: String = "",
+    val city: String = "",
+    val draft: String = "",
+    val saving: Boolean = false,
+    val message: String? = null
+)
 
 @HiltViewModel
 class BioGeneratorViewModel @Inject constructor(
     private val session: SessionStore,
     private val auth: AuthRepository
 ) : ViewModel() {
-    var saved = mutableStateOf(false)
-        private set
+    private val _ui = MutableStateFlow(BioDraftUiState())
+    val ui = _ui.asStateFlow()
 
-    fun saveToProfile(bio: String) = viewModelScope.launch {
-        val uid = session.userId.first() ?: return@launch
-        auth.updateBio(uid, bio)
-        saved.value = true
+    init {
+        viewModelScope.launch {
+            val userId = session.userId.first()
+            val profile = userId?.let { auth.currentProfile(it) }
+            _ui.value = if (profile == null) {
+                BioDraftUiState(loading = false, message = "Your profile could not be loaded.")
+            } else {
+                BioDraftUiState(
+                    loading = false,
+                    name = profile.displayName,
+                    age = profile.age.takeIf { it > 0 }?.toString().orEmpty(),
+                    profession = profile.profession,
+                    education = profile.education,
+                    religion = profile.religion,
+                    city = profile.city
+                )
+            }
+        }
     }
-}
 
-private val ORANGE = Color(0xFFE65100)
+    fun updateName(value: String) = _ui.update { it.copy(name = value.take(100), message = null) }
+    fun updateProfession(value: String) = _ui.update { it.copy(profession = value.take(160), message = null) }
+    fun updateEducation(value: String) = _ui.update { it.copy(education = value.take(160), message = null) }
+    fun updateReligion(value: String) = _ui.update { it.copy(religion = value.take(120), message = null) }
+    fun updateCity(value: String) = _ui.update { it.copy(city = value.take(120), message = null) }
 
-private enum class BioTone(val label: String, val emoji: String) {
-    Traditional("Traditional", "🕉"),
-    Modern("Modern", "✨"),
-    Professional("Professional", "💼"),
-    Casual("Casual", "😊")
-}
-private enum class BioLength(val label: String, val words: Int) {
-    Short("Short", 40), Medium("Medium", 80), Long("Long", 140)
+    fun createDraft() {
+        val value = _ui.value
+        val facts = buildList {
+            value.age.takeIf { it.isNotBlank() }?.let { add(it + " years old") }
+            value.city.takeIf { it.isNotBlank() }?.let { add("based in " + it) }
+            value.profession.takeIf { it.isNotBlank() }?.let { add("working as " + it) }
+        }
+        val intro = when {
+            value.name.isNotBlank() && facts.isNotEmpty() ->
+                "I'm " + value.name + ", " + facts.joinToString(", ") + "."
+            value.name.isNotBlank() -> "I'm " + value.name + "."
+            facts.isNotEmpty() -> "I'm " + facts.joinToString(", ") + "."
+            else -> "I'm looking to build a meaningful partnership based on mutual respect."
+        }
+        val details = buildList {
+            value.education.takeIf { it.isNotBlank() }?.let {
+                add("My education background is " + it + ".")
+            }
+            value.religion.takeIf { it.isNotBlank() }?.let {
+                add("My profile lists my religion/community as " + it + ".")
+            }
+        }
+        val closing = "I value honest communication, respect, and taking the time to understand each other."
+        _ui.update {
+            it.copy(
+                draft = (listOf(intro) + details + closing).joinToString(" "),
+                message = null
+            )
+        }
+    }
+
+    fun updateDraft(value: String) = _ui.update { it.copy(draft = value.take(1200), message = null) }
+
+    fun saveDraft() = viewModelScope.launch {
+        val userId = session.userId.first()
+        val draft = _ui.value.draft.trim()
+        if (userId == null || draft.length < 20) {
+            _ui.update { it.copy(message = "Create and review a bio before saving.") }
+            return@launch
+        }
+        _ui.update { it.copy(saving = true, message = null) }
+        runCatching { auth.updateBio(userId, draft) }
+            .onSuccess { _ui.update { it.copy(saving = false, message = "Bio saved to your profile.") } }
+            .onFailure { _ui.update { it.copy(saving = false, message = "Could not save the bio.") } }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BioGeneratorScreen(onBack: () -> Unit = {}, vm: BioGeneratorViewModel = hiltViewModel()) {
-    var name by remember { mutableStateOf("Priya") }
-    var age by remember { mutableStateOf("28") }
-    var profession by remember { mutableStateOf("Software Engineer") }
-    var religion by remember { mutableStateOf("Hindu, Brahmin") }
-    var education by remember { mutableStateOf("M.Tech, IIT Delhi") }
-    var hobbies by remember { mutableStateOf("reading, classical music, yoga") }
-    var values by remember { mutableStateOf("family, honesty, spirituality") }
-    var tone by remember { mutableStateOf(BioTone.Modern) }
-    var length by remember { mutableStateOf(BioLength.Medium) }
-    var generatedBio by remember { mutableStateOf("") }
-    val clipboard = LocalClipboardManager.current
+fun BioGeneratorScreen(
+    onBack: () -> Unit = {},
+    vm: BioGeneratorViewModel = hiltViewModel()
+) {
+    val ui by vm.ui.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(t("bio_generator", "Bio Generator")) },
+                title = { Text("Bio Draft Helper") },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("biogen_back")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
-    ) { pad ->
+    ) { padding ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("bio_generator_screen"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.padding(padding).fillMaxSize()
+                .verticalScroll(rememberScrollState()).padding(16.dp)
+                .testTag("bio_generator_screen"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = ORANGE.copy(alpha = 0.08f))) {
+            ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.AutoAwesome, null, tint = ORANGE)
+                    Row {
+                        Icon(Icons.Filled.EditNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(8.dp))
-                        Text(t("ai_bio_generator", "AI Bio Generator"),
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                            color = ORANGE)
+                        Text("Deterministic draft helper", fontWeight = FontWeight.SemiBold)
                     }
-                    Text(t("bio_generator_desc", "Generate a polished matrimonial bio from your profile in seconds."),
+                    Text(
+                        "This is not an AI model. It builds an editable draft only from the details shown below, initially loaded from your signed-in profile. Review every sentence before saving.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            Text(t("your_details", "Your details"), fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(value = name, onValueChange = { name = it },
-                label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = age, onValueChange = { age = it },
-                    label = { Text("Age") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = religion, onValueChange = { religion = it },
-                    label = { Text("Religion / Community") }, modifier = Modifier.weight(2f))
-            }
-            OutlinedTextField(value = profession, onValueChange = { profession = it },
-                label = { Text("Profession") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = education, onValueChange = { education = it },
-                label = { Text("Education") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = hobbies, onValueChange = { hobbies = it },
-                label = { Text("Hobbies (comma separated)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = values, onValueChange = { values = it },
-                label = { Text("Values") }, modifier = Modifier.fillMaxWidth())
-
-            Text(t("tone", "Tone"), fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                BioTone.values().forEach { t ->
-                    FilterChip(
-                        selected = tone == t,
-                        onClick = { tone = t },
-                        label = { Text("${t.emoji} ${t.label}") },
-                        modifier = Modifier.weight(1f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Text(t("length", "Length"), fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                BioLength.values().forEach { l ->
-                    FilterChip(
-                        selected = length == l,
-                        onClick = { length = l },
-                        label = { Text(l.label) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            OutlinedTextField(ui.name, vm::updateName, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(ui.profession, vm::updateProfession, label = { Text("Profession") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(ui.education, vm::updateEducation, label = { Text("Education") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(ui.religion, vm::updateReligion, label = { Text("Religion / community") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(ui.city, vm::updateCity, label = { Text("City") }, modifier = Modifier.fillMaxWidth())
 
             Button(
-                onClick = {
-                    generatedBio = composeBio(name, age, profession, religion, education,
-                        hobbies, values, tone, length)
-                },
-                modifier = Modifier.fillMaxWidth().testTag("biogen_btn"),
-                colors = ButtonDefaults.buttonColors(containerColor = ORANGE)
+                onClick = vm::createDraft,
+                enabled = !ui.loading && !ui.saving,
+                modifier = Modifier.fillMaxWidth().testTag("biogen_btn")
             ) {
-                Icon(Icons.Filled.AutoAwesome, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (generatedBio.isBlank()) "Generate Bio" else "Regenerate")
+                Text(if (ui.draft.isBlank()) "Create draft" else "Rebuild draft")
             }
 
-            if (generatedBio.isNotBlank()) {
-                ElevatedCard(shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Your bio",
-                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                            color = ORANGE)
-                        Text(generatedBio, style = MaterialTheme.typography.bodyMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(
-                                onClick = { clipboard.setText(AnnotatedString(generatedBio)) },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Filled.ContentCopy, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Copy")
-                            }
-                            Button(
-                                onClick = { vm.saveToProfile(generatedBio) },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = ORANGE)
-                            ) {
-                                Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (vm.saved.value) "Saved!" else "Use in profile")
-                            }
-                        }
-                    }
+            if (ui.draft.isNotBlank()) {
+                OutlinedTextField(
+                    value = ui.draft,
+                    onValueChange = vm::updateDraft,
+                    label = { Text("Review and edit your bio") },
+                    minLines = 6,
+                    maxLines = 12,
+                    modifier = Modifier.fillMaxWidth().testTag("bio_draft")
+                )
+                Button(
+                    onClick = vm::saveDraft,
+                    enabled = !ui.saving && ui.draft.trim().length >= 20,
+                    modifier = Modifier.fillMaxWidth().testTag("bio_save")
+                ) {
+                    Icon(Icons.Filled.Check, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (ui.saving) "Saving…" else "Save to profile")
                 }
             }
-            Spacer(Modifier.height(16.dp))
+
+            ui.message?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
-}
-
-private fun composeBio(
-    name: String, age: String, profession: String, religion: String, education: String,
-    hobbies: String, values: String, tone: BioTone, length: BioLength
-): String {
-    val opener = when (tone) {
-        BioTone.Traditional -> listOf(
-            "With blessings of my family, I am ${name.ifBlank { "a seeker" }}",
-            "Namaste. My name is ${name.ifBlank { "..." }}",
-            "By God's grace and my family's blessings, I, ${name.ifBlank { "..." }}"
-        ).random()
-        BioTone.Modern -> listOf(
-            "Hi — I'm ${name.ifBlank { "someone" }}",
-            "Hello! ${name.ifBlank { "I'm" }} here",
-            "Hey, I'm ${name.ifBlank { "a dreamer" }}"
-        ).random()
-        BioTone.Professional -> listOf(
-            "${name.ifBlank { "I am" }}, $age, a $profession",
-            "I'm ${name.ifBlank { "a professional" }}, $age, working as a $profession"
-        ).random()
-        BioTone.Casual -> listOf(
-            "Hey there! ${name.ifBlank { "I'm just someone" }}",
-            "Yo! I'm ${name.ifBlank { "someone cool" }}, $age",
-            "Hi 👋 I'm ${name.ifBlank { "me" }}"
-        ).random()
-    }
-    val middle = when (tone) {
-        BioTone.Traditional -> listOf(
-            "belonging to a $religion family. I have completed $education and work as a $profession.",
-            "from a respected $religion household. I hold a degree from $education and serve as a $profession.",
-            "rooted in the $religion tradition. Educated at $education, I now work as $profession."
-        ).random()
-        BioTone.Modern -> listOf(
-            "— $age, $profession with a degree from $education. Proud of my $religion roots.",
-            "— $age, $profession, $education alumni. My $religion heritage means a lot to me.",
-            "— $age years young, $profession by day, $religion traditions at heart."
-        ).random()
-        BioTone.Professional -> listOf(
-            "by profession. Educated at $education. I belong to a $religion background.",
-            ". My education at $education has shaped my career. I come from a $religion family."
-        ).random()
-        BioTone.Casual -> listOf(
-            "— $age, $profession, $religion, $education alum.",
-            "— $age, love my $profession life, $religion vibes, studied at $education."
-        ).random()
-    }
-    val hobbiesList = hobbies.split(",").map { it.trim() }.filter { it.isNotBlank() }
-    val valuesList = values.split(",").map { it.trim() }.filter { it.isNotBlank() }
-    val hobbyPart = if (hobbiesList.isNotEmpty())
-        listOf(
-            "In my free time I enjoy ${hobbiesList.joinToString(", ")}.",
-            "My passions include ${hobbiesList.joinToString(", ")}.",
-            "When not working, you'll find me ${hobbiesList.joinToString(", ")}."
-        ).random()
-    else ""
-    val valuesPart = if (valuesList.isNotEmpty())
-        listOf(
-            "What matters to me most: ${valuesList.joinToString(", ")}.",
-            "I deeply value ${valuesList.joinToString(", ")}.",
-            "Core to who I am: ${valuesList.joinToString(", ")}."
-        ).random()
-    else ""
-    val closer = when (tone) {
-        BioTone.Traditional -> listOf(
-            "Looking for a life partner who shares our traditions and values family.",
-            "Seeking a compatible match who respects our culture and family values.",
-            "I pray for a partner who walks this path of life together with devotion and respect."
-        ).random()
-        BioTone.Modern -> listOf(
-            "Looking for someone kind, ambitious, and genuine — let's grow together.",
-            "If you value real connections and good conversations, let's talk!",
-            "Searching for my person — someone who matches my energy and ambition."
-        ).random()
-        BioTone.Professional -> listOf(
-            "Seeking a well-educated, career-oriented partner for a long-term partnership.",
-            "Looking for an equally driven individual to build a meaningful future together.",
-            "My ideal partner is intellectually curious and professionally accomplished."
-        ).random()
-        BioTone.Casual -> listOf(
-            "If this sounds like your vibe — say hi! Let's chat.",
-            "Swipe right if you like what you see 😊",
-            "Let's grab coffee (or chai) and see where it goes!"
-        ).random()
-    }
-    val full = "$opener $middle $hobbyPart $valuesPart $closer"
-    val words = full.split(" ").filter { it.isNotBlank() }
-    return if (words.size <= length.words) full.trim()
-    else words.take(length.words).joinToString(" ") + "…"
 }

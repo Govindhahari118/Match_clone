@@ -1,10 +1,12 @@
-# Matree production readiness — current completion branch
+# Matree production readiness — exact-source release candidate
 
-> Branch: `gpt/matree-pin-to-pin-completion-20260925`
+> Candidate identity is the exact Git SHA supplied to the release process. Do not treat a mutable
+> branch name, PR number or historical green run as release identity.
 >
-> Baseline: `gpt/matree-pin-to-pin-20260923` (itself based on canonical `Gpt_matree`)
+> Canonical production destination: `main`. Production build/deploy scripts require
+> `MATREE_RELEASE_SHA` to match the checked-out clean HEAD before they proceed.
 >
-> Status: **DRAFT / NOT PRODUCTION-READY**
+> Status: **REPOSITORY RELEASE CANDIDATE / NOT YET PUBLICLY LAUNCHED**
 >
 > Rule: a green workflow certifies only the exact SHA it ran against. Any later code or
 > configuration commit invalidates that release claim until mandatory gates rerun.
@@ -114,29 +116,27 @@ win over earlier exploratory text; security/privacy invariants are never weakene
 - Google Play entitlement reconciliation has deterministic policy/ledger regression coverage for
   void/refund/expiry paths, and compatibility scoring carries formula version/factor evidence
 - legacy protected-media token references have an idempotent owner-path migration policy and tests
+- every Android Screen source is exhaustively classified with a CI gate that prevents hidden/STUB/UNSAFE/POST_LAUNCH exposure drift
+- release-candidate privacy/legal copy was reconciled to the implemented Firebase/Google Play/Nearby/media architecture; CI rejects legacy E2EE/Razorpay/BCrypt/no-GPS claims
+- role-scoped operations provisioning has a dry-run-first audited bootstrap that preserves unrelated custom claims and revokes refresh tokens after changes
+- production rollback has an explicit safe-off/maintenance/release-rollback runbook tied to the existing Remote Config kill switches
 
 ## Exact-head evidence
 
-Production CI completed **all green** on exact code head
-`8551a1b3e073852b87ab9c14ec1176fb4829d4bb` (run `36337683818`).
+This document deliberately does **not** hard-code a supposedly current green SHA. Any documentation
+commit would immediately make that SHA stale. The authoritative exact-head result is the latest
+`Production CI` run and its SHA-labelled evidence artifacts for the candidate commit.
 
-The four mandatory jobs all completed successfully on that SHA:
+Mandatory CI jobs are:
 
-- Android build, lint and tests
-- Firebase Functions lint, build and production dependency audit
-- Firestore and Storage security rules
-- Room migration matrix
+1. Android source/integrity gates + unit tests + lint + debug build + non-production release/R8
+   validation + exact-SHA evidence.
+2. Emulator-backed Room migration matrix across every registered supported migration hop.
+3. Firebase Functions lint + build/typecheck + tests + production dependency audit.
+4. Firestore + Storage emulator security-rules tests.
 
-This remains exact-SHA evidence only. Any later production code/configuration change requires a new
-green run before that later SHA can inherit the claim.
-
-Mandatory CI jobs:
-
-1. production-integrity source gate + Android unit tests + lint + debug build + non-production
-   release/R8 validation + evidence artifact
-2. emulator-backed Room migration matrix across every registered supported migration hop
-3. Firebase Functions lint + build/typecheck + production dependency audit + evidence artifact
-4. Firestore + Storage emulator security-rules tests + evidence artifact
+A production handoff is repository-GO only when all four jobs are green on the **same current head**.
+Historical green runs never certify a later commit.
 
 ## Remaining repository verification before release
 
@@ -174,7 +174,7 @@ These cannot be truthfully completed by repository code alone:
 
 ## Release statement
 
-The repository-side exact-head CI baseline is green at the SHA recorded above, but this branch and
-PR #18 must remain Draft until all required external/operator gates have current evidence. Code
-volume, screenshots, historical green commits or a rendering Compose screen are not completion
-evidence.
+The repository-side release candidate is eligible for handoff only when mandatory CI is green on the
+current exact SHA. Production promotion remains blocked until the expanded operator-controlled
+external evidence gate passes for that same SHA. Code volume, screenshots, branch names, PR numbers,
+historical green commits or a rendering Compose screen are not completion evidence.

@@ -25,7 +25,6 @@ export const onUserCreate = functions.firestore
     await snap.ref.update({
       matrimonyId,
       verificationLevel: 1,
-      subscriptionPlan: "FREE",
       createdAt: Date.now(),
       profileRevision: Number(snap.data()?.profileRevision || 0),
     });
@@ -50,15 +49,25 @@ function profileCompletenessFieldsChanged(
 
 async function recomputeProfileCompleteness(uid: string): Promise<void> {
   const userRef = db.collection("users").doc(uid);
-  const [userSnap, privateSnap] = await Promise.all([
-    userRef.get(),
-    db.collection("userPrivate").doc(uid).get(),
-  ]);
+  const [userSnap, privateSnap, partnerPreferencesSnap, verificationSnap] =
+    await Promise.all([
+      userRef.get(),
+      db.collection("userPrivate").doc(uid).get(),
+      db.collection("partnerPreferences").doc(uid).get(),
+      db.collection("verifications").doc(uid).get(),
+    ]);
   if (!userSnap.exists) return;
 
   const user = userSnap.data() || {};
   const privateProfile = privateSnap.data() || {};
-  const next = calculateProfileCompletenessValue(user, privateProfile);
+  const partnerPreferences = partnerPreferencesSnap.data() || {};
+  const verification = verificationSnap.data() || {};
+  const next = calculateProfileCompletenessValue(
+    user,
+    privateProfile,
+    partnerPreferences,
+    verification
+  );
   const current = Number(user.profileCompleteness ?? -1);
   if (Number.isFinite(current) && Math.abs(current - next) < 0.0005) return;
 
@@ -111,6 +120,19 @@ export const onProfileCompletenessPrivateWrite = functions.firestore
     ) {
       return;
     }
+    await recomputeProfileCompleteness(context.params.uid);
+  });
+
+
+export const onProfileCompletenessPartnerPreferencesWrite = functions.firestore
+  .document("partnerPreferences/{uid}")
+  .onWrite(async (_change, context) => {
+    await recomputeProfileCompleteness(context.params.uid);
+  });
+
+export const onProfileCompletenessVerificationWrite = functions.firestore
+  .document("verifications/{uid}")
+  .onWrite(async (_change, context) => {
     await recomputeProfileCompleteness(context.params.uid);
   });
 
@@ -231,6 +253,66 @@ async function deleteQuery(query: FirebaseFirestore.Query): Promise<number> {
 async function deleteCollection(path: string): Promise<number> {
   return deleteQuery(db.collection(path));
 }
+
+async function removeUidFromPhotoFingerprints(uid: string): Promise<void> {
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await db.collection("photoFingerprints")
+      .where("owners", "array-contains", uid)
+      .limit(DELETE_BATCH_SIZE)
+      .get();
+    if (snapshot.empty) break;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      const owners = Array.isArray(doc.data()?.owners)
+        ? doc.data()?.owners.filter((value: unknown): value is string =>
+          typeof value === "string" && value !== uid)
+        : [];
+      if (owners.length === 0) {
+        batch.delete(doc.ref);
+      } else {
+        batch.update(doc.ref, {
+          owners,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    });
+    await batch.commit();
+    hasMore = snapshot.size === DELETE_BATCH_SIZE;
+  }
+}
+
+
+async function removeUidFromBioFingerprints(uid: string): Promise<void> {
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await db.collection("bioFingerprints")
+      .where("owners", "array-contains", uid)
+      .limit(DELETE_BATCH_SIZE)
+      .get();
+    if (snapshot.empty) break;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      const owners = Array.isArray(doc.data()?.owners)
+        ? doc.data()?.owners.filter((value: unknown): value is string =>
+          typeof value === "string" && value !== uid)
+        : [];
+      if (owners.length === 0) {
+        batch.delete(doc.ref);
+      } else {
+        batch.update(doc.ref, {
+          owners,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    });
+    await batch.commit();
+    hasMore = snapshot.size === DELETE_BATCH_SIZE;
+  }
+}
+
 
 async function deleteFcmDevicesForUser(uid: string): Promise<void> {
   const devices = db.collection("fcmTokens").doc(uid).collection("devices");
@@ -369,6 +451,23 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("backgroundChecks").where("targetUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("fromUid", "==", uid));
         await deleteQuery(db.collection("callRequests").where("toUid", "==", uid));
+        await deleteQuery(db.collection("dataExportRequests").where("uid", "==", uid));
+        await deleteQuery(db.collection("supportTickets").where("uid", "==", uid));
+        await deleteQuery(db.collection("profileReports").where("reporterUid", "==", uid));
+        await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
+        await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("videoModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("profileVideoOrphans").where("uid", "==", uid));
+        await deleteQuery(db.collection("chatMediaOrphans").where("senderUid", "==", uid));
+        await deleteQuery(db.collection("chatMediaOrphans").where("recipientUid", "==", uid));
+        await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
+        await deleteQuery(
+          db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
+        );
+        await deleteQuery(
+          db.collection("recommendationImpressionBatches")
+            .where("targetUids", "array-contains", uid)
+        );
       });
 
       await runDeletionPhase(requestRef, completed, "OWNER_SCOPED_DATA", async () => {
@@ -379,12 +478,29 @@ export const deleteUserAccount = functions
         await deleteCollection(`blocks/${uid}/blocked`);
         await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
         await deleteCollection(`privacyRelations/${uid}/members`);
+        await deleteCollection(`familyDelegates/${uid}/members`);
+        await deleteQuery(db.collectionGroup("members").where("delegateUid", "==", uid));
+        await deleteQuery(db.collection("familyInvites").where("ownerUid", "==", uid));
+        await deleteQuery(db.collection("familyInvites").where("acceptedBy", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("ownerUid", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("delegateUid", "==", uid));
+        await deleteQuery(db.collection("familyAccessAudit").where("actorUid", "==", uid));
         await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
         await deleteCollection(`contactGrants/${uid}/viewers`);
         await deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid));
         await deleteCollection(`subscriptions/${uid}/usage`);
         await deleteCollection(`profileAnalytics/${uid}/weekly`);
         await deleteCollection(`sessions/${uid}/devices`);
+        await deleteCollection(`riskActivity/${uid}/days`);
+        await deleteCollection(`riskActivity/${uid}/messageEvents`);
+        await deleteCollection(`recommendationFeedback/${uid}/targets`);
+        await deleteQuery(
+          db.collectionGroup("targets").where("targetUid", "==", uid)
+        );
+        await deleteCollection(`consents/${uid}/items`);
+        await deleteCollection(`consentLedger/${uid}/events`);
+        await removeUidFromPhotoFingerprints(uid);
+        await removeUidFromBioFingerprints(uid);
         await deleteFcmDevicesForUser(uid);
       });
 
@@ -394,13 +510,14 @@ export const deleteUserAccount = functions
         const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
         for (const thread of chats.docs) {
           await bucket.deleteFiles({ prefix: `chat-media/${thread.id}/` });
+          await deleteQuery(db.collection("chatMediaOrphans").where("threadId", "==", thread.id));
           await deleteQuery(thread.ref.collection("messages"));
           await thread.ref.delete();
         }
       });
 
       await runDeletionPhase(requestRef, completed, "MEDIA", async () => {
-        for (const prefix of ["photos", "videos", "voicebios", "verifications"]) {
+        for (const prefix of ["photos", "videos", "voicebios", "verifications", "exports"]) {
           await bucket.deleteFiles({ prefix: `${prefix}/${uid}/` });
         }
       });
@@ -419,12 +536,22 @@ export const deleteUserAccount = functions
           db.collection("profileAnalytics").doc(uid),
           db.collection("notificationPrefs").doc(uid),
           db.collection("appearancePrefs").doc(uid),
+          db.collection("partnerPreferences").doc(uid),
+          db.collection("riskActivity").doc(uid),
+          db.collection("recommendationFeedback").doc(uid),
+          db.collection("consents").doc(uid),
+          db.collection("consentLedger").doc(uid),
+          db.collection("riskSignals").doc(uid),
+          db.collection("riskAssessments").doc(uid),
+          db.collection("familyDelegates").doc(uid),
+          db.collection("accountEnforcements").doc(uid),
           db.collection("verifications").doc(uid),
           db.collection("verificationRequests").doc(uid),
           db.collection("rewards").doc(uid),
           db.collection("sessions").doc(uid),
           db.collection("fcmTokens").doc(uid),
           db.collection("userLocations").doc(uid),
+          db.collection("dataExportRateLimits").doc(uid),
         ];
         for (let i = 0; i < singletonRefs.length; i += DELETE_BATCH_SIZE) {
           const batch = db.batch();

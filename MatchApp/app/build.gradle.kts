@@ -17,6 +17,37 @@ val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
 
+fun nonBlankEnv(name: String): String? =
+    System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+fun releaseSecret(envName: String, propertyName: String): String? =
+    nonBlankEnv(envName) ?: keystoreProps.getProperty(propertyName)?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseVersionCode = nonBlankEnv("MATREE_VERSION_CODE")?.let { raw ->
+    raw.toIntOrNull()?.takeIf { it > 0 }
+        ?: error("MATREE_VERSION_CODE must be a positive integer")
+} ?: 1
+val releaseVersionName = nonBlankEnv("MATREE_VERSION_NAME")?.also { value ->
+    require(value.length <= 50 && value.matches(Regex("[0-9A-Za-z][0-9A-Za-z._-]*"))) {
+        "MATREE_VERSION_NAME must be 1-50 safe version characters"
+    }
+} ?: "1.0.0"
+
+val releaseKeystorePath = releaseSecret("MATREE_KEYSTORE_PATH", "storeFile")
+val releaseKeystorePassword = releaseSecret("MATREE_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = releaseSecret("MATREE_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = releaseSecret("MATREE_KEY_PASSWORD", "keyPassword")
+val releaseSigningInputs = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+)
+val releaseSigningConfigured = releaseSigningInputs.all { !it.isNullOrBlank() }
+require(releaseSigningInputs.none { !it.isNullOrBlank() } || releaseSigningConfigured) {
+    "Release signing is partially configured. Supply all MATREE_KEYSTORE_* inputs or a complete keystore.properties."
+}
+
 android {
     namespace = "com.match.app"
     compileSdk = 36
@@ -25,20 +56,20 @@ android {
         applicationId = "com.match.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "com.match.app.HiltTestRunner"
     }
 
     signingConfigs {
-        if (keystorePropsFile.exists()) {
+        if (releaseSigningConfigured) {
             create("release") {
-                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                storeFile = rootProject.file(requireNotNull(releaseKeystorePath))
+                storePassword = requireNotNull(releaseKeystorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
             }
         }
     }
@@ -55,7 +86,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (keystorePropsFile.exists()) {
+            if (releaseSigningConfigured) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
@@ -121,7 +152,6 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.jbcrypt)
     implementation(libs.androidx.biometric)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)

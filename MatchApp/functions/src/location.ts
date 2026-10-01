@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck } from "./shared";
+import { hasActiveConsent, requireActiveConsent } from "./consent";
+import { db, requireAppCheck, requireProductionFeature } from "./shared";
 import {
   nearbyAccountIsActive,
   nearbyAccountIsDiscoverable,
@@ -150,6 +151,10 @@ export const getNearbyStatus = functions.https.onCall(async (_data, context) => 
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
   const ref = db.collection("userLocations").doc(uid);
+  if (!await hasActiveConsent(uid, "location")) {
+    await ref.delete();
+    return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
+  }
   const snap = await ref.get();
   if (!snap.exists) return { sharing: false, updatedAtMillis: 0, expiresAtMillis: 0 };
 
@@ -167,8 +172,10 @@ export const getNearbyStatus = functions.https.onCall(async (_data, context) => 
 
 export const updateMyLocation = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
+  requireProductionFeature("nearby");
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  await requireActiveConsent(uid, "location");
 
   const location = normalizedLocation(data);
   const profile = await db.collection("users").doc(uid).get();
@@ -202,8 +209,10 @@ export const nearbyProfiles = functions
   .runWith({ timeoutSeconds: 30, memory: "256MB" })
   .https.onCall(async (data, context) => {
     requireAppCheck(context);
+    requireProductionFeature("nearby");
     const uid = context.auth?.uid;
     if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+    await requireActiveConsent(uid, "location");
 
     const radiusRaw = finiteNumber(data?.radiusKm ?? 25, "radiusKm");
     const radiusKm = Math.max(5, Math.min(100, radiusRaw));

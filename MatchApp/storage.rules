@@ -13,15 +13,40 @@ service firebase.storage {
     function explicitInterestFrom(ownerUid, viewerUid) {
       return firestore.exists(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid));
     }
-    function ownerMediaReadable(uid) {
-      return signedIn() && (
-        request.auth.uid == uid ||
-        (firestore.exists(/databases/(default)/documents/users/$(uid)) &&
-          !blockedEitherWay(request.auth.uid, uid) &&
-          !profileHiddenFrom(uid, request.auth.uid) &&
-          (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
-            explicitInterestFrom(uid, request.auth.uid)))
-      );
+    function activeAccount(uid) {
+      return firestore.exists(/databases/(default)/documents/users/$(uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
+    }
+    function ownerCanReadOwnMedia(uid) {
+      return signedIn() && request.auth.uid == uid && activeAccount(uid);
+    }
+    function peerCanReadProfileMedia(uid) {
+      return signedIn() &&
+        request.auth.uid != uid &&
+        activeAccount(request.auth.uid) &&
+        activeAccount(uid) &&
+        !blockedEitherWay(request.auth.uid, uid) &&
+        !profileHiddenFrom(uid, request.auth.uid) &&
+        (firestore.get(/databases/(default)/documents/users/$(uid)).data.get('stealthMode', false) != true ||
+          explicitInterestFrom(uid, request.auth.uid));
+    }
+    function publishedPhotoReadable(uid, fileName) {
+      return ownerCanReadOwnMedia(uid) ||
+        (peerCanReadProfileMedia(uid) &&
+          firestore.get(/databases/(default)/documents/users/$(uid)).data.get('photoUrl', '') ==
+            'photos/' + uid + '/' + fileName);
+    }
+    function publishedVideoReadable(uid, fileName) {
+      return ownerCanReadOwnMedia(uid) ||
+        (peerCanReadProfileMedia(uid) &&
+          firestore.get(/databases/(default)/documents/users/$(uid)).data.get('videoUrl', '') ==
+            'videos/' + uid + '/' + fileName);
+    }
+    function publishedVoiceBioReadable(uid, fileName) {
+      return ownerCanReadOwnMedia(uid) ||
+        (peerCanReadProfileMedia(uid) &&
+          firestore.get(/databases/(default)/documents/users/$(uid)).data.get('voiceBioUrl', '') ==
+            'voicebios/' + uid + '/' + fileName);
     }
     function chatExists(threadId) {
       return firestore.exists(/databases/(default)/documents/chats/$(threadId));
@@ -36,10 +61,12 @@ service firebase.storage {
     }
     function chatUsable(threadId) {
       return chatMember(threadId, request.auth.uid) &&
+        activeAccount(chatParticipants(threadId)[0]) &&
+        activeAccount(chatParticipants(threadId)[1]) &&
         !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
     }
-    function validChatMedia(threadId) {
-      return request.resource.size > 0 && request.resource.size < 12 * 1024 * 1024 &&
+    function validChatMedia(threadId, fileName) {
+      return request.resource.size > 0 &&
         request.resource.metadata.keys().hasOnly(['senderUid','recipientUid','threadId','kind']) &&
         request.resource.metadata.senderUid == request.auth.uid &&
         request.resource.metadata.threadId == threadId &&
@@ -47,46 +74,65 @@ service firebase.storage {
         request.resource.metadata.recipientUid != request.auth.uid &&
         (
           (request.resource.metadata.kind == 'image' &&
-            request.resource.contentType.matches('image/.*')) ||
+            fileName.matches('[A-Za-z0-9_-]+[.]jpg') &&
+            request.resource.size < 8 * 1024 * 1024 &&
+            request.resource.contentType == 'image/jpeg') ||
           (request.resource.metadata.kind == 'voice' &&
-            request.resource.contentType.matches('audio/.*'))
+            fileName.matches('[A-Za-z0-9_-]+[.]m4a') &&
+            request.resource.size < 12 * 1024 * 1024 &&
+            request.resource.contentType == 'audio/mp4')
         );
     }
 
-    match /photos/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    match /photos/{uid}/{fileName} {
+      allow read: if publishedPhotoReadable(uid, fileName);
+      allow create: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size < 2 * 1024 * 1024 &&
+        request.resource.contentType == 'image/jpeg' &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
-    match /videos/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+    match /videos/{uid}/{fileName} {
+      allow read: if publishedVideoReadable(uid, fileName);
+      allow create: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType == 'video/mp4' &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
-    match /voicebios/{uid}/{allPaths=**} {
-      allow read: if ownerMediaReadable(uid);
-      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('audio/.*');
+    match /voicebios/{uid}/{fileName} {
+      allow read: if publishedVoiceBioReadable(uid, fileName);
+      allow create, update: if signedIn() && request.auth.uid == uid &&
+        request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('audio/.*');
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
-      // Raw KYC material is never client-readable. Existing clients may still upload their own
-      // protected object; only the new backend callable can convert a metadata-bound object into a
-      // PENDING verification state.
       allow read: if false;
       allow create, update: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024 &&
-        (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+        request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] &&
+        request.resource.metadata.keys().hasOnly(['ownerUid','docType']) &&
+        request.resource.metadata.ownerUid == uid &&
+        request.resource.metadata.docType in ['Passport','Driving Licence','PAN Card','Voter ID'];
       allow delete: if false;
     }
     match /chat-media/{threadId}/{fileName} {
       allow read: if signedIn() && chatUsable(threadId);
-      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId);
+      allow create: if signedIn() && chatUsable(threadId) && validChatMedia(threadId, fileName);
       allow update: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid &&
         request.resource.metadata.senderUid == request.auth.uid &&
-        validChatMedia(threadId);
+        validChatMedia(threadId, fileName);
       allow delete: if signedIn() && chatUsable(threadId) &&
         resource.metadata.senderUid == request.auth.uid;
+    }
+    match /exports/{uid}/{fileName} {
+      allow read, write: if false;
     }
   }
 }

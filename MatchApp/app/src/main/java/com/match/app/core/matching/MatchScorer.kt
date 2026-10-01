@@ -7,9 +7,9 @@ import kotlin.math.abs
 /**
  * Explainable, symmetric compatibility score used by production discovery.
  *
- * v2 fixes two truthfulness issues in the earlier formula:
- * - astrology is included only when both profiles are Hindu and both have usable birth-sign inputs;
- * - trust is mutual (average verification level), not a one-sided score of the candidate.
+ * v4 keeps applicability-aware astrology and mutual trust, and uses the backend-derived reciprocal
+ * partner-preference fit as an optional pair-specific factor. Raw partner preferences never enter
+ * this client scorer; only the trusted 0..1 pair aggregate is accepted.
  *
  * Missing/inapplicable dimensions are excluded and the remaining configured weights are
  * renormalized. This prevents absent astrology/questionnaire data from becoming a fabricated
@@ -17,7 +17,7 @@ import kotlin.math.abs
  */
 object MatchScorer {
 
-    const val FORMULA_VERSION = "match-v2-applicability"
+    const val FORMULA_VERSION = "match-v4-reciprocal-preferences"
 
     data class Factor(
         val key: String,
@@ -34,23 +34,29 @@ object MatchScorer {
 
     fun calculate(me: UserProfile, peer: UserProfile): Int = explain(me, peer).percentage
 
-    fun explain(me: UserProfile, peer: UserProfile): Result {
+    fun explain(
+        me: UserProfile,
+        peer: UserProfile,
+        bilateralPreferenceFit: Float? = null
+    ): Result {
         val factors = mutableListOf<Factor>()
 
+        bilateralPreferenceFit?.let {
+            factors += Factor("bilateral_preferences", it.coerceIn(0f, 1f), 0.35f)
+        }
+
         questionnaireScore(me, peer)?.let {
-            factors += Factor("questionnaire", it, 0.40f)
+            factors += Factor("questionnaire", it, 0.25f)
         }
 
         if (astrologyApplicable(me, peer)) {
-            factors += Factor(
-                "astrology",
-                Astrology.score(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra),
-                0.30f
-            )
+            Astrology.scoreOrNull(me.rasi, me.nakshatra, peer.rasi, peer.nakshatra)?.let {
+                factors += Factor("astrology", it, 0.15f)
+            }
         }
 
         demographicsScore(me, peer)?.let {
-            factors += Factor("demographics_lifestyle", it, 0.20f)
+            factors += Factor("demographics_lifestyle", it, 0.15f)
         }
 
         val trust = (
@@ -89,10 +95,8 @@ object MatchScorer {
     private fun astrologyApplicable(me: UserProfile, peer: UserProfile): Boolean {
         return ReligionCategory.fromReligion(me.religion) == ReligionCategory.HINDU &&
             ReligionCategory.fromReligion(peer.religion) == ReligionCategory.HINDU &&
-            me.rasi.isNotBlank() &&
-            me.nakshatra.isNotBlank() &&
-            peer.rasi.isNotBlank() &&
-            peer.nakshatra.isNotBlank()
+            Astrology.isValid(me.rasi, me.nakshatra) &&
+            Astrology.isValid(peer.rasi, peer.nakshatra)
     }
 
     /**

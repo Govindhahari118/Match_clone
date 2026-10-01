@@ -40,6 +40,15 @@ class MatchingRepository @Inject constructor(
     private val interestService: FirestoreInterestService
 ) {
 
+    private data class ReciprocalPreferenceScores(
+        val forward: Float?,
+        val reverse: Float?,
+        val mutual: Float?,
+        val forwardCriteria: Int,
+        val reverseCriteria: Int,
+        val mutualCriteria: Int
+    )
+
     suspend fun discoverPaged(filter: MatchFilter = MatchFilter()): Flow<PagingData<UserProfile>> {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
         val me = uid.let { userDao.findByFirebaseUid(it) }
@@ -61,15 +70,18 @@ class MatchingRepository @Inject constructor(
                 )
             }
         ).flow.map { data ->
-            data.map { remote -> cacheRemoteCandidate(remote).toProfile() }
+            data.map { remote -> cacheRemoteCandidate(remote.profile).toProfile() }
         }
     }
 
     suspend fun myCity(userId: Long): String = userDao.findById(userId)?.city ?: ""
     suspend fun myState(userId: Long): String = userDao.findById(userId)?.state ?: ""
 
-    suspend fun astrologyApplicable(userId: Long): Boolean =
-        ReligionCategory.fromReligion(userDao.findById(userId)?.religion.orEmpty()) == ReligionCategory.HINDU
+    suspend fun astrologyApplicable(userId: Long): Boolean {
+        val user = userDao.findById(userId) ?: return false
+        return ReligionCategory.fromReligion(user.religion) == ReligionCategory.HINDU &&
+            Astrology.isValid(user.rasi, user.nakshatra)
+    }
 
     suspend fun recommendations(
         seekerId: Long,
@@ -77,8 +89,8 @@ class MatchingRepository @Inject constructor(
         filter: MatchFilter = MatchFilter()
     ): List<MatchResult> {
         val seekerEntity = userDao.findById(seekerId) ?: return emptyList()
-        val authorizedUids = syncRemoteCandidates(seekerEntity, filter)
-        if (authorizedUids.isEmpty()) return emptyList()
+        val authorizedCandidates = syncRemoteCandidates(seekerEntity, filter)
+        if (authorizedCandidates.isEmpty()) return emptyList()
 
         return withContext(Dispatchers.Default) {
             val blockedIds = social.blockedIds(seekerId).toSet()
@@ -88,7 +100,7 @@ class MatchingRepository @Inject constructor(
             userDao.allExcluding(seekerId)
                 .asSequence()
                 .filter { !it.isSeed }
-                .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedUids }
+                .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedCandidates.keys }
                 .filter { it.id !in blockedIds }
                 .filter { !it.stealthMode }
                 .filter { genderFilter(seekerEntity, it) }
@@ -150,7 +162,7 @@ class MatchingRepository @Inject constructor(
                     }
                 }
                 .filter { !filter.willingToRelocate || it.willingToRelocate }
-                .map { candidate ->
+                .mapNotNull { candidate ->
                     val candidateProfile = candidate.toProfile(qMap)
                     val qScore = if (seekerProfile.selfVector != null && seekerProfile.partnerVector != null) {
                         qMap[candidate.id]?.let { q ->
@@ -160,21 +172,37 @@ class MatchingRepository @Inject constructor(
                                 Vec.decode(q.selfVector),
                                 Vec.decode(q.partnerVector)
                             )
-                        } ?: 0f
-                    } else 0f
+                        }
+                    } else null
+                    if (mode == MatchMode.QUESTIONNAIRE && qScore == null) {
+                        return@mapNotNull null
+                    }
+
                     val astro = if (
                         ReligionCategory.fromReligion(seekerEntity.religion) == ReligionCategory.HINDU &&
-                        ReligionCategory.fromReligion(candidate.religion) == ReligionCategory.HINDU &&
-                        seekerEntity.rasi.isNotBlank() && seekerEntity.nakshatra.isNotBlank() &&
-                        candidate.rasi.isNotBlank() && candidate.nakshatra.isNotBlank()
+                        ReligionCategory.fromReligion(candidate.religion) == ReligionCategory.HINDU
                     ) {
-                        Astrology.score(seekerEntity.rasi, seekerEntity.nakshatra, candidate.rasi, candidate.nakshatra)
-                    } else 0f
-                    val combined = MatchScorer.explain(seekerProfile, candidateProfile)
+                        Astrology.scoreOrNull(
+                            seekerEntity.rasi,
+                            seekerEntity.nakshatra,
+                            candidate.rasi,
+                            candidate.nakshatra
+                        )
+                    } else null
+                    if (mode == MatchMode.ASTROLOGY && astro == null) {
+                        return@mapNotNull null
+                    }
+
+                    val combined = MatchScorer.explain(
+                        seekerProfile,
+                        candidateProfile,
+                        authorizedCandidates[candidate.firebaseUid]?.mutual
+                    )
+                    val preferenceScores = authorizedCandidates[candidate.firebaseUid]
                     MatchResult(
                         user = candidateProfile,
-                        questionnaireScore = qScore,
-                        astrologyScore = astro,
+                        questionnaireScore = qScore ?: 0f,
+                        astrologyScore = astro ?: 0f,
                         combinedScore = combined.percentage.toFloat() / 100f,
                         mode = mode,
                         formulaVersion = combined.formulaVersion,
@@ -184,21 +212,36 @@ class MatchingRepository @Inject constructor(
                                 score = it.score,
                                 configuredWeight = it.configuredWeight
                             )
-                        }
+                        },
+                        forwardPreferenceScore = preferenceScores?.forward,
+                        reversePreferenceScore = preferenceScores?.reverse,
+                        mutualPreferenceScore = preferenceScores?.mutual,
+                        forwardPreferenceCriteria = preferenceScores?.forwardCriteria ?: 0,
+                        reversePreferenceCriteria = preferenceScores?.reverseCriteria ?: 0,
+                        mutualPreferenceCriteria = preferenceScores?.mutualCriteria ?: 0
                     )
                 }
-                .filter { filter.minScore <= 0f || it.combinedScore >= filter.minScore }
-                .sortedByDescending { it.combinedScore }
+                .filter { filter.minScore <= 0f || it.primary() >= filter.minScore }
+                .filter {
+                    filter.minPoruthamScore <= 0 ||
+                        (it.astrologyScore * 100f).toInt() >= filter.minPoruthamScore
+                }
+                .sortedByDescending { it.primary() }
                 .take(200)
                 .toList()
         }
     }
 
-    private suspend fun syncRemoteCandidates(seeker: UserEntity, filter: MatchFilter): Set<String> {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() } ?: return emptySet()
+    private suspend fun syncRemoteCandidates(
+        seeker: UserEntity,
+        filter: MatchFilter
+    ): Map<String, ReciprocalPreferenceScores> {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+            ?.takeIf { it.isNotBlank() }
+            ?: return emptyMap()
         val blocked = runCatching { blockService.getBlockedUids(uid) }.getOrDefault(emptySet())
         val liked = runCatching { interestService.getSentInterestUids(uid) }.getOrDefault(emptySet())
-        val authorized = linkedSetOf<String>()
+        val authorized = linkedMapOf<String, ReciprocalPreferenceScores>()
         var cursor: String? = null
 
         repeat(MAX_DISCOVERY_PAGES_PER_REFRESH) {
@@ -220,8 +263,18 @@ class MatchingRepository @Inject constructor(
             when (result) {
                 is PagingSource.LoadResult.Page -> {
                     result.data.forEach { remote ->
-                        if (remote.firebaseUid.isNotBlank()) authorized += remote.firebaseUid
-                        cacheRemoteCandidate(remote)
+                        val entity = remote.profile
+                        if (entity.firebaseUid.isNotBlank()) {
+                            authorized[entity.firebaseUid] = ReciprocalPreferenceScores(
+                                forward = remote.forwardPreferenceFit,
+                                reverse = remote.reversePreferenceFit,
+                                mutual = remote.mutualPreferenceFit ?: remote.pairPreferenceFit,
+                                forwardCriteria = remote.forwardPreferenceCriteria,
+                                reverseCriteria = remote.reversePreferenceCriteria,
+                                mutualCriteria = remote.mutualPreferenceCriteria
+                            )
+                        }
+                        cacheRemoteCandidate(entity)
                     }
                     cursor = result.nextKey
                     if (cursor == null) return authorized

@@ -1,41 +1,64 @@
 @echo off
-:: Builds a signed release APK / AAB and runs all unit tests.
-:: Run from MatchApp\ directory.
-::
-:: Requires keystore.properties to be filled in (see keystore.properties.template).
-::
-:: Usage: scripts\deploy\build-release.bat
+setlocal
+:: Production release build. Run from MatchApp\.
+:: Exact release source, version and signing inputs are supplied outside source control.
 
-echo Checking keystore.properties ...
+if "%MATREE_RELEASE_SHA%"=="" (
+  echo [ERROR] MATREE_RELEASE_SHA is required for a production build.
+  exit /b 1
+)
+python scripts\ci\release_source_guard.py --sha "%MATREE_RELEASE_SHA%"
+if errorlevel 1 exit /b 1
+
+if "%MATREE_VERSION_CODE%"=="" (
+  echo [ERROR] MATREE_VERSION_CODE is required for a production build.
+  exit /b 1
+)
+if "%MATREE_VERSION_NAME%"=="" (
+  echo [ERROR] MATREE_VERSION_NAME is required for a production build.
+  exit /b 1
+)
+
+if not exist app\src\release\google-services.json if not exist app\google-services.json (
+  echo [ERROR] Production google-services.json is required. Do not use the debug placeholder.
+  exit /b 1
+)
+
 if not exist keystore.properties (
-    echo [ERROR] keystore.properties not found.
-    echo Copy keystore.properties.template to keystore.properties and fill in values.
+  if "%MATREE_KEYSTORE_PATH%"=="" goto :missing_signing
+  if "%MATREE_KEYSTORE_PASSWORD%"=="" goto :missing_signing
+  if "%MATREE_KEY_ALIAS%"=="" goto :missing_signing
+  if "%MATREE_KEY_PASSWORD%"=="" goto :missing_signing
+  if not exist "%MATREE_KEYSTORE_PATH%" (
+    echo [ERROR] MATREE_KEYSTORE_PATH does not exist.
     exit /b 1
+  )
 )
 
-echo Running unit tests ...
-call gradlew.bat testReleaseUnitTest --no-daemon
-if errorlevel 1 (
-    echo [ERROR] Unit tests failed. Fix before releasing.
-    exit /b 1
+echo Running release tests, lint and bundle build ...
+call gradlew.bat --no-daemon testReleaseUnitTest lintRelease bundleRelease
+if errorlevel 1 goto :err
+
+python scripts\ci\release_candidate_scan.py --merged-manifest app\build\intermediates\merged_manifests\release\processReleaseManifest\AndroidManifest.xml
+if errorlevel 1 goto :err
+
+for %%F in (app\build\outputs\bundle\release\*.aab) do (
+  python scripts\ci\release_artifact_audit.py "%%F"
+  if errorlevel 1 goto :err
 )
-
-echo Building release APK ...
-call gradlew.bat assembleRelease --no-daemon
-if errorlevel 1 goto :err
-
-echo Building release AAB (for Play Store) ...
-call gradlew.bat bundleRelease --no-daemon
-if errorlevel 1 goto :err
 
 echo.
-echo ==============================
-echo  Release build complete!
-echo  APK: app\build\outputs\apk\release\
-echo  AAB: app\build\outputs\bundle\release\
-echo ==============================
-goto :eof
+echo =========================================
+echo Production release bundle validated.
+echo Version: %MATREE_VERSION_NAME% (%MATREE_VERSION_CODE%)
+echo AAB: app\build\outputs\bundle\release\
+echo =========================================
+exit /b 0
+
+:missing_signing
+echo [ERROR] Configure keystore.properties or all MATREE_KEYSTORE_* environment variables.
+exit /b 1
 
 :err
-echo [ERROR] Build failed.
+echo [ERROR] Production release build failed.
 exit /b 1

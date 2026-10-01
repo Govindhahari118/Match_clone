@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.match.app.core.matching.Astrology
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.KundliRepository
 import com.match.app.data.session.SessionStore
@@ -121,9 +120,7 @@ class KundliViewModel @Inject constructor(
 
             kundliRepository.getSharedHoroscope(target.firebaseUid)
                 .onSuccess { shared ->
-                    val score = if (shared.available) {
-                        Astrology.score(shared.myRasi, shared.myNakshatra, shared.targetRasi, shared.targetNakshatra)
-                    } else null
+                    val score = if (shared.available) shared.compatibilityScore else null
                     _ui.value = KundliUi(
                         loading = false,
                         myName = me.displayName,
@@ -140,7 +137,12 @@ class KundliViewModel @Inject constructor(
                             "not_applicable" -> "Kundali comparison is shown only when it is applicable to both members."
                             "viewer_incomplete" -> "Add your Rasi and Nakshatra before comparing."
                             "target_incomplete" -> "This member has not added enough horoscope information for comparison."
-                            else -> if (shared.available) null else "Horoscope compatibility is not available for this profile."
+                            "invalid_reference_data" -> "One of the horoscope values needs correction before compatibility can be calculated."
+                            else -> when {
+                                !shared.available -> "Horoscope compatibility is not available for this profile."
+                                score == null -> "Horoscope compatibility is unavailable from the trusted server policy."
+                                else -> null
+                            }
                         }
                     )
                 }
@@ -232,7 +234,7 @@ private fun PairCompatibilityContent(ui: KundliUi, modifier: Modifier) {
             MatreeMatchSignal(
                 label = "Rasi / Nakshatra compatibility signal",
                 score = score,
-                supportingText = "A decision-support signal from the shared horoscope information; not a prediction or guarantee."
+                supportingText = "Calculated by Matree's versioned server policy from shared Rasi and Nakshatra information; not a prediction or guarantee."
             )
         }
 

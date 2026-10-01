@@ -31,9 +31,9 @@ data class FamilyInfo(
     val fatherOccupation: String = "",
     val motherOccupation: String = "",
     val siblings: Int = 0,
-    val familyType: String = "Nuclear",       // Nuclear / Joint
-    val familyStatus: String = "Middle Class", // Affluent / Middle Class / Upper Middle Class
-    val familyValues: String = "Moderate",     // Orthodox / Traditional / Moderate / Liberal
+    val familyType: String = "",
+    val familyStatus: String = "",
+    val familyValues: String = "",
     val nativePlace: String = "",
     val gotra: String = "",
     val aboutFamily: String = ""
@@ -47,9 +47,10 @@ class FamilyViewModel @Inject constructor(
     private val _info = MutableStateFlow(FamilyInfo())
     val info: StateFlow<FamilyInfo> = _info.asStateFlow()
     val isSaved = MutableStateFlow(false)
+    val saveError = MutableStateFlow<String?>(null)
 
     init {
-        // In a full implementation, load from DB. Here we pre-fill with defaults.
+        // Load the member's current persisted profile values; missing attributes remain unspecified.
         viewModelScope.launch {
             val uid = session.userId.first() ?: return@launch
             val p = auth.currentProfile(uid) ?: return@launch
@@ -57,9 +58,12 @@ class FamilyViewModel @Inject constructor(
                 fatherOccupation = p.fatherOccupation,
                 motherOccupation = p.motherOccupation,
                 siblings = p.siblings,
-                familyType = p.familyType.ifBlank { "Nuclear" },
-                nativePlace = p.city,
-                gotra = p.gothra
+                familyType = p.familyType,
+                familyStatus = p.familyStatus,
+                familyValues = p.familyValues,
+                nativePlace = p.nativeState,
+                gotra = p.gothra,
+                aboutFamily = p.aboutFamily
             )
         }
     }
@@ -68,18 +72,26 @@ class FamilyViewModel @Inject constructor(
     fun save() = viewModelScope.launch {
         val uid = session.userId.first() ?: return@launch
         val info = _info.value
-        auth.updateFamilyDetails(
-            userId = uid,
-            fatherOccupation = info.fatherOccupation,
-            motherOccupation = info.motherOccupation,
-            siblings = info.siblings,
-            familyType = info.familyType,
-            familyValues = info.familyValues,
-            nativePlace = info.nativePlace,
-            gotra = info.gotra,
-            aboutFamily = info.aboutFamily
-        )
-        isSaved.value = true
+        saveError.value = null
+        runCatching {
+            auth.updateFamilyDetails(
+                userId = uid,
+                fatherOccupation = info.fatherOccupation.trim().take(160),
+                motherOccupation = info.motherOccupation.trim().take(160),
+                siblings = info.siblings.coerceIn(0, 20),
+                familyType = info.familyType,
+                familyStatus = info.familyStatus,
+                familyValues = info.familyValues,
+                nativeState = info.nativePlace.trim().take(160),
+                gotra = info.gotra.trim().take(160),
+                aboutFamily = info.aboutFamily.trim().take(1000)
+            )
+        }.onSuccess {
+            isSaved.value = true
+        }.onFailure {
+            saveError.value =
+                "Family details were not saved to the server. Refresh and try again."
+        }
     }
 }
 
@@ -91,6 +103,7 @@ fun FamilyScreen(
 ) {
     val info by vm.info.collectAsState()
     val saved by vm.isSaved.collectAsState()
+    val saveError by vm.saveError.collectAsState()
 
     var father by remember(info) { mutableStateOf(info.fatherOccupation) }
     var mother by remember(info) { mutableStateOf(info.motherOccupation) }
@@ -101,17 +114,19 @@ fun FamilyScreen(
     var nativePlace by remember(info) { mutableStateOf(info.nativePlace) }
     var gotra by remember(info) { mutableStateOf(info.gotra) }
     var aboutFamily by remember(info) { mutableStateOf(info.aboutFamily) }
-    var familyIncome by remember { mutableStateOf("") }
-    var propertyDetails by remember { mutableStateOf("") }
-    var brothersMarried by remember { mutableStateOf("") }
-    var sistersMarried by remember { mutableStateOf("") }
 
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(saved) {
-        if (saved) {
-            snackbar.showSnackbar("Family details saved!")
-            vm.isSaved.value = false
+    LaunchedEffect(saved, saveError) {
+        when {
+            saved -> {
+                snackbar.showSnackbar("Family details saved.")
+                vm.isSaved.value = false
+            }
+            saveError != null -> {
+                snackbar.showSnackbar(saveError.orEmpty())
+                vm.saveError.value = null
+            }
         }
     }
 
@@ -171,7 +186,8 @@ fun FamilyScreen(
                 singleLine = true
             )
             OutlinedTextField(
-                value = siblings, onValueChange = { siblings = it },
+                value = siblings,
+                onValueChange = { siblings = it.filter(Char::isDigit).take(2) },
                 label = { Text("Number of siblings") },
                 leadingIcon = { Icon(Icons.Filled.People, null) },
                 modifier = Modifier.fillMaxWidth().testTag("family_siblings"),
@@ -183,19 +199,19 @@ fun FamilyScreen(
 
             ChipGroup(
                 label = "Family type",
-                options = listOf("Nuclear", "Joint"),
+                options = listOf("Not specified", "Nuclear", "Joint"),
                 selected = familyType,
                 onSelect = { familyType = it }
             )
             ChipGroup(
                 label = "Family status",
-                options = listOf("Middle Class", "Upper Middle Class", "Affluent"),
+                options = listOf("Not specified", "Middle Class", "Upper Middle Class", "Affluent"),
                 selected = familyStatus,
                 onSelect = { familyStatus = it }
             )
             ChipGroup(
                 label = "Family values",
-                options = listOf("Orthodox", "Traditional", "Moderate", "Liberal"),
+                options = listOf("Not specified", "Orthodox", "Traditional", "Moderate", "Liberal"),
                 selected = familyValues,
                 onSelect = { familyValues = it }
             )
@@ -218,46 +234,7 @@ fun FamilyScreen(
                 singleLine = true
             )
 
-            // ── Siblings detail ──────────────────────────────────────────
-            SectionHeader(Icons.Filled.People, "Siblings Detail")
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = brothersMarried, onValueChange = { brothersMarried = it },
-                    label = { Text("Brothers married") },
-                    modifier = Modifier.weight(1f).testTag("family_bros_married"),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = sistersMarried, onValueChange = { sistersMarried = it },
-                    label = { Text("Sisters married") },
-                    modifier = Modifier.weight(1f).testTag("family_sis_married"),
-                    singleLine = true
-                )
-            }
-
-            // ── Family income & property ────────────────────────────────
-            SectionHeader(Icons.Filled.AccountBalance, "Family Finances")
-
-            Text(t("family_annual_income", "Family annual income"), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("< 5L", "5-10L", "10-25L", "25-50L", "50L-1Cr", "1Cr+").forEach { band ->
-                    FilterChip(
-                        selected = familyIncome == band,
-                        onClick = { familyIncome = band },
-                        label = { Text(band, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = propertyDetails, onValueChange = { propertyDetails = it },
-                label = { Text("Property / assets (optional)") },
-                leadingIcon = { Icon(Icons.Filled.HomeWork, null) },
-                modifier = Modifier.fillMaxWidth().testTag("family_property"),
-                singleLine = true
-            )
+            MatreeFamilyNotice()
 
             // ── About ─────────────────────────────────────────────────
             SectionHeader(Icons.Filled.Description, "About Family")
@@ -275,9 +252,10 @@ fun FamilyScreen(
                     vm.update(
                         FamilyInfo(
                             fatherOccupation = father, motherOccupation = mother,
-                            siblings = siblings.toIntOrNull() ?: 0,
-                            familyType = familyType, familyStatus = familyStatus,
-                            familyValues = familyValues, nativePlace = nativePlace,
+                            siblings = (siblings.toIntOrNull() ?: 0).coerceIn(0, 20),
+                            familyType = familyType.takeUnless { it == "Not specified" }.orEmpty(),
+                            familyStatus = familyStatus.takeUnless { it == "Not specified" }.orEmpty(),
+                            familyValues = familyValues.takeUnless { it == "Not specified" }.orEmpty(), nativePlace = nativePlace,
                             gotra = gotra, aboutFamily = aboutFamily
                         )
                     )
@@ -295,6 +273,21 @@ fun FamilyScreen(
 }
 
 @Composable
+private fun MatreeFamilyNotice() {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            "Only fields backed by the current profile schema are shown here. Residence city is kept separate from native state so family-origin edits cannot change discovery location.",
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
 private fun SectionHeader(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
         Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
@@ -307,12 +300,13 @@ private fun SectionHeader(icon: ImageVector, title: String) {
 @Composable
 private fun ChipGroup(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
     Column {
+        val displaySelection = selected.ifBlank { "Not specified" }
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { opt ->
                 FilterChip(
-                    selected = selected == opt,
+                    selected = displaySelection == opt,
                     onClick = { onSelect(opt) },
                     label = { Text(opt, style = MaterialTheme.typography.labelMedium) }
                 )

@@ -79,6 +79,20 @@ class MatchScorerTest {
     }
 
     @Test
+    fun `bilateral preference fit is explainable and changes compatibility`() {
+        val a = profile(1, "Christian", verification = 3)
+        val b = profile(2, "Christian", verification = 3)
+
+        val low = MatchScorer.explain(a, b, bilateralPreferenceFit = 0f)
+        val high = MatchScorer.explain(a, b, bilateralPreferenceFit = 1f)
+
+        assertTrue(high.percentage > low.percentage)
+        assertTrue(high.factors.any {
+            it.key == "bilateral_preferences" && it.score == 1f
+        })
+    }
+
+    @Test
     fun `unknown demographics are omitted instead of receiving a neutral bonus`() {
         val a = profile(1, "Other", education = "", occupation = "", diet = "")
         val b = profile(2, "Other", education = "", occupation = "", diet = "")

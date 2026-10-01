@@ -33,27 +33,40 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.match.app.MainActivity
+import com.match.app.core.config.RemoteConfigManager
 import com.match.app.data.local.dao.MessageDao
 import com.match.app.data.repo.NotificationRepository
 import com.match.app.data.session.SessionStore
+import com.match.app.ui.aiinsights.AIMatchInsightsScreen
+import com.match.app.ui.analytics.ProfileAnalyticsScreen
+import com.match.app.ui.assisted.AssistedServiceScreen
 import com.match.app.ui.biodata.BiodataScreen
 import com.match.app.ui.chat.ChatListScreen
 import com.match.app.ui.chat.ChatScreen
+import com.match.app.ui.deepcompat.CompatibilityDeepDiveScreen
 import com.match.app.ui.detail.MatchDetailScreen
+import com.match.app.ui.family.FamilyAccessScreen
+import com.match.app.ui.family.FamilyScreen
 import com.match.app.ui.help.HelpScreen
 import com.match.app.ui.interests.InterestsScreen
 import com.match.app.ui.kundli.KundliScreen
 import com.match.app.ui.legal.LegalScreen
 import com.match.app.ui.matches.MatchesScreen
 import com.match.app.ui.nearby.NearbyMatchesScreen
+import com.match.app.ui.nri.NRIMatchScreen
 import com.match.app.ui.notifications.NotificationsScreen
 import com.match.app.ui.pricing.PricingScreen
 import com.match.app.ui.privacy.PrivacyDashboardScreen
+import com.match.app.ui.preferences.PartnerPreferencesScreen
+import com.match.app.ui.phone.PhoneVerificationScreen
 import com.match.app.ui.profile.ProfileScreen
+import com.match.app.ui.recentlyjoined.RecentlyJoinedScreen
 import com.match.app.ui.questionnaire.QuestionnaireScreen
+import com.match.app.ui.safety.SafetyCenterScreen
 import com.match.app.ui.settings.SettingsScreen
 import com.match.app.ui.shortlist.ShortlistScreen
 import com.match.app.ui.verification.VerificationScreen
+import com.match.app.ui.videoprofile.VideoProfileScreen
 import com.match.app.ui.whoviewed.WhoViewedScreen
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -66,6 +79,8 @@ object MainRoutes {
     const val HOME = "home"
     const val MATCHES = "matches"
     const val NEARBY = "nearby"
+    const val NRI = "nri"
+    const val RECENTLY_JOINED = "recently_joined"
     const val INTERESTS = "interests"
     const val SHORTLISTS = "shortlists"
     const val CHAT_LIST = "chat_list"
@@ -78,6 +93,8 @@ object MainRoutes {
     const val KUNDLI_PAIR = "kundli/{targetId}"
     const val PRICING = "pricing"
     const val VERIFICATION = "verification"
+    const val PHONE_VERIFICATION = "phone_verification"
+    const val VIDEO_PROFILE = "video_profile"
     const val HELP = "help"
     const val TERMS = "terms"
     const val PRIVACY = "privacy"
@@ -86,6 +103,14 @@ object MainRoutes {
     const val REFUNDS = "refunds"
     const val BIODATA = "biodata"
     const val PRIVACY_DASH = "privacy_dash"
+    const val PARTNER_PREFERENCES = "partner_preferences"
+    const val FAMILY_ACCESS = "family_access"
+    const val FAMILY_DETAILS = "family_details"
+    const val ASSISTED = "assisted_matchmaking"
+    const val PROFILE_ANALYTICS = "profile_analytics"
+    const val MATCH_INSIGHTS = "match_insights"
+    const val COMPATIBILITY_BREAKDOWN = "compatibility/{candidateId}"
+    const val SAFETY_CENTER = "safety_center"
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
@@ -93,6 +118,7 @@ object MainRoutes {
     fun detail(userId: Long) = "detail/$userId"
     fun chat(peerId: Long) = "chat/$peerId"
     fun kundli(targetId: Long) = "kundli/$targetId"
+    fun compatibility(candidateId: Long) = "compatibility/$candidateId"
 }
 
 private sealed class Tab(val route: String, val label: String, val icon: ImageVector, val tag: String) {
@@ -120,8 +146,10 @@ private data class DrawerSection(val title: String, val items: List<DrawerItem>)
 class MainShellViewModel @Inject constructor(
     private val session: SessionStore,
     private val notifRepo: NotificationRepository,
-    private val messageDao: MessageDao
+    private val messageDao: MessageDao,
+    remoteConfig: RemoteConfigManager
 ) : ViewModel() {
+    val optionalRoutes = remoteConfig.optionalRoutes
     val unreadNotifications: StateFlow<Int> = session.userId.filterNotNull()
         .flatMapLatest { notifRepo.observeUnreadCount(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -136,14 +164,20 @@ private fun AppDrawer(
     currentRoute: String?,
     unreadNotif: Int,
     unreadMsg: Int,
+    nearbyEnabled: Boolean,
+    kundaliEnabled: Boolean,
+    nriEnabled: Boolean,
     onNavigate: (String) -> Unit,
     onClose: () -> Unit
 ) {
     val sections = listOf(
-        DrawerSection("MATCH", listOf(
+        DrawerSection("MATCH", listOfNotNull(
             DrawerItem(MainRoutes.HOME, "Home", "Your activity", Icons.Filled.Home),
             DrawerItem(MainRoutes.MATCHES, "Discover", "Browse compatible profiles", Icons.Filled.Search),
-            DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn),
+            if (nearbyEnabled) DrawerItem(MainRoutes.NEARBY, "Nearby", "Profiles near your shared location", Icons.Filled.LocationOn) else null,
+            if (nriEnabled) DrawerItem(MainRoutes.NRI, "NRI discovery", "Eligible members living abroad", Icons.Filled.Public) else null,
+            DrawerItem(MainRoutes.RECENTLY_JOINED, "Recently joined", "Eligible members from the last 30 days", Icons.Filled.FiberNew),
+            DrawerItem(MainRoutes.MATCH_INSIGHTS, "Match insights", "Explainable matching signals", Icons.Filled.Insights),
             DrawerItem(MainRoutes.INTERESTS, "Interests", "Sent and received interests", Icons.AutoMirrored.Filled.Send),
             DrawerItem(MainRoutes.SHORTLISTS, "Shortlist", "Profiles you saved", Icons.Filled.Bookmark),
             DrawerItem(MainRoutes.WHO_VIEWED, "Who Viewed", "Recent profile visitors", Icons.Filled.RemoveRedEye)
@@ -157,12 +191,15 @@ private fun AppDrawer(
             DrawerItem(MainRoutes.VERIFICATION, "Verification", "Identity verification", Icons.Filled.Verified),
             DrawerItem(MainRoutes.PRIVACY_DASH, "Privacy", "Visibility and account privacy", Icons.Filled.PrivacyTip),
             DrawerItem(MainRoutes.PRICING, "Membership", "Google Play membership plans", Icons.Filled.WorkspacePremium),
+            DrawerItem(MainRoutes.ASSISTED, "Assisted matchmaking", "Request human matchmaking support", Icons.Filled.SupportAgent),
+            DrawerItem(MainRoutes.PROFILE_ANALYTICS, "Profile analytics", "Real account activity metrics", Icons.Filled.BarChart),
+            DrawerItem(MainRoutes.SAFETY_CENTER, "Safety Center", "Platform safety controls and guidance", Icons.Filled.Shield),
             DrawerItem(MainRoutes.SETTINGS, "Settings", "Language, security and account", Icons.Filled.Settings),
             DrawerItem(MainRoutes.HELP, "Help", "Support and guidance", Icons.AutoMirrored.Filled.Help)
         )),
-        DrawerSection("COMPATIBILITY", listOf(
+        DrawerSection("COMPATIBILITY", listOfNotNull(
             DrawerItem(MainRoutes.QUIZ, "Questionnaire", "Values and partner preferences", Icons.AutoMirrored.Filled.ListAlt),
-            DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome)
+            if (kundaliEnabled) DrawerItem(MainRoutes.KUNDLI, "Kundali", "Astrology when applicable", Icons.Filled.AutoAwesome) else null
         )),
         DrawerSection("LEGAL", listOf(
             DrawerItem(MainRoutes.TERMS, "Terms", "Terms of service", Icons.Filled.Gavel),
@@ -242,6 +279,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
     val currentRoute = current?.route
     val unreadNotif by vm.unreadNotifications.collectAsState()
     val unreadMsg by vm.unreadMessages.collectAsState()
+    val optionalRoutes by vm.optionalRoutes.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -266,6 +304,9 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 currentRoute = currentRoute,
                 unreadNotif = unreadNotif,
                 unreadMsg = unreadMsg,
+                nearbyEnabled = optionalRoutes.nearby,
+                kundaliEnabled = optionalRoutes.kundali,
+                nriEnabled = optionalRoutes.nri,
                 onNavigate = { route ->
                     nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -348,14 +389,36 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoMessages = { nav.navigate(MainRoutes.CHAT_LIST) },
                         onGoProfile = { nav.navigate(MainRoutes.PROFILE) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
-                        onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
+                        onGoKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.KUNDLI) },
                         onGoPrivacyDash = { nav.navigate(MainRoutes.PRIVACY_DASH) },
-                        onGoNearby = { nav.navigate(MainRoutes.NEARBY) }
+                        onGoNearby = { if (optionalRoutes.nearby) nav.navigate(MainRoutes.NEARBY) },
+                        kundaliEnabled = optionalRoutes.kundali,
+                        nearbyEnabled = optionalRoutes.nearby
                     )
                 }
                 composable(MainRoutes.MATCHES) { MatchesScreen(onOpen = { nav.navigate(MainRoutes.detail(it)) }) }
                 composable(MainRoutes.NEARBY) {
-                    NearbyMatchesScreen(
+                    if (optionalRoutes.nearby) {
+                        NearbyMatchesScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        )
+                    } else {
+                        OptionalFeatureUnavailable("Nearby", onBack = { nav.popBackStack() })
+                    }
+                }
+                composable(MainRoutes.NRI) {
+                    if (optionalRoutes.nri) {
+                        NRIMatchScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                        )
+                    } else {
+                        OptionalFeatureUnavailable("NRI discovery", onBack = { nav.popBackStack() })
+                    }
+                }
+                composable(MainRoutes.RECENTLY_JOINED) {
+                    RecentlyJoinedScreen(
                         onBack = { nav.popBackStack() },
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
                     )
@@ -363,7 +426,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.INTERESTS) {
                     InterestsScreen(
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
-                        onCheckKundli = { nav.navigate(MainRoutes.kundli(it)) },
+                        onCheckKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(it)) },
                         onOpenChat = { nav.navigate(MainRoutes.chat(it)) }
                     )
                 }
@@ -376,15 +439,20 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onGoNotifications = { nav.navigate(MainRoutes.NOTIFICATIONS) },
                         onGoWhoViewed = { nav.navigate(MainRoutes.WHO_VIEWED) },
                         onGoShortlists = { nav.navigate(MainRoutes.SHORTLISTS) },
-                        onGoKundli = { nav.navigate(MainRoutes.KUNDLI) },
+                        onGoKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.KUNDLI) },
                         onGoPricing = { nav.navigate(MainRoutes.PRICING) },
                         onGoInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onGoVerification = { nav.navigate(MainRoutes.VERIFICATION) },
+                        onGoFamily = { nav.navigate(MainRoutes.FAMILY_DETAILS) },
                         onGoHelp = { nav.navigate(MainRoutes.HELP) },
                         onGoTerms = { nav.navigate(MainRoutes.TERMS) },
                         onGoPrivacy = { nav.navigate(MainRoutes.PRIVACY_DASH) },
                         onGoGuidelines = { nav.navigate(MainRoutes.GUIDELINES) },
                         onGoBiodata = { nav.navigate(MainRoutes.BIODATA) },
+                        onGoVideoProfile = {
+                            if (optionalRoutes.videoProfiles) nav.navigate(MainRoutes.VIDEO_PROFILE)
+                        },
+                        videoProfileEnabled = optionalRoutes.videoProfiles,
                         unreadNotif = unreadNotif
                     )
                 }
@@ -392,8 +460,34 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                     SettingsScreen(
                         onBack = { nav.popBackStack() },
                         onGoLanguage = { nav.navigate(MainRoutes.LANGUAGE_SELECT) },
+                        onGoPartnerPreferences = { nav.navigate(MainRoutes.PARTNER_PREFERENCES) },
+                        onGoFamilyAccess = { nav.navigate(MainRoutes.FAMILY_ACCESS) },
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
+                }
+                composable(MainRoutes.PARTNER_PREFERENCES) {
+                    PartnerPreferencesScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.FAMILY_ACCESS) {
+                    FamilyAccessScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.FAMILY_DETAILS) {
+                    FamilyScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.ASSISTED) {
+                    AssistedServiceScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.PROFILE_ANALYTICS) {
+                    ProfileAnalyticsScreen(onBack = { nav.popBackStack() })
+                }
+                composable(MainRoutes.MATCH_INSIGHTS) {
+                    AIMatchInsightsScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenProfile = { nav.navigate(MainRoutes.detail(it)) }
+                    )
+                }
+                composable(MainRoutes.SAFETY_CENTER) {
+                    SafetyCenterScreen(onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.LANGUAGE_SELECT) { com.match.app.ui.language.LanguageSelectionScreen(onBack = { nav.popBackStack() }) }
                 composable(MainRoutes.NOTIFICATIONS) {
@@ -410,16 +504,38 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
-                composable(MainRoutes.KUNDLI) { KundliScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.KUNDLI) {
+                    if (optionalRoutes.kundali) KundliScreen(onBack = { nav.popBackStack() })
+                    else OptionalFeatureUnavailable("Kundali", onBack = { nav.popBackStack() })
+                }
                 composable(
                     MainRoutes.KUNDLI_PAIR,
                     arguments = listOf(navArgument("targetId") { type = NavType.LongType })
                 ) { backStack ->
                     val targetId = backStack.arguments?.getLong("targetId") ?: return@composable
-                    KundliScreen(targetId = targetId, onBack = { nav.popBackStack() })
+                    if (optionalRoutes.kundali) KundliScreen(targetId = targetId, onBack = { nav.popBackStack() })
+                    else OptionalFeatureUnavailable("Kundali", onBack = { nav.popBackStack() })
                 }
                 composable(MainRoutes.PRICING) { PricingScreen(onBack = { nav.popBackStack() }) }
-                composable(MainRoutes.VERIFICATION) { VerificationScreen(onBack = { nav.popBackStack() }) }
+                composable(MainRoutes.VERIFICATION) {
+                    VerificationScreen(
+                        onBack = { nav.popBackStack() },
+                        onVerifyPhone = { nav.navigate(MainRoutes.PHONE_VERIFICATION) }
+                    )
+                }
+                composable(MainRoutes.PHONE_VERIFICATION) {
+                    PhoneVerificationScreen(
+                        onBack = { nav.popBackStack() },
+                        onVerified = { nav.popBackStack() }
+                    )
+                }
+                composable(MainRoutes.VIDEO_PROFILE) {
+                    if (optionalRoutes.videoProfiles) {
+                        VideoProfileScreen(onBack = { nav.popBackStack() })
+                    } else {
+                        OptionalFeatureUnavailable("Video profile", onBack = { nav.popBackStack() })
+                    }
+                }
                 composable(MainRoutes.PRIVACY_DASH) {
                     PrivacyDashboardScreen(onBack = { nav.popBackStack() }, onGoSettings = { nav.navigate(MainRoutes.SETTINGS) })
                 }
@@ -438,7 +554,19 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         onBack = { nav.popBackStack() },
                         onChat = { nav.navigate(MainRoutes.chat(userId)) },
                         onPricing = { nav.navigate(MainRoutes.PRICING) },
-                        onKundli = { nav.navigate(MainRoutes.kundli(userId)) }
+                        onKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(userId)) },
+                        onCompatibilityBreakdown = { nav.navigate(MainRoutes.compatibility(userId)) }
+                    )
+                }
+                composable(
+                    MainRoutes.COMPATIBILITY_BREAKDOWN,
+                    arguments = listOf(navArgument("candidateId") { type = NavType.LongType })
+                ) { backStack ->
+                    val candidateId = backStack.arguments?.getLong("candidateId") ?: return@composable
+                    CompatibilityDeepDiveScreen(
+                        candidateId = candidateId,
+                        onBack = { nav.popBackStack() },
+                        onUpgrade = { nav.navigate(MainRoutes.PRICING) }
                     )
                 }
                 composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
@@ -447,5 +575,30 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun OptionalFeatureUnavailable(
+    featureName: String,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(MatreeDesign.spacing.sm))
+        Text("$featureName is not enabled for this release", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(MatreeDesign.spacing.xs))
+        Text(
+            "This feature stays off until its production validation gates pass.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(MatreeDesign.spacing.md))
+        Button(onClick = onBack) { Text("Back") }
     }
 }

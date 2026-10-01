@@ -3,17 +3,18 @@ package com.match.app.core.trust
 import com.match.app.domain.model.UserProfile
 
 /**
- * Computes a trust score (0–100) for a profile based on completion and verification status.
- * Factors: email verified, phone verified, ID verified, bio, photo, questionnaire, profession.
+ * Legacy local profile-quality preview retained for compatibility with older screens/tests.
  *
- * Score breakdown:
- *   - ID Verified: 30 points
+ * Production trust decisions must use TrustRepository/getTrustSummary, whose inputs are derived
+ * by trusted backend code. Payment or premium membership must never increase trust.
+ *
+ * Local preview breakdown:
+ *   - ID verified: 35 points
  *   - Photo added: 20 points
- *   - Bio filled:  10 points
+ *   - Bio filled: 10 points
  *   - Questionnaire completed: 15 points
  *   - Profession filled: 10 points
- *   - Premium member: 10 points
- *   - Native state filled: 5 points
+ *   - Native state filled: 10 points
  */
 object TrustScoreEngine {
 
@@ -36,13 +37,12 @@ object TrustScoreEngine {
         val hasQ     = profile.hasQuestionnaire
         val hasPro   = profile.profession.isNotBlank()
 
-        if (verified) score += 30
+        if (verified) score += 35
         if (hasPhoto) score += 20
         if (hasBio)   score += 10
         if (hasQ)     score += 15
         if (hasPro)   score += 10
-        if (profile.isPremium) score += 10
-        if (profile.nativeState.isNotBlank()) score += 5
+        if (profile.nativeState.isNotBlank()) score += 10
 
         val label = when {
             score >= 80 -> "Highly Trusted"

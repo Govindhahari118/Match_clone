@@ -3,6 +3,7 @@ package com.match.app.data.remote
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -15,6 +16,7 @@ import javax.inject.Singleton
 @Singleton
 class FirestoreChatService @Inject constructor() {
     private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
     companion object {
         fun threadId(uid1: String, uid2: String): String {
@@ -36,10 +38,12 @@ class FirestoreChatService @Inject constructor() {
                     val participants = (doc.get("participantUids") as? List<*>)?.filterIsInstance<String>().orEmpty()
                     if (participants.size != 2 || myUid !in participants) return@mapNotNull null
                     val peerUid = participants.firstOrNull { it != myUid } ?: return@mapNotNull null
+                    val lastSentAt = doc.getLong("lastSentAt") ?: 0L
+                    if (lastSentAt <= 0L) return@mapNotNull null
                     FirestoreChatThread(
                         peerFirebaseUid = peerUid,
                         lastMessage = doc.getString("lastMessage").orEmpty(),
-                        lastSentAt = doc.getLong("lastSentAt") ?: 0L
+                        lastSentAt = lastSentAt
                     )
                 }.sortedByDescending { it.lastSentAt }
                 trySend(threads)
@@ -76,9 +80,28 @@ class FirestoreChatService @Inject constructor() {
     }
 
     /**
-     * Idempotent send. A client-generated message id is stable across retry. Thread preview and
-     * message metadata are committed in the same batch, so the UI cannot observe a ghost thread
-     * whose actual message write failed.
+     * Establish the canonical server-authorized thread before uploading IMAGE/VOICE media.
+     * Prepared threads are not user-visible until sendChatMessage accepts a real message.
+     */
+    suspend fun prepareThread(myFirebaseUid: String, peerFirebaseUid: String): String {
+        require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank() && myFirebaseUid != peerFirebaseUid)
+        val result = functions.getHttpsCallable("prepareChatThread")
+            .call(mapOf("targetUid" to peerFirebaseUid))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?>
+            ?: error("Invalid chat-prepare response")
+        check(payload["success"] == true) { "Chat thread was not authorized by the server" }
+        val returned = payload["threadId"] as? String ?: error("Missing chat thread identity")
+        val expected = threadId(myFirebaseUid, peerFirebaseUid)
+        check(returned == expected) { "Server returned an unexpected chat thread identity" }
+        return returned
+    }
+
+    /**
+     * Idempotent server-authoritative send. The stable client-generated message id is preserved
+     * across retries by the durable outbox. Trusted Functions owns thread/message creation and
+     * re-checks account, match, block/privacy, media identity and safety ceilings on every attempt.
      */
     suspend fun sendMessage(
         clientMessageId: String,
@@ -92,51 +115,29 @@ class FirestoreChatService @Inject constructor() {
         require(clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}"))) { "Invalid message id" }
         require(myFirebaseUid.isNotBlank() && peerFirebaseUid.isNotBlank() && myFirebaseUid != peerFirebaseUid)
         require(body.length <= 3000) { "Message too long" }
-        require(voiceUri.isNullOrBlank() || imageUri.isNullOrBlank()) { "A message may contain only one media attachment" }
-
-        val tid = threadId(myFirebaseUid, peerFirebaseUid)
-        val threadRef = db.collection("chats").document(tid)
-        val messageRef = threadRef.collection("messages").document(clientMessageId)
-
-        // If an earlier attempt committed but the client lost the acknowledgement, treat retry as
-        // success instead of attempting to overwrite an immutable message.
-        val existing = messageRef.get().await()
-        if (existing.exists()) {
-            val sameSender = existing.getString("fromFirebaseUid") == myFirebaseUid
-            val sameRecipient = existing.getString("toFirebaseUid") == peerFirebaseUid
-            if (sameSender && sameRecipient) return
-            error("Message id collision")
+        require(voiceUri.isNullOrBlank() || imageUri.isNullOrBlank()) {
+            "A message may contain only one media attachment"
         }
 
-        val now = System.currentTimeMillis()
-        val participantUids = listOf(myFirebaseUid, peerFirebaseUid).sorted()
-        val preview = when {
-            !imageUri.isNullOrBlank() -> "📷 Image"
-            !voiceUri.isNullOrBlank() -> "🎤 Voice message"
-            else -> body.take(120)
-        }
-        val message = mutableMapOf<String, Any>(
-            "body" to body,
-            "sentAt" to now,
-            "isRead" to false,
-            "fromFirebaseUid" to myFirebaseUid,
-            "toFirebaseUid" to peerFirebaseUid
-        )
-        if (!voiceUri.isNullOrBlank()) message["voiceUri"] = voiceUri
-        if (!imageUri.isNullOrBlank()) message["imageUri"] = imageUri
-        if (voiceDurationMs != null && voiceDurationMs > 0) message["voiceDurationMs"] = voiceDurationMs
-
-        val batch = db.batch()
-        batch.set(
-            threadRef,
-            mapOf(
-                "participantUids" to participantUids,
-                "lastMessage" to preview,
-                "lastSentAt" to now
+        val result = functions.getHttpsCallable("sendChatMessage")
+            .call(
+                buildMap<String, Any> {
+                    put("clientMessageId", clientMessageId)
+                    put("targetUid", peerFirebaseUid)
+                    put("body", body)
+                    if (!voiceUri.isNullOrBlank()) put("voicePath", voiceUri)
+                    if (!imageUri.isNullOrBlank()) put("imagePath", imageUri)
+                    if (voiceDurationMs != null && voiceDurationMs > 0) {
+                        put("voiceDurationMs", voiceDurationMs)
+                    }
+                }
             )
-        )
-        batch.set(messageRef, message)
-        batch.commit().await()
+            .await()
+
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?>
+            ?: error("Invalid chat-send response")
+        check(payload["success"] == true) { "Message was not accepted by the server" }
     }
 
     /** Recipient-side receipt acknowledgement. Server persistence alone is only SENT. */

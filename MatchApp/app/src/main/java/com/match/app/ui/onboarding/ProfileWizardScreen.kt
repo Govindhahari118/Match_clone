@@ -273,10 +273,22 @@ private fun StepEducationCareer(vm: ProfileWizardViewModel) {
         OutlinedTextField(s.institution, { vm.update(s.copy(institution = it.take(120))) }, label = { Text("College / university") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(if (s.graduationYear > 0) s.graduationYear.toString() else "", { vm.update(s.copy(graduationYear = it.toIntOrNull()?.coerceIn(1950, 2100) ?: 0)) }, label = { Text("Graduation year") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(s.profession, { vm.update(s.copy(profession = it.take(100))) }, label = { Text("Occupation / role *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        ChoiceField("Occupation category", s.occupationCategory, IndiaProfileCatalog.occupationCategories, { vm.update(s.copy(occupationCategory = it)) })
+        ChoiceField(
+        "Occupation category",
+        s.occupationCategory,
+        IndiaProfileCatalog.occupationCategories,
+        { vm.update(s.copy(occupationCategory = it)) },
+        required = true
+    )
         OutlinedTextField(s.employer, { vm.update(s.copy(employer = it.take(120))) }, label = { Text("Employer / business") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         ChoiceField("Employer type", s.employerType, IndiaProfileCatalog.employerTypes, { vm.update(s.copy(employerType = it)) })
-        OutlinedTextField(s.incomeBand, { vm.update(s.copy(incomeBand = it.take(80))) }, label = { Text("Annual income range") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ChoiceField(
+        "Annual income range",
+        s.incomeBand,
+        IndiaProfileCatalog.incomeBands,
+        { vm.update(s.copy(incomeBand = it)) },
+        required = true
+    )
     }
 }
 
@@ -286,8 +298,20 @@ private fun StepPhysicalRelationship(vm: ProfileWizardViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Personal details", "These fields improve filters while keeping the profile structure consistent across communities.")
         OutlinedTextField(if (s.heightCm > 0) s.heightCm.toString() else "", { vm.update(s.copy(heightCm = it.toIntOrNull() ?: 0)) }, label = { Text("Height (cm) *") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(if (s.weight > 0f) s.weight.toString() else "", { vm.update(s.copy(weight = it.toFloatOrNull() ?: 0f)) }, label = { Text("Weight (kg)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(s.complexion, { vm.update(s.copy(complexion = it.take(60))) }, label = { Text("Complexion (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+        if (s.weight > 0f) s.weight.toString() else "",
+        { vm.update(s.copy(weight = it.toFloatOrNull() ?: 0f)) },
+        label = { Text("Weight (kg) *") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+        ChoiceField(
+        "Skin tone (optional, self-described)",
+        s.complexion,
+        IndiaProfileCatalog.complexionOptions,
+        { vm.update(s.copy(complexion = it)) }
+    )
         ChoiceField("Physical status", s.physicalStatus, IndiaProfileCatalog.physicalStatuses, { vm.update(s.copy(physicalStatus = it)) })
         ChoiceField("Marital status", s.maritalStatus, IndiaProfileCatalog.maritalStatuses, { vm.update(s.copy(maritalStatus = it)) }, required = true)
         Row(verticalAlignment = Alignment.CenterVertically) {

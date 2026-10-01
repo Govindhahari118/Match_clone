@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseNetworkException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import com.google.firebase.messaging.FirebaseMessaging
@@ -15,6 +16,7 @@ import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.remote.FirestoreProfileService
+import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
@@ -26,6 +28,19 @@ import kotlinx.coroutines.withContext
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class AccountDeviceSession(
+    val deviceId: String,
+    val platform: String,
+    val appVersion: String,
+    val updatedAtMillis: Long?
+)
+
+data class DataExportLink(
+    val downloadUrl: String,
+    val linkExpiresAtMillis: Long,
+    val exportExpiresAtMillis: Long
+)
 
 sealed class AuthResult {
     data class Success(val userId: Long) : AuthResult()
@@ -191,6 +206,56 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    suspend fun listMyDevices(): Result<List<AccountDeviceSession>> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("listMyDevices")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        @Suppress("UNCHECKED_CAST")
+        val devices = payload["devices"] as? List<Map<String, Any?>> ?: emptyList()
+        devices.mapNotNull { value ->
+            val deviceId = value["deviceId"] as? String ?: return@mapNotNull null
+            AccountDeviceSession(
+                deviceId = deviceId,
+                platform = value["platform"] as? String ?: "unknown",
+                appVersion = value["appVersion"] as? String ?: "",
+                updatedAtMillis = (value["updatedAtMillis"] as? Number)?.toLong()
+            )
+        }
+    }
+
+    suspend fun createMyDataExport(): Result<DataExportLink> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("createMyDataExport")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: error("Invalid data-export response")
+        val downloadUrl = payload["downloadUrl"] as? String
+            ?: error("Missing data-export download link")
+        require(downloadUrl.startsWith("https://")) { "Invalid data-export download link" }
+        DataExportLink(
+            downloadUrl = downloadUrl,
+            linkExpiresAtMillis = (payload["linkExpiresAtMillis"] as? Number)?.toLong() ?: 0L,
+            exportExpiresAtMillis = (payload["exportExpiresAtMillis"] as? Number)?.toLong() ?: 0L
+        )
+    }
+
+    suspend fun signOutAllDevices(): Result<Int> = runCatching {
+        val result = com.google.firebase.functions.FirebaseFunctions.getInstance()
+            .getHttpsCallable("revokeAllSessions")
+            .call()
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: emptyMap()
+        val revoked = (payload["revokedDeviceCount"] as? Number)?.toInt() ?: 0
+        firebaseAuth.signOut()
+        clearLocalAccountState()
+        revoked
+    }
+
     suspend fun signOut() {
         val uid = firebaseAuth.currentUser?.uid
         if (!uid.isNullOrBlank()) {
@@ -305,8 +370,9 @@ class AuthRepository @Inject constructor(
         motherOccupation: String,
         siblings: Int,
         familyType: String,
+        familyStatus: String,
         familyValues: String,
-        nativePlace: String,
+        nativeState: String,
         gotra: String,
         aboutFamily: String
     ) {
@@ -316,9 +382,10 @@ class AuthRepository @Inject constructor(
             motherOccupation = motherOccupation,
             siblings = siblings,
             familyType = familyType,
+            familyStatus = familyStatus,
             familyValues = familyValues,
             gothra = gotra,
-            city = nativePlace.ifBlank { u.city },
+            nativeState = nativeState,
             aboutFamily = aboutFamily
         )
         userDao.update(updated)
@@ -326,8 +393,14 @@ class AuthRepository @Inject constructor(
             try {
                 val synced = firestoreProfile.pushProfile(updated)
                 userDao.update(synced)
+            } catch (conflict: ProfileConflictException) {
+                // FirestoreProfileService refreshes the latest server copy before surfacing the
+                // conflict. Preserve that authoritative copy and let the UI require a refresh.
+                throw conflict
             } catch (ex: Exception) {
-                Log.w("AuthRepository", "Family details cloud sync failed", ex)
+                userDao.update(u)
+                Log.w("AuthRepository", "Family details cloud sync failed; local edit rolled back", ex)
+                throw ex
             }
         }
     }
@@ -445,6 +518,86 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("AuthRepository", "Account deletion was not confirmed by server", e)
             AuthResult.Error("Account deletion could not be completed. Check your connection and retry.")
+        }
+    }
+
+    /**
+     * Firebase Phone Auth is both signup and login. Existing cloud profiles are hydrated; a new
+     * phone-only account receives only a minimal private/local shell and is immediately routed to
+     * the required profile wizard before discovery or messaging.
+     */
+    suspend fun signInWithPhoneCredential(credential: PhoneAuthCredential): AuthResult {
+        val previousUid = firebaseAuth.currentUser?.uid
+        return try {
+            val authResult = firebaseAuth.signInWithCredential(credential).await()
+            val firebaseUser = authResult.user
+                ?: return AuthResult.Error("Phone sign-in failed")
+            val firebaseUid = firebaseUser.uid
+
+            if (!previousUid.isNullOrBlank() && previousUid != firebaseUid) {
+                clearLocalAccountState()
+            }
+
+            val firestoreEntity = firestoreProfile.fetchProfile(firebaseUid)
+            val existingLocal = userDao.findByFirebaseUid(firebaseUid)
+            val localEmail = existingLocal?.email
+                ?.takeIf { it.isNotBlank() }
+                ?: "${firebaseUid}@cache.invalid"
+            val localId = when {
+                existingLocal != null -> {
+                    if (firestoreEntity != null) {
+                        userDao.update(
+                            firestoreEntity.copy(
+                                id = existingLocal.id,
+                                email = localEmail,
+                                passwordHash = "",
+                                phoneNumber = firebaseUser.phoneNumber
+                                    ?: firestoreEntity.phoneNumber,
+                                isSeed = false
+                            )
+                        )
+                    }
+                    existingLocal.id
+                }
+                firestoreEntity != null -> userDao.insert(
+                    firestoreEntity.copy(
+                        email = firestoreEntity.email.ifBlank { localEmail },
+                        passwordHash = "",
+                        phoneNumber = firebaseUser.phoneNumber
+                            ?: firestoreEntity.phoneNumber,
+                        isSeed = false
+                    )
+                )
+                else -> {
+                    val entity = UserEntity(
+                        firebaseUid = firebaseUid,
+                        email = localEmail,
+                        passwordHash = "",
+                        displayName = "Member",
+                        age = 0,
+                        gender = "OTHER",
+                        lookingFor = "ANY",
+                        city = "",
+                        bio = "",
+                        rasi = "",
+                        nakshatra = "",
+                        phoneNumber = firebaseUser.phoneNumber.orEmpty(),
+                        lastActiveAt = System.currentTimeMillis()
+                    )
+                    val id = userDao.insert(entity)
+                    val synced = firestoreProfile.pushProfile(entity.copy(id = id))
+                    userDao.update(synced)
+                    id
+                }
+            }
+
+            registerFcmToken(firebaseUid)
+            session.setUser(localId)
+            session.setFirebaseUid(firebaseUid)
+            AuthResult.Success(localId)
+        } catch (ex: Exception) {
+            Log.e("AuthRepository", "signInWithPhoneCredential failed", ex)
+            AuthResult.Error("Unable to verify this phone number. Please retry.")
         }
     }
 

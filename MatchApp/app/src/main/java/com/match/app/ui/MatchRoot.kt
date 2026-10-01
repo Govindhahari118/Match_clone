@@ -29,16 +29,19 @@ import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.UserEntity
 import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
+import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.AppearancePreference
 import com.match.app.domain.model.ThemePreference
 import com.match.app.ui.auth.SignInScreen
 import com.match.app.ui.auth.SignUpScreen
+import com.match.app.ui.auth.PhoneAuthScreen
 import com.match.app.ui.i18n.LocalI18n
 import com.match.app.ui.i18n.rememberI18nCatalog
 import com.match.app.ui.main.MainShell
 import com.match.app.ui.onboarding.OnboardingScreen
 import com.match.app.ui.onboarding.ProfileWizardScreen
+import com.match.app.ui.preferences.PartnerPreferencesScreen
 import com.match.app.ui.theme.AppPalette
 import com.match.app.ui.theme.AppearanceThemeResolver
 import com.match.app.ui.theme.MatchTheme
@@ -56,6 +59,7 @@ object Routes {
     const val AUTH_GRAPH  = "auth"
     const val SIGN_IN     = "sign_in"
     const val SIGN_UP     = "sign_up"
+    const val PHONE_AUTH  = "phone_auth"
     const val ONBOARDING  = "onboarding"
     const val MAIN_GRAPH  = "main"
 }
@@ -65,6 +69,7 @@ class RootViewModel @Inject constructor(
     private val session: SessionStore,
     private val connectivity: ConnectivityObserver,
     private val authRepository: AuthRepository,
+    private val partnerPreferenceRepository: PartnerPreferenceRepository,
     userDao: UserDao,
     appearancePreferenceRepository: AppearancePreferenceRepository
 ) : ViewModel() {
@@ -92,6 +97,60 @@ class RootViewModel @Inject constructor(
     val profileSetupComplete = currentUser
         .map { it?.isRequiredProfileComplete() == true }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    enum class PartnerPreferenceGate {
+        UNKNOWN,
+        CHECKING,
+        REQUIRED,
+        COMPLETE,
+        UNAVAILABLE
+    }
+
+    private val _partnerPreferenceGate =
+        kotlinx.coroutines.flow.MutableStateFlow(PartnerPreferenceGate.UNKNOWN)
+    val partnerPreferenceGate = _partnerPreferenceGate
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PartnerPreferenceGate.UNKNOWN)
+
+    private var partnerPreferenceCheckedUid: Long? = null
+
+    fun refreshPartnerPreferenceGate(force: Boolean = false) = viewModelScope.launch {
+        val id = userId.value ?: run {
+            partnerPreferenceCheckedUid = null
+            _partnerPreferenceGate.value = PartnerPreferenceGate.UNKNOWN
+            return@launch
+        }
+        if (!profileSetupComplete.value) {
+            _partnerPreferenceGate.value = PartnerPreferenceGate.UNKNOWN
+            return@launch
+        }
+        if (!force && partnerPreferenceCheckedUid == id &&
+            _partnerPreferenceGate.value in setOf(
+                PartnerPreferenceGate.REQUIRED,
+                PartnerPreferenceGate.COMPLETE
+            )
+        ) return@launch
+
+        _partnerPreferenceGate.value = PartnerPreferenceGate.CHECKING
+        runCatching { partnerPreferenceRepository.load() }
+            .onSuccess { preferences ->
+                partnerPreferenceCheckedUid = id
+                _partnerPreferenceGate.value = if (preferences.configured) {
+                    PartnerPreferenceGate.COMPLETE
+                } else {
+                    PartnerPreferenceGate.REQUIRED
+                }
+            }
+            .onFailure {
+                // Do not brick startup when Firebase/Functions is unavailable. Main remains usable
+                // offline; the check retries when connectivity returns.
+                _partnerPreferenceGate.value = PartnerPreferenceGate.UNAVAILABLE
+            }
+    }
+
+    fun markPartnerPreferencesConfigured() {
+        partnerPreferenceCheckedUid = userId.value
+        _partnerPreferenceGate.value = PartnerPreferenceGate.COMPLETE
+    }
 
     fun touchActivity() = viewModelScope.launch { session.touchActivity() }
 
@@ -126,6 +185,7 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     val onboarded by vm.onboarded.collectAsState()
     val sessionReady by vm.sessionReady.collectAsState()
     val profileSetupComplete by vm.profileSetupComplete.collectAsState()
+    val partnerPreferenceGate by vm.partnerPreferenceGate.collectAsState()
     val loggedIn = userId != null
     val uiLanguage by vm.uiLanguage.collectAsState()
     val catalog = rememberI18nCatalog(uiLanguage)
@@ -138,6 +198,11 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
     }
     LaunchedEffect(isOnline) {
         if (isOnline) vm.validateRemoteSession()
+    }
+    LaunchedEffect(loggedIn, profileSetupComplete, isOnline) {
+        if (loggedIn && profileSetupComplete && isOnline) {
+            vm.refreshPartnerPreferenceGate()
+        }
     }
 
     val effectivePalette = when {
@@ -214,6 +279,17 @@ fun MatchRoot(vm: RootViewModel = hiltViewModel()) {
                             !onboarded -> OnboardingScreen(onDone = {})
                             !loggedIn -> AuthNav()
                             !profileSetupComplete -> ProfileWizardScreen(onComplete = {})
+                            partnerPreferenceGate == RootViewModel.PartnerPreferenceGate.REQUIRED ->
+                                PartnerPreferencesScreen(
+                                    onBack = null,
+                                    onSaved = vm::markPartnerPreferencesConfigured
+                                )
+                            isOnline && partnerPreferenceGate in setOf(
+                                RootViewModel.PartnerPreferenceGate.UNKNOWN,
+                                RootViewModel.PartnerPreferenceGate.CHECKING
+                            ) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                             else -> MainShell()
                         }
                     }
@@ -228,10 +304,16 @@ private fun AuthNav() {
     val nav: NavHostController = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.SIGN_IN) {
         composable(Routes.SIGN_IN) {
-            SignInScreen(onGoSignUp = { nav.navigate(Routes.SIGN_UP) })
+            SignInScreen(
+                onGoSignUp = { nav.navigate(Routes.SIGN_UP) },
+                onGoPhone = { nav.navigate(Routes.PHONE_AUTH) }
+            )
         }
         composable(Routes.SIGN_UP) {
             SignUpScreen(onBack = { nav.popBackStack() })
+        }
+        composable(Routes.PHONE_AUTH) {
+            PhoneAuthScreen(onBack = { nav.popBackStack() })
         }
     }
 }

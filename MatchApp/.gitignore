@@ -12,3 +12,5 @@
 *.keystore
 *.jks
 keystore.properties
+/app/src/release/google-services.json
+/app/google-services.json

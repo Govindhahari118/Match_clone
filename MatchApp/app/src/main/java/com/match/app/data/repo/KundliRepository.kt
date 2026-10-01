@@ -14,7 +14,9 @@ class KundliRepository @Inject constructor() {
         val myRasi: String = "",
         val myNakshatra: String = "",
         val targetRasi: String = "",
-        val targetNakshatra: String = ""
+        val targetNakshatra: String = "",
+        val compatibilityScore: Float? = null,
+        val formulaVersion: String = ""
     )
 
     private val functions = FirebaseFunctions.getInstance()
@@ -37,7 +39,9 @@ class KundliRepository @Inject constructor() {
             myRasi = data["myRasi"] as? String ?: "",
             myNakshatra = data["myNakshatra"] as? String ?: "",
             targetRasi = data["targetRasi"] as? String ?: "",
-            targetNakshatra = data["targetNakshatra"] as? String ?: ""
+            targetNakshatra = data["targetNakshatra"] as? String ?: "",
+            compatibilityScore = (data["compatibilityScore"] as? Number)?.toFloat(),
+            formulaVersion = data["formulaVersion"] as? String ?: ""
         )
     }
 }

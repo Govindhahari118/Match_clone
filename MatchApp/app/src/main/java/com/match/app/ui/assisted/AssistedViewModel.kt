@@ -20,6 +20,7 @@ data class AssistedUiState(
     val leadPreference: String = "",
     val selectedPlan: String = "Gold RM",
     val submitted: Boolean = false,
+    val requestStatus: String = "",
     val error: String? = null
 )
 
@@ -33,10 +34,10 @@ class AssistedViewModel @Inject constructor(
     val ui: StateFlow<AssistedUiState> = _ui.asStateFlow()
 
     init {
-        loadLeadInfo()
+        refresh()
     }
 
-    private fun loadLeadInfo() = viewModelScope.launch {
+    fun refresh() = viewModelScope.launch {
         val uid = session.firebaseUid.firstOrNull() ?: return@launch
         runCatching { featureService.getRMRequest(uid) }
             .onSuccess { request ->
@@ -48,6 +49,7 @@ class AssistedViewModel @Inject constructor(
                             leadPreference = request["preferences"] as? String ?: "",
                             selectedPlan = request["plan"] as? String ?: "Gold RM",
                             submitted = true,
+                            requestStatus = request["status"] as? String ?: "OPEN",
                             error = null
                         )
                     }
@@ -76,6 +78,35 @@ class AssistedViewModel @Inject constructor(
         it.copy(selectedPlan = plan, error = null)
     }
 
+    fun cancelRequest() = viewModelScope.launch {
+        val uid = session.firebaseUid.firstOrNull()
+        if (uid.isNullOrBlank() || _ui.value.loading) return@launch
+
+        _ui.update { it.copy(loading = true, error = null) }
+        runCatching {
+            featureService.cancelRMRequest(uid)
+            featureService.getRMRequest(uid)
+        }.onSuccess { request ->
+            _ui.update {
+                it.copy(
+                    loading = false,
+                    submitted = request != null,
+                    requestStatus = request?.get("status") as? String ?: "CANCELLED",
+                    leadPreference = request?.get("preferences") as? String ?: "",
+                    leadPhone = request?.get("phone") as? String ?: "",
+                    error = null
+                )
+            }
+        }.onFailure {
+            _ui.update {
+                it.copy(
+                    loading = false,
+                    error = "Unable to cancel the request. Check your connection and try again."
+                )
+            }
+        }
+    }
+
     fun submitRequest() = viewModelScope.launch {
         val uid = session.firebaseUid.firstOrNull()
         if (uid.isNullOrBlank()) {
@@ -102,7 +133,14 @@ class AssistedViewModel @Inject constructor(
                 phone = state.leadPhone
             )
         }.onSuccess {
-            _ui.update { it.copy(loading = false, submitted = true) }
+            _ui.update {
+                it.copy(
+                    loading = false,
+                    submitted = true,
+                    requestStatus = "OPEN",
+                    error = null
+                )
+            }
         }.onFailure {
             _ui.update {
                 it.copy(

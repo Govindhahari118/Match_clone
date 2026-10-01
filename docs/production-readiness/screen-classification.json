@@ -1,0 +1,411 @@
+{
+  "schemaVersion": 1,
+  "allowedStatuses": [
+    "READY",
+    "BETA",
+    "STUB",
+    "UNSAFE",
+    "POST_LAUNCH"
+  ],
+  "screens": [
+    {
+      "path": "ui/aiinsights/AIMatchInsightsScreen.kt",
+      "symbol": "AIMatchInsightsScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/analytics/ProfileAnalyticsScreen.kt",
+      "symbol": "ProfileAnalyticsScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/assisted/AssistedServiceScreen.kt",
+      "symbol": "AssistedServiceScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/auth/PhoneAuthScreen.kt",
+      "symbol": "PhoneAuthScreen",
+      "status": "READY",
+      "exposure": "auth",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/auth/SignInScreen.kt",
+      "symbol": "SignInScreen",
+      "status": "READY",
+      "exposure": "auth",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/auth/SignUpScreen.kt",
+      "symbol": "SignUpScreen",
+      "status": "READY",
+      "exposure": "auth",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/bgcheck/BackgroundCheckScreen.kt",
+      "symbol": "BackgroundCheckScreen",
+      "status": "UNSAFE",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/biodata/BiodataScreen.kt",
+      "symbol": "BiodataScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/biogen/BioGeneratorScreen.kt",
+      "symbol": "BioGeneratorScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/boost/ProfileBoostScreen.kt",
+      "symbol": "ProfileBoostScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/chat/ChatListScreen.kt",
+      "symbol": "ChatListScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/chat/ChatScreen.kt",
+      "symbol": "ChatScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/counselling/CounsellingScreen.kt",
+      "symbol": "CounsellingScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/deepcompat/CompatibilityDeepDiveScreen.kt",
+      "symbol": "CompatibilityDeepDiveScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/detail/MatchDetailScreen.kt",
+      "symbol": "MatchDetailScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/discovery/SwipeDiscoveryScreen.kt",
+      "symbol": "SwipeDiscoveryScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/events/LiveEventsScreen.kt",
+      "symbol": "LiveEventsScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/family/FamilyAccessScreen.kt",
+      "symbol": "FamilyAccessScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/family/FamilyScreen.kt",
+      "symbol": "FamilyScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/guides/GuidesScreen.kt",
+      "symbol": "GuidesScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/help/HelpScreen.kt",
+      "symbol": "HelpScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/horoscope/AdvancedHoroscopeScreen.kt",
+      "symbol": "AdvancedHoroscopeScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/interests/InterestsScreen.kt",
+      "symbol": "InterestsScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/kundli/KundliScreen.kt",
+      "symbol": "KundliScreen",
+      "status": "BETA",
+      "exposure": "flagged",
+      "requiredFlag": "KEY_ENABLE_KUNDALI"
+    },
+    {
+      "path": "ui/language/LanguageSelectionScreen.kt",
+      "symbol": "LanguageSelectionScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/legal/LegalScreen.kt",
+      "symbol": "LegalScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/main/HomeLauncherScreen.kt",
+      "symbol": "HomeLauncherScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/matches/MatchesScreen.kt",
+      "symbol": "MatchesScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/meet/VirtualMeetScreen.kt",
+      "symbol": "VirtualMeetScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/muhurat/AstroCalendarScreen.kt",
+      "symbol": "AstroCalendarScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/nearby/NearbyMatchesScreen.kt",
+      "symbol": "NearbyMatchesScreen",
+      "status": "BETA",
+      "exposure": "flagged",
+      "requiredFlag": "KEY_ENABLE_NEARBY"
+    },
+    {
+      "path": "ui/notifications/NotificationsScreen.kt",
+      "symbol": "NotificationsScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/nri/NRIMatchScreen.kt",
+      "symbol": "NRIMatchScreen",
+      "status": "BETA",
+      "exposure": "flagged",
+      "requiredFlag": "KEY_ENABLE_NRI_FEATURES"
+    },
+    {
+      "path": "ui/onboarding/OnboardingScreen.kt",
+      "symbol": "OnboardingScreen",
+      "status": "READY",
+      "exposure": "onboarding",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/onboarding/ProfileWizardScreen.kt",
+      "symbol": "ProfileWizardScreen",
+      "status": "READY",
+      "exposure": "onboarding",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/phone/PhoneVerificationScreen.kt",
+      "symbol": "PhoneVerificationScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/photoeditor/PhotoEditorScreen.kt",
+      "symbol": "PhotoEditorScreen",
+      "status": "BETA",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/preferences/PartnerPreferencesScreen.kt",
+      "symbol": "PartnerPreferencesScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/pricing/PricingScreen.kt",
+      "symbol": "PricingScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/privacy/PrivacyDashboardScreen.kt",
+      "symbol": "PrivacyDashboardScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/profile/ProfileScreen.kt",
+      "symbol": "ProfileScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/questionnaire/QuestionnaireScreen.kt",
+      "symbol": "QuestionnaireScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/recentlyjoined/RecentlyJoinedScreen.kt",
+      "symbol": "RecentlyJoinedScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/referral/MatchmakerReferralScreen.kt",
+      "symbol": "MatchmakerReferralScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/rewards/DailyRewardsScreen.kt",
+      "symbol": "DailyRewardsScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/safety/SafetyCenterScreen.kt",
+      "symbol": "SafetyCenterScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/secondmarriage/SecondMarriageScreen.kt",
+      "symbol": "SecondMarriageScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/securecall/SecureCallScreen.kt",
+      "symbol": "SecureCallScreen",
+      "status": "UNSAFE",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/settings/SettingsScreen.kt",
+      "symbol": "SettingsScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/shortlist/ShortlistScreen.kt",
+      "symbol": "ShortlistScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/stories/SuccessStoriesScreen.kt",
+      "symbol": "SuccessStoriesScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/testimonials/TestimonialsScreen.kt",
+      "symbol": "TestimonialsScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/timeline/RelationshipTimelineScreen.kt",
+      "symbol": "RelationshipTimelineScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/verification/VerificationScreen.kt",
+      "symbol": "VerificationScreen",
+      "status": "BETA",
+      "exposure": "reachable",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/videoprofile/VideoProfileScreen.kt",
+      "symbol": "VideoProfileScreen",
+      "status": "BETA",
+      "exposure": "flagged",
+      "requiredFlag": "KEY_SHOW_VIDEO_PROFILES"
+    },
+    {
+      "path": "ui/wedding/WeddingPlannerScreen.kt",
+      "symbol": "WeddingPlannerScreen",
+      "status": "POST_LAUNCH",
+      "exposure": "hidden",
+      "requiredFlag": null
+    },
+    {
+      "path": "ui/whoviewed/WhoViewedScreen.kt",
+      "symbol": "WhoViewedScreen",
+      "status": "READY",
+      "exposure": "reachable",
+      "requiredFlag": null
+    }
+  ]
+}

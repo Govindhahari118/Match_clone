@@ -42,12 +42,23 @@ function baseProfile(overrides = {}) {
     isPremium: false,
     isVerified: false,
     verificationLevel: 0,
-    subscriptionPlan: 'FREE',
-    subscriptionExpiry: 0,
     stealthMode: false,
     ...overrides,
   };
 }
+
+test('profile create rejects billing metadata even when values look free', async () => {
+  const db = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(doc(db, 'users/alice'), baseProfile({
+    subscriptionPlan: 'FREE',
+  })));
+  await assertFails(setDoc(doc(db, 'users/alice'), baseProfile({
+    subscriptionExpiry: 0,
+  })));
+  await assertFails(setDoc(doc(db, 'users/alice'), baseProfile({
+    paymentId: 'play_fake',
+  })));
+});
 
 for (const field of ['email', 'phoneNumber', 'dateOfBirth', 'rasi', 'nakshatra', 'manglik', 'birthTime', 'birthPlace', 'incomeBand']) {
   test(`public profile rejects private field ${field}`, async () => {

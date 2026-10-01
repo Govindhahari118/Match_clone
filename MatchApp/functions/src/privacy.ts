@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
 
 const CONTACT_LIMITS: Record<string, number> = {
   SILVER_3M: 75,
@@ -66,7 +67,8 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
   const targetRef = db.collection("users").doc(targetUid);
   const privateRef = db.collection("userPrivate").doc(targetUid);
   const matchRef = db.collection("matches").doc(matchId);
-  const usageRef = db.collection("subscriptions").doc(uid).collection("usage").doc("current");
+  const subscriptionRef = db.collection("subscriptions").doc(uid);
+  const usageRef = subscriptionRef.collection("usage").doc("current");
 
   return db.runTransaction(async (tx) => {
     const [
@@ -74,6 +76,7 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
       targetSnap,
       targetPrivateSnap,
       matchSnap,
+      subscriptionSnap,
       usageSnap,
       outgoingBlock,
       incomingBlock,
@@ -86,6 +89,7 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
       tx.get(targetRef),
       tx.get(privateRef),
       tx.get(matchRef),
+      tx.get(subscriptionRef),
       tx.get(usageRef),
       tx.get(outgoingBlockRef),
       tx.get(incomingBlockRef),
@@ -136,18 +140,17 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     }
 
     const user = userSnap.data() || {};
-    const planId = String(user.subscriptionPlan || user.premiumPlan || "FREE");
+    const membership = resolveMembershipState(subscriptionSnap.data(), user);
+    const planId = membership.planId;
     const contactLimit = CONTACT_LIMITS[planId] || 0;
-    const expiry = user.premiumUntil instanceof admin.firestore.Timestamp
-      ? user.premiumUntil.toMillis() : Number(user.subscriptionExpiry || 0);
-    if (user.isPremium !== true || expiry <= Date.now() || contactLimit <= 0) {
+    if (!membership.active || contactLimit <= 0) {
       throw new functions.https.HttpsError("permission-denied", "Active paid membership required");
     }
 
     const phoneNumber = String(targetPrivateSnap.data()?.phoneNumber || "").trim();
     if (!phoneNumber) throw new functions.https.HttpsError("failed-precondition", "This member has not shared a phone number");
 
-    const paymentId = String(user.paymentId || "");
+    const paymentId = membership.paymentId;
     if (!paymentId) throw new functions.https.HttpsError("failed-precondition", "Membership entitlement is incomplete");
     const usage = usageSnap.data() || {};
     const sameEntitlement = usage.paymentId === paymentId;

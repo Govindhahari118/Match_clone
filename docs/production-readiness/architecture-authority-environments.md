@@ -1,6 +1,6 @@
 # Matree architecture, authority and environment map
 
-> Applies to `gpt/matree-pin-to-pin-completion-20260925`.
+> Applies to `gpt/matree-master-plan-hardening-20260929` (PR #22).
 > This records repository-enforceable boundaries. Production project IDs, provider credentials,
 > enforcement switches and deployment proof remain operator evidence and are not invented here.
 
@@ -67,6 +67,8 @@ Optional features default to OFF unless the trusted project enables them:
 - NRI features
 - AI icebreakers
 - daily rewards
+- Nearby
+- Kundali
 
 Operational keys also include maintenance mode/message, forced/recommended update version,
 free-message limit, daily-like limit, Boost duration, photo limits and minimum photos for Boost.

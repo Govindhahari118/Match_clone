@@ -128,6 +128,11 @@ object TenPorutham {
         nakshatraBride: String, rasiBride: String,
         nakshatraGroom: String, rasiGroom: String
     ): FullResult {
+        require(nakshatraIndex.containsKey(nakshatraBride)) { "Unknown bride Nakshatra" }
+        require(nakshatraIndex.containsKey(nakshatraGroom)) { "Unknown groom Nakshatra" }
+        require(rasiIndex.containsKey(rasiBride)) { "Unknown bride Rasi" }
+        require(rasiIndex.containsKey(rasiGroom)) { "Unknown groom Rasi" }
+
         val results = mutableListOf<PoruthamResult>()
 
         // 1. Dina Porutham
@@ -163,8 +168,8 @@ object TenPorutham {
     }
 
     private fun checkDina(brideNak: String, groomNak: String): PoruthamResult {
-        val bIdx = nakshatraIndex[brideNak] ?: 0
-        val gIdx = nakshatraIndex[groomNak] ?: 0
+        val bIdx = nakshatraIndex.getValue(brideNak)
+        val gIdx = nakshatraIndex.getValue(groomNak)
         val diff = ((gIdx - bIdx + 27) % 27) + 1
         // Dina matches if the count from bride to groom's nakshatra (mod 9) is not 2,4,6,8
         val remainder = diff % 9
@@ -174,8 +179,8 @@ object TenPorutham {
     }
 
     private fun checkGana(brideNak: String, groomNak: String): PoruthamResult {
-        val gB = ganaMap[brideNak] ?: "Manushya"
-        val gG = ganaMap[groomNak] ?: "Manushya"
+        val gB = ganaMap.getValue(brideNak)
+        val gG = ganaMap.getValue(groomNak)
         val matched = when {
             gB == gG -> true
             gB == "Deva" && gG == "Manushya" -> true
@@ -187,8 +192,8 @@ object TenPorutham {
     }
 
     private fun checkMahendra(brideNak: String, groomNak: String): PoruthamResult {
-        val bIdx = nakshatraIndex[brideNak] ?: 0
-        val gIdx = nakshatraIndex[groomNak] ?: 0
+        val bIdx = nakshatraIndex.getValue(brideNak)
+        val gIdx = nakshatraIndex.getValue(groomNak)
         val diff = ((gIdx - bIdx + 27) % 27) + 1
         // Mahendra matches if count is 4,7,10,13,16,19,22,25
         val matched = diff % 3 == 1 && diff > 1
@@ -197,8 +202,8 @@ object TenPorutham {
     }
 
     private fun checkStreeDeergha(brideNak: String, groomNak: String): PoruthamResult {
-        val bIdx = nakshatraIndex[brideNak] ?: 0
-        val gIdx = nakshatraIndex[groomNak] ?: 0
+        val bIdx = nakshatraIndex.getValue(brideNak)
+        val gIdx = nakshatraIndex.getValue(groomNak)
         val diff = ((gIdx - bIdx + 27) % 27) + 1
         // Stree Deergha: count from bride's to groom's nakshatra > 13
         val matched = diff > 13
@@ -207,8 +212,8 @@ object TenPorutham {
     }
 
     private fun checkYoni(brideNak: String, groomNak: String): PoruthamResult {
-        val yB = yoniMap[brideNak] ?: "Unknown"
-        val yG = yoniMap[groomNak] ?: "Unknown"
+        val yB = yoniMap.getValue(brideNak)
+        val yG = yoniMap.getValue(groomNak)
         val isEnemy = yoniEnemies.any { it == setOf(yB, yG) }
         val matched = !isEnemy
         return PoruthamResult("Yoni", "యోని", matched,
@@ -216,8 +221,8 @@ object TenPorutham {
     }
 
     private fun checkRasi(rasiBride: String, rasiGroom: String): PoruthamResult {
-        val bIdx = rasiIndex[rasiBride] ?: 0
-        val gIdx = rasiIndex[rasiGroom] ?: 0
+        val bIdx = rasiIndex.getValue(rasiBride)
+        val gIdx = rasiIndex.getValue(rasiGroom)
         val diff = ((gIdx - bIdx + 12) % 12) + 1
         // Rasi matches if groom's is 2,3,4,5,6 signs from bride, or same
         val matched = diff in listOf(1, 2, 3, 4, 5, 6, 7)
@@ -226,8 +231,8 @@ object TenPorutham {
     }
 
     private fun checkRasiAdhipathi(rasiBride: String, rasiGroom: String): PoruthamResult {
-        val lordB = rasiLord[rasiBride] ?: "Unknown"
-        val lordG = rasiLord[rasiGroom] ?: "Unknown"
+        val lordB = rasiLord.getValue(rasiBride)
+        val lordG = rasiLord.getValue(rasiGroom)
         val matched = when {
             lordB == lordG -> true // Same lord = always compatible
             friendlyPlanets.any { it == setOf(lordB, lordG) } -> true
@@ -238,8 +243,8 @@ object TenPorutham {
     }
 
     private fun checkVasya(rasiBride: String, rasiGroom: String): PoruthamResult {
-        val vB = vasyaMap[rasiBride] ?: "Dwipada"
-        val vG = vasyaMap[rasiGroom] ?: "Dwipada"
+        val vB = vasyaMap.getValue(rasiBride)
+        val vG = vasyaMap.getValue(rasiGroom)
         // Vasya matches if same group or compatible groups
         val matched = vB == vG || (vB == "Dwipada" || vG == "Dwipada")
         return PoruthamResult("Vasya", "వశ్య", matched,
@@ -247,8 +252,8 @@ object TenPorutham {
     }
 
     private fun checkRajju(brideNak: String, groomNak: String): PoruthamResult {
-        val rB = rajjuMap[brideNak] ?: "Nabhi"
-        val rG = rajjuMap[groomNak] ?: "Nabhi"
+        val rB = rajjuMap.getValue(brideNak)
+        val rG = rajjuMap.getValue(groomNak)
         // Rajju is GOOD when bride and groom are NOT in same rajju
         val matched = rB != rG
         return PoruthamResult("Rajju", "రజ్జు", matched,
@@ -256,8 +261,8 @@ object TenPorutham {
     }
 
     private fun checkVedha(brideNak: String, groomNak: String): PoruthamResult {
-        val bIdx = nakshatraIndex[brideNak] ?: 0
-        val gIdx = nakshatraIndex[groomNak] ?: 0
+        val bIdx = nakshatraIndex.getValue(brideNak)
+        val gIdx = nakshatraIndex.getValue(groomNak)
         // Vedha occurs if bride and groom nakshatras form an obstruction pair
         val hasVedha = vedhaPairs.any { (a, b) ->
             (bIdx == a && gIdx == b) || (bIdx == b && gIdx == a)

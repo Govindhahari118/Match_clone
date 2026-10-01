@@ -1,6 +1,6 @@
 # Matree production route inventory
 
-> Scope: reachable production navigation on `gpt/matree-pin-to-pin-completion-20260925`.
+> Scope: reachable production navigation on `gpt/matree-master-plan-hardening-20260929`.
 >
 > This inventory classifies navigation exposure, not overall release readiness. A `READY` route still
 > depends on the exact-head CI, Firebase/provider configuration, security rules and external gates.
@@ -19,7 +19,8 @@
 |---|---|---|
 | Home | READY | Real account/profile state and real navigation callbacks only. |
 | Discover / Matches | READY | Server/Firebase eligibility and current profile data; hard rules remain authoritative. |
-| Nearby | BETA | Foreground-only location, private exact coordinates, server-derived coarse distance; production location/load evidence still required. |
+| Nearby | BETA / OFF BY DEFAULT | Foreground-only location, private exact coordinates and server-derived coarse distance. Production is fail-closed behind Android Remote Config `enable_nearby` **and** backend Functions config `features.nearby=true`; production location/load evidence is required before enabling both. |
+| NRI discovery | BETA / OFF BY DEFAULT | Convenience route over Matree's normal server-authorized NRI/country filters with reciprocal preferences/privacy and no synthetic inventory. The dedicated route is hidden behind Android Remote Config `enable_nri_features`; NRI/country filters themselves remain core discovery and saved-preference capabilities. |
 | Interests | READY | Server-authoritative interest transitions and block checks. |
 | Shortlist | READY | Server-backed shortlist; no demo fallback. |
 | Messages list | READY | Real conversations only. |
@@ -31,9 +32,19 @@
 | Language | READY | Supported locale catalog only. |
 | Notifications | READY | Server-persisted real events, FCM delivery and cross-device read state. |
 | Who Viewed | READY | Server-recorded view events; client cannot forge view authority. |
-| Kundali | BETA | Available only where applicable; provider/production evidence required for any provider-backed interpretation. |
+| Recently joined | READY | Uses the same server-authorized discovery path with authoritative profile creation timestamps and normal privacy/block/reciprocal-preference checks. |
+| Family details | READY | Edits the signed-in member's real family-background fields with cloud-authoritative profile revision/sync handling and bounded inputs. |
+| Family access | READY | Explicit 24-hour invite flow, revocable view/edit permissions, server allowlisted non-sensitive edits, lifecycle rechecks and audit trail. |
+| Assisted matchmaking request | READY | Records a human-service callback/request with server status/cancellation and ops workflow. It does not purchase, activate or guarantee an RM service; pricing/service activation remain operator-confirmed. |
+| Profile analytics | READY | Authenticated callable derives all-time counts from real profile views, interests, matches, chats and shortlists; no synthetic ranks or demographic estimates. |
+| Match insights | READY | Browse real eligible recommendations with computed questionnaire/astrology signals only; no invented personality traits, relationship timelines or success predictions. |
+| Compatibility breakdown | READY | Per-profile view of the real versioned compatibility factors used by matching, with missing dimensions omitted/renormalized and astrology explicitly labeled beta. |
+| Safety Center | READY | Truthful guidance over real block/report/privacy/location/verification controls; no invented fraud statistics or unsupported encryption claims. |
+| Kundali | BETA / OFF BY DEFAULT | Available only where applicable. Compatibility is calculated by a versioned trusted backend policy. Production is fail-closed behind Android Remote Config `enable_kundali` **and** backend Functions config `features.kundali=true`; independent reference validation is required before enabling both. |
 | Membership / Pricing | PREMIUM | Google Play is the single digital-entitlement authority. Displayed paid benefits are limited to enforced duration/contact quotas; production Play Console evidence is still required. |
-| Verification | BETA | Server-authoritative statuses; production KYC/provider evidence required. |
+| Verification | BETA | Server-authoritative government-ID statuses; production KYC/provider evidence required for provider-backed advanced identity methods. |
+| Phone verification | READY | Firebase Phone Auth credential linking plus backend confirmation; explicitly separate from government-ID/KYC verification. |
+| Video profile | BETA / OFF BY DEFAULT | Consented protected upload, server-owned moderation, audited review and backend-only publication/removal. New uploads/approvals are fail-closed behind Android Remote Config `show_video_profiles` **and** backend Functions config `features.video_profiles=true`; disabled uploads are purged server-side and unsubmitted enabled uploads expire through orphan cleanup. |
 | Privacy dashboard | READY | Real privacy settings/relationship controls. |
 | Help | READY | Support/help navigation; support operations depend on backend records where shown. |
 | Terms / Privacy / Guidelines / Security / Refunds | READY | Static legal/support surfaces; final operator/legal approval is external. |
@@ -44,18 +55,30 @@
 The following source surfaces remain **HIDDEN/UNAVAILABLE** unless they are separately promoted after
 their end-to-end provider/data/entitlement contract passes the same Definition of Done:
 
-`AI Match Insights`, `Profile Analytics`, `Assisted Matchmaking`, `Background Check`,
+`Background Check`,
 `Bio Generator`, `Profile Boost standalone surface`, `Circles`, `Community Browse`,
-`Counselling`, `Compatibility Deep Dive`, `Swipe Discovery`, `Live Events`, `Family tools`,
+`Counselling`, `Swipe Discovery`, `Live Events`,
 `Guides`, `Advanced Horoscope`, `Likes`, `Virtual Meet`, `Muhurat/Astro Calendar`,
-`NRI discovery`, `Photo Editor`, `Referral`, `Regions`, `Daily Rewards`, `Safety Center
-standalone surface`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
-`Testimonials`, `Relationship Timeline`, `Video Profile`, and `Wedding Planner`.
+`Referral`, `Regions`, `Daily Rewards`, `Second Marriage discovery`, `Secure Call`, `Success Stories`,
+`Testimonials`, `Relationship Timeline`, and `Wedding Planner`.
+
+`Video Profile` now has consented protected upload, server-owned moderation, audited operator review and backend-only publication/removal in source, but it remains hidden/off by default until real-device playback/upload, moderation-operations and performance evidence pass.
+
+`Profile photo upload` is production-backed through protected Storage plus server moderation; the old simulated Photo Editor controls were removed. The upload surface must not claim crop/filter/brightness transforms until transformed bytes are actually produced and validated.
 
 Their Kotlin files are not proof of product availability. They must not be re-added to production
 navigation merely because a screen renders. Provider-backed optional callables for the retired
 feature bundle/background-check prototype are also removed from the deployed Functions export
 surface; promotion requires a new audited backend/provider contract, not just re-enabling a route.
+
+## Exhaustive screen classification
+
+The route table above describes launch navigation. The complete Android screen inventory is maintained
+in `docs/production-readiness/screen-classification.json`. Production CI discovers every
+`app/src/main/**/**Screen.kt` and fails if a screen is unclassified, if a STUB/UNSAFE/POST_LAUNCH
+screen becomes routed, or if a flagged BETA route loses its fail-closed Remote Config default.
+This makes source presence non-authoritative: adding a screen file cannot silently make it a launch
+feature.
 
 ## Deep-link exposure
 
@@ -68,3 +91,8 @@ domain and matching `.well-known/assetlinks.json` exist. No placeholder domain i
 A hidden/BETA route may become READY/PREMIUM only when UI + state + authorization + persistence +
 failure/offline handling + tests + telemetry + provider/operator evidence (where relevant) all pass on
 the same release candidate.
+
+
+## Fail-closed release promotion
+
+BETA capability presence in source does not make it launch-visible. `enable_nearby`, `enable_kundali`, `enable_nri_features` and `show_video_profiles` default to `false` in the Android Remote Config contract. Drawer, Home, profile and direct/deep navigation paths enforce the applicable flags. Nearby, Kundali and Video Profile additionally require explicit backend Functions feature flags, so a modified client cannot promote those capabilities by invoking callables directly. Video uploads made while the backend feature is disabled are deleted by a Storage trigger. A direct navigation attempt while disabled renders a truthful unavailable state rather than entering the feature.

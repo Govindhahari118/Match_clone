@@ -5,6 +5,7 @@ import {
   persistAndSendNotification,
   requireAppCheck,
 } from "./shared";
+import { deviceAccountSwitchIsReviewSignal } from "./riskSignalPolicy";
 
 type NotificationPayload = {
   userId: string;
@@ -54,8 +55,13 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
   await db.runTransaction(async (tx) => {
     const owner = await tx.get(ownerRef);
     const priorUid = owner.data()?.uid;
-    if (typeof priorUid === "string" && priorUid && priorUid !== uid) {
-      tx.delete(db.collection("fcmTokens").doc(priorUid).collection("devices").doc(deviceId));
+    if (deviceAccountSwitchIsReviewSignal(priorUid, uid)) {
+      tx.delete(db.collection("fcmTokens").doc(String(priorUid)).collection("devices").doc(deviceId));
+      tx.set(db.collection("riskSignals").doc(uid), {
+        sharedDeviceAccountSwitchCount: admin.firestore.FieldValue.increment(1),
+        lastSharedDeviceSignalAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
     }
 
     tx.set(deviceRef, {
@@ -143,8 +149,7 @@ async function chatNotificationStillAllowed(
 
 async function deliverPersistedNotification(
   notificationId: string,
-  payload: NotificationPayload,
-  _channelId: string
+  payload: NotificationPayload
 ): Promise<void> {
   const pushType = payload.type === "INTEREST" ? "interest_received" :
     payload.type === "MATCH" ? "mutual_match" :
@@ -186,8 +191,7 @@ export const onInterestCreated = functions.firestore
         entityId: fromUid,
         deepLink: "matrimonyconnect://interests",
         fromFirebaseUid: fromUid,
-      },
-      "match_interests"
+      }
     );
   });
 
@@ -212,8 +216,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid2,
           deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid2,
-        },
-        "match_matches"
+        }
       ),
       deliverPersistedNotification(
         `match_${context.params.matchId}_${uid2}`,
@@ -226,8 +229,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid1,
           deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid1,
-        },
-        "match_matches"
+        }
       ),
     ]);
   });
@@ -256,7 +258,6 @@ export const onNewMessage = functions.firestore
         entityId: context.params.threadId,
         deepLink: "matrimonyconnect://notifications",
         fromFirebaseUid,
-      },
-      "match_messages"
+      }
     );
   });

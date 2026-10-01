@@ -19,8 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.match.app.domain.subscription.SubscriptionPlans
 
-private data class ScoreItem(val label: String, val score: Int)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompatibilityDeepDiveScreen(
@@ -71,20 +69,12 @@ fun CompatibilityDeepDiveScreen(
                 Modifier.padding(padding).fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
+            state.error != null -> EmptyCompatState(
+                modifier = Modifier.padding(padding),
+                message = state.error.orEmpty()
+            )
             else -> {
-                val scores = listOf(
-                    ScoreItem("Astrology", state.astrology),
-                    ScoreItem("Religion & community", state.religionCaste),
-                    ScoreItem("Education & career", state.educationCareer),
-                    ScoreItem("Location", state.location),
-                    ScoreItem("Age preference", state.age),
-                    ScoreItem("Family values", state.familyValues),
-                    ScoreItem("Lifestyle", state.lifestyle),
-                    ScoreItem("Physical preferences", state.physical),
-                    ScoreItem("Personality", state.personality)
-                )
-
-                if (scores.all { it.score == 0 } && state.totalPct == 0) {
+                if (state.factors.isEmpty()) {
                     EmptyCompatState(
                         modifier = Modifier.padding(padding),
                         message = "Compatibility data is not available for this profile yet."
@@ -113,11 +103,18 @@ fun CompatibilityDeepDiveScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text("Overall compatibility signal", style = MaterialTheme.typography.titleMedium)
+                                if (state.formulaVersion.isNotBlank()) {
+                                    Text(
+                                        "Formula ${state.formulaVersion}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
 
-                        scores.forEach { item ->
-                            ScoreCard(item)
+                        state.factors.forEach { factor ->
+                            FactorCard(factor)
                         }
 
                         Surface(
@@ -128,7 +125,7 @@ fun CompatibilityDeepDiveScreen(
                                 Icon(Icons.Filled.Info, null, tint = MaterialTheme.colorScheme.secondary)
                                 Spacer(Modifier.width(10.dp))
                                 Text(
-                                    "These percentages are generated from profile fields and the app's matching engine. They are guidance signals, not predictions of marriage success or relationship outcomes.",
+                                    "This breakdown uses the same versioned factors as Matree's production matching repository. Missing dimensions are omitted and remaining weights are renormalized. Astrology, when applicable, remains a beta compatibility signal rather than a prediction or full birth-chart assessment.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
@@ -143,15 +140,33 @@ fun CompatibilityDeepDiveScreen(
 }
 
 @Composable
-private fun ScoreCard(item: ScoreItem) {
-    val safe = item.score.coerceIn(0, 100)
+private fun FactorCard(item: CompatFactorUi) {
+    val safe = item.scorePct.coerceIn(0, 100)
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("$safe%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    item.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "$safe%",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-            LinearProgressIndicator(progress = { safe / 100f }, modifier = Modifier.fillMaxWidth().height(8.dp))
+            LinearProgressIndicator(
+                progress = { safe / 100f },
+                modifier = Modifier.fillMaxWidth().height(8.dp)
+            )
+            Text(
+                "Configured weight: ${item.configuredWeightPct.coerceIn(0, 100)}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -9,6 +9,11 @@ package com.match.app.domain.questionnaire
  */
 object Questionnaire {
 
+    data class DecodedAnswers(
+        val likert: Map<Int, Int>,
+        val interests: Map<Int, Set<String>>
+    )
+
     /** 10 single-choice Likert-style questions. */
     data class LikertQuestion(val id: Int, val prompt: String)
 
@@ -68,5 +73,29 @@ object Questionnaire {
             }
         }
         return vec
+    }
+
+    /** Reverse the canonical vector so owner-only server state can restore the editing form. */
+    fun decode(vector: FloatArray): DecodedAnswers? {
+        if (vector.size != VECTOR_LENGTH) return null
+        var index = 0
+        val likert = linkedMapOf<Int, Int>()
+        LIKERT.forEach { question ->
+            val value = vector[index++]
+            if (!value.isFinite() || value !in -1f..1f) return null
+            likert[question.id] = (value * 2f + 3f).toInt().coerceIn(1, 5)
+        }
+
+        val interests = linkedMapOf<Int, Set<String>>()
+        INTERESTS.forEach { question ->
+            val selected = linkedSetOf<String>()
+            question.options.forEach { option ->
+                val value = vector[index++]
+                if (!value.isFinite() || value !in -1f..1f) return null
+                if (value > 0.5f) selected += option
+            }
+            interests[question.id] = selected
+        }
+        return DecodedAnswers(likert = likert, interests = interests)
     }
 }

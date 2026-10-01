@@ -5,7 +5,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 const projectId = 'matchapp-chat-atomic-test';
 let env;
@@ -20,25 +20,60 @@ before(async () => {
 after(async () => env?.cleanup());
 beforeEach(async () => env.clearFirestore());
 
-async function seedUsersAndMutual() {
+async function seedUsersAndMatch() {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    await setDoc(doc(db, 'users/alice'), { firebaseUid: 'alice', stealthMode: false });
-    await setDoc(doc(db, 'users/bob'), { firebaseUid: 'bob', stealthMode: false });
-    await setDoc(doc(db, 'interests/alice_bob'), { fromUid: 'alice', toUid: 'bob' });
-    await setDoc(doc(db, 'interests/bob_alice'), { fromUid: 'bob', toUid: 'alice' });
+    await setDoc(doc(db, 'users/alice'), {
+      firebaseUid: 'alice',
+      accountStatus: 'ACTIVE',
+      stealthMode: false,
+    });
+    await setDoc(doc(db, 'users/bob'), {
+      firebaseUid: 'bob',
+      accountStatus: 'ACTIVE',
+      stealthMode: false,
+    });
+    await setDoc(doc(db, 'matches/alice_bob'), {
+      users: ['alice', 'bob'],
+      createdAt: Date.now(),
+    });
   });
 }
 
-function firstMessageBatch(db, body = 'hello') {
+async function seedServerThreadAndMessage({
+  deliveredAt = null,
+  isRead = false,
+  readAt = null,
+} = {}) {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats/thread1'), {
+      participantUids: ['alice', 'bob'],
+      lastMessage: 'hello',
+      lastSentAt: Date.now(),
+    });
+    const message = {
+      body: 'hello',
+      sentAt: Date.now(),
+      isRead,
+      fromFirebaseUid: 'alice',
+      toFirebaseUid: 'bob',
+    };
+    if (deliveredAt) message.deliveredAt = deliveredAt;
+    if (readAt) message.readAt = readAt;
+    await setDoc(doc(db, 'chats/thread1/messages/client_1234567890123456'), message);
+  });
+}
+
+function forgedFirstMessageBatch(db) {
   const batch = writeBatch(db);
   batch.set(doc(db, 'chats/thread1'), {
     participantUids: ['alice', 'bob'],
-    lastMessage: body,
+    lastMessage: 'hello',
     lastSentAt: Date.now(),
   });
-  batch.set(doc(db, 'chats/thread1/messages/client_1234567890'), {
-    body,
+  batch.set(doc(db, 'chats/thread1/messages/client_1234567890123456'), {
+    body: 'hello',
     sentAt: Date.now(),
     isRead: false,
     fromFirebaseUid: 'alice',
@@ -47,116 +82,61 @@ function firstMessageBatch(db, body = 'hello') {
   return batch;
 }
 
-test('mutual members may atomically create a thread and first message', async () => {
-  await seedUsersAndMutual();
+test('clients cannot create a chat thread or first message even for a valid match', async () => {
+  await seedUsersAndMatch();
   const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(firstMessageBatch(alice).commit());
+
+  await assertFails(forgedFirstMessageBatch(alice).commit());
+  await assertFails(setDoc(doc(alice, 'chats/thread1'), {
+    participantUids: ['alice', 'bob'],
+    lastMessage: '',
+    lastSentAt: 0,
+  }));
 });
 
-test('first-message batch is denied without mutual interests', async () => {
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await setDoc(doc(db, 'users/alice'), { firebaseUid: 'alice', stealthMode: false });
-    await setDoc(doc(db, 'users/bob'), { firebaseUid: 'bob', stealthMode: false });
-    await setDoc(doc(db, 'interests/alice_bob'), { fromUid: 'alice', toUid: 'bob' });
-  });
+test('clients cannot append messages or mutate server-owned thread previews', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
   const alice = env.authenticatedContext('alice').firestore();
-  await assertFails(firstMessageBatch(alice).commit());
-});
 
-test('first-message batch is denied when either member blocked the other', async () => {
-  await seedUsersAndMutual();
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'blocks/bob/blocked/alice'), { blockedAt: Date.now() });
-  });
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertFails(firstMessageBatch(alice).commit());
-});
-
-
-test('message attachments must belong to the same thread and one media type', async () => {
-  await seedUsersAndMutual();
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertSucceeds(firstMessageBatch(alice).commit());
-
-  const base = {
-    body: 'attachment',
+  await assertFails(setDoc(doc(alice, 'chats/thread1/messages/client_forged_123456789'), {
+    body: 'forged',
     sentAt: Date.now(),
     isRead: false,
     fromFirebaseUid: 'alice',
     toFirebaseUid: 'bob',
-  };
-
-  await assertFails(setDoc(
-    doc(alice, 'chats/thread1/messages/client_bad_other_thread'),
-    {
-      ...base,
-      imageUri: 'chat-media/another-thread/client_1234567890123456.jpg',
-    },
-  ));
-
-  await assertFails(setDoc(
-    doc(alice, 'chats/thread1/messages/client_wrong_object_123'),
-    {
-      ...base,
-      imageUri: 'chat-media/thread1/different_message_123.jpg',
-    },
-  ));
-
-  await assertFails(setDoc(
-    doc(alice, 'chats/thread1/messages/client_bad_two_media'),
-    {
-      ...base,
-      imageUri: 'chat-media/thread1/client_1234567890123456.jpg',
-      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
-      voiceDurationMs: 1200,
-    },
-  ));
-
-  await assertFails(setDoc(
-    doc(alice, 'chats/thread1/messages/client_bad_voice_duration'),
-    {
-      ...base,
-      voiceUri: 'chat-media/thread1/client_1234567890123456.m4a',
-      voiceDurationMs: 100,
-    },
-  ));
-
-  await assertSucceeds(setDoc(
-    doc(alice, 'chats/thread1/messages/client_good_image_123456'),
-    {
-      ...base,
-      imageUri: 'chat-media/thread1/client_good_image_123456.jpg',
-    },
-  ));
-
-  await assertSucceeds(setDoc(
-    doc(alice, 'chats/thread1/messages/client_good_voice_123456'),
-    {
-      ...base,
-      voiceUri: 'chat-media/thread1/client_good_voice_123456.m4a',
-      voiceDurationMs: 1200,
-    },
-  ));
+  }));
+  await assertFails(updateDoc(doc(alice, 'chats/thread1'), {
+    lastMessage: 'forged preview',
+    lastSentAt: Date.now(),
+  }));
 });
 
-test('empty chat bodies are rejected at the rules boundary', async () => {
-  await seedUsersAndMutual();
-  const alice = env.authenticatedContext('alice').firestore();
-  await assertFails(firstMessageBatch(alice, '').commit());
-});
+test('only participants can read a server-created thread and messages', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
 
-test('only recipient may acknowledge delivery and read state', async () => {
-  await seedUsersAndMutual();
   const alice = env.authenticatedContext('alice').firestore();
   const bob = env.authenticatedContext('bob').firestore();
-  await assertSucceeds(firstMessageBatch(alice).commit());
+  const mallory = env.authenticatedContext('mallory').firestore();
 
-  const aliceMessage = doc(alice, 'chats/thread1/messages/client_1234567890');
-  const bobMessage = doc(bob, 'chats/thread1/messages/client_1234567890');
+  await assertSucceeds(getDoc(doc(alice, 'chats/thread1')));
+  await assertSucceeds(getDoc(doc(bob, 'chats/thread1')));
+  await assertFails(getDoc(doc(mallory, 'chats/thread1')));
+  await assertSucceeds(getDoc(doc(bob, 'chats/thread1/messages/client_1234567890123456')));
+  await assertFails(getDoc(doc(mallory, 'chats/thread1/messages/client_1234567890123456')));
+});
+
+test('only recipient may acknowledge delivery and delivered-before-read is enforced', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
+
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const aliceMessage = doc(alice, 'chats/thread1/messages/client_1234567890123456');
+  const bobMessage = doc(bob, 'chats/thread1/messages/client_1234567890123456');
 
   await assertFails(updateDoc(aliceMessage, { deliveredAt: serverTimestamp() }));
-  await assertFails(updateDoc(bobMessage, { readAt: serverTimestamp() }));
   await assertFails(updateDoc(bobMessage, {
     isRead: true,
     readAt: serverTimestamp(),
@@ -169,11 +149,9 @@ test('only recipient may acknowledge delivery and read state', async () => {
   await assertFails(updateDoc(bobMessage, { isRead: false }));
 });
 
-test('block revokes recipient receipt updates immediately', async () => {
-  await seedUsersAndMutual();
-  const alice = env.authenticatedContext('alice').firestore();
-  const bob = env.authenticatedContext('bob').firestore();
-  await assertSucceeds(firstMessageBatch(alice).commit());
+test('block immediately revokes thread, message and receipt access', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
 
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'blocks/alice/blocked/bob'), {
@@ -182,8 +160,28 @@ test('block revokes recipient receipt updates immediately', async () => {
     });
   });
 
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(bob, 'chats/thread1')));
+  await assertFails(getDoc(doc(bob, 'chats/thread1/messages/client_1234567890123456')));
   await assertFails(updateDoc(
-    doc(bob, 'chats/thread1/messages/client_1234567890'),
+    doc(bob, 'chats/thread1/messages/client_1234567890123456'),
+    { deliveredAt: serverTimestamp() },
+  ));
+});
+
+test('inactive account immediately loses chat read and receipt access', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), 'users/bob'), { accountStatus: 'SUSPENDED' });
+  });
+
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(bob, 'chats/thread1')));
+  await assertFails(getDoc(doc(bob, 'chats/thread1/messages/client_1234567890123456')));
+  await assertFails(updateDoc(
+    doc(bob, 'chats/thread1/messages/client_1234567890123456'),
     { deliveredAt: serverTimestamp() },
   ));
 });

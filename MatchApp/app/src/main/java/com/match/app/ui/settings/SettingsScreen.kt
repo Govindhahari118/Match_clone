@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,6 +23,7 @@ import com.match.app.core.telemetry.MatreeTelemetry
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.local.entity.SavedSearchEntity
 import com.match.app.data.local.entity.UserEntity
+import com.match.app.data.repo.AccountDeviceSession
 import com.match.app.data.repo.AppearancePreferenceRepository
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.AuthResult
@@ -99,6 +101,16 @@ class SettingsViewModel @Inject constructor(
     private val _searchMessage = MutableStateFlow<String?>(null)
     val searchMessage: StateFlow<String?> = _searchMessage.asStateFlow()
 
+    private val _devices = MutableStateFlow<List<AccountDeviceSession>>(emptyList())
+    val devices: StateFlow<List<AccountDeviceSession>> = _devices.asStateFlow()
+    private val _sessionBusy = MutableStateFlow(false)
+    val sessionBusy: StateFlow<Boolean> = _sessionBusy.asStateFlow()
+
+    private val _exportBusy = MutableStateFlow(false)
+    val exportBusy: StateFlow<Boolean> = _exportBusy.asStateFlow()
+    private val _exportUrl = MutableStateFlow<String?>(null)
+    val exportUrl: StateFlow<String?> = _exportUrl.asStateFlow()
+
     private val _profilePaused = MutableStateFlow(false)
     val profilePaused: StateFlow<Boolean> = _profilePaused.asStateFlow()
     private val _lifecycleBusy = MutableStateFlow(false)
@@ -108,6 +120,23 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _profilePaused.value = authRepo.getMatrimonyPaused()
         }
+        refreshDevices()
+    }
+
+    fun refreshDevices() = viewModelScope.launch {
+        authRepo.listMyDevices()
+            .onSuccess { _devices.value = it }
+            .onFailure { _searchMessage.value = "Could not load signed-in devices." }
+    }
+
+    fun signOutAllDevices() = viewModelScope.launch {
+        if (_sessionBusy.value) return@launch
+        _sessionBusy.value = true
+        authRepo.signOutAllDevices()
+            .onFailure {
+                _sessionBusy.value = false
+                _searchMessage.value = "Could not revoke all sessions. Please retry."
+            }
     }
 
     fun useAutomaticTheme() = updateTheme(ThemePreference.AUTOMATIC)
@@ -156,6 +185,24 @@ class SettingsViewModel @Inject constructor(
     fun savedSearchToFilter(search: SavedSearchEntity): MatchFilter = savedSearchRepo.toFilter(search)
     fun consumeSearchMessage() { _searchMessage.value = null }
 
+    fun requestDataExport() = viewModelScope.launch {
+        if (_exportBusy.value) return@launch
+        _exportBusy.value = true
+        authRepo.createMyDataExport()
+            .onSuccess { link ->
+                _exportUrl.value = link.downloadUrl
+                _searchMessage.value =
+                    "Your protected export is ready. The download link expires shortly."
+            }
+            .onFailure { error ->
+                _searchMessage.value = error.message?.take(180)
+                    ?: "Could not generate your data export. Re-authenticate and try again."
+            }
+        _exportBusy.value = false
+    }
+
+    fun consumeExportUrl() { _exportUrl.value = null }
+
     fun setProfilePaused(paused: Boolean) = viewModelScope.launch {
         if (_lifecycleBusy.value) return@launch
         _lifecycleBusy.value = true
@@ -196,6 +243,8 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(
     onBack: () -> Unit,
     onGoLanguage: () -> Unit = {},
+    onGoPartnerPreferences: () -> Unit = {},
+    onGoFamilyAccess: () -> Unit = {},
     onUpgrade: () -> Unit = {},
     onAccountDeleted: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel()
@@ -212,6 +261,11 @@ fun SettingsScreen(
     val searchMessage by vm.searchMessage.collectAsState()
     val profilePaused by vm.profilePaused.collectAsState()
     val lifecycleBusy by vm.lifecycleBusy.collectAsState()
+    val devices by vm.devices.collectAsState()
+    val sessionBusy by vm.sessionBusy.collectAsState()
+    val exportBusy by vm.exportBusy.collectAsState()
+    val exportUrl by vm.exportUrl.collectAsState()
+    val uriHandler = LocalUriHandler.current
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by remember { mutableStateOf(false) }
     var saveSearchDialog by remember { mutableStateOf(false) }
@@ -234,6 +288,13 @@ fun SettingsScreen(
                 vm.resetError()
             }
             else -> Unit
+        }
+    }
+    LaunchedEffect(exportUrl) {
+        exportUrl?.let { url ->
+            runCatching { uriHandler.openUri(url) }
+                .onFailure { snackbar.showSnackbar("Could not open the protected export link.") }
+            vm.consumeExportUrl()
         }
     }
     LaunchedEffect(searchMessage) {
@@ -273,6 +334,47 @@ fun SettingsScreen(
                     }
                     user?.phoneNumber?.takeIf { it.isNotBlank() }?.let { SettingInfoRow(Icons.Filled.Phone, "Phone", maskPhone(it)) }
                     SettingInfoRow(Icons.Filled.Badge, "Profile ID", user?.matrimonyId?.ifBlank { "Being assigned" }.orEmpty())
+                }
+            }
+
+            Text("Matching preferences", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Card(
+                onClick = onGoPartnerPreferences,
+                modifier = Modifier.fillMaxWidth().testTag("settings_partner_preferences"),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Tune, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Partner preferences", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Set strict boundaries separately from preferred qualities. These are private and apply bilaterally in discovery.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Filled.ChevronRight, null)
+                }
+            }
+
+            Card(
+                onClick = onGoFamilyAccess,
+                modifier = Modifier.fillMaxWidth().testTag("settings_family_access"),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.FamilyRestroom, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Family access", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Invite, accept or revoke explicit family profile access. Delegated edits remain restricted by server policy.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Filled.ChevronRight, null)
                 }
             }
 
@@ -465,8 +567,8 @@ fun SettingsScreen(
             )
             SettingToggle(
                 icon = Icons.Filled.Notifications,
-                title = "Account & system",
-                subtitle = "Verification, safety, subscription and service updates.",
+                title = "Optional system updates",
+                subtitle = "Service and non-critical account updates. Security, safety and verification alerts remain enabled.",
                 checked = notificationPreferences.system,
                 onCheckedChange = { vm.setNotificationPreference("system", it) }
             )
@@ -490,6 +592,46 @@ fun SettingsScreen(
                 checked = biometric,
                 onCheckedChange = vm::setBiometricLock
             )
+
+            MatreeInfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Devices, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text("Signed-in devices", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (devices.isEmpty()) "No registered push installations found."
+                            else "${devices.size} registered installation${if (devices.size == 1) "" else "s"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        devices.take(3).forEach { device ->
+                            Text(
+                                listOf(device.platform, device.appVersion)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" • ")
+                                    .ifBlank { "Registered device" },
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    IconButton(onClick = vm::refreshDevices) {
+                        Icon(Icons.Filled.Refresh, "Refresh devices")
+                    }
+                }
+                MatreeSecondaryButton(
+                    text = if (sessionBusy) "Revoking sessions…" else "Sign out all devices",
+                    onClick = vm::signOutAllDevices,
+                    enabled = !sessionBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Filled.Logout
+                )
+                Text(
+                    "This revokes Firebase refresh tokens and removes registered push installations, including this device.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             HorizontalDivider()
             Text("Matrimony visibility", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -520,6 +662,27 @@ fun SettingsScreen(
                         else -> "Pause matrimony profile"
                     }
                 )
+            }
+
+            HorizontalDivider()
+            Text("Account data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Generate a protected JSON export of your account data. Raw KYC files, internal fraud signals and provider secrets are excluded. For security, the server requires a recently authenticated session and the download link expires shortly.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = vm::requestDataExport,
+                enabled = !exportBusy && accountState !is SettingsViewModel.AccountState.Deleting,
+                modifier = Modifier.fillMaxWidth().testTag("settings_export_data")
+            ) {
+                if (exportBusy) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Filled.Download, contentDescription = null)
+                }
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(if (exportBusy) "Preparing export…" else "Download my data")
             }
 
             Text("Permanent deletion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

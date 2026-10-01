@@ -35,6 +35,8 @@ import com.match.app.data.repo.ShortlistRepository
 import com.match.app.data.repo.SocialRepository
 import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.data.repo.SupportRepository
+import com.match.app.data.repo.TrustRepository
+import com.match.app.data.repo.TrustSummary
 import com.match.app.data.repo.WhoViewedRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.CompatibilityFactor
@@ -81,6 +83,7 @@ data class DetailUi(
     val showReportDialog: Boolean = false,
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
+    val trustSummary: TrustSummary? = null,
     val loading: Boolean = true
 )
 
@@ -98,7 +101,8 @@ class MatchDetailViewModel @Inject constructor(
     private val analytics: AnalyticsManager,
     private val noteRepo: NoteRepository,
     private val subscriptionRepo: SubscriptionRepository,
-    private val supportRepo: SupportRepository
+    private val supportRepo: SupportRepository,
+    private val trustRepository: TrustRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(DetailUi())
     val ui: StateFlow<DetailUi> = _ui.asStateFlow()
@@ -118,6 +122,9 @@ class MatchDetailViewModel @Inject constructor(
         }
 
         val photos = photoRepo.observe(userId).first()
+        val trustSummary = profile.firebaseUid
+            .takeIf { it.isNotBlank() }
+            ?.let { uid -> runCatching { trustRepository.load(uid) }.getOrNull() }
         val meLiked = social.isLiked(meId, userId)
         val theyLiked = social.isLiked(userId, meId)
         val me = auth.currentProfile(meId)
@@ -129,6 +136,7 @@ class MatchDetailViewModel @Inject constructor(
             shortlisted = shortlistRepo.isSaved(meId, userId),
             isMutual = meLiked && theyLiked,
             meIsPremium = me?.isPremium == true,
+            trustSummary = trustSummary,
             loading = false
         )
 
@@ -304,6 +312,7 @@ fun MatchDetailScreen(
     onChat: () -> Unit,
     onPricing: () -> Unit = {},
     onKundli: () -> Unit = {},
+    onCompatibilityBreakdown: () -> Unit = {},
     vm: MatchDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(userId) { vm.load(userId) }
@@ -495,7 +504,15 @@ fun MatchDetailScreen(
                     )
                 }
 
+                TrustSummaryCard(ui.trustSummary)
                 ActualCompatibilityCard(ui)
+                MatreeSecondaryButton(
+                    text = "Compatibility breakdown",
+                    icon = Icons.Filled.Insights,
+                    onClick = onCompatibilityBreakdown,
+                    enabled = !ui.blocked,
+                    modifier = Modifier.fillMaxWidth().testTag("profile_compat_breakdown")
+                )
                 ProfileFacts(p)
 
                 if (p.bio.isNotBlank()) SectionCard("About") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
@@ -561,6 +578,57 @@ private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
         isVerified = profile.isVerified,
         isPremium = profile.isPremium
     )
+}
+
+@Composable
+private fun TrustSummaryCard(trust: TrustSummary?) {
+    if (trust == null) {
+        MatreeInlineNotice(
+            message = "Trust Score is temporarily unavailable. Verification badges remain authoritative.",
+            icon = Icons.Filled.VerifiedUser
+        )
+        return
+    }
+    SectionCard("Trust & verification") {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${trust.score}/100",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+            Column {
+                Text(trust.tierLabel, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Server-authoritative Trust Score",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        LinearProgressIndicator(
+            progress = { trust.score.coerceIn(0, 100) / 100f },
+            modifier = Modifier.fillMaxWidth()
+        )
+        trust.factors.take(6).forEach { factor ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(MatreeDesign.sizes.iconSmall),
+                    tint = MatreeDesign.colors.success
+                )
+                Spacer(Modifier.width(MatreeDesign.spacing.xs))
+                Text(factor, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Text(
+            "Paid membership does not increase Trust Score. Fraud-detection details stay private so they cannot be gamed.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable

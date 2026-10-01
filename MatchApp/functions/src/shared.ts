@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import * as crypto from "crypto";
+import { productionFeatureEnabled, ProductionFeature } from "./featureFlagPolicy";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -20,6 +21,38 @@ export function requireAppCheck(context: functions.https.CallableContext): void 
   }
 }
 
+/**
+ * Second-layer rollout authority for provider/validation-sensitive capabilities.
+ * The client controls discoverability; this backend flag prevents direct callable bypass.
+ */
+export function requireProductionFeature(feature: ProductionFeature): void {
+  const raw = functions.config().features?.[feature];
+  if (!productionFeatureEnabled(raw)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "This feature is not enabled in production"
+    );
+  }
+}
+
+export function requestIdFromContext(
+  context: functions.https.CallableContext
+): string {
+  const incoming = context.rawRequest?.get("x-request-id")?.trim();
+  if (incoming && incoming.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(incoming)) {
+    return incoming;
+  }
+  return crypto.randomUUID();
+}
+
+export function operatorMfaSatisfied(token: unknown): boolean {
+  if (!token || typeof token !== "object") return false;
+  const firebaseClaim = (token as { firebase?: unknown }).firebase;
+  if (!firebaseClaim || typeof firebaseClaim !== "object") return false;
+  const factor = (firebaseClaim as { sign_in_second_factor?: unknown }).sign_in_second_factor;
+  return typeof factor === "string" && factor.trim().length > 0;
+}
+
 export type OpsRole =
   | "support"
   | "moderator"
@@ -37,7 +70,7 @@ export function resolveOpsRole(raw: unknown, allowed: OpsRole[]): OpsRole | unde
 export function requireOpsRole(
   context: functions.https.CallableContext,
   allowed: OpsRole[]
-): { uid: string; role: OpsRole } {
+): { uid: string; role: OpsRole; requestId: string } {
   requireAppCheck(context);
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
@@ -49,10 +82,19 @@ export function requireOpsRole(
       "Your operations role does not permit this action"
     );
   }
-  return { uid, role: matched };
+
+  const enforceOpsMfa = functions.config().security?.enforce_ops_mfa === "true";
+  if (enforceOpsMfa && !operatorMfaSatisfied(context.auth?.token)) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Operations access requires multi-factor authentication"
+    );
+  }
+
+  return { uid, role: matched, requestId: requestIdFromContext(context) };
 }
 
-export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system";
+export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system" | "critical";
 
 type FcmDeviceToken = {
   deviceId: string;
@@ -139,6 +181,9 @@ export async function notificationPreferenceEnabled(
   uid: string,
   key: NotificationPreferenceKey
 ): Promise<boolean> {
+  // Security, verification and other account-safety alerts are transactional notices rather than
+  // optional engagement notifications and therefore cannot be disabled by a marketing/system toggle.
+  if (key === "critical") return true;
   const prefs = await db.collection("notificationPrefs").doc(uid).get();
   return prefs.data()?.[key] !== false;
 }

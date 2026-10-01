@@ -5,77 +5,95 @@ const {
   calculateProfileCompletenessValue,
 } = require("../lib/profileCompletenessPolicy");
 
-test("profile completeness mirrors the 20-field wizard contract", () => {
-  const publicProfile = {
+function completePublicProfile() {
+  return {
     username: "anu_rao",
     displayName: "Anu",
     state: "Telangana",
     city: "Hyderabad",
     motherTongue: "Telugu",
-    bio: "About me",
     religion: "Hindu",
+    heightCm: 165,
+    weight: 58,
+    maritalStatus: "Never Married",
+    photoUrl: "photos/alice/approved.jpg",
     education: "B.Tech",
     profession: "Engineer",
-    heightCm: 165,
-    maritalStatus: "Never Married",
+    occupationCategory: "Private Sector",
+    employer: "Example",
     familyType: "Nuclear",
     familyValues: "Moderate",
-    diet: "Vegetarian",
-    countryOfResidence: "India",
-    employer: "Example",
     aboutFamily: "Family details",
+    fatherOccupation: "Retired",
+    diet: "Vegetarian",
+    smoking: "Never",
+    drinking: "Never",
+    hobbies: ["Reading"],
     spokenLanguages: ["Telugu", "English"],
-  };
-  const privateProfile = {
-    dateOfBirth: "1996-02-14",
-    incomeBand: "10-15 LPA",
-  };
-
-  assert.equal(
-    calculateProfileCompletenessValue(publicProfile, privateProfile),
-    1
-  );
-});
-
-test("profile completeness uses private fields without exposing their values", () => {
-  const publicProfile = {
-    username: "anu_rao",
-    displayName: "Anu",
-    state: "Telangana",
-    city: "Hyderabad",
-    motherTongue: "Telugu",
     bio: "About me",
-    religion: "Hindu",
-    education: "B.Tech",
-    profession: "Engineer",
-    heightCm: 165,
-    maritalStatus: "Never Married",
-    familyType: "Nuclear",
-    familyValues: "Moderate",
-    diet: "Vegetarian",
-    countryOfResidence: "India",
-    employer: "Example",
-    aboutFamily: "Family details",
-    spokenLanguages: "Telugu,English",
+    isVerified: true,
+    verificationLevel: 2,
   };
+}
 
-  assert.equal(calculateProfileCompletenessValue(publicProfile, {}), 0.9);
+test("weighted profile strength reaches 100% only across high-value sections", () => {
   assert.equal(
-    calculateProfileCompletenessValue(publicProfile, {
-      dateOfBirth: "1996-02-14",
-      incomeBand: "10-15 LPA",
-    }),
+    calculateProfileCompletenessValue(
+      completePublicProfile(),
+      {
+        dateOfBirth: "1996-02-14",
+        incomeBand: "10-15 LPA",
+      },
+      { configured: true },
+      { phoneStatus: "VERIFIED" }
+    ),
     1
   );
 });
 
-test("height must be positive and blank values do not count", () => {
+test("partner preference and verification sections are deliberate weighted evidence", () => {
+  const profile = completePublicProfile();
   assert.equal(
-    calculateProfileCompletenessValue({
-      username: "anu_rao",
-      displayName: " ",
-      heightCm: 0,
-    }, {}),
-    0.05
+    calculateProfileCompletenessValue(
+      profile,
+      {
+        dateOfBirth: "1996-02-14",
+        incomeBand: "10-15 LPA",
+      },
+      {},
+      {}
+    ),
+    0.77
+  );
+  assert.equal(
+    calculateProfileCompletenessValue(
+      profile,
+      {
+        dateOfBirth: "1996-02-14",
+        incomeBand: "10-15 LPA",
+      },
+      { configured: true },
+      { phoneStatus: "VERIFIED" }
+    ),
+    1
+  );
+});
+
+test("explicit no-preference configuration completes the partner-intent section", () => {
+  const base = calculateProfileCompletenessValue({}, {}, {}, {});
+  const configured = calculateProfileCompletenessValue(
+    {},
+    {},
+    { configured: true, cityMode: "NO_PREFERENCE" },
+    {}
+  );
+  assert.equal(base, 0);
+  assert.equal(configured, 0.15);
+});
+
+test("single basic field earns only its fraction of the Basics section", () => {
+  assert.equal(
+    calculateProfileCompletenessValue({ username: "anu_rao" }, {}, {}, {}),
+    0.015
   );
 });

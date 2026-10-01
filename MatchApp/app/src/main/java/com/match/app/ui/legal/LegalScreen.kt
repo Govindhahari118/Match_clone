@@ -34,14 +34,14 @@ private val TERMS = listOf(
         "Respect privacy controls and consent boundaries."
     )),
     LegalSection("Service Disclaimer", listOf(
-        "MatrimonyConnect is a facilitation tool and does not guarantee marriage outcomes.",
+        "Matree is a facilitation tool and does not guarantee marriage outcomes.",
         "Users are responsible for their interactions and decisions."
     )),
     LegalSection("Account Termination", listOf(
         "We may suspend or terminate accounts that violate these terms or pose safety risks to the community."
     )),
     LegalSection("Contact", listOf(
-        "Questions about these terms can be sent to support@matrimonyconnect.com."
+        "Use the authenticated Help & Support flow for questions about these terms."
     ))
 )
 
@@ -65,25 +65,19 @@ private val PRIVACY = listOf(
         "We keep your data only as long as necessary to provide the service.",
         "You may request deletion at any time from Settings."
     )),
-    LegalSection("Your Rights (DPDP Act & GDPR)", listOf(
-        "Right to Access — Request a copy of the personal data we hold about you.",
-        "Right to Correction — Ask us to correct inaccurate or incomplete data.",
-        "Right to Erasure — Request deletion of your personal data via Settings > Account > Delete Account.",
-        "Right to Withdraw Consent — Withdraw consent for data processing at any time.",
-        "Right to Grievance Redressal — File a complaint with our Data Protection Officer.",
-        "Right to Nominate — Nominate another individual to exercise your rights (DPDP Act)."
+    LegalSection("Your Controls", listOf(
+        "Access — Use the account-data export flow in Settings for a copy of supported account data.",
+        "Correction — Edit supported profile information and preferences in the app.",
+        "Deletion — Request permanent account deletion from Settings.",
+        "Consent — Withdraw supported optional-processing consent from the relevant feature or privacy control.",
+        "Privacy or grievance requests — Use the authenticated Help & Support flow so the request is linked to the correct account."
     )),
-    LegalSection("Legal Basis for Processing", listOf(
-        "Consent — You provide explicit consent when creating an account.",
-        "Contractual necessity — Processing required to deliver the matchmaking service.",
-        "Legitimate interest — Safety measures, fraud prevention, and service improvement.",
-        "Legal obligation — Compliance with applicable Indian and international laws."
-    )),
-    LegalSection("Data Protection Officer", listOf(
-        "For queries related to your personal data, contact dpo@matrimonyconnect.com."
+    LegalSection("Applicable Rights", listOf(
+        "Specific legal rights and response obligations depend on the law that applies to you and the final production privacy policy.",
+        "Matree does not invent jurisdiction-specific rights, retention periods, officer titles, or response deadlines in product copy."
     )),
     LegalSection("Contact", listOf(
-        "For privacy questions, email support@matrimonyconnect.com."
+        "Use Help & Support in the app for privacy questions or account-specific requests."
     ))
 )
 
@@ -108,12 +102,12 @@ private val GUIDELINES = listOf(
 
 private val SECURITY = listOf(
     LegalSection("Security Basics", listOf(
-        "HTTPS is enforced across the platform.",
+        "Release builds disable cleartext network traffic; production services must use configured secure transport.",
         "Strong input validation and safe defaults protect user data.",
         "Security headers reduce common browser attacks."
     )),
     LegalSection("Responsible Disclosure", listOf(
-        "If you find a vulnerability, email security@matrimonyconnect.com.",
+        "If you find a vulnerability, use the authenticated Help & Support flow and choose Technical issue or Safety.",
         "Do not publicly disclose issues before we investigate and fix them."
     ))
 )
@@ -144,9 +138,9 @@ private fun titleFor(type: String) = when (type) {
 }
 
 private fun subtitleFor(type: String) = when (type) {
-    "terms" -> "MatrimonyConnect is a matchmaking platform. By using the service, you agree to the terms below."
-    "privacy" -> "MatrimonyConnect is built around trust. This policy explains what data we collect, why we collect it, and how you control your privacy."
-    "guidelines" -> "MatrimonyConnect is built for serious, respectful matchmaking. These guidelines protect everyone on the platform."
+    "terms" -> "Matree is a matchmaking platform. By using the service, you agree to the terms below."
+    "privacy" -> "Matree is built around trust. This policy explains what data we collect, why we collect it, and how you control your privacy."
+    "guidelines" -> "Matree is built for serious, respectful matchmaking. These guidelines protect everyone on the platform."
     "security" -> "We take security seriously. This page outlines basic practices and how to report security issues responsibly."
     "refunds" -> "Refund and cancellation terms depend on the real purchase channel and the policy shown for that product."
     else -> ""
@@ -185,7 +179,7 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
                 subtitle = subtitle
             ) {
                 Text(
-                    t("effective_date", "Effective March 10, 2026"),
+                    t("effective_date", "Release-candidate copy · final legal approval required"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -220,7 +214,7 @@ fun LegalScreen(type: String, onBack: () -> Unit = {}) {
 
             // Contact footer
             MatreeInlineNotice(
-                message = "© 2026 MatrimonyConnect. All rights reserved."
+                message = "Release-candidate legal copy · final published policy approval is required before launch."
             )
             Spacer(Modifier.height(MatreeDesign.spacing.md))
         }

@@ -46,34 +46,43 @@ object ActivityStatusHelper {
     }
 
     /**
-     * Display the backend-authoritative aggregate. The server stores it as 0..1 using the same
-     * 20-field contract as onboarding; UI must not invent a second weighted score.
+     * Display only the backend-authoritative weighted aggregate. The server includes approved
+     * photo, partner-preference and verification evidence that is not all duplicated into this
+     * local profile object.
      */
     fun profileCompleteness(p: UserProfile): Int =
         (p.profileCompleteness.coerceIn(0f, 1f) * 100f).toInt().coerceIn(0, 100)
 
-    /** Same 20 source checks used by the backend profileCompletenessPolicy. */
+    /**
+     * Visible section hints only. These are not a second scoring formula; the progress percentage
+     * remains server-owned.
+     */
     fun completenessItems(p: UserProfile): List<Pair<String, Boolean>> = listOf(
-        "Username" to p.username.isNotBlank(),
-        "Name" to p.displayName.isNotBlank(),
-        "Date of birth" to p.dateOfBirth.isNotBlank(),
-        "State" to p.state.isNotBlank(),
-        "City" to p.city.isNotBlank(),
-        "Mother tongue" to p.motherTongue.isNotBlank(),
-        "Bio" to p.bio.isNotBlank(),
-        "Religion" to p.religion.isNotBlank(),
-        "Education" to p.education.isNotBlank(),
-        "Profession" to p.profession.isNotBlank(),
-        "Height" to (p.heightCm > 0),
-        "Marital status" to p.maritalStatus.isNotBlank(),
-        "Family type" to p.familyType.isNotBlank(),
-        "Family values" to p.familyValues.isNotBlank(),
-        "Diet" to p.diet.isNotBlank(),
-        "Country" to p.countryOfResidence.isNotBlank(),
-        "Income band" to p.incomeBand.isNotBlank(),
-        "Employer" to p.employer.isNotBlank(),
-        "Family details" to p.aboutFamily.isNotBlank(),
-        "Languages" to p.spokenLanguages.isNotEmpty()
+        "Basics" to (
+            p.username.isNotBlank() &&
+                p.displayName.isNotBlank() &&
+                p.dateOfBirth.isNotBlank() &&
+                p.state.isNotBlank() &&
+                p.city.isNotBlank() &&
+                p.motherTongue.isNotBlank() &&
+                p.religion.isNotBlank() &&
+                p.heightCm > 0 &&
+                p.maritalStatus.isNotBlank()
+            ),
+        "Photo" to p.photoUrl.isNotBlank(),
+        "Education" to (p.education.isNotBlank() && p.profession.isNotBlank()),
+        "Family" to (
+            p.familyType.isNotBlank() &&
+                p.familyValues.isNotBlank() &&
+                p.aboutFamily.isNotBlank()
+            ),
+        "Lifestyle" to (
+            p.diet.isNotBlank() &&
+                p.smoking.isNotBlank() &&
+                p.drinking.isNotBlank()
+            ),
+        "About me" to p.bio.isNotBlank(),
+        "Verification" to p.isVerified
     )
 
 }

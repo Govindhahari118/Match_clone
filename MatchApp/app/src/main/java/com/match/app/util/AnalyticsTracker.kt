@@ -6,8 +6,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Centralized Firebase Analytics event logging for the 7-stage funnel
- * and all business-critical events.
+ * Legacy funnel facade retained for compatibility.
+ *
+ * It intentionally strips member identifiers, exact monetary values and arbitrary free-form
+ * strings. New instrumentation should use MatreeTelemetry's typed privacy-safe event contract.
  */
 @Singleton
 class AnalyticsTracker @Inject constructor(
@@ -17,7 +19,7 @@ class AnalyticsTracker @Inject constructor(
     fun logRegistrationStart() = log("registration_start")
 
     fun logRegistrationComplete(method: String) = log("registration_complete") {
-        putString("method", method) // "phone", "google", "email"
+        putString("method", safeEnum(method))
     }
 
     // ── Profile funnel ────────────────────────────────────────────────────
@@ -40,17 +42,18 @@ class AnalyticsTracker @Inject constructor(
     fun logVoiceCallStarted() = log("voice_call_started")
 
     // ── Subscription/monetization ─────────────────────────────────────────
-    fun logSubscriptionPurchased(planType: String, amount: Int) = log("subscription_purchased") {
-        putString("plan_type", planType)
-        putInt("amount_inr", amount)
+    fun logSubscriptionPurchased(
+        planType: String,
+        @Suppress("UNUSED_PARAMETER") amount: Int
+    ) = log("subscription_purchased") {
+        putString("plan_type", safeEnum(planType))
     }
 
     fun logBoostPurchased() = log("boost_purchased")
 
     // ── Discovery / engagement ────────────────────────────────────────────
-    fun logProfileViewed(viewedUid: String) = log("profile_viewed") {
-        putString("viewed_uid", viewedUid)
-    }
+    fun logProfileViewed(@Suppress("UNUSED_PARAMETER") viewedUid: String) =
+        log("profile_viewed")
 
     fun logSearchPerformed(filterCount: Int) = log("search_performed") {
         putInt("filter_count", filterCount)
@@ -62,14 +65,22 @@ class AnalyticsTracker @Inject constructor(
 
     // ── Verification ──────────────────────────────────────────────────────
     fun logVerificationStarted(type: String) = log("verification_started") {
-        putString("verification_type", type)
+        putString("verification_type", safeEnum(type))
     }
 
     fun logVerificationCompleted(type: String) = log("verification_completed") {
-        putString("verification_type", type)
+        putString("verification_type", safeEnum(type))
     }
 
     // ── Internal helper ───────────────────────────────────────────────────
+    private fun safeEnum(value: String): String =
+        value.trim()
+            .uppercase()
+            .replace(Regex("[^A-Z0-9_]+"), "_")
+            .trim('_')
+            .take(40)
+            .ifBlank { "UNKNOWN" }
+
     private fun log(event: String, extras: (Bundle.() -> Unit)? = null) {
         val bundle = Bundle().apply { extras?.invoke(this) }
         analytics.logEvent(event, bundle)

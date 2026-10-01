@@ -34,14 +34,20 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/alice'), {
-      firebaseUid: 'alice', displayName: 'Alice', age: 28, gender: 'FEMALE', lookingFor: 'MALE',
-      city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
+      firebaseUid: 'alice', username: 'alice123', displayName: 'Alice', age: 28,
+      gender: 'FEMALE', lookingFor: 'MALE', state: 'Telangana', city: 'Hyderabad',
+      motherTongue: 'Telugu', religion: 'Hindu', education: 'B.Tech',
+      profession: 'Engineer', maritalStatus: 'Never Married', heightCm: 165,
+      isPremium: false, isVerified: false, verificationLevel: 0,
+      subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'users/bob'), {
-      firebaseUid: 'bob', displayName: 'Bob', age: 30, gender: 'MALE', lookingFor: 'FEMALE',
-      city: 'Hyderabad', religion: 'Hindu', isPremium: false, isVerified: false,
-      verificationLevel: 0, subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
+      firebaseUid: 'bob', username: 'bob123', displayName: 'Bob', age: 30,
+      gender: 'MALE', lookingFor: 'FEMALE', state: 'Telangana', city: 'Hyderabad',
+      motherTongue: 'Telugu', religion: 'Hindu', education: 'B.Tech',
+      profession: 'Engineer', maritalStatus: 'Never Married', heightCm: 175,
+      isPremium: false, isVerified: false, verificationLevel: 0,
+      subscriptionPlan: 'FREE', subscriptionExpiry: 0, stealthMode: false,
     });
     await setDoc(doc(db, 'userPrivate/alice'), { phoneNumber: '9999999999', email: 'alice@example.test' });
   });
@@ -244,32 +250,72 @@ test('only owner can configure global contact visibility', async () => {
   await assertFails(getDoc(doc(bobDb, 'privacySettings/alice')));
 });
 
-test('chat thread requires server-created mutual interests and stops after a block', async () => {
+test('chat creation is server-only while participant reads and recipient receipts remain constrained', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
-  const thread = doc(aliceDb, 'chats/alice_bob');
+  const threadPath = 'chats/alice_bob';
+  const messagePath = threadPath + '/messages/server_message_0001';
 
   await seedInterest('alice', 'bob');
-  await assertFails(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-
   await seedInterest('bob', 'alice');
-  await assertSucceeds(setDoc(thread, { participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0 }));
-  await assertSucceeds(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0001'), {
-    body: 'hello', sentAt: Date.now(), isRead: false,
-    fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
-    voiceUri: null, imageUri: null, voiceDurationMs: null,
+
+  await assertFails(setDoc(doc(aliceDb, threadPath), {
+    participantUids: ['alice', 'bob'],
+    lastMessage: 'forged preview',
+    lastSentAt: Date.now(),
+  }));
+  await assertFails(setDoc(doc(aliceDb, messagePath), {
+    body: 'forged',
+    sentAt: Date.now(),
+    isRead: false,
+    fromFirebaseUid: 'alice',
+    toFirebaseUid: 'bob',
+  }));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, threadPath), {
+      participantUids: ['alice', 'bob'],
+      lastMessage: 'hello',
+      lastSentAt: Date.now(),
+    });
+    await setDoc(doc(db, messagePath), {
+      body: 'hello',
+      sentAt: Date.now(),
+      isRead: false,
+      fromFirebaseUid: 'alice',
+      toFirebaseUid: 'bob',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(aliceDb, threadPath)));
+  await assertSucceeds(getDoc(doc(bobDb, threadPath)));
+  await assertSucceeds(getDoc(doc(bobDb, messagePath)));
+
+  // Only the recipient may acknowledge delivery/read, and read requires both timestamps.
+  await assertFails(updateDoc(doc(aliceDb, messagePath), {
+    deliveredAt: new Date(),
+  }));
+  await assertSucceeds(updateDoc(doc(bobDb, messagePath), {
+    deliveredAt: new Date(),
+  }));
+  await assertFails(updateDoc(doc(bobDb, messagePath), {
+    isRead: true,
+  }));
+  await assertSucceeds(updateDoc(doc(bobDb, messagePath), {
+    isRead: true,
+    deliveredAt: new Date(),
+    readAt: new Date(),
   }));
 
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
-      blockedUid: 'alice', blockedAt: Date.now(),
+      blockedUid: 'alice',
+      blockedAt: Date.now(),
     });
   });
-  await assertFails(setDoc(doc(aliceDb, 'chats/alice_bob/messages/client_message_0002'), {
-    body: 'blocked', sentAt: Date.now(), isRead: false,
-    fromFirebaseUid: 'alice', toFirebaseUid: 'bob',
-    voiceUri: null, imageUri: null, voiceDurationMs: null,
-  }));
+  await assertFails(getDoc(doc(aliceDb, messagePath)));
+  await assertFails(getDoc(doc(bobDb, messagePath)));
 });
 
 test('users cannot write payment authority documents', async () => {
@@ -304,8 +350,8 @@ test('profile photo upload is owner-only', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const bytes = new Uint8Array([1, 2, 3, 4]);
-  await assertSucceeds(uploadBytes(ref(aliceStorage, 'photos/alice/profile.jpg'), bytes, { contentType: 'image/jpeg' }));
-  await assertFails(uploadBytes(ref(bobStorage, 'photos/alice/attack.jpg'), bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(ref(aliceStorage, 'photos/alice/profile.jpg'), bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await assertFails(uploadBytes(ref(bobStorage, 'photos/alice/attack.jpg'), bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
 });
 
 test('hidden member cannot read profile photo while owner still can', async () => {
@@ -315,7 +361,12 @@ test('hidden member cannot read profile photo while owner still can', async () =
   const object = ref(aliceStorage, 'photos/alice/private-profile.jpg');
   const bytes = new Uint8Array([8, 6, 7, 5, 3, 0, 9]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/private-profile.jpg',
+    });
+  });
   await assertSucceeds(getBytes(object));
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/private-profile.jpg')));
 
@@ -334,7 +385,12 @@ test('blocked member cannot read profile media', async () => {
   const object = ref(aliceStorage, 'photos/alice/block-test.jpg');
   const bytes = new Uint8Array([4, 2, 4, 2]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/block-test.jpg',
+    });
+  });
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/block-test.jpg')));
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'blocks/alice/blocked/bob'), {
@@ -350,7 +406,12 @@ test('stealth profile media is private except to an explicit interest recipient'
   const object = ref(aliceStorage, 'photos/alice/stealth-test.jpg');
   const bytes = new Uint8Array([1, 9, 9, 9]);
 
-  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(object, bytes, { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } }));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/alice'), {
+      photoUrl: 'photos/alice/stealth-test.jpg',
+    });
+  });
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'users/alice'), { stealthMode: true });
   });
@@ -364,7 +425,14 @@ test('verification documents cannot be read by another client', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();
   const bobStorage = env.authenticatedContext('bob').storage();
   const bytes = new Uint8Array([1, 2, 3]);
-  await assertSucceeds(uploadBytes(ref(aliceStorage, 'verifications/alice/id.jpg'), bytes, { contentType: 'image/jpeg' }));
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'verifications/alice/id.jpg'),
+    bytes,
+    {
+      contentType: 'image/jpeg',
+      customMetadata: { ownerUid: 'alice', docType: 'Passport' },
+    }
+  ));
   await assertFails(getBytes(ref(bobStorage, 'verifications/alice/id.jpg')));
 });
 
@@ -505,5 +573,21 @@ test('operations records are server-only for ordinary authenticated clients', as
   ]) {
     await assertFails(getDoc(doc(aliceDb, path)));
     await assertFails(setDoc(doc(aliceDb, path), { status: 'CLOSED' }, { merge: true }));
+  }
+});
+
+
+test('data export request and throttle state are server-only', async () => {
+  const aliceDb = env.authenticatedContext('alice').firestore();
+  for (const path of [
+    'dataExportRequests/fake_export',
+    'dataExportRateLimits/alice',
+  ]) {
+    await assertFails(getDoc(doc(aliceDb, path)));
+    await assertFails(setDoc(doc(aliceDb, path), {
+      uid: 'alice',
+      status: 'READY',
+      nextAllowedAtMillis: Date.now() + 600000,
+    }));
   }
 });

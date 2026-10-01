@@ -26,7 +26,7 @@ test('client cannot forge pending verification request', async () => {
   const alice = env.authenticatedContext('alice').firestore();
   await assertFails(setDoc(doc(alice, 'verificationRequests/alice'), {
     uid: 'alice',
-    docType: 'Aadhaar',
+    docType: 'Passport',
     documentPath: 'verifications/alice/document',
     status: 'pending',
     submittedAt: Date.now(),
@@ -56,7 +56,7 @@ test('verification artifact remains unreadable to all clients', async () => {
   const object = ref(aliceStorage, 'verifications/alice/document');
   await assertSucceeds(uploadBytes(object, new Uint8Array([1, 2, 3]), {
     contentType: 'image/jpeg',
-    customMetadata: { ownerUid: 'alice', docType: 'Aadhaar' },
+    customMetadata: { ownerUid: 'alice', docType: 'Passport' },
   }));
   await assertFails(getBytes(object));
   await assertFails(getBytes(ref(bobStorage, 'verifications/alice/document')));
@@ -90,4 +90,33 @@ test('client cannot forge granular verification signals', async () => {
   await assertFails(updateDoc(doc(alice, 'verifications/alice'), {
     identityStatus: 'VERIFIED',
   }));
+});
+
+
+test('KYC upload requires bound owner and supported document metadata', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'verifications/alice/missing-metadata'),
+    new Uint8Array([1]),
+    { contentType: 'image/jpeg' },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'verifications/alice/aadhaar-generic'),
+    new Uint8Array([1]),
+    {
+      contentType: 'image/jpeg',
+      customMetadata: { ownerUid: 'alice', docType: 'Aadhaar' },
+    },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'verifications/alice/svg'),
+    new Uint8Array([1]),
+    {
+      contentType: 'image/svg+xml',
+      customMetadata: { ownerUid: 'alice', docType: 'Passport' },
+    },
+  ));
 });

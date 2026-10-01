@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.webkit.MimeTypeMap
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -44,7 +43,7 @@ class FirebaseStorageService @Inject constructor(
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putBytes(bytes, metadata).await()
-        ref.toString()
+        ref.path
     }
 
     /**
@@ -57,22 +56,15 @@ class FirebaseStorageService @Inject constructor(
         if (descriptorLength > 0L) {
             require(descriptorLength <= MAX_PROFILE_VIDEO_BYTES) { "Video must be 50 MB or smaller" }
         }
-        val contentType = context.contentResolver.getType(uri)
-            ?.takeIf { it.startsWith("video/") }
-            ?: "video/mp4"
-        require(contentType.startsWith("video/")) { "Only video files are supported" }
-        val extension = MimeTypeMap.getSingleton()
-            .getExtensionFromMimeType(contentType)
-            ?.take(8)
-            ?.takeIf { it.matches(Regex("[A-Za-z0-9]+")) }
-            ?: "mp4"
-        val ref = storage.reference.child("videos/$firebaseUid/" + UUID.randomUUID() + "." + extension)
+        val contentType = context.contentResolver.getType(uri)?.lowercase() ?: "video/mp4"
+        require(contentType == "video/mp4") { "Profile video must be an MP4 file" }
+        val ref = storage.reference.child("videos/$firebaseUid/" + UUID.randomUUID() + ".mp4")
         val metadata = StorageMetadata.Builder()
             .setContentType(contentType)
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putFile(uri, metadata).await()
-        ref.toString()
+        ref.path
     }
 
     suspend fun deletePhoto(urlOrPath: String): Result<Unit> = deleteProtectedMedia(urlOrPath)
@@ -88,10 +80,22 @@ class FirebaseStorageService @Inject constructor(
         recipientUid: String,
         clientMessageId: String,
         source: String
-    ): Result<String> = uploadChatMedia(
-        threadId, senderUid, recipientUid, clientMessageId, source,
-        kind = "image", maxBytes = MAX_CHAT_IMAGE_BYTES, fallbackContentType = "image/jpeg"
-    )
+    ): Result<String> = runCatching {
+        validateChatIdentity(threadId, senderUid, recipientUid, clientMessageId)
+        val bytes = compressToTarget(sourceUri(source))
+        require(bytes.isNotEmpty() && bytes.size <= MAX_CHAT_IMAGE_BYTES) { "Chat image is too large" }
+        val path = "chat-media/$threadId/$clientMessageId.jpg"
+        val ref = storage.reference.child(path)
+        val metadata = chatMediaMetadata(
+            senderUid = senderUid,
+            recipientUid = recipientUid,
+            threadId = threadId,
+            kind = "image",
+            contentType = "image/jpeg"
+        )
+        ref.putBytes(bytes, metadata).await()
+        path
+    }
 
     suspend fun uploadChatVoice(
         threadId: String,
@@ -99,10 +103,32 @@ class FirebaseStorageService @Inject constructor(
         recipientUid: String,
         clientMessageId: String,
         source: String
-    ): Result<String> = uploadChatMedia(
-        threadId, senderUid, recipientUid, clientMessageId, source,
-        kind = "voice", maxBytes = MAX_CHAT_VOICE_BYTES, fallbackContentType = "audio/mp4"
-    )
+    ): Result<String> = runCatching {
+        validateChatIdentity(threadId, senderUid, recipientUid, clientMessageId)
+        val uri = sourceUri(source)
+        val localFile = source.takeIf { !it.contains("://") }?.let(::File)
+        if (localFile != null) {
+            require(localFile.exists() && localFile.length() in 1..MAX_CHAT_VOICE_BYTES) {
+                "Voice message is unavailable or too large"
+            }
+        } else {
+            val knownLength = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+            if (knownLength > 0) {
+                require(knownLength <= MAX_CHAT_VOICE_BYTES) { "Voice message is too large" }
+            }
+        }
+        val path = "chat-media/$threadId/$clientMessageId.m4a"
+        val ref = storage.reference.child(path)
+        val metadata = chatMediaMetadata(
+            senderUid = senderUid,
+            recipientUid = recipientUid,
+            threadId = threadId,
+            kind = "voice",
+            contentType = "audio/mp4"
+        )
+        ref.putFile(uri, metadata).await()
+        path
+    }
 
     suspend fun downloadChatMedia(storagePath: String): Result<String> = runCatching {
         require(storagePath.startsWith("chat-media/")) { "Unexpected media path" }
@@ -134,41 +160,30 @@ class FirebaseStorageService @Inject constructor(
         }
     }
 
-    private suspend fun uploadChatMedia(
+    private fun validateChatIdentity(
         threadId: String,
         senderUid: String,
         recipientUid: String,
-        clientMessageId: String,
-        source: String,
-        kind: String,
-        maxBytes: Long,
-        fallbackContentType: String
-    ): Result<String> = runCatching {
+        clientMessageId: String
+    ) {
         require(threadId.matches(Regex("[a-f0-9]{64}")))
         require(senderUid.isNotBlank() && recipientUid.isNotBlank() && senderUid != recipientUid)
         require(clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}")))
-        val uri = sourceUri(source)
-        val localFile = source.takeIf { !it.contains("://") }?.let(::File)
-        if (localFile != null && localFile.exists()) {
-            require(localFile.length() in 1..maxBytes) { "Media too large" }
-        }
-        val resolverType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
-        val contentType = resolverType?.takeIf {
-            (kind == "image" && it.startsWith("image/")) || (kind == "voice" && it.startsWith("audio/"))
-        } ?: fallbackContentType
-        val ext = if (kind == "image") "jpg" else "m4a"
-        val path = "chat-media/$threadId/$clientMessageId.$ext"
-        val ref = storage.reference.child(path)
-        val metadata = StorageMetadata.Builder()
-            .setContentType(contentType)
-            .setCustomMetadata("senderUid", senderUid)
-            .setCustomMetadata("recipientUid", recipientUid)
-            .setCustomMetadata("threadId", threadId)
-            .setCustomMetadata("kind", kind)
-            .build()
-        ref.putFile(uri, metadata).await()
-        path
     }
+
+    private fun chatMediaMetadata(
+        senderUid: String,
+        recipientUid: String,
+        threadId: String,
+        kind: String,
+        contentType: String
+    ): StorageMetadata = StorageMetadata.Builder()
+        .setContentType(contentType)
+        .setCustomMetadata("senderUid", senderUid)
+        .setCustomMetadata("recipientUid", recipientUid)
+        .setCustomMetadata("threadId", threadId)
+        .setCustomMetadata("kind", kind)
+        .build()
 
     private fun referenceFor(urlOrPath: String): com.google.firebase.storage.StorageReference {
         val value = urlOrPath.trim()

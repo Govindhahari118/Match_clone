@@ -30,11 +30,18 @@ class SessionStore(private val context: Context) {
     private val KEY_ONBOARD   = booleanPreferencesKey("onboarded")
     private val KEY_AGE_MIN   = intPreferencesKey("filter_age_min")
     private val KEY_AGE_MAX   = intPreferencesKey("filter_age_max")
+    private val KEY_HEIGHT_MIN = intPreferencesKey("filter_height_min_cm")
+    private val KEY_HEIGHT_MAX = intPreferencesKey("filter_height_max_cm")
     private val KEY_CITY      = stringPreferencesKey("filter_city")
     private val KEY_STATE     = stringPreferencesKey("filter_state")
     private val KEY_CASTE     = stringPreferencesKey("filter_caste")
     private val KEY_SUB_CASTE = stringPreferencesKey("filter_sub_caste")
+    private val KEY_FAITH_TRADITION = stringPreferencesKey("filter_faith_tradition")
+    private val KEY_FAITH_SUB_TRADITION = stringPreferencesKey("filter_faith_sub_tradition")
+    private val KEY_FAITH_INSTITUTION = stringPreferencesKey("filter_faith_institution")
+    private val KEY_VISA_STATUS = stringPreferencesKey("filter_visa_status")
     private val KEY_MIN_SCORE = floatPreferencesKey("filter_min_score")
+    private val KEY_MIN_MUTUAL_MATCH = intPreferencesKey("filter_min_mutual_match_percent")
     private val KEY_RELIGION  = stringPreferencesKey("filter_religion")
     private val KEY_TONGUE    = stringPreferencesKey("filter_tongue")
     private val KEY_MARITAL   = stringPreferencesKey("filter_marital")
@@ -44,7 +51,6 @@ class SessionStore(private val context: Context) {
     private val KEY_THEME_PREFERENCE = stringPreferencesKey("appearance_theme_preference")
     private val KEY_MANUAL_THEME = stringPreferencesKey("appearance_manual_theme")
     private val KEY_DISPLAY_MODE = stringPreferencesKey("appearance_display_mode")
-    private val KEY_API_BASE  = stringPreferencesKey("api_base_url")
     private val KEY_BIOMETRIC = booleanPreferencesKey("biometric_lock")
     private val KEY_INCOME_MIN = stringPreferencesKey("filter_income_min")
     private val KEY_INCOME_MAX = stringPreferencesKey("filter_income_max")
@@ -112,11 +118,18 @@ class SessionStore(private val context: Context) {
         MatchFilter(
             ageMin = it[KEY_AGE_MIN] ?: 18,
             ageMax = it[KEY_AGE_MAX] ?: 70,
+            heightMinCm = it[KEY_HEIGHT_MIN] ?: 90,
+            heightMaxCm = it[KEY_HEIGHT_MAX] ?: 250,
             city = it[KEY_CITY] ?: "",
             state = it[KEY_STATE] ?: "",
             caste = it[KEY_CASTE] ?: "",
             subCaste = it[KEY_SUB_CASTE] ?: "",
+            faithTradition = it[KEY_FAITH_TRADITION] ?: "",
+            faithSubTradition = it[KEY_FAITH_SUB_TRADITION] ?: "",
+            faithInstitution = it[KEY_FAITH_INSTITUTION] ?: "",
+            visaStatus = it[KEY_VISA_STATUS] ?: "",
             minScore = it[KEY_MIN_SCORE] ?: 0f,
+            minMutualMatchPercent = it[KEY_MIN_MUTUAL_MATCH] ?: 0,
             religion = it[KEY_RELIGION] ?: "",
             motherTongue = it[KEY_TONGUE] ?: "",
             maritalStatus = it[KEY_MARITAL] ?: "",
@@ -194,7 +207,6 @@ class SessionStore(private val context: Context) {
             religionThemeEnabled = prefs[KEY_RELIGION_THEME] ?: false
         )
     }
-    val apiBaseUrl: Flow<String> = context.dataStore.data.map { it[KEY_API_BASE] ?: "" }
     val biometricLock: Flow<Boolean> = context.dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
     val uiLanguage: Flow<String> = context.dataStore.data.map { prefs -> normalizeUiLanguage(prefs[KEY_UI_LANG]) }
@@ -219,7 +231,6 @@ class SessionStore(private val context: Context) {
         val displayMode = prefs[KEY_DISPLAY_MODE]
         val legacyDarkMode = prefs[KEY_DARK]
         val biometricLock = prefs[KEY_BIOMETRIC]
-        val apiBaseUrl = prefs[KEY_API_BASE]
 
         prefs.clear()
 
@@ -227,7 +238,6 @@ class SessionStore(private val context: Context) {
         displayMode?.let { prefs[KEY_DISPLAY_MODE] = it }
         legacyDarkMode?.let { prefs[KEY_DARK] = it }
         biometricLock?.let { prefs[KEY_BIOMETRIC] = it }
-        apiBaseUrl?.let { prefs[KEY_API_BASE] = it }
     }
     suspend fun setMode(m: MatchMode) = context.dataStore.edit {
         it[KEY_MODE] = when (m) { MatchMode.QUESTIONNAIRE -> 0L; MatchMode.ASTROLOGY -> 1L; MatchMode.ADVANCED -> 2L }
@@ -236,11 +246,18 @@ class SessionStore(private val context: Context) {
     suspend fun setFilter(f: MatchFilter) = context.dataStore.edit {
         it[KEY_AGE_MIN] = f.ageMin
         it[KEY_AGE_MAX] = f.ageMax
+        it[KEY_HEIGHT_MIN] = f.heightMinCm
+        it[KEY_HEIGHT_MAX] = f.heightMaxCm
         it[KEY_CITY] = f.city
         it[KEY_STATE] = f.state
         it[KEY_CASTE] = f.caste
         it[KEY_SUB_CASTE] = f.subCaste
+        it[KEY_FAITH_TRADITION] = f.faithTradition
+        it[KEY_FAITH_SUB_TRADITION] = f.faithSubTradition
+        it[KEY_FAITH_INSTITUTION] = f.faithInstitution
+        it[KEY_VISA_STATUS] = f.visaStatus
         it[KEY_MIN_SCORE] = f.minScore
+        it[KEY_MIN_MUTUAL_MATCH] = f.minMutualMatchPercent.coerceIn(0, 100)
         it[KEY_RELIGION] = f.religion
         it[KEY_TONGUE] = f.motherTongue
         it[KEY_MARITAL] = f.maritalStatus
@@ -333,7 +350,6 @@ class SessionStore(private val context: Context) {
         prefs[KEY_PALETTE] = key
         prefs[KEY_MANUAL_THEME] = key
     }
-    suspend fun setApiBaseUrl(url: String) = context.dataStore.edit { it[KEY_API_BASE] = url }
     suspend fun setBiometricLock(v: Boolean) = context.dataStore.edit { it[KEY_BIOMETRIC] = v }
     suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = normalizeUiLanguage(lang) }
     suspend fun setCommunitySetupDone(v: Boolean) = context.dataStore.edit { it[KEY_COMMUNITY_SETUP_DONE] = v }

@@ -74,6 +74,11 @@ fun AssistedServiceScreen(
                     IconButton(onClick = onBack, modifier = Modifier.testTag("assisted_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
+                },
+                actions = {
+                    IconButton(onClick = vm::refresh, enabled = !ui.loading) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh assisted request")
+                    }
                 }
             )
         }
@@ -179,10 +184,26 @@ fun AssistedServiceScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
+                            "Current request status: ${ui.requestStatus.ifBlank { "OPEN" }.replace('_', ' ')}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
                             "This confirms only that your callback/service request was recorded. It is not proof of payment, assignment, or an active paid engagement.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                        if (ui.requestStatus.uppercase() !in setOf("RESOLVED", "CANCELLED")) {
+                            OutlinedButton(
+                                onClick = vm::cancelRequest,
+                                enabled = !ui.loading,
+                                modifier = Modifier.fillMaxWidth().testTag("assisted_cancel")
+                            ) {
+                                Icon(Icons.Filled.Cancel, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Cancel request")
+                            }
+                        }
                     }
                 }
             } else {

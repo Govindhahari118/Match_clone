@@ -34,7 +34,11 @@ class MessageRetryWorker @AssistedInject constructor(
             try {
                 val senderUid = userDao.findById(msg.fromUserId)?.firebaseUid?.takeIf { it.isNotBlank() } ?: error("Sender UID missing")
                 val recipientUid = userDao.findById(msg.toUserId)?.firebaseUid?.takeIf { it.isNotBlank() } ?: error("Recipient UID missing")
-                val threadId = FirestoreChatService.threadId(senderUid, recipientUid)
+                val threadId = if (msg.type == "IMAGE" || msg.type == "VOICE") {
+                    firestoreChat.prepareThread(senderUid, recipientUid)
+                } else {
+                    FirestoreChatService.threadId(senderUid, recipientUid)
+                }
                 val plaintextBody = plaintextForRetry(msg)
                 var voicePath: String? = null
                 var imagePath: String? = null
