@@ -188,13 +188,9 @@ export async function notificationPreferenceEnabled(
   const prefs = await db.collection("notificationPrefs").doc(uid).get();
   const value = prefs.data() || {};
   if (value[key] === false) return false;
-  const notificationConfig = functions.config().notifications || {};
   if (quietHoursActive(
     value.quietHours === true,
-    String(value.timeZone || ""),
-    new Date(),
-    Number(notificationConfig.quiet_hours_start),
-    Number(notificationConfig.quiet_hours_end)
+    String(value.timeZone || "")
   )) {
     return false;
   }
