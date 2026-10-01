@@ -22,6 +22,7 @@ import com.match.app.data.repo.PartnerPreferenceMode
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferences
 import com.match.app.data.session.SessionStore
+import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.MatreeDesign
@@ -305,21 +306,21 @@ fun PartnerPreferencesScreen(
                         vm.update { it.copy(weightMinKg = min, weightMaxKg = max) }
                     }
                 )
-                ListPreferenceCard(
+                ChoicePreferenceCard(
                     title = "Annual income range",
                     mode = ui.value.incomeBandMode,
-                    values = ui.value.incomeBands,
-                    hint = "₹10–15L, ₹15–25L…",
+                    selected = ui.value.incomeBands,
+                    options = IndiaProfileCatalog.incomeBands.map { it to it },
                     onMode = { mode -> vm.update { it.copy(incomeBandMode = mode) } },
-                    onValues = { values -> vm.update { it.copy(incomeBands = values) } }
+                    onSelected = { values -> vm.update { it.copy(incomeBands = values) } }
                 )
-                ListPreferenceCard(
-                    title = "Complexion",
+                ChoicePreferenceCard(
+                    title = "Skin tone (optional, self-described)",
                     mode = ui.value.complexionMode,
-                    values = ui.value.complexions,
-                    hint = "Optional appearance preference",
+                    selected = ui.value.complexions,
+                    options = IndiaProfileCatalog.complexionOptions.map { it to it },
                     onMode = { mode -> vm.update { it.copy(complexionMode = mode) } },
-                    onValues = { values -> vm.update { it.copy(complexions = values) } }
+                    onSelected = { values -> vm.update { it.copy(complexions = values) } }
                 )
 
                 PreferenceSectionHeader(
