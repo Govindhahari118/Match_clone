@@ -12,7 +12,10 @@ data class DiscoveryProfileCandidate(
     val pairPreferenceFit: Float?,
     val forwardPreferenceFit: Float? = null,
     val reversePreferenceFit: Float? = null,
-    val mutualPreferenceFit: Float? = null
+    val mutualPreferenceFit: Float? = null,
+    val forwardPreferenceCriteria: Int = 0,
+    val reversePreferenceCriteria: Int = 0,
+    val mutualPreferenceCriteria: Int = 0
 )
 
 /**
@@ -194,7 +197,10 @@ class FirestorePagingSource(
                     ?.coerceIn(0f, 1f),
                 mutualPreferenceFit = (raw["mutualPreferenceFit"] as? Number)
                     ?.toFloat()
-                    ?.coerceIn(0f, 1f)
+                    ?.coerceIn(0f, 1f),
+                forwardPreferenceCriteria = (raw["forwardPreferenceCriteria"] as? Number)?.toInt() ?: 0,
+                reversePreferenceCriteria = (raw["reversePreferenceCriteria"] as? Number)?.toInt() ?: 0,
+                mutualPreferenceCriteria = (raw["mutualPreferenceCriteria"] as? Number)?.toInt() ?: 0
             )
         }
 
