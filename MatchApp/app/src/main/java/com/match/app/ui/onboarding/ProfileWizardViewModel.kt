@@ -277,7 +277,12 @@ class ProfileWizardViewModel @Inject constructor(
         return when (step) {
             0 -> validateRequiredIdentityAndLocation()
             1 -> if (s.religion.isBlank()) "Select your religion or choose Prefer not to say." else null
-            2 -> if (s.education.isBlank() || s.profession.isBlank()) "Add your education and occupation." else null
+            2 -> when {
+                s.education.isBlank() || s.profession.isBlank() -> "Add your education and occupation."
+                s.occupationCategory.isBlank() -> "Select your occupation category."
+                s.incomeBand.isBlank() -> "Select your annual income range or Prefer not to say."
+                else -> null
+            }
             3 -> when {
                 s.heightCm !in 90..250 -> "Enter a valid height in centimetres."
                 s.maritalStatus.isBlank() -> "Select your marital status."
