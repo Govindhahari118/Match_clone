@@ -353,3 +353,21 @@ test("mutual score is unavailable unless both members express scorable preferenc
   assert.equal(score.reverse, null);
   assert.equal(score.mutual, null);
 });
+
+
+test("schema v4 body and income normalization clamps ranges and preserves explicit lists", () => {
+  const prefs = normalizePartnerPreferences({
+    weightMode: "STRICT",
+    weightMinKg: 80,
+    weightMaxKg: 60,
+    incomeBandMode: "PREFERRED",
+    incomeBands: [" ₹15–25L ", "₹15–25L"],
+    complexionMode: "PREFERRED",
+    complexions: ["Medium"],
+  });
+  assert.equal(prefs.weightMode, "STRICT");
+  assert.equal(prefs.weightMinKg, 80);
+  assert.equal(prefs.weightMaxKg, 80);
+  assert.deepEqual(prefs.incomeBands, ["₹15–25L"]);
+  assert.deepEqual(prefs.complexions, ["Medium"]);
+});
