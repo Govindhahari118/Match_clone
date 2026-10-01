@@ -7,6 +7,7 @@ import {
 } from "./activityVisibilityPolicy";
 import {
   bilateralPreferenceMatch,
+  STRONG_MUTUAL_MIN_CRITERIA,
   normalizePartnerPreferences,
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
@@ -539,6 +540,9 @@ export const discoverProfiles = functions
       forwardPreferenceFit: number | null;
       reversePreferenceFit: number | null;
       mutualPreferenceFit: number | null;
+      forwardPreferenceCriteria: number;
+      reversePreferenceCriteria: number;
+      mutualPreferenceCriteria: number;
       boosted: number;
       behavior: number;
       relevance: number;
@@ -609,6 +613,7 @@ export const discoverProfiles = functions
       if (
         minMutualMatchPercent > 0 &&
         (pairPreferenceMatch.mutual == null ||
+          pairPreferenceMatch.mutualCriteria < STRONG_MUTUAL_MIN_CRITERIA ||
           pairPreferenceMatch.mutual * 100 < minMutualMatchPercent)
       ) continue;
       const behavior = personalizationActive
@@ -619,6 +624,9 @@ export const discoverProfiles = functions
         forwardPreferenceFit: pairPreferenceMatch.forward,
         reversePreferenceFit: pairPreferenceMatch.reverse,
         mutualPreferenceFit: pairPreferenceMatch.mutual,
+        forwardPreferenceCriteria: pairPreferenceMatch.forwardCriteria,
+        reversePreferenceCriteria: pairPreferenceMatch.reverseCriteria,
+        mutualPreferenceCriteria: pairPreferenceMatch.mutualCriteria,
         boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
         behavior,
         relevance: blendedRecommendationRelevance(pairPreferenceMatch.mutual, behavior),
@@ -641,6 +649,9 @@ export const discoverProfiles = functions
         forwardPreferenceFit,
         reversePreferenceFit,
         mutualPreferenceFit,
+        forwardPreferenceCriteria,
+        reversePreferenceCriteria,
+        mutualPreferenceCriteria,
       }) => {
         const profile = publicProfile(
           doc.id,
@@ -658,6 +669,9 @@ export const discoverProfiles = functions
         if (reversePreferenceFit != null) {
           signals.reversePreferenceFit = Math.round(reversePreferenceFit * 1000) / 1000;
         }
+        signals.forwardPreferenceCriteria = forwardPreferenceCriteria;
+        signals.reversePreferenceCriteria = reversePreferenceCriteria;
+        signals.mutualPreferenceCriteria = mutualPreferenceCriteria;
         const questionnaireFit = questionnaireFitByUid.get(doc.id);
         if (questionnaireFit != null) {
           signals.pairQuestionnaireFit = Math.round(questionnaireFit * 1000) / 1000;
