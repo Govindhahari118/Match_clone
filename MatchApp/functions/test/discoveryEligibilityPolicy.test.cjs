@@ -6,6 +6,7 @@ const {
   partnerPreferencesReady,
   discoveryActorReady,
   discoveryCandidateReady,
+  profileFreshEnough,
 } = require("../lib/discoveryEligibilityPolicy");
 
 const complete = {
@@ -57,4 +58,14 @@ test("candidate must have complete public profile and configured preferences", (
   );
   assert.equal(partnerPreferencesReady({ configured: true }), true);
   assert.equal(partnerPreferencesReady(undefined), false);
+});
+
+
+test("discovery freshness suppresses stale profiles while allowing recently active members", () => {
+  const day = 86_400_000;
+  const now = 200 * day;
+  assert.equal(profileFreshEnough(now - 10 * day, 0, now), true);
+  assert.equal(profileFreshEnough(now - 100 * day, 0, now), false);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 2 * day, now), true);
+  assert.equal(profileFreshEnough(0, 0, now), true);
 });
