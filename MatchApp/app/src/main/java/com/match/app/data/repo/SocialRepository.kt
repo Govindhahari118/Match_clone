@@ -31,9 +31,20 @@ class SocialRepository @Inject constructor(
     private val firestoreBlock: FirestoreBlockService,
     private val firestoreProfile: FirestoreProfileService
 ) {
-    suspend fun sendInterest(from: Long, to: Long, isSuperLike: Boolean = false): Boolean =
+    suspend fun sendInterest(
+        from: Long,
+        to: Long,
+        isSuperLike: Boolean = false,
+        introNote: String = ""
+    ): Boolean =
         withContext(Dispatchers.IO) {
-            val mutual = syncInterestToFirestore(from, to, isLike = true, isSuperLike = isSuperLike)
+            val mutual = syncInterestToFirestore(
+                from,
+                to,
+                isLike = true,
+                isSuperLike = isSuperLike,
+                introNote = introNote
+            )
             if (!mutual && !remoteInterestExists(from, to)) {
                 throw IllegalStateException("Interest could not be sent")
             }
@@ -111,6 +122,11 @@ class SocialRepository @Inject constructor(
             cacheAuthorizedRemoteUids(
                 InterestListPolicy.pendingCounterparts(docs.map { it.fromUid }, mutualUids)
             )
+        }
+
+    fun observeReceivedInterestNotesRemote(myUid: String): Flow<Map<String, String>> =
+        firestoreInterest.observeIncomingInterests(myUid).map { docs ->
+            docs.associate { it.fromUid to it.introNote }
         }
 
     fun observeSentInterestsRemote(myUid: String): Flow<List<Long>> =
@@ -199,12 +215,13 @@ class SocialRepository @Inject constructor(
         fromLocalId: Long,
         toLocalId: Long,
         isLike: Boolean,
-        isSuperLike: Boolean = false
+        isSuperLike: Boolean = false,
+        introNote: String = ""
     ): Boolean {
         val fromUid = userDao.findById(fromLocalId)?.firebaseUid.orEmpty()
         val toUid = userDao.findById(toLocalId)?.firebaseUid.orEmpty()
         if (fromUid.isBlank() || toUid.isBlank()) throw IllegalStateException("Profile is not linked to Firebase")
-        return if (isLike) firestoreInterest.sendInterest(fromUid, toUid, isSuperLike)
+        return if (isLike) firestoreInterest.sendInterest(fromUid, toUid, isSuperLike, introNote)
         else {
             firestoreInterest.removeInterest(fromUid, toUid)
             false
