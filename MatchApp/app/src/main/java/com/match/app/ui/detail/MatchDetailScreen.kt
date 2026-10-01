@@ -84,6 +84,9 @@ data class DetailUi(
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
     val trustSummary: TrustSummary? = null,
+    val showInterestDialog: Boolean = false,
+    val interestSending: Boolean = false,
+    val interestError: String? = null,
     val loading: Boolean = true
 )
 
@@ -204,11 +207,65 @@ class MatchDetailViewModel @Inject constructor(
     }
 
     fun toggleLike() = viewModelScope.launch {
-        if (_ui.value.blocked) return@launch
-        val liked = social.toggleLike(meId, targetId)
-        val mutual = liked && social.isLiked(targetId, meId)
-        _ui.update { it.copy(liked = liked, isMutual = mutual, contactError = null) }
-        if (liked) analytics.logInterestSent(targetId)
+        if (_ui.value.blocked || _ui.value.interestSending) return@launch
+        if (_ui.value.liked) {
+            runCatching { social.unlike(meId, targetId) }
+                .onSuccess {
+                    _ui.update {
+                        it.copy(
+                            liked = false,
+                            isMutual = false,
+                            contactError = null,
+                            interestError = null
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _ui.update {
+                        it.copy(interestError = error.message ?: "Could not withdraw this interest.")
+                    }
+                }
+        } else {
+            _ui.update { it.copy(showInterestDialog = true, interestError = null) }
+        }
+    }
+
+    fun dismissInterestDialog() {
+        if (!_ui.value.interestSending) {
+            _ui.update { it.copy(showInterestDialog = false, interestError = null) }
+        }
+    }
+
+    fun sendInterest(introNote: String) = viewModelScope.launch {
+        if (_ui.value.blocked || _ui.value.interestSending || _ui.value.liked) return@launch
+        _ui.update { it.copy(interestSending = true, interestError = null) }
+        runCatching {
+            social.sendInterest(
+                meId,
+                targetId,
+                isSuperLike = false,
+                introNote = introNote.trim()
+            )
+        }.onSuccess { mutual ->
+            _ui.update {
+                it.copy(
+                    liked = true,
+                    isMutual = mutual,
+                    showInterestDialog = false,
+                    interestSending = false,
+                    interestError = null,
+                    contactError = null
+                )
+            }
+            analytics.logInterestSent(targetId)
+        }.onFailure { error ->
+            _ui.update {
+                it.copy(
+                    interestSending = false,
+                    interestError = error.message ?: "Could not send this interest."
+                )
+            }
+        }
     }
 
     fun toggleShortlist() = viewModelScope.launch {
@@ -343,6 +400,62 @@ fun MatchDetailScreen(
             onUpgrade = onPricing,
             onMessage = onChat,
             onDismiss = vm::dismissContactUnlock
+        )
+    }
+
+    if (ui.showInterestDialog && p != null) {
+        var introNote by remember(p.firebaseUid) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = vm::dismissInterestDialog,
+            title = { Text("Send interest") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    Text(
+                        "Add an optional personal introduction. Contact details, external links and payment requests are blocked until you both match.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = introNote,
+                        onValueChange = { introNote = it.take(280) },
+                        label = { Text("Personal note (optional)") },
+                        supportingText = { Text("${introNote.length}/280") },
+                        minLines = 3,
+                        maxLines = 5,
+                        enabled = !ui.interestSending,
+                        modifier = Modifier.fillMaxWidth().testTag("interest_intro_note")
+                    )
+                    ui.interestError?.let { error ->
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { vm.sendInterest(introNote) },
+                    enabled = !ui.interestSending
+                ) {
+                    if (ui.interestSending) {
+                        CircularProgressIndicator(
+                            Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(if (ui.interestSending) "Sending…" else "Send interest")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = vm::dismissInterestDialog,
+                    enabled = !ui.interestSending
+                ) { Text("Cancel") }
+            }
         )
     }
 
