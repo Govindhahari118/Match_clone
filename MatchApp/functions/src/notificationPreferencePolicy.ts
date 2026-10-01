@@ -3,7 +3,7 @@ export const QUIET_HOURS_END = 7;
 
 function localHour(now: Date, timeZone: string): number | null {
   const zone = typeof timeZone === "string" ? timeZone.trim().slice(0, 64) : "";
-  if (!zone) return null;
+  if (!zone || Number.isNaN(now.getTime())) return null;
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: zone,
@@ -17,17 +17,36 @@ function localHour(now: Date, timeZone: string): number | null {
   }
 }
 
+export function normalizeQuietHour(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 23) return fallback;
+  return parsed;
+}
+
 /**
- * Quiet hours are deliberately a push-delivery preference only. The durable in-app notification
- * is still persisted, and security/verification critical notices bypass this preference.
+ * Quiet hours are a push-delivery preference only. Durable in-app notifications are persisted
+ * regardless, and security/verification critical notices bypass this preference.
+ *
+ * The member's timezone is supplied by the Android foreground lifecycle. Start/end are optional
+ * product-configurable hours, clamped to valid clock values; equal start/end deliberately means
+ * "no quiet window" rather than muting every optional notification for 24 hours.
  */
 export function quietHoursActive(
   enabled: boolean,
   timeZone: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  startHour = QUIET_HOURS_START,
+  endHour = QUIET_HOURS_END
 ): boolean {
   if (!enabled) return false;
   const hour = localHour(now, timeZone);
   if (hour == null) return false;
-  return hour >= QUIET_HOURS_START || hour < QUIET_HOURS_END;
+
+  const start = normalizeQuietHour(startHour, QUIET_HOURS_START);
+  const end = normalizeQuietHour(endHour, QUIET_HOURS_END);
+  if (start === end) return false;
+
+  return start < end
+    ? hour >= start && hour < end
+    : hour >= start || hour < end;
 }
