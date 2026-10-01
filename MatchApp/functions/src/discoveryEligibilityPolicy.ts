@@ -16,6 +16,7 @@ export function publicDiscoveryProfileReady(
 ): boolean {
   const age = finiteInt(profile.age);
   const height = finiteInt(profile.heightCm);
+  const weight = Number(profile.weight || 0);
   return text(profile.username).length >= 3 &&
     text(profile.displayName).length >= 2 &&
     age >= 18 && age <= 99 &&
@@ -25,8 +26,10 @@ export function publicDiscoveryProfileReady(
     text(profile.religion).length > 0 &&
     text(profile.education).length > 0 &&
     text(profile.profession).length >= 2 &&
+    text(profile.occupationCategory).length > 0 &&
     text(profile.maritalStatus).length > 0 &&
-    height >= 90 && height <= 250;
+    height >= 90 && height <= 250 &&
+    Number.isFinite(weight) && weight >= 30 && weight <= 250;
 }
 
 export function partnerPreferencesReady(
