@@ -43,7 +43,10 @@ class MatchingRepository @Inject constructor(
     private data class ReciprocalPreferenceScores(
         val forward: Float?,
         val reverse: Float?,
-        val mutual: Float?
+        val mutual: Float?,
+        val forwardCriteria: Int,
+        val reverseCriteria: Int,
+        val mutualCriteria: Int
     )
 
     suspend fun discoverPaged(filter: MatchFilter = MatchFilter()): Flow<PagingData<UserProfile>> {
@@ -212,7 +215,10 @@ class MatchingRepository @Inject constructor(
                         },
                         forwardPreferenceScore = preferenceScores?.forward,
                         reversePreferenceScore = preferenceScores?.reverse,
-                        mutualPreferenceScore = preferenceScores?.mutual
+                        mutualPreferenceScore = preferenceScores?.mutual,
+                        forwardPreferenceCriteria = preferenceScores?.forwardCriteria ?: 0,
+                        reversePreferenceCriteria = preferenceScores?.reverseCriteria ?: 0,
+                        mutualPreferenceCriteria = preferenceScores?.mutualCriteria ?: 0
                     )
                 }
                 .filter { filter.minScore <= 0f || it.primary() >= filter.minScore }
@@ -262,7 +268,10 @@ class MatchingRepository @Inject constructor(
                             authorized[entity.firebaseUid] = ReciprocalPreferenceScores(
                                 forward = remote.forwardPreferenceFit,
                                 reverse = remote.reversePreferenceFit,
-                                mutual = remote.mutualPreferenceFit ?: remote.pairPreferenceFit
+                                mutual = remote.mutualPreferenceFit ?: remote.pairPreferenceFit,
+                                forwardCriteria = remote.forwardPreferenceCriteria,
+                                reverseCriteria = remote.reversePreferenceCriteria,
+                                mutualCriteria = remote.mutualPreferenceCriteria
                             )
                         }
                         cacheRemoteCandidate(entity)
