@@ -18,8 +18,10 @@ const complete = {
   religion: "Hindu",
   education: "B.Tech",
   profession: "Engineer",
+  occupationCategory: "Private Sector",
   maritalStatus: "Never Married",
   heightCm: 170,
+  weight: 68,
 };
 
 test("public discovery profile gate requires all canonical profile fields", () => {
@@ -27,6 +29,8 @@ test("public discovery profile gate requires all canonical profile fields", () =
   assert.equal(publicDiscoveryProfileReady({ ...complete, city: "" }), false);
   assert.equal(publicDiscoveryProfileReady({ ...complete, age: 17 }), false);
   assert.equal(publicDiscoveryProfileReady({ ...complete, username: "ab" }), false);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, weight: 0 }), false);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, occupationCategory: "" }), false);
 });
 
 test("discovery actor additionally requires DOB and configured preferences", () => {
