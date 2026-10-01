@@ -26,11 +26,14 @@ REQUIRED = (
     "docs/release/PLAY_STORE_HANDOFF.md",
     "docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json",
     "scripts/ci/production_external_gate.py",
+    "scripts/ci/release_source_guard.py",
     "scripts/ci/release_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/screen_classification_scan.py",
     "scripts/deploy/build-release.sh",
+    "scripts/deploy/build-release.bat",
     "scripts/deploy/firebase-full.sh",
+    "scripts/deploy/firebase-full.bat",
     "scripts/ci/callable_contract_scan.py",
     "scripts/perf/discovery-load.mjs",
     "functions/src/health.ts",
@@ -89,9 +92,32 @@ def main() -> int:
         if release_input not in gradle:
             fail(f"Android release configuration omits {release_input}", failures)
 
+    for rel in (
+        "scripts/deploy/build-release.sh",
+        "scripts/deploy/build-release.bat",
+        "scripts/deploy/firebase-full.sh",
+        "scripts/deploy/firebase-full.bat",
+    ):
+        deploy_text = (ROOT / rel).read_text(encoding="utf-8")
+        if "MATREE_RELEASE_SHA" not in deploy_text or "release_source_guard.py" not in deploy_text:
+            fail(f"{rel} must enforce the exact frozen MATREE_RELEASE_SHA", failures)
+
     firebase_deploy = (ROOT / "scripts/deploy/firebase-full.sh").read_text(encoding="utf-8")
     if "MATREE_FIREBASE_PROJECT_ID" not in firebase_deploy or "--project" not in firebase_deploy:
         fail("Firebase production deploy must require an explicit project id", failures)
+
+    external_gate = (ROOT / "scripts/ci/production_external_gate.py").read_text(encoding="utf-8")
+    for external_contract in (
+        "firebaseRulesIndexesFunctionsDeployed",
+        "firebaseSecretsConfigured",
+        "playServiceAccountApiVerified",
+        "playRtdnVerified",
+        "signedReleaseAabVerified",
+        "closedTestingPassed",
+        "disabledProviderSurfacesVerified",
+    ):
+        if external_contract not in external_gate:
+            fail(f"external evidence contract omits launch blocker: {external_contract}", failures)
 
     media = (ROOT / "functions/src/media.ts").read_text(encoding="utf-8")
     if "cleanupAbandonedChatMedia" not in media or "chatMediaOrphans" not in media:
