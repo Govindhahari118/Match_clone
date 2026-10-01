@@ -41,6 +41,8 @@ jobs:
         run: python3 scripts/ci/screen_classification_scan.py
       - name: Android / Functions callable contract gate
         run: python3 scripts/ci/callable_contract_scan.py
+      - name: Exact-source release guard
+        run: python3 scripts/ci/release_source_guard.py --sha "$GITHUB_SHA"
       - name: Release candidate repository scan
         run: python3 scripts/ci/release_candidate_scan.py
       - name: Production handoff package gate
@@ -49,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/ci/production_external_gate.py
+          python3 -m py_compile scripts/ci/production_external_gate.py scripts/ci/release_source_guard.py
           if python3 scripts/ci/production_external_gate.py \
               --evidence docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json \
               --sha "$GITHUB_SHA" --mode prelaunch; then
@@ -57,17 +59,21 @@ jobs:
             exit 1
           fi
           python3 - "$GITHUB_SHA" <<'PY'
-          import json, pathlib, sys
+          import importlib.util, json, pathlib, sys
           sha=sys.argv[1]
-          gates=[
-            "productionFirebaseConfigured","productionSigningVerified","releaseCredentialsVerified",
-            "appCheckPlayIntegrityVerified","authReleaseDeviceMatrixPassed","billingLicensedMatrixPassed",
-            "physicalDeviceE2EPassed","accessibilityDeviceMatrixPassed","performanceSloPassed",
-            "penetrationTestPassed","legalAndDataSafetyApproved","playPreLaunchReportPassed",
-            "rollbackDrillPassed","controlledRolloutCompleted","postRolloutHealthPassed"
-          ]
-          data={"gitSha":sha,"evidenceType":"ci-synthetic-validator","evidence":{}}
-          for gate in gates:
+          path=pathlib.Path("scripts/ci/production_external_gate.py")
+          spec=importlib.util.spec_from_file_location("production_external_gate", path)
+          assert spec and spec.loader
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          data={
+              "gitSha":sha,
+              "evidenceType":"ci-synthetic-validator",
+              "releaseOwner":"production-ci",
+              "capturedAt":"2026-01-01T00:00:00Z",
+              "evidence":{},
+          }
+          for gate in module.FULL_RELEASE_GATES:
               data[gate]=True
               data["evidence"][gate]="synthetic-ci-validator-reference"
           pathlib.Path("/tmp/matree-external-gate-synthetic.json").write_text(
