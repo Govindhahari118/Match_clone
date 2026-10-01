@@ -17,6 +17,7 @@ import {
   DISCOVERY_RANKING_VERSION,
   behavioralAdjustment,
   blendedRecommendationRelevance,
+  recentImpressionAdjustment,
 } from "./recommendationPolicy";
 import {
   discoveryActorReady,
@@ -386,6 +387,13 @@ export const discoverProfiles = functions
           .collection("targets")
           .doc(doc.id))
       : [];
+    const recentImpressionQuery = personalizationActive
+      ? db.collection("recommendationImpressionBatches")
+        .where("viewerUid", "==", viewerUid)
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get()
+      : Promise.resolve(null);
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
     const privateRefs = privateFilterRequested
       ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
@@ -423,6 +431,7 @@ export const discoverProfiles = functions
       incomingInterestDocs,
       matchDocs,
       recommendationFeedbackDocs,
+      recentImpressionSnapshot,
     ] = await Promise.all([
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
@@ -439,6 +448,7 @@ export const discoverProfiles = functions
       recommendationFeedbackRefs.length
         ? db.getAll(...recommendationFeedbackRefs)
         : Promise.resolve([]),
+      recentImpressionQuery,
     ]);
 
     const reverseBlocked = new Set<string>();
@@ -478,6 +488,20 @@ export const discoverProfiles = functions
     const feedbackByUid = new Map<string, FirebaseFirestore.DocumentData>();
     recommendationFeedbackDocs.forEach((doc, index) => {
       if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
+    });
+    const recentImpressionBatchByUid = new Map<string, number>();
+    recentImpressionSnapshot?.docs.forEach((batchDoc, batchIndex) => {
+      const targetUids = batchDoc.data()?.targetUids;
+      if (!Array.isArray(targetUids)) return;
+      targetUids.forEach((uid) => {
+        if (
+          typeof uid === "string" &&
+          uid &&
+          !recentImpressionBatchByUid.has(uid)
+        ) {
+          recentImpressionBatchByUid.set(uid, batchIndex);
+        }
+      });
     });
     const visibleLastActiveByUid = new Map<string, number>();
     const privateLastActiveByUid = new Map<string, number>();
@@ -633,7 +657,8 @@ export const discoverProfiles = functions
           pairPreferenceMatch.mutual * 100 < minMutualMatchPercent)
       ) continue;
       const behavior = personalizationActive
-        ? behavioralAdjustment(feedbackByUid.get(doc.id))
+        ? behavioralAdjustment(feedbackByUid.get(doc.id)) +
+          recentImpressionAdjustment(recentImpressionBatchByUid.get(doc.id))
         : 0;
       eligible.push({
         doc,
