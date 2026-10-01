@@ -1,7 +1,9 @@
 # MatrimonyConnect — Deep Production Audit
 
 **Audit date:** 2026-09-14  
-**Audited branch:** `Gpt_matree`  
+**Historical audit baseline:** originally captured from `Gpt_matree` on 2026-09-14.  
+**Current authority:** this file is historical context only. Use `docs/production-readiness/current-head.md`, `docs/production-readiness/route-inventory.md`, `MatchApp/docs/release/GO_NO_GO.md` and the exact-head Production CI/external evidence gate for release decisions.  
+**Payment note:** Razorpay material below describes superseded historical architecture. The current Android digital-entitlement authority is Google Play Billing plus trusted backend verification/reconciliation. Do not provision Razorpay for the current release.  
 **Goal:** a smaller, truthful, secure and testable Android production surface. Source files that exist in the repository are **not** considered production-ready features unless they are reachable, backed by real data, authorized server-side and covered by release validation.
 
 ## Read this first
@@ -15,7 +17,7 @@ The current production architecture remains intentionally conservative:
 - Identity: Firebase Auth UID is the network identity
 - Backend: Firestore + Cloud Functions + Firebase Storage
 - Push/observability: FCM + Crashlytics/Analytics where configured
-- Payments: server-authoritative Razorpay integration
+- Payments (current architecture): Google Play Billing with server-authoritative purchase verification/reconciliation
 - No pre-launch PostgreSQL, Redis, queue or microservice migration
 
 ## Severity model
@@ -150,7 +152,7 @@ Code cannot finish these owner-controlled items:
 - production Firebase project and release `google-services.json`;
 - release Google Sign-In fingerprints/authorized domains;
 - Play Integrity/App Check registration and staged enforcement;
-- Razorpay live secret/key/webhook configuration;
+- Google Play production catalog/service-account/Developer API/RTDN configuration;
 - release keystore/Play App Signing;
 - production support/moderation/admin-claim workflow;
 - Play Console Data Safety/content rating/privacy/account-deletion declarations;
@@ -190,7 +192,7 @@ Warnings are triaged, not ignored wholesale. Deprecation warnings are upgraded d
 3. Remove/move seed/demo/password leftovers once references are proven absent.
 4. Exercise Nearby on physical devices with approximate/precise/denied/service-off scenarios.
 5. Exercise chat text/image/voice on two devices, including retry/process death/block mid-thread.
-6. Exercise payment recovery/idempotency with Razorpay test mode, then controlled live smoke test.
+6. Exercise Google Play licensed purchase, pending, restore, renewal, expiry, cancellation, refund/revocation and reconciliation paths.
 7. Exercise account deletion and all privacy visibility combinations.
 8. Validate Room migrations from every released schema.
 9. Complete production Firebase/App Check/payment/signing/legal/Play setup.
