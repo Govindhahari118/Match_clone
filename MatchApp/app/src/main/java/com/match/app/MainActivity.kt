@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -30,6 +31,7 @@ import com.match.app.ui.MatchRoot
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -75,6 +77,15 @@ class MainActivity : FragmentActivity() {
         lifecycleScope.launch {
             try { kotlinx.coroutines.withTimeout(500) { session.userId.first() } } catch (_: Exception) {}
             isReady = true
+        }
+        lifecycleScope.launch {
+            session.screenshotProtection.collectLatest { enabled ->
+                if (enabled) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+            }
         }
         requestNotificationPermissionIfNeeded()
         handleIntent(intent)
