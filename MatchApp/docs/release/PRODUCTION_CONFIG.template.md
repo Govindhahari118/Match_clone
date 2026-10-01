@@ -5,7 +5,8 @@ owned by deployment/release operations. Do not commit the completed production c
 
 ## Release identity
 
-- Git SHA: `<exact release SHA>`
+- Git SHA: `<exact 40-character release SHA>`
+- Export the same value as `MATREE_RELEASE_SHA`; production build/deploy scripts reject any HEAD mismatch or dirty source tree.
 - Android application ID: `com.match.app`
 - Version code: set `MATREE_VERSION_CODE=<positive integer greater than every prior Play upload>`
 - Version name: set `MATREE_VERSION_NAME=<release version>`
@@ -27,7 +28,7 @@ build without a production `google-services.json` and explicit version inputs.
 
 ## Firebase deployment target
 
-Set `MATREE_FIREBASE_PROJECT_ID` to the exact production project before using
+Set `MATREE_RELEASE_SHA` to the frozen release commit and `MATREE_FIREBASE_PROJECT_ID` to the exact production project before using
 `scripts/deploy/firebase-full.sh` or `.bat`. The scripts always pass `--project` explicitly and
 never trust an ambient Firebase CLI project selection. Set `MATREE_DEPLOY_HOSTING=1` only when the
 operator console is approved for that deployment.
