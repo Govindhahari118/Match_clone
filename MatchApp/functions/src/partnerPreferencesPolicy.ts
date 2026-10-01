@@ -619,10 +619,12 @@ export function preferredPreferenceFit(
   return possible > 0 ? earned / possible : null;
 }
 
+export const STRONG_MUTUAL_MIN_CRITERIA = 5;
+
 function activePreferenceFit(
   preferences: PartnerPreferenceDocument,
   subject: Record<string, unknown>
-): number | null {
+): { score: number | null; criteria: number } {
   let earned = 0;
   let possible = 0;
   const scoreRange = (
@@ -694,14 +696,20 @@ function activePreferenceFit(
     [preferences.visaStatusMode, preferences.visaStatuses, subject.visaStatus],
   ];
   listRules.forEach(([prefMode, expected, actual]) => scoreList(prefMode, expected, actual));
-  return possible > 0 ? earned / possible : null;
+  return {
+    score: possible > 0 ? earned / possible : null,
+    criteria: possible,
+  };
 }
 
 export type BilateralPreferenceMatch = {
   forward: number | null;
   reverse: number | null;
   mutual: number | null;
-  formulaVersion: "partner-preferences-v4-reciprocal-min";
+  forwardCriteria: number;
+  reverseCriteria: number;
+  mutualCriteria: number;
+  formulaVersion: "partner-preferences-v4-reciprocal-min-evidence";
 };
 
 export function bilateralPreferenceMatch(
@@ -710,8 +718,10 @@ export function bilateralPreferenceMatch(
   candidatePreferences: PartnerPreferenceDocument,
   candidate: Record<string, unknown>
 ): BilateralPreferenceMatch {
-  const forward = activePreferenceFit(viewerPreferences, candidate);
-  const reverse = activePreferenceFit(candidatePreferences, viewer);
+  const forwardFit = activePreferenceFit(viewerPreferences, candidate);
+  const reverseFit = activePreferenceFit(candidatePreferences, viewer);
+  const forward = forwardFit.score;
+  const reverse = reverseFit.score;
   const mutual = forward != null && reverse != null
     ? Math.min(forward, reverse)
     : null;
@@ -719,7 +729,10 @@ export function bilateralPreferenceMatch(
     forward,
     reverse,
     mutual,
-    formulaVersion: "partner-preferences-v4-reciprocal-min",
+    forwardCriteria: forwardFit.criteria,
+    reverseCriteria: reverseFit.criteria,
+    mutualCriteria: Math.min(forwardFit.criteria, reverseFit.criteria),
+    formulaVersion: "partner-preferences-v4-reciprocal-min-evidence",
   };
 }
 
