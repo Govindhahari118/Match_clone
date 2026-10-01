@@ -286,7 +286,7 @@ private fun InterestCard(
                 if (introNote.isNotBlank()) {
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = RoundedCornerShape(MatreeDesign.radii.input),
+                        shape = RoundedCornerShape(MatreeDesign.radii.card),
                         modifier = Modifier.fillMaxWidth().testTag("interest_intro_${profile.id}")
                     ) {
                         Column(
