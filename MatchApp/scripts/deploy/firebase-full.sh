@@ -2,6 +2,9 @@
 set -euo pipefail
 
 # Production Firebase deploy. Run from MatchApp/.
+: "${MATREE_RELEASE_SHA:?MATREE_RELEASE_SHA is required}"
+python3 scripts/ci/release_source_guard.py --sha "$MATREE_RELEASE_SHA"
+
 : "${MATREE_FIREBASE_PROJECT_ID:?MATREE_FIREBASE_PROJECT_ID is required}"
 
 project="$MATREE_FIREBASE_PROJECT_ID"
