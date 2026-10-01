@@ -9,6 +9,7 @@ import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,6 +23,11 @@ class ScreenCaptureProtectionTest {
 
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
+
+    @Before
+    fun setUp() {
+        hilt.inject()
+    }
 
     @Test
     fun screenCaptureFlagTracksPersistedPrivacyPreference() {
