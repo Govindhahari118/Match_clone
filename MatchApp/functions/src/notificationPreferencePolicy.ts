@@ -25,7 +25,7 @@ export function normalizeQuietHour(value: unknown, fallback: number): number {
 
 /**
  * Quiet hours are a push-delivery preference only. Durable in-app notifications are persisted
- * regardless, and security/verification critical notices bypass this preference.
+ * regardless; critical account-safety notices are always delivered.
  *
  * The member's timezone is supplied by the Android foreground lifecycle. Start/end are optional
  * product-configurable hours, clamped to valid clock values; equal start/end deliberately means
