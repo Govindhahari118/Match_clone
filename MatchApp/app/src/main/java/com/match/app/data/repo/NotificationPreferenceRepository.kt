@@ -8,13 +8,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
+import java.util.TimeZone
 import javax.inject.Singleton
 
 data class NotificationPreferences(
     val interests: Boolean = true,
     val matches: Boolean = true,
     val messages: Boolean = true,
-    val system: Boolean = true
+    val system: Boolean = true,
+    val quietHours: Boolean = false
 )
 
 @Singleton
@@ -37,7 +39,8 @@ class NotificationPreferenceRepository @Inject constructor() {
                         interests = snapshot?.getBoolean("interests") ?: true,
                         matches = snapshot?.getBoolean("matches") ?: true,
                         messages = snapshot?.getBoolean("messages") ?: true,
-                        system = snapshot?.getBoolean("system") ?: true
+                        system = snapshot?.getBoolean("system") ?: true,
+                        quietHours = snapshot?.getBoolean("quietHours") ?: false
                     )
                 )
             }
@@ -45,10 +48,16 @@ class NotificationPreferenceRepository @Inject constructor() {
     }
 
     suspend fun update(key: String, enabled: Boolean) {
-        require(key in setOf("interests", "matches", "messages", "system"))
+        require(key in setOf("interests", "matches", "messages", "system", "quietHours"))
         val uid = auth.currentUser?.uid ?: error("Not signed in")
         firestore.collection("notificationPrefs").document(uid)
-            .set(mapOf(key to enabled), SetOptions.merge())
+            .set(
+                mapOf(
+                    key to enabled,
+                    "timeZone" to TimeZone.getDefault().id
+                ),
+                SetOptions.merge()
+            )
             .await()
     }
 }
