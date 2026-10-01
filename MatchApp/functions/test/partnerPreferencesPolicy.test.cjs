@@ -79,7 +79,10 @@ test("bilateral reciprocal fit is limited by the weaker direction", () => {
   assert.equal(reciprocal.forward, 1);
   assert.equal(reciprocal.reverse, 0);
   assert.equal(reciprocal.mutual, 0);
-  assert.equal(reciprocal.formulaVersion, "partner-preferences-v4-reciprocal-min");
+  assert.equal(reciprocal.forwardCriteria, 1);
+  assert.equal(reciprocal.reverseCriteria, 1);
+  assert.equal(reciprocal.mutualCriteria, 1);
+  assert.equal(reciprocal.formulaVersion, "partner-preferences-v4-reciprocal-min-evidence");
   assert.equal(
     bilateralPreferredFit(
       a,
