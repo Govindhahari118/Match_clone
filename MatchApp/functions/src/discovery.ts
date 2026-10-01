@@ -21,6 +21,7 @@ import {
 import {
   discoveryActorReady,
   discoveryCandidateReady,
+  profileFreshEnough,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
 import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
@@ -389,9 +390,12 @@ export const discoverProfiles = functions
     const privateRefs = privateFilterRequested
       ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
       : [];
-    const presenceRefs = lastActiveFilterDays > 0
-      ? candidates.map((doc) => db.collection("presencePrivate").doc(doc.id))
-      : [];
+    // Presence is always read by trusted discovery code so stale inventory can be suppressed.
+    // Precise timestamps are still never returned unless the target's activity-visibility policy
+    // permits the explicit last-active filter path below.
+    const presenceRefs = candidates.map((doc) =>
+      db.collection("presencePrivate").doc(doc.id)
+    );
     const activitySettingsRefs = lastActiveFilterDays > 0
       ? candidates.map((doc) => db.collection("privacySettings").doc(doc.id))
       : [];
@@ -476,6 +480,13 @@ export const discoverProfiles = functions
       if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
     });
     const visibleLastActiveByUid = new Map<string, number>();
+    const privateLastActiveByUid = new Map<string, number>();
+    presenceDocs.forEach((doc, index) => {
+      const lastActive = Number(doc.data()?.lastActiveAt || 0);
+      if (doc.exists && Number.isFinite(lastActive) && lastActive > 0) {
+        privateLastActiveByUid.set(candidates[index].id, lastActive);
+      }
+    });
     reverseDocs.forEach((doc, index) => {
       if (doc.exists) reverseBlocked.add(candidates[index].id);
     });
@@ -559,6 +570,11 @@ export const discoverProfiles = functions
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
       if (!discoveryCandidateReady(candidate, rawPartnerPreferencesByUid.get(doc.id))) continue;
+      if (!profileFreshEnough(
+        createdAtMillis(candidate),
+        privateLastActiveByUid.get(doc.id) || 0,
+        now
+      )) continue;
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
