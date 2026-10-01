@@ -27,13 +27,8 @@ Freshness is a trusted-backend eligibility signal and never exposes the exact pr
 
 Quiet hours affect optional push delivery only. The durable in-app notification is still written first. Critical security/safety/verification notifications bypass optional notification preferences.
 
-- Default window: 22:00–07:00 in the member's current IANA timezone.
-- Optional server configuration:
-  - `notifications.quiet_hours_start`
-  - `notifications.quiet_hours_end`
-- Valid hour values are 0–23. Invalid configuration falls back to defaults.
-- Equal start/end means no quiet window, avoiding accidental 24-hour suppression.
-- Both overnight and same-day windows are supported.
+- Product window: 22:00–07:00 in the member's current IANA timezone.
+- The policy helper validates clock bounds defensively, but production delivery intentionally uses the fixed 22:00–07:00 contract shown in Settings so backend behavior cannot drift from the user-facing promise.
 - Invalid/unknown timezone data fails open for optional push rather than silently suppressing delivery.
 - Android syncs the current timezone whenever the app returns to the foreground. A per-process account/timezone key avoids unnecessary duplicate writes. DST offset changes require no stored preference rewrite because the server resolves the IANA timezone at delivery time.
 
