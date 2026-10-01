@@ -164,10 +164,12 @@ def main() -> int:
                 f"Android partner-preference contract missing {preference_field}", failures)
         require(preference_field in preference_screen,
                 f"partner-preference UI missing {preference_field}", failures)
-    require("partner-preferences-v4-reciprocal-min" in preference_policy,
+    require("partner-preferences-v4-reciprocal-min-evidence" in preference_policy,
             "reciprocal preference scoring must remain versioned and weaker-side bounded", failures)
     require("Math.min(forward, reverse)" in preference_policy,
             "mutual preference score must be limited by the weaker direction", failures)
+    require("STRONG_MUTUAL_MIN_CRITERIA = 5" in preference_policy,
+            "strong mutual-match claims must require a minimum evidence count", failures)
 
     discovery_functions = text(ROOT / "functions/src/discovery.ts")
     require('"minMutualMatchPercent"' in discovery_functions and
