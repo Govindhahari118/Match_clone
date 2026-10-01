@@ -13,6 +13,7 @@ SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 # that their fail-closed state was verified rather than silently treating missing providers as ready.
 PRELAUNCH_GATES = (
     "sourceMergedAndFrozen",
+    "mainBranchProtectionVerified",
     "productionFirebaseConfigured",
     "firebaseRulesIndexesFunctionsDeployed",
     "firebaseSecretsConfigured",
@@ -37,6 +38,7 @@ PRELAUNCH_GATES = (
     "poorNetworkRecoveryPassed",
     "physicalDeviceE2EPassed",
     "accessibilityDeviceMatrixPassed",
+    "supportedLocaleQaPassed",
     "performanceSloPassed",
     "penetrationTestPassed",
     "legalAndDataSafetyApproved",
