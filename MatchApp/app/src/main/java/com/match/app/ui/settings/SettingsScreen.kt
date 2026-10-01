@@ -575,6 +575,13 @@ fun SettingsScreen(
                 checked = notificationPreferences.system,
                 onCheckedChange = { vm.setNotificationPreference("system", it) }
             )
+            SettingToggle(
+                icon = Icons.Filled.Bedtime,
+                title = "Quiet hours",
+                subtitle = "Silence optional push delivery from 10 PM to 7 AM in your current timezone. Events still appear in Matree; critical safety and verification notices are never suppressed.",
+                checked = notificationPreferences.quietHours,
+                onCheckedChange = { vm.setNotificationPreference("quietHours", it) }
+            )
 
             Text("Language & security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
