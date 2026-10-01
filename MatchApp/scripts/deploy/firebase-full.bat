@@ -1,7 +1,14 @@
 @echo off
 setlocal
 :: Production Firebase deploy. Run from MatchApp\.
-:: Never relies on "firebase use"; the exact target project must be explicit.
+:: Never relies on "firebase use"; the exact target project and source SHA must be explicit.
+
+if "%MATREE_RELEASE_SHA%"=="" (
+  echo [ERROR] MATREE_RELEASE_SHA is required.
+  exit /b 1
+)
+python scripts\ci\release_source_guard.py --sha "%MATREE_RELEASE_SHA%"
+if errorlevel 1 exit /b 1
 
 if "%MATREE_FIREBASE_PROJECT_ID%"=="" (
   echo [ERROR] MATREE_FIREBASE_PROJECT_ID is required.
