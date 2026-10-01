@@ -1,10 +1,12 @@
-# Matree production readiness — current completion branch
+# Matree production readiness — exact-source release candidate
 
-> Branch: `gpt/matree-master-plan-hardening-20260929` (PR #22)
+> Candidate identity is the exact Git SHA supplied to the release process. Do not treat a mutable
+> branch name, PR number or historical green run as release identity.
 >
-> Base: canonical `main`; this branch carries the September 29 production-hardening completion pass.
+> Canonical production destination: `main`. Production build/deploy scripts require
+> `MATREE_RELEASE_SHA` to match the checked-out clean HEAD before they proceed.
 >
-> Status: **DRAFT / NOT PRODUCTION-READY**
+> Status: **REPOSITORY RELEASE CANDIDATE / NOT YET PUBLICLY LAUNCHED**
 >
 > Rule: a green workflow certifies only the exact SHA it ran against. Any later code or
 > configuration commit invalidates that release claim until mandatory gates rerun.
@@ -172,7 +174,7 @@ These cannot be truthfully completed by repository code alone:
 
 ## Release statement
 
-The repository-side exact-head CI baseline is green at the SHA recorded above, but this branch and
-PR #22 must remain Draft until all required external/operator gates have current evidence. Code
-volume, screenshots, historical green commits or a rendering Compose screen are not completion
-evidence.
+The repository-side release candidate is eligible for handoff only when mandatory CI is green on the
+current exact SHA. Production promotion remains blocked until the expanded operator-controlled
+external evidence gate passes for that same SHA. Code volume, screenshots, branch names, PR numbers,
+historical green commits or a rendering Compose screen are not completion evidence.

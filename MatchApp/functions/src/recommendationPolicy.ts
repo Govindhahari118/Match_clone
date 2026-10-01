@@ -1,4 +1,4 @@
-export const DISCOVERY_RANKING_VERSION = "discovery-v3-consented-behavioral";
+export const DISCOVERY_RANKING_VERSION = "discovery-v4-reciprocal-preferences";
 
 export type RecommendationFeedbackSummary = {
   profileOpenCount?: unknown;

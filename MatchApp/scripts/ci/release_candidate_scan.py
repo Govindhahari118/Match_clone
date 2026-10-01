@@ -84,6 +84,20 @@ def main() -> int:
     require("DebugAppCheckProviderFactory" not in release_appcheck,
             "debug App Check provider leaked into release source set", failures)
 
+    appearance_model = text(APP / "src/main/java/com/match/app/domain/model/AppearancePreference.kt")
+    appearance_resolver = text(APP / "src/main/java/com/match/app/ui/theme/AppearanceThemeResolver.kt")
+    settings_screen = text(APP / "src/main/java/com/match/app/ui/settings/SettingsScreen.kt")
+    require("ThemePreference.NEUTRAL" in appearance_model and
+            'val themePreference: ThemePreference = ThemePreference.NEUTRAL' in appearance_model,
+            "appearance must remain Neutral-first for new accounts", failures)
+    require('"AUTOMATIC" -> NEUTRAL' in appearance_model,
+            "legacy automatic appearance must migrate to Neutral instead of inferring religion consent", failures)
+    require("ThemePreference.AUTOMATIC" in appearance_resolver and
+            "profileReligion" in appearance_resolver,
+            "religion-following appearance must remain an explicit resolver mode", failures)
+    require("Appearance changes presentation only; it never changes identity, matching, trust or authorization." in settings_screen,
+            "settings must explain that visual theme is independent from matching and identity", failures)
+
     remote_config = text(APP / "src/main/java/com/match/app/core/config/RemoteConfigManager.kt")
     for flag in [
         "KEY_SHOW_VIDEO_PROFILES",
@@ -125,6 +139,123 @@ def main() -> int:
             "Nearby must expose an explicit location-processing consent control", failures)
     require('"Sensitive preference processing"' in preference_screen,
             "partner preferences must expose explicit sensitive-processing consent", failures)
+
+    preference_policy = text(ROOT / "functions/src/partnerPreferencesPolicy.ts")
+    preference_callable = text(ROOT / "functions/src/partnerPreferences.ts")
+    require("schemaVersion: 4" in preference_callable,
+            "partner-preference schema must remain v4 for reciprocal profile-preference matching", failures)
+    for preference_field in [
+        "gothraMode",
+        "faithTraditionMode",
+        "faithSubTraditionMode",
+        "faithInstitutionMode",
+        "nativeStateMode",
+        "educationFieldMode",
+        "employerTypeMode",
+        "familyStatusMode",
+        "visaStatusMode",
+        "weightMode",
+        "incomeBandMode",
+        "complexionMode",
+    ]:
+        require(preference_field in preference_policy,
+                f"backend partner-preference contract missing {preference_field}", failures)
+        require(preference_field in partner_repo,
+                f"Android partner-preference contract missing {preference_field}", failures)
+        require(preference_field in preference_screen,
+                f"partner-preference UI missing {preference_field}", failures)
+    require("partner-preferences-v4-reciprocal-min-evidence" in preference_policy,
+            "reciprocal preference scoring must remain versioned and weaker-side bounded", failures)
+    require("Math.min(forward, reverse)" in preference_policy,
+            "mutual preference score must be limited by the weaker direction", failures)
+    require("STRONG_MUTUAL_MIN_CRITERIA = 5" in preference_policy,
+            "strong mutual-match claims must require a minimum evidence count", failures)
+
+    discovery_functions = text(ROOT / "functions/src/discovery.ts")
+    require('"minMutualMatchPercent"' in discovery_functions and
+            "mutualPreferenceFit" in discovery_functions,
+            "discovery must support server-authoritative strong mutual-match thresholds", failures)
+
+    location_functions = text(ROOT / "functions/src/location.ts")
+    horoscope_functions = text(ROOT / "functions/src/horoscope.ts")
+    require(location_functions.count('requireProductionFeature("nearby")') >= 2,
+            "Nearby backend update/discovery callables must enforce the rollout gate", failures)
+    require('requireProductionFeature("kundali")' in horoscope_functions,
+            "Kundali backend callable must enforce the rollout gate", failures)
+
+    media_functions = text(ROOT / "functions/src/media.ts")
+    video_submit = media_functions.split("export const submitProfileVideo", 1)[1].split(
+        "export const listPendingVideoModeration", 1
+    )[0]
+    video_review = media_functions.split("export const reviewProfileVideo", 1)[1].split(
+        "export const removeProfileVideo", 1
+    )[0]
+    photo_review = media_functions.split("export const reviewProfilePhoto", 1)[1].split(
+        "export const setPrimaryApprovedPhoto", 1
+    )[0]
+    require('requireProductionFeature("video_profiles")' in video_submit,
+            "Video profile submission must enforce the backend rollout gate", failures)
+    require('requireProductionFeature("video_profiles")' in video_review,
+            "Video profile approval must enforce the backend rollout gate", failures)
+    require('requireProductionFeature("video_profiles")' not in photo_review,
+            "Video rollout gating must never block ordinary profile-photo moderation", failures)
+    require("onProfileVideoUploaded" in media_functions and
+            "productionFeatureEnabled" in media_functions,
+            "Video profile Storage uploads must be purged while the backend feature is disabled", failures)
+    require("cleanupAbandonedProfileVideos" in media_functions and
+            "profileVideoOrphans" in media_functions,
+            "Unsubmitted profile-video uploads must have bounded orphan cleanup", failures)
+    photo_submit = media_functions.split("export const submitProfilePhoto", 1)[1].split(
+        "export const listPendingPhotoModeration", 1
+    )[0]
+    require("profileVideoOrphans" not in photo_submit,
+            "Video orphan cleanup must not be wired into profile-photo submission", failures)
+    require("profileVideoOrphans" in video_submit,
+            "Video submission must clear its unregistered-upload orphan record", failures)
+
+
+    play_billing = text(ROOT / "functions/src/playBilling.ts")
+    interests_functions = text(ROOT / "functions/src/interests.ts")
+    privacy_functions = text(ROOT / "functions/src/privacy.ts")
+    discovery_functions = text(ROOT / "functions/src/discovery.ts")
+    users_functions = text(ROOT / "functions/src/users.ts")
+    require('membershipActive:' in play_billing and 'getMyMembershipStatus' in play_billing,
+            "Play billing must persist and expose private membership authority", failures)
+    require('resolveMembershipState' in interests_functions,
+            "interest quota authorization must resolve private membership state", failures)
+    require('resolveMembershipState' in privacy_functions,
+            "contact reveal authorization must resolve private membership state", failures)
+    require('resolveMembershipState' in discovery_functions,
+            "discovery premium badge/filter must resolve private membership state", failures)
+    require('subscriptionPlan: "FREE"' not in users_functions,
+            "new user creation must not seed public billing metadata", failures)
+
+    require("profileVideoOrphans" in users_functions,
+            "account deletion must remove profile-video orphan records", failures)
+    require('chatMediaOrphans").where("senderUid", "==", uid)' in users_functions and
+            'chatMediaOrphans").where("recipientUid", "==", uid)' in users_functions,
+            "account deletion must erase chat-media orphan ownership in both directions", failures)
+    require("removeUidFromBioFingerprints(uid)" in users_functions,
+            "account deletion must remove copied-bio fingerprint ownership deterministically", failures)
+
+
+    verification_functions = text(ROOT / "functions/src/verification.ts")
+    verification_screen = text(
+        APP / "src/main/java/com/match/app/ui/verification/VerificationScreen.kt"
+    )
+    storage_rules = text(ROOT / "storage.rules")
+    require("const AADHAAR_OFFLINE_PROVIDER_IMPLEMENTED = false" in verification_functions,
+            "Aadhaar must remain unavailable until a registered offline-verification adapter exists", failures)
+    require("const SELFIE_PROVIDER_IMPLEMENTED = false" in verification_functions and
+            "const LIVENESS_PROVIDER_IMPLEMENTED = false" in verification_functions and
+            "const FACE_SIMILARITY_PROVIDER_IMPLEMENTED = false" in verification_functions,
+            "biometric verification claims must remain unavailable until validated provider adapters exist", failures)
+    require('docType.toLowerCase().includes("aadhaar")' in verification_functions,
+            "generic government-ID submission must explicitly reject Aadhaar", failures)
+    require("Aadhaar is not accepted as a generic card/image upload" in verification_screen,
+            "verification UI must truthfully explain that Aadhaar is unavailable", failures)
+    require("'Aadhaar" not in storage_rules and '"Aadhaar' not in storage_rules,
+            "Storage rules must not accept Aadhaar as a generic KYC document type", failures)
 
     gitignore = text(ROOT.parent / ".gitignore") if (ROOT.parent / ".gitignore").exists() else ""
     local_gitignore = text(ROOT / ".gitignore") if (ROOT / ".gitignore").exists() else ""
@@ -172,6 +303,21 @@ def main() -> int:
             require("isPremium" not in text(candidate),
                     f"{relative}: payment/premium state must not affect trust or fraud heuristics",
                     failures)
+
+    legacy_local_trust_files = {
+        APP / "src/main/java/com/match/app/core/trust/TrustScoreEngine.kt",
+        APP / "src/main/java/com/match/app/core/security/FakeProfileDetector.kt",
+    }
+    for source in (APP / "src/main/java").rglob("*.kt"):
+        if source in legacy_local_trust_files:
+            continue
+        source_text = text(source)
+        require("TrustScoreEngine" not in source_text,
+                f"{source.relative_to(ROOT)}: production code must use server TrustRepository, not TrustScoreEngine",
+                failures)
+        require("FakeProfileDetector" not in source_text,
+                f"{source.relative_to(ROOT)}: production code must not use device-local fake-profile authority",
+                failures)
 
     privacy_policy = ROOT / "privacy-policy.html"
     legal_screen = APP / "src/main/java/com/match/app/ui/legal/LegalScreen.kt"

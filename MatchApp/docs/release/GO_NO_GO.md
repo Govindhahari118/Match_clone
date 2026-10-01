@@ -17,7 +17,10 @@ A candidate is **NO-GO** if any of the following is true:
 - Functions lint/build/tests/high-severity production dependency audit fails;
 - screen classification, truthfulness, callable-contract or release-candidate scans fail;
 - active route has a known P0/P1 defect;
-- external prelaunch evidence does not pass for the exact SHA.
+- external prelaunch evidence does not pass for the exact SHA, including production Firebase deploy/secrets,
+  App Check/Play Integrity, FCM/Crashlytics/Analytics, ops/master-data bootstrap, Play signing/catalog/API/RTDN,
+  signed AAB, real-device install/upgrade/network/multi-device journeys, closed testing, legal/store/support,
+  rollback evidence and verification that provider-dependent surfaces remain fail-closed unless validated.
 
 A historical green run never certifies a newer commit.
 

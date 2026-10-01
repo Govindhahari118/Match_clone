@@ -2,6 +2,9 @@
 set -euo pipefail
 
 # Production release build. Run from MatchApp/.
+: "${MATREE_RELEASE_SHA:?MATREE_RELEASE_SHA is required}"
+python3 scripts/ci/release_source_guard.py --sha "$MATREE_RELEASE_SHA"
+
 : "${MATREE_VERSION_CODE:?MATREE_VERSION_CODE is required}"
 : "${MATREE_VERSION_NAME:?MATREE_VERSION_NAME is required}"
 

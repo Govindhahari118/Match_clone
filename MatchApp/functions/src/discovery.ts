@@ -6,7 +6,8 @@ import {
   normalizeActivityVisibility,
 } from "./activityVisibilityPolicy";
 import {
-  bilateralPreferredFit,
+  bilateralPreferenceMatch,
+  STRONG_MUTUAL_MIN_CRITERIA,
   normalizePartnerPreferences,
   strictPreferencesAllow,
 } from "./partnerPreferencesPolicy";
@@ -21,6 +22,9 @@ import {
   discoveryActorReady,
   discoveryCandidateReady,
 } from "./discoveryEligibilityPolicy";
+import { resolveMembershipState } from "./membershipAuthority";
+import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
+import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
@@ -49,6 +53,10 @@ function stringValue(value: unknown): string {
 
 function normalizedSearchValue(value: unknown): string {
   return stringValue(value).trim().toLocaleLowerCase("en-IN");
+}
+
+function isHinduReligion(value: unknown): boolean {
+  return normalizedSearchValue(value) === "hindu";
 }
 
 function filterString(data: unknown, key: string, max = 100): string {
@@ -81,31 +89,22 @@ function boolFromAnyFilter(value: string, actual: boolean): boolean {
   return true;
 }
 
-function premiumExpiryMillis(data: FirebaseFirestore.DocumentData): number {
-  if (data.premiumUntil instanceof admin.firestore.Timestamp) {
-    return data.premiumUntil.toMillis();
-  }
-  const expiry = Number(data.subscriptionExpiry || 0);
-  return Number.isFinite(expiry) ? expiry : 0;
-}
-
-function premiumIsActive(data: FirebaseFirestore.DocumentData, now: number): boolean {
-  return data.isPremium === true && premiumExpiryMillis(data) > now;
-}
-
 function matchesServerFilters(
   candidate: FirebaseFirestore.DocumentData,
   data: unknown,
   now: number,
-  visibleLastActiveAt: number
+  visibleLastActiveAt: number,
+  premiumActive: boolean
 ): boolean {
   const textFields: Array<[string, string]> = [
     ["city", "city"], ["state", "state"], ["religion", "religion"],
-    ["caste", "caste"], ["subCaste", "subCaste"], ["motherTongue", "motherTongue"],
+    ["caste", "caste"], ["subCaste", "subCaste"], ["faithTradition", "faithTradition"],
+    ["faithSubTradition", "faithSubTradition"], ["faithInstitution", "faithInstitution"],
+    ["motherTongue", "motherTongue"],
     ["maritalStatus", "maritalStatus"], ["diet", "diet"], ["educationLevel", "education"],
     ["educationField", "educationField"], ["occupationCategory", "occupationCategory"],
     ["employerType", "employerType"], ["residentialStatus", "residentialStatus"],
-    ["nativeState", "nativeState"], ["countryOfResidence", "countryOfResidence"],
+    ["visaStatus", "visaStatus"], ["nativeState", "nativeState"], ["countryOfResidence", "countryOfResidence"],
     ["citizenship", "citizenship"], ["gothra", "gothra"], ["smoking", "smoking"],
     ["drinking", "drinking"], ["familyType", "familyType"], ["familyStatus", "familyStatus"],
     ["physicalStatus", "physicalStatus"], ["rasi", "rasi"], ["nakshatra", "nakshatra"],
@@ -119,7 +118,7 @@ function matchesServerFilters(
   if (verifiedOnly && candidate.isVerified !== true) return false;
   const verifiedLevel = filterInt(data, "verifiedLevel", 0, 100);
   if (verifiedLevel > 0 && Number(candidate.verificationLevel || 0) < verifiedLevel) return false;
-  if (filterBoolean(data, "premiumOnly") && !premiumIsActive(candidate, now)) return false;
+  if (filterBoolean(data, "premiumOnly") && !premiumActive) return false;
   if (filterBoolean(data, "withPhotoOnly") && !stringValue(candidate.photoUrl)) return false;
   if (filterBoolean(data, "willingToRelocate") && candidate.willingToRelocate !== true) return false;
 
@@ -198,13 +197,13 @@ function matchesKeyword(data: FirebaseFirestore.DocumentData, keyword: string): 
 function publicProfile(
   uid: string,
   data: FirebaseFirestore.DocumentData,
-  now: number
+  premiumActive: boolean
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { firebaseUid: uid };
   for (const field of PUBLIC_PROFILE_FIELDS) {
     if (field === "firebaseUid") continue;
     if (field === "isPremium") {
-      result[field] = premiumIsActive(data, now);
+      result[field] = premiumActive;
       continue;
     }
     const value = data[field];
@@ -257,11 +256,26 @@ export const discoverProfiles = functions
     const ageMaxRaw = Number(data?.ageMax ?? 70);
     const ageMin = Math.max(18, Math.min(99, Number.isFinite(ageMinRaw) ? Math.trunc(ageMinRaw) : 18));
     const ageMax = Math.max(ageMin, Math.min(99, Number.isFinite(ageMaxRaw) ? Math.trunc(ageMaxRaw) : 70));
+    const heightMinRaw = Number(data?.heightMinCm ?? 90);
+    const heightMaxRaw = Number(data?.heightMaxCm ?? 250);
+    const heightMinCm = Math.max(
+      90,
+      Math.min(250, Number.isFinite(heightMinRaw) ? Math.trunc(heightMinRaw) : 90)
+    );
+    const heightMaxCm = Math.max(
+      heightMinCm,
+      Math.min(250, Number.isFinite(heightMaxRaw) ? Math.trunc(heightMaxRaw) : 250)
+    );
     const cursor = typeof data?.cursor === "string" && data.cursor.length <= 128 ? data.cursor : "";
     const keyword = typeof data?.keyword === "string"
       ? data.keyword.trim().toLocaleLowerCase("en-IN").slice(0, MAX_KEYWORD_LENGTH)
       : "";
     const normalizedUsername = keyword.replace(/^@+/, "");
+    const includeQuestionnaireFit = filterBoolean(data, "includeQuestionnaireFit");
+    const requireQuestionnaireFit = filterBoolean(data, "requireQuestionnaireFit");
+    const includeAstrologyFit = filterBoolean(data, "includeAstrologyFit");
+    const requireAstrologyFit = filterBoolean(data, "requireAstrologyFit");
+    const minMutualMatchPercent = filterInt(data, "minMutualMatchPercent", 0, 100);
 
     const [viewerDoc, viewerPreferencesDoc, viewerPrivateDoc] = await Promise.all([
       db.collection("users").doc(viewerUid).get(),
@@ -300,6 +314,12 @@ export const discoverProfiles = functions
     );
     const viewerGender = stringValue(viewer.gender).toUpperCase();
     const viewerLookingFor = stringValue(viewer.lookingFor).toUpperCase() || "ANY";
+    const viewerQuestionnaireDoc = includeQuestionnaireFit || requireQuestionnaireFit
+      ? await db.collection("questionnaires").doc(viewerUid).get()
+      : null;
+    const viewerQuestionnaire = viewerQuestionnaireDoc?.exists
+      ? viewerQuestionnaireDoc.data() || {}
+      : {};
 
     let query: FirebaseFirestore.Query = db.collection("users")
       .orderBy("createdAt", "desc")
@@ -348,7 +368,14 @@ export const discoverProfiles = functions
     const partnerPreferenceRefs = candidates.map((doc) =>
       db.collection("partnerPreferences").doc(doc.id)
     );
-    const privateFilterRequested = needsPrivateFilterData(data);
+    const questionnaireRefs = includeQuestionnaireFit || requireQuestionnaireFit
+      ? candidates.map((doc) => db.collection("questionnaires").doc(doc.id))
+      : [];
+    const privateFilterRequested =
+      needsPrivateFilterData(data) ||
+      viewerPartnerPreferences.incomeBandMode !== "NO_PREFERENCE" ||
+      includeAstrologyFit ||
+      requireAstrologyFit;
     const personalizationActive = !keyword &&
       await hasActiveConsent(viewerUid, "personalization");
     const recommendationFeedbackRefs = personalizationActive
@@ -384,6 +411,7 @@ export const discoverProfiles = functions
       viewerPrivacyDocs,
       subscriptionDocs,
       partnerPreferenceDocs,
+      questionnaireDocs,
       privateDocs,
       presenceDocs,
       activitySettingsDocs,
@@ -397,6 +425,7 @@ export const discoverProfiles = functions
       viewerHiddenRefs.length ? db.getAll(...viewerHiddenRefs) : Promise.resolve([]),
       subscriptionRefs.length ? db.getAll(...subscriptionRefs) : Promise.resolve([]),
       partnerPreferenceRefs.length ? db.getAll(...partnerPreferenceRefs) : Promise.resolve([]),
+      questionnaireRefs.length ? db.getAll(...questionnaireRefs) : Promise.resolve([]),
       privateRefs.length ? db.getAll(...privateRefs) : Promise.resolve([]),
       presenceRefs.length ? db.getAll(...presenceRefs) : Promise.resolve([]),
       activitySettingsRefs.length ? db.getAll(...activitySettingsRefs) : Promise.resolve([]),
@@ -412,6 +441,7 @@ export const discoverProfiles = functions
     const hiddenFromViewer = new Set<string>();
     const hiddenByViewer = new Set<string>();
     const boostUntilByUid = new Map<string, number>();
+    const membershipActiveByUid = new Map<string, boolean>();
     const partnerPreferencesByUid = new Map<
       string,
       ReturnType<typeof normalizePartnerPreferences>
@@ -429,6 +459,18 @@ export const discoverProfiles = functions
       );
     });
     const privateFilterByUid = new Map<string, FirebaseFirestore.DocumentData>();
+    const questionnaireFitByUid = new Map<string, number>();
+    const astrologyFitByUid = new Map<string, number>();
+    questionnaireDocs.forEach((doc, index) => {
+      if (!doc.exists || !viewerQuestionnaireDoc?.exists) return;
+      const score = questionnaireCompatibility(
+        viewerQuestionnaire.selfVector,
+        viewerQuestionnaire.partnerVector,
+        doc.data()?.selfVector,
+        doc.data()?.partnerVector
+      );
+      if (score) questionnaireFitByUid.set(candidates[index].id, score.score);
+    });
     const feedbackByUid = new Map<string, FirebaseFirestore.DocumentData>();
     recommendationFeedbackDocs.forEach((doc, index) => {
       if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
@@ -444,12 +486,30 @@ export const discoverProfiles = functions
       if (doc.exists && doc.data()?.profileHidden === true) hiddenByViewer.add(candidates[index].id);
     });
     subscriptionDocs.forEach((doc, index) => {
+      const candidate = candidates[index].data() || {};
+      const membership = resolveMembershipState(doc.data(), candidate);
+      membershipActiveByUid.set(candidates[index].id, membership.active);
       const raw = Number(doc.data()?.boostUntil || 0);
       boostUntilByUid.set(candidates[index].id, Number.isFinite(raw) ? raw : 0);
     });
     privateDocs.forEach((doc, index) => {
       if (doc.exists) privateFilterByUid.set(candidates[index].id, doc.data() || {});
     });
+    if ((includeAstrologyFit || requireAstrologyFit) &&
+        isHinduReligion(viewer.religion)) {
+      candidates.forEach((candidateDoc) => {
+        const candidate = candidateDoc.data() || {};
+        if (!isHinduReligion(candidate.religion) || candidate.showHoroscope !== true) return;
+        const privateData = privateFilterByUid.get(candidateDoc.id) || {};
+        const compatibility = horoscopeCompatibility(
+          viewerPrivate.rasi,
+          viewerPrivate.nakshatra,
+          privateData.rasi,
+          privateData.nakshatra
+        );
+        if (compatibility) astrologyFitByUid.set(candidateDoc.id, compatibility.score);
+      });
+    }
     if (lastActiveFilterDays > 0) {
       candidates.forEach((candidateDoc, index) => {
         const relationship = {
@@ -477,7 +537,12 @@ export const discoverProfiles = functions
     const now = Date.now();
     const eligible: Array<{
       doc: FirebaseFirestore.DocumentSnapshot;
-      preferredFit: number | null;
+      forwardPreferenceFit: number | null;
+      reversePreferenceFit: number | null;
+      mutualPreferenceFit: number | null;
+      forwardPreferenceCriteria: number;
+      reversePreferenceCriteria: number;
+      mutualPreferenceCriteria: number;
       boosted: number;
       behavior: number;
       relevance: number;
@@ -498,6 +563,12 @@ export const discoverProfiles = functions
 
       const candidateAge = Number(candidate.age || 0);
       if (!Number.isFinite(candidateAge) || candidateAge < ageMin || candidateAge > ageMax) continue;
+      const candidateHeight = Number(candidate.heightCm || 0);
+      if (
+        !Number.isFinite(candidateHeight) ||
+        candidateHeight < heightMinCm ||
+        candidateHeight > heightMaxCm
+      ) continue;
 
       const candidateGender = stringValue(candidate.gender).toUpperCase();
       const candidateLookingFor = stringValue(candidate.lookingFor).toUpperCase() || "ANY";
@@ -518,29 +589,47 @@ export const discoverProfiles = functions
         filterCandidate,
         data,
         now,
-        visibleLastActiveByUid.get(doc.id) || 0
+        visibleLastActiveByUid.get(doc.id) || 0,
+        membershipActiveByUid.get(doc.id) === true
       )) continue;
 
       const candidatePartnerPreferences = partnerPreferencesByUid.get(doc.id) ||
         normalizePartnerPreferences(undefined);
-      if (!strictPreferencesAllow(viewerPartnerPreferences, candidate)) continue;
-      if (!strictPreferencesAllow(candidatePartnerPreferences, viewer)) continue;
+      const viewerForPreferences = {
+        ...viewer,
+        incomeBand: viewerPrivate.incomeBand,
+      };
+      if (!strictPreferencesAllow(viewerPartnerPreferences, filterCandidate)) continue;
+      if (!strictPreferencesAllow(candidatePartnerPreferences, viewerForPreferences)) continue;
+      if (requireQuestionnaireFit && !questionnaireFitByUid.has(doc.id)) continue;
+      if (requireAstrologyFit && !astrologyFitByUid.has(doc.id)) continue;
 
-      const preferredFit = bilateralPreferredFit(
+      const pairPreferenceMatch = bilateralPreferenceMatch(
         viewerPartnerPreferences,
-        viewer,
+        viewerForPreferences,
         candidatePartnerPreferences,
-        candidate
+        filterCandidate
       );
+      if (
+        minMutualMatchPercent > 0 &&
+        (pairPreferenceMatch.mutual == null ||
+          pairPreferenceMatch.mutualCriteria < STRONG_MUTUAL_MIN_CRITERIA ||
+          pairPreferenceMatch.mutual * 100 < minMutualMatchPercent)
+      ) continue;
       const behavior = personalizationActive
         ? behavioralAdjustment(feedbackByUid.get(doc.id))
         : 0;
       eligible.push({
         doc,
-        preferredFit,
+        forwardPreferenceFit: pairPreferenceMatch.forward,
+        reversePreferenceFit: pairPreferenceMatch.reverse,
+        mutualPreferenceFit: pairPreferenceMatch.mutual,
+        forwardPreferenceCriteria: pairPreferenceMatch.forwardCriteria,
+        reversePreferenceCriteria: pairPreferenceMatch.reverseCriteria,
+        mutualPreferenceCriteria: pairPreferenceMatch.mutualCriteria,
         boosted: (boostUntilByUid.get(doc.id) || 0) > now ? 1 : 0,
         behavior,
-        relevance: blendedRecommendationRelevance(preferredFit, behavior),
+        relevance: blendedRecommendationRelevance(pairPreferenceMatch.mutual, behavior),
         createdAt: createdAtMillis(candidate),
       });
     }
@@ -555,14 +644,45 @@ export const discoverProfiles = functions
 
     const profiles = rankedCandidates
       .slice(0, RETURN_LIMIT)
-      .map(({ doc, preferredFit }) => {
-        const profile = publicProfile(doc.id, doc.data() || {}, now);
-        return preferredFit == null
+      .map(({
+        doc,
+        forwardPreferenceFit,
+        reversePreferenceFit,
+        mutualPreferenceFit,
+        forwardPreferenceCriteria,
+        reversePreferenceCriteria,
+        mutualPreferenceCriteria,
+      }) => {
+        const profile = publicProfile(
+          doc.id,
+          doc.data() || {},
+          membershipActiveByUid.get(doc.id) === true
+        );
+        const signals: Record<string, number> = {};
+        if (mutualPreferenceFit != null) {
+          signals.pairPreferenceFit = Math.round(mutualPreferenceFit * 1000) / 1000;
+          signals.mutualPreferenceFit = Math.round(mutualPreferenceFit * 1000) / 1000;
+        }
+        if (forwardPreferenceFit != null) {
+          signals.forwardPreferenceFit = Math.round(forwardPreferenceFit * 1000) / 1000;
+        }
+        if (reversePreferenceFit != null) {
+          signals.reversePreferenceFit = Math.round(reversePreferenceFit * 1000) / 1000;
+        }
+        signals.forwardPreferenceCriteria = forwardPreferenceCriteria;
+        signals.reversePreferenceCriteria = reversePreferenceCriteria;
+        signals.mutualPreferenceCriteria = mutualPreferenceCriteria;
+        const questionnaireFit = questionnaireFitByUid.get(doc.id);
+        if (questionnaireFit != null) {
+          signals.pairQuestionnaireFit = Math.round(questionnaireFit * 1000) / 1000;
+        }
+        const astrologyFit = astrologyFitByUid.get(doc.id);
+        if (astrologyFit != null) {
+          signals.pairAstrologyFit = Math.round(astrologyFit * 1000) / 1000;
+        }
+        return Object.keys(signals).length === 0
           ? profile
-          : {
-            ...profile,
-            pairPreferenceFit: Math.round(preferredFit * 1000) / 1000,
-          };
+          : { ...profile, ...signals };
       });
 
     const nextCursor = scan.docs.length === SCAN_LIMIT

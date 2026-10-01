@@ -1,7 +1,8 @@
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck, requireOpsRole } from "./shared";
+import { db, requireAppCheck, requireOpsRole, requireProductionFeature } from "./shared";
+import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { requireActiveConsent } from "./consent";
 import {
   fileSignatureMatchesMime,
@@ -16,6 +17,8 @@ import {
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024;
+const PROFILE_VIDEO_ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
+const PROFILE_VIDEO_ORPHAN_BATCH = 200;
 
 function moderationIdForPath(path: string): string {
   return crypto.createHash("sha256").update(path).digest("hex");
@@ -367,6 +370,7 @@ export const getPhotoModerationReviewCase = functions.https.onCall(async (data, 
  */
 export const submitProfileVideo = functions.https.onCall(async (data, context) => {
   requireAppCheck(context);
+  requireProductionFeature("video_profiles");
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
   await requireActiveConsent(uid, "media_processing");
@@ -423,6 +427,9 @@ export const submitProfileVideo = functions.https.onCall(async (data, context) =
     });
   });
 
+  await db.collection("profileVideoOrphans").doc(moderationId)
+    .delete()
+    .catch(() => undefined);
   return { moderationId, status: "PENDING", storagePath };
 });
 
@@ -490,6 +497,7 @@ export const reviewProfileVideo = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("invalid-argument", "Invalid video moderation case");
   }
   const decision = reviewDecision(data?.decision);
+  if (decision === "APPROVED") requireProductionFeature("video_profiles");
   const reason = reviewReason(data?.reason);
   const moderationRef = db.collection("videoModeration").doc(moderationId);
   const auditRef = db.collection("opsAuditLog").doc();
@@ -571,6 +579,86 @@ export const removeProfileVideo = functions.https.onCall(async (_data, context) 
   return { success: true };
 });
 
+/**
+ * Storage is writable by the signed-in owner so Android can upload before registering moderation.
+ * The backend flag still owns launch authority: when disabled, uploaded video objects are removed
+ * immediately. When enabled, unsubmitted uploads are tracked and cleaned after a short grace period.
+ */
+export const onProfileVideoUploaded = functions.storage.object().onFinalize(async (object) => {
+  const storagePath = object.name || "";
+  const match = storagePath.match(/^videos\/([^/]+)\//);
+  if (!match) return;
+  const uid = match[1];
+
+  const enabled = productionFeatureEnabled(
+    functions.config().features?.video_profiles
+  );
+  const file = admin.storage().bucket(object.bucket).file(storagePath);
+  if (!enabled) {
+    await file.delete({ ignoreNotFound: true });
+    functions.logger.info("Removed profile video upload while feature disabled", {
+      uid,
+      storagePath,
+    });
+    return;
+  }
+
+  const moderationId = moderationIdForPath(storagePath);
+  await db.collection("profileVideoOrphans").doc(moderationId).set({
+    uid,
+    storagePath,
+    bucketName: object.bucket,
+    createdAtMillis: Date.now(),
+    expiresAtMillis: Date.now() + PROFILE_VIDEO_ORPHAN_TTL_MS,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: false });
+});
+
+/** Delete enabled-feature video uploads that never reached moderation registration. */
+export const cleanupAbandonedProfileVideos = functions.pubsub
+  .schedule("every 6 hours")
+  .onRun(async () => {
+    const now = Date.now();
+    for (let pass = 0; pass < 20; pass += 1) {
+      const stale = await db.collection("profileVideoOrphans")
+        .where("expiresAtMillis", "<=", now)
+        .limit(PROFILE_VIDEO_ORPHAN_BATCH)
+        .get();
+      if (stale.empty) break;
+
+      for (const orphan of stale.docs) {
+        const value = orphan.data() || {};
+        const uid = String(value.uid || "");
+        const storagePath = String(value.storagePath || "");
+        const bucketName = String(value.bucketName || "");
+        if (
+          !uid ||
+          !bucketName ||
+          !storagePath.startsWith(`videos/${uid}/`) ||
+          storagePath.includes("..")
+        ) {
+          await orphan.ref.delete();
+          continue;
+        }
+
+        const moderationId = moderationIdForPath(storagePath);
+        const [moderation, user] = await Promise.all([
+          db.collection("videoModeration").doc(moderationId).get(),
+          db.collection("users").doc(uid).get(),
+        ]);
+        const published = user.exists && user.data()?.videoUrl === storagePath;
+        if (!moderation.exists && !published) {
+          await admin.storage().bucket(bucketName).file(storagePath)
+            .delete({ ignoreNotFound: true });
+        }
+        await orphan.ref.delete();
+      }
+
+      if (stale.size < PROFILE_VIDEO_ORPHAN_BATCH) break;
+    }
+    return null;
+  });
+
 export const onProfileVideoDeleted = functions.storage.object().onDelete(async (object) => {
   const storagePath = object.name || "";
   const match = storagePath.match(/^videos\/([^/]+)\//);
@@ -584,6 +672,7 @@ export const onProfileVideoDeleted = functions.storage.object().onDelete(async (
       tx.get(userRef),
     ]);
     if (moderation.exists) tx.delete(moderationRef);
+    tx.delete(db.collection("profileVideoOrphans").doc(moderationIdForPath(storagePath)));
     if (user.exists && user.data()?.videoUrl === storagePath) {
       tx.update(userRef, { videoUrl: "" });
     }
@@ -648,6 +737,7 @@ export const onChatMediaUploaded = functions.storage.object().onFinalize(async (
         messageId,
         extension,
         senderUid,
+        recipientUid,
         createdAtMillis,
         expiresAt: admin.firestore.Timestamp.fromMillis(
           createdAtMillis + CHAT_MEDIA_ORPHAN_TTL_MS

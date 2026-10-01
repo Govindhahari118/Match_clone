@@ -149,8 +149,7 @@ async function chatNotificationStillAllowed(
 
 async function deliverPersistedNotification(
   notificationId: string,
-  payload: NotificationPayload,
-  _channelId: string
+  payload: NotificationPayload
 ): Promise<void> {
   const pushType = payload.type === "INTEREST" ? "interest_received" :
     payload.type === "MATCH" ? "mutual_match" :
@@ -192,8 +191,7 @@ export const onInterestCreated = functions.firestore
         entityId: fromUid,
         deepLink: "matrimonyconnect://interests",
         fromFirebaseUid: fromUid,
-      },
-      "match_interests"
+      }
     );
   });
 
@@ -218,8 +216,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid2,
           deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid2,
-        },
-        "match_matches"
+        }
       ),
       deliverPersistedNotification(
         `match_${context.params.matchId}_${uid2}`,
@@ -232,8 +229,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid1,
           deepLink: "matrimonyconnect://matches",
           fromFirebaseUid: uid1,
-        },
-        "match_matches"
+        }
       ),
     ]);
   });
@@ -262,7 +258,6 @@ export const onNewMessage = functions.firestore
         entityId: context.params.threadId,
         deepLink: "matrimonyconnect://notifications",
         fromFirebaseUid,
-      },
-      "match_messages"
+      }
     );
   });

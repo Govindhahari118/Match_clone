@@ -14,10 +14,12 @@ function completePublicProfile() {
     motherTongue: "Telugu",
     religion: "Hindu",
     heightCm: 165,
+    weight: 58,
     maritalStatus: "Never Married",
     photoUrl: "photos/alice/approved.jpg",
     education: "B.Tech",
     profession: "Engineer",
+    occupationCategory: "Private Sector",
     employer: "Example",
     familyType: "Nuclear",
     familyValues: "Moderate",
@@ -92,6 +94,6 @@ test("explicit no-preference configuration completes the partner-intent section"
 test("single basic field earns only its fraction of the Basics section", () => {
   assert.equal(
     calculateProfileCompletenessValue({ username: "anu_rao" }, {}, {}, {}),
-    0.017
+    0.015
   );
 });

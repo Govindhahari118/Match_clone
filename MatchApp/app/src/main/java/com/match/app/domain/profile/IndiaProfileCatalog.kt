@@ -42,6 +42,13 @@ object IndiaProfileCatalog {
         "Homemaker", "Not Working", "Retired", "Other"
     )
     val employerTypes = listOf("MNC", "Startup", "Private Company", "Government", "PSU", "Self-Employed", "Other")
+    val incomeBands = listOf(
+        "Below ₹5L", "₹5–10L", "₹10–15L", "₹15–25L", "₹25–50L",
+        "₹50L–₹1Cr", "₹1Cr+", "Other / different currency", "Prefer not to say"
+    )
+    val complexionOptions = listOf(
+        "Very light", "Light", "Medium", "Deep", "Prefer not to say"
+    )
     val familyTypes = listOf("Nuclear", "Joint", "Extended", "Other")
     val familyStatuses = listOf("Middle Class", "Upper Middle Class", "Affluent", "Other")
     val familyValues = listOf("Traditional", "Moderate", "Liberal", "Other")

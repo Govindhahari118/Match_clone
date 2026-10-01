@@ -7,11 +7,19 @@ internal data class DiscoveryEmptyState(
     val actionLabel: String?,
     val action: Action
 ) {
-    enum class Action { NONE, RESET, INCLUDE_NO_PHOTO }
+    enum class Action { NONE, RESET, INCLUDE_NO_PHOTO, RELAX_MUTUAL_MATCH }
 }
 
 internal object DiscoveryEmptyStatePolicy {
     fun resolve(filter: MatchFilter): DiscoveryEmptyState {
+        if (filter.minMutualMatchPercent >= 90) {
+            return DiscoveryEmptyState(
+                message = "No profiles currently meet your ${filter.minMutualMatchPercent}%+ reciprocal preference threshold. Your strict preferences have not been changed.",
+                actionLabel = "Show other eligible matches",
+                action = DiscoveryEmptyState.Action.RELAX_MUTUAL_MATCH
+            )
+        }
+
         val reasons = buildList {
             if (filter.keyword.isNotBlank()) add("keyword")
             if (filter.ageMin != 18 || filter.ageMax != 70) add("age")

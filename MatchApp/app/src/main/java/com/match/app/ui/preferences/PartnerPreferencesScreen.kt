@@ -16,10 +16,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.PartnerPreferenceMode
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferences
+import com.match.app.data.session.SessionStore
+import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.theme.MatreeDesign
@@ -27,6 +30,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -37,6 +41,7 @@ data class PartnerPreferencesUi(
     val consentSaving: Boolean = false,
     val sensitiveConsentCurrent: Boolean = false,
     val sensitiveConsentVersion: String = "",
+    val profileReligion: String = "",
     val value: PartnerPreferences = PartnerPreferences(),
     val message: String? = null,
     val error: String? = null
@@ -45,7 +50,9 @@ data class PartnerPreferencesUi(
 @HiltViewModel
 class PartnerPreferencesViewModel @Inject constructor(
     private val repository: PartnerPreferenceRepository,
-    private val consentRepository: ConsentRepository
+    private val consentRepository: ConsentRepository,
+    private val session: SessionStore,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(PartnerPreferencesUi())
     val ui: StateFlow<PartnerPreferencesUi> = _ui.asStateFlow()
@@ -54,10 +61,16 @@ class PartnerPreferencesViewModel @Inject constructor(
         viewModelScope.launch {
             val preferences = runCatching { repository.load() }
             val consents = runCatching { consentRepository.getState() }
+            val profileReligion = runCatching {
+                session.userId.first()?.let { userId ->
+                    authRepository.currentProfile(userId)?.religion
+                }.orEmpty()
+            }.getOrDefault("")
             val consent = consents.getOrNull()
                 ?.firstOrNull { it.purpose == "sensitive_preferences" }
             _ui.value = PartnerPreferencesUi(
                 loading = false,
+                profileReligion = profileReligion,
                 value = preferences.getOrDefault(PartnerPreferences()),
                 sensitiveConsentCurrent = consent?.isCurrent == true,
                 sensitiveConsentVersion = consent?.noticeVersion.orEmpty(),
@@ -93,6 +106,29 @@ class PartnerPreferencesViewModel @Inject constructor(
                     error = error.message ?: "Could not update sensitive-preference consent."
                 )
             }
+        }
+    }
+
+    fun useMyConfirmedReligion() {
+        val religion = _ui.value.profileReligion.trim()
+        if (religion.isBlank()) {
+            _ui.update { it.copy(error = "Your profile does not have a confirmed religion to use.") }
+            return
+        }
+        if (!_ui.value.sensitiveConsentCurrent) {
+            _ui.update {
+                it.copy(error = "Enable sensitive-preference processing before using this preset.")
+            }
+            return
+        }
+        update {
+            it.copy(
+                religionMode = PartnerPreferenceMode.STRICT,
+                religions = listOf(religion)
+            )
+        }
+        _ui.update {
+            it.copy(message = "Using your confirmed religion as a strict preference. Save to apply it.")
         }
     }
 
@@ -202,6 +238,36 @@ fun PartnerPreferencesScreen(
                     }
                 }
 
+                if (ui.profileReligion.isNotBlank()) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(
+                            Modifier.padding(MatreeDesign.spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+                        ) {
+                            Text(
+                                "Quick setup",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Your confirmed profile religion is ${ui.profileReligion}. Matching does not use it automatically.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FilledTonalButton(
+                                onClick = vm::useMyConfirmedReligion,
+                                enabled = ui.sensitiveConsentCurrent
+                            ) {
+                                Text("Use my confirmed religion")
+                            }
+                        }
+                    }
+                }
+
+                PreferenceSectionHeader(
+                    title = "Core preferences",
+                    subtitle = "Start with the few criteria that matter most. Every item remains optional."
+                )
                 RangePreferenceCard(
                     title = "Age",
                     mode = ui.value.ageMode,
@@ -227,7 +293,40 @@ fun PartnerPreferencesScreen(
                         vm.update { it.copy(heightMinCm = min, heightMaxCm = max) }
                     }
                 )
+                RangePreferenceCard(
+                    title = "Weight",
+                    mode = ui.value.weightMode,
+                    min = ui.value.weightMinKg,
+                    max = ui.value.weightMaxKg,
+                    minAllowed = 30,
+                    maxAllowed = 250,
+                    suffix = "kg",
+                    onMode = { mode -> vm.update { it.copy(weightMode = mode) } },
+                    onRange = { min, max ->
+                        vm.update { it.copy(weightMinKg = min, weightMaxKg = max) }
+                    }
+                )
+                ChoicePreferenceCard(
+                    title = "Annual income range",
+                    mode = ui.value.incomeBandMode,
+                    selected = ui.value.incomeBands,
+                    options = IndiaProfileCatalog.incomeBands.map { it to it },
+                    onMode = { mode -> vm.update { it.copy(incomeBandMode = mode) } },
+                    onSelected = { values -> vm.update { it.copy(incomeBands = values) } }
+                )
+                ChoicePreferenceCard(
+                    title = "Skin tone (optional, self-described)",
+                    mode = ui.value.complexionMode,
+                    selected = ui.value.complexions,
+                    options = IndiaProfileCatalog.complexionOptions.map { it to it },
+                    onMode = { mode -> vm.update { it.copy(complexionMode = mode) } },
+                    onSelected = { values -> vm.update { it.copy(complexions = values) } }
+                )
 
+                PreferenceSectionHeader(
+                    title = "Community & faith",
+                    subtitle = "Use only the religious or community details that matter to you."
+                )
                 ListPreferenceCard(
                     title = "Religion",
                     mode = ui.value.religionMode,
@@ -235,6 +334,58 @@ fun PartnerPreferencesScreen(
                     hint = "Hindu, Muslim, Christian…",
                     onMode = { mode -> vm.update { it.copy(religionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(religions = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Community / caste",
+                    mode = ui.value.casteMode,
+                    values = ui.value.castes,
+                    hint = "Reddy, Brahmin, Kamma…",
+                    onMode = { mode -> vm.update { it.copy(casteMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(castes = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Sub-community / sub-caste",
+                    mode = ui.value.subCasteMode,
+                    values = ui.value.subCastes,
+                    hint = "Optional sub-community preferences",
+                    onMode = { mode -> vm.update { it.copy(subCasteMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(subCastes = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Gothra / lineage",
+                    mode = ui.value.gothraMode,
+                    values = ui.value.gothras,
+                    hint = "Optional lineage preference",
+                    onMode = { mode -> vm.update { it.copy(gothraMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(gothras = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith tradition",
+                    mode = ui.value.faithTraditionMode,
+                    values = ui.value.faithTraditions,
+                    hint = "Denomination, sect, tradition…",
+                    onMode = { mode -> vm.update { it.copy(faithTraditionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithTraditions = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith sub-tradition",
+                    mode = ui.value.faithSubTraditionMode,
+                    values = ui.value.faithSubTraditions,
+                    hint = "Optional sub-tradition",
+                    onMode = { mode -> vm.update { it.copy(faithSubTraditionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithSubTraditions = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Faith institution / community",
+                    mode = ui.value.faithInstitutionMode,
+                    values = ui.value.faithInstitutions,
+                    hint = "Optional church, jamaat, samaj or institution",
+                    onMode = { mode -> vm.update { it.copy(faithInstitutionMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(faithInstitutions = values) } }
+                )
+                PreferenceSectionHeader(
+                    title = "Location & residence",
+                    subtitle = "Set geography, citizenship, overseas residence and relocation choices."
                 )
                 ListPreferenceCard(
                     title = "State / region",
@@ -245,12 +396,78 @@ fun PartnerPreferencesScreen(
                     onValues = { values -> vm.update { it.copy(states = values) } }
                 )
                 ListPreferenceCard(
+                    title = "Native state",
+                    mode = ui.value.nativeStateMode,
+                    values = ui.value.nativeStates,
+                    hint = "Telangana, Andhra Pradesh…",
+                    onMode = { mode -> vm.update { it.copy(nativeStateMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(nativeStates = values) } }
+                )
+                ListPreferenceCard(
                     title = "City",
                     mode = ui.value.cityMode,
                     values = ui.value.cities,
                     hint = "Hyderabad, Bengaluru…",
                     onMode = { mode -> vm.update { it.copy(cityMode = mode) } },
                     onValues = { values -> vm.update { it.copy(cities = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Country of residence",
+                    mode = ui.value.countryOfResidenceMode,
+                    values = ui.value.countriesOfResidence,
+                    hint = "India, United States, UAE…",
+                    onMode = { mode -> vm.update { it.copy(countryOfResidenceMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(countriesOfResidence = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Citizenship",
+                    mode = ui.value.citizenshipMode,
+                    values = ui.value.citizenships,
+                    hint = "India, United States…",
+                    onMode = { mode -> vm.update { it.copy(citizenshipMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(citizenships = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Residential status",
+                    mode = ui.value.residentialStatusMode,
+                    values = ui.value.residentialStatuses,
+                    hint = "Citizen, Permanent Resident, Work Visa…",
+                    onMode = { mode -> vm.update { it.copy(residentialStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(residentialStatuses = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Visa status",
+                    mode = ui.value.visaStatusMode,
+                    values = ui.value.visaStatuses,
+                    hint = "Citizen, PR, H-1B, student visa…",
+                    onMode = { mode -> vm.update { it.copy(visaStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(visaStatuses = values) } }
+                )
+                ChoicePreferenceCard(
+                    title = "Residence class",
+                    mode = ui.value.nriMode,
+                    selected = ui.value.nriStatuses,
+                    options = listOf(
+                        "INDIA_RESIDENT" to "India resident",
+                        "NRI" to "NRI / overseas resident"
+                    ),
+                    onMode = { mode -> vm.update { it.copy(nriMode = mode) } },
+                    onSelected = { values -> vm.update { it.copy(nriStatuses = values) } }
+                )
+                ChoicePreferenceCard(
+                    title = "Relocation",
+                    mode = ui.value.relocationMode,
+                    selected = ui.value.relocationStatuses,
+                    options = listOf(
+                        "WILLING_TO_RELOCATE" to "Willing to relocate",
+                        "NOT_WILLING_TO_RELOCATE" to "Not willing to relocate"
+                    ),
+                    onMode = { mode -> vm.update { it.copy(relocationMode = mode) } },
+                    onSelected = { values -> vm.update { it.copy(relocationStatuses = values) } }
+                )
+                PreferenceSectionHeader(
+                    title = "Language, family & career",
+                    subtitle = "Refine life-stage, education, work and family-background preferences."
                 )
                 ListPreferenceCard(
                     title = "Mother tongue",
@@ -268,6 +485,17 @@ fun PartnerPreferencesScreen(
                     onMode = { mode -> vm.update { it.copy(maritalStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(maritalStatuses = values) } }
                 )
+                ChoicePreferenceCard(
+                    title = "Children",
+                    mode = ui.value.childrenMode,
+                    selected = ui.value.childrenStatuses,
+                    options = listOf(
+                        "NO_CHILDREN" to "No children",
+                        "HAS_CHILDREN" to "Has children"
+                    ),
+                    onMode = { mode -> vm.update { it.copy(childrenMode = mode) } },
+                    onSelected = { values -> vm.update { it.copy(childrenStatuses = values) } }
+                )
                 ListPreferenceCard(
                     title = "Education",
                     mode = ui.value.educationMode,
@@ -277,12 +505,64 @@ fun PartnerPreferencesScreen(
                     onValues = { values -> vm.update { it.copy(educationLevels = values) } }
                 )
                 ListPreferenceCard(
+                    title = "Education field",
+                    mode = ui.value.educationFieldMode,
+                    values = ui.value.educationFields,
+                    hint = "Engineering, Medicine, Commerce…",
+                    onMode = { mode -> vm.update { it.copy(educationFieldMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(educationFields = values) } }
+                )
+                ListPreferenceCard(
                     title = "Occupation",
                     mode = ui.value.occupationMode,
                     values = ui.value.occupationCategories,
                     hint = "Software, Healthcare…",
                     onMode = { mode -> vm.update { it.copy(occupationMode = mode) } },
                     onValues = { values -> vm.update { it.copy(occupationCategories = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Employer type",
+                    mode = ui.value.employerTypeMode,
+                    values = ui.value.employerTypes,
+                    hint = "Private, Government, Self-employed…",
+                    onMode = { mode -> vm.update { it.copy(employerTypeMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(employerTypes = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Family type",
+                    mode = ui.value.familyTypeMode,
+                    values = ui.value.familyTypes,
+                    hint = "Nuclear, Joint…",
+                    onMode = { mode -> vm.update { it.copy(familyTypeMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(familyTypes = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Family status",
+                    mode = ui.value.familyStatusMode,
+                    values = ui.value.familyStatuses,
+                    hint = "Middle class, Upper middle class…",
+                    onMode = { mode -> vm.update { it.copy(familyStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(familyStatuses = values) } }
+                )
+                ListPreferenceCard(
+                    title = "Family values",
+                    mode = ui.value.familyValuesMode,
+                    values = ui.value.familyValues,
+                    hint = "Traditional, Moderate, Liberal…",
+                    onMode = { mode -> vm.update { it.copy(familyValuesMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(familyValues = values) } }
+                )
+                PreferenceSectionHeader(
+                    title = "Lifestyle & wellbeing",
+                    subtitle = "Optional lifestyle criteria. Leave them at No preference to keep discovery broad."
+                )
+                ListPreferenceCard(
+                    title = "Physical status",
+                    mode = ui.value.physicalStatusMode,
+                    values = ui.value.physicalStatuses,
+                    hint = "Normal, Differently abled…",
+                    onMode = { mode -> vm.update { it.copy(physicalStatusMode = mode) } },
+                    onValues = { values -> vm.update { it.copy(physicalStatuses = values) } }
                 )
                 ListPreferenceCard(
                     title = "Diet",
@@ -330,6 +610,25 @@ fun PartnerPreferencesScreen(
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
         }
+    }
+}
+
+@Composable
+private fun PreferenceSectionHeader(
+    title: String,
+    subtitle: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -426,6 +725,54 @@ private fun NumericPreferenceField(
         singleLine = true,
         modifier = modifier
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoicePreferenceCard(
+    title: String,
+    mode: PartnerPreferenceMode,
+    selected: List<String>,
+    options: List<Pair<String, String>>,
+    onMode: (PartnerPreferenceMode) -> Unit,
+    onSelected: (List<String>) -> Unit
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(MatreeDesign.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            PreferenceModeRow(mode, onMode)
+            if (mode != PartnerPreferenceMode.NO_PREFERENCE) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                ) {
+                    options.forEach { (value, label) ->
+                        val active = value in selected
+                        FilterChip(
+                            selected = active,
+                            onClick = {
+                                onSelected(
+                                    if (active) selected - value
+                                    else (selected + value).distinct()
+                                )
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                if (selected.isEmpty()) {
+                    Text(
+                        "Choose at least one option or use No preference.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

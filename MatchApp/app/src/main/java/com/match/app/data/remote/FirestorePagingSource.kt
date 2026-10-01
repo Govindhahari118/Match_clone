@@ -9,7 +9,13 @@ import kotlinx.coroutines.tasks.await
 
 data class DiscoveryProfileCandidate(
     val profile: UserEntity,
-    val pairPreferenceFit: Float?
+    val pairPreferenceFit: Float?,
+    val forwardPreferenceFit: Float? = null,
+    val reversePreferenceFit: Float? = null,
+    val mutualPreferenceFit: Float? = null,
+    val forwardPreferenceCriteria: Int = 0,
+    val reversePreferenceCriteria: Int = 0,
+    val mutualPreferenceCriteria: Int = 0
 )
 
 /**
@@ -43,6 +49,9 @@ class FirestorePagingSource(
         val payload = mutableMapOf<String, Any>(
             "ageMin" to filter.ageMin,
             "ageMax" to filter.ageMax,
+            "heightMinCm" to filter.heightMinCm,
+            "heightMaxCm" to filter.heightMaxCm,
+            "minMutualMatchPercent" to filter.minMutualMatchPercent.coerceIn(0, 100),
             "withPhotoOnly" to filter.withPhotoOnly,
             "verifiedOnly" to filter.verifiedOnly,
             "premiumOnly" to filter.premiumOnly,
@@ -62,6 +71,9 @@ class FirestorePagingSource(
         putText("religion", filter.religion)
         putText("caste", filter.caste)
         putText("subCaste", filter.subCaste)
+        putText("faithTradition", filter.faithTradition)
+        putText("faithSubTradition", filter.faithSubTradition)
+        putText("faithInstitution", filter.faithInstitution)
         putText("motherTongue", filter.motherTongue)
         putText("maritalStatus", filter.maritalStatus)
         putText("incomeMin", filter.incomeMin)
@@ -72,6 +84,7 @@ class FirestorePagingSource(
         putText("employerType", filter.employerType)
         putText("diet", filter.diet)
         putText("residentialStatus", filter.residentialStatus)
+        putText("visaStatus", filter.visaStatus)
         putText("hasChildren", filter.hasChildren)
         putText("hasChildrenFilter", filter.hasChildrenFilter)
         putText("gothra", filter.gothra)
@@ -109,11 +122,15 @@ class FirestorePagingSource(
 
             if (!matchesGenderPreference(entity)) return@mapNotNull null
             if (entity.age !in filter.ageMin..filter.ageMax) return@mapNotNull null
+            if (entity.heightCm !in filter.heightMinCm..filter.heightMaxCm) return@mapNotNull null
             if (!matchesText(filter.city, entity.city)) return@mapNotNull null
             if (!matchesText(filter.state, entity.state)) return@mapNotNull null
             if (!matchesText(filter.religion, entity.religion)) return@mapNotNull null
             if (!matchesText(filter.caste, entity.caste)) return@mapNotNull null
             if (!matchesText(filter.subCaste, entity.subCaste)) return@mapNotNull null
+            if (!matchesText(filter.faithTradition, entity.faithTradition)) return@mapNotNull null
+            if (!matchesText(filter.faithSubTradition, entity.faithSubTradition)) return@mapNotNull null
+            if (!matchesText(filter.faithInstitution, entity.faithInstitution)) return@mapNotNull null
             if (!matchesText(filter.motherTongue, entity.motherTongue)) return@mapNotNull null
             if (!matchesText(filter.maritalStatus, entity.maritalStatus)) return@mapNotNull null
             if (filter.verifiedOnly && !entity.isVerified) return@mapNotNull null
@@ -126,6 +143,7 @@ class FirestorePagingSource(
             if (!matchesText(filter.occupationCategory, entity.occupationCategory)) return@mapNotNull null
             if (!matchesText(filter.employerType, entity.employerType)) return@mapNotNull null
             if (!matchesText(filter.residentialStatus, entity.residentialStatus)) return@mapNotNull null
+            if (!matchesText(filter.visaStatus, entity.visaStatus)) return@mapNotNull null
             if (!matchesText(filter.nativeState, entity.nativeState)) return@mapNotNull null
             if (!matchesText(filter.countryOfResidence, entity.countryOfResidence)) return@mapNotNull null
             if (!matchesText(filter.citizenship, entity.citizenship)) return@mapNotNull null
@@ -170,7 +188,19 @@ class FirestorePagingSource(
                 profile = entity,
                 pairPreferenceFit = (raw["pairPreferenceFit"] as? Number)
                     ?.toFloat()
-                    ?.coerceIn(0f, 1f)
+                    ?.coerceIn(0f, 1f),
+                forwardPreferenceFit = (raw["forwardPreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                reversePreferenceFit = (raw["reversePreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                mutualPreferenceFit = (raw["mutualPreferenceFit"] as? Number)
+                    ?.toFloat()
+                    ?.coerceIn(0f, 1f),
+                forwardPreferenceCriteria = (raw["forwardPreferenceCriteria"] as? Number)?.toInt() ?: 0,
+                reversePreferenceCriteria = (raw["reversePreferenceCriteria"] as? Number)?.toInt() ?: 0,
+                mutualPreferenceCriteria = (raw["mutualPreferenceCriteria"] as? Number)?.toInt() ?: 0
             )
         }
 
@@ -217,6 +247,9 @@ class FirestorePagingSource(
         state = data["state"] as? String ?: "",
         subCaste = data["subCaste"] as? String ?: "",
         gothra = data["gothra"] as? String ?: "",
+        faithTradition = data["faithTradition"] as? String ?: "",
+        faithSubTradition = data["faithSubTradition"] as? String ?: "",
+        faithInstitution = data["faithInstitution"] as? String ?: "",
         incomeBand = data["incomeBand"] as? String ?: "",
         diet = data["diet"] as? String ?: "",
         familyType = data["familyType"] as? String ?: "",

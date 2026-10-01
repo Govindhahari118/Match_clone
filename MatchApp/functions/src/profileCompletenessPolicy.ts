@@ -8,7 +8,9 @@ export const PROFILE_COMPLETENESS_PUBLIC_FIELDS = [
   "religion",
   "education",
   "profession",
+  "occupationCategory",
   "heightCm",
+  "weight",
   "maritalStatus",
   "familyType",
   "familyValues",
@@ -72,6 +74,7 @@ export function calculateProfileCompletenessValue(
     nonBlank(publicProfile.motherTongue),
     nonBlank(publicProfile.religion),
     positiveNumber(publicProfile.heightCm),
+    positiveNumber(publicProfile.weight),
     nonBlank(publicProfile.maritalStatus),
   ]);
 
@@ -82,6 +85,7 @@ export function calculateProfileCompletenessValue(
   score += section(0.10, [
     nonBlank(publicProfile.education),
     nonBlank(publicProfile.profession),
+    nonBlank(publicProfile.occupationCategory),
     nonBlank(publicProfile.employer),
     nonBlank(privateProfile.incomeBand),
   ]);

@@ -25,7 +25,6 @@ export const onUserCreate = functions.firestore
     await snap.ref.update({
       matrimonyId,
       verificationLevel: 1,
-      subscriptionPlan: "FREE",
       createdAt: Date.now(),
       profileRevision: Number(snap.data()?.profileRevision || 0),
     });
@@ -285,6 +284,36 @@ async function removeUidFromPhotoFingerprints(uid: string): Promise<void> {
 }
 
 
+async function removeUidFromBioFingerprints(uid: string): Promise<void> {
+  let hasMore = true;
+  while (hasMore) {
+    const snapshot = await db.collection("bioFingerprints")
+      .where("owners", "array-contains", uid)
+      .limit(DELETE_BATCH_SIZE)
+      .get();
+    if (snapshot.empty) break;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      const owners = Array.isArray(doc.data()?.owners)
+        ? doc.data()?.owners.filter((value: unknown): value is string =>
+          typeof value === "string" && value !== uid)
+        : [];
+      if (owners.length === 0) {
+        batch.delete(doc.ref);
+      } else {
+        batch.update(doc.ref, {
+          owners,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    });
+    await batch.commit();
+    hasMore = snapshot.size === DELETE_BATCH_SIZE;
+  }
+}
+
+
 async function deleteFcmDevicesForUser(uid: string): Promise<void> {
   const devices = db.collection("fcmTokens").doc(uid).collection("devices");
   let hasMore = true;
@@ -428,6 +457,9 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("profileReports").where("targetUid", "==", uid));
         await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
         await deleteQuery(db.collection("videoModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("profileVideoOrphans").where("uid", "==", uid));
+        await deleteQuery(db.collection("chatMediaOrphans").where("senderUid", "==", uid));
+        await deleteQuery(db.collection("chatMediaOrphans").where("recipientUid", "==", uid));
         await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
         await deleteQuery(
           db.collection("recommendationImpressionBatches").where("viewerUid", "==", uid)
@@ -468,6 +500,7 @@ export const deleteUserAccount = functions
         await deleteCollection(`consents/${uid}/items`);
         await deleteCollection(`consentLedger/${uid}/events`);
         await removeUidFromPhotoFingerprints(uid);
+        await removeUidFromBioFingerprints(uid);
         await deleteFcmDevicesForUser(uid);
       });
 
@@ -477,6 +510,7 @@ export const deleteUserAccount = functions
         const chats = await db.collection("chats").where("participantUids", "array-contains", uid).get();
         for (const thread of chats.docs) {
           await bucket.deleteFiles({ prefix: `chat-media/${thread.id}/` });
+          await deleteQuery(db.collection("chatMediaOrphans").where("threadId", "==", thread.id));
           await deleteQuery(thread.ref.collection("messages"));
           await thread.ref.delete();
         }
