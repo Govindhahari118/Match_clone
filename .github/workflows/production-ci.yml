@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# On pull_request GitHub's default github.sha is a synthetic merge commit. Production evidence
+# must bind to the actual branch head that will be reviewed and promoted.
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 concurrency:
   group: production-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -23,6 +28,8 @@ jobs:
         working-directory: MatchApp
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -42,7 +49,7 @@ jobs:
       - name: Android / Functions callable contract gate
         run: python3 scripts/ci/callable_contract_scan.py
       - name: Exact-source release guard
-        run: python3 scripts/ci/release_source_guard.py --sha "$GITHUB_SHA"
+        run: python3 scripts/ci/release_source_guard.py --sha "$SOURCE_SHA"
       - name: Release candidate repository scan
         run: python3 scripts/ci/release_candidate_scan.py
       - name: Production handoff package gate
@@ -54,11 +61,11 @@ jobs:
           python3 -m py_compile scripts/ci/production_external_gate.py scripts/ci/release_source_guard.py
           if python3 scripts/ci/production_external_gate.py \
               --evidence docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json \
-              --sha "$GITHUB_SHA" --mode prelaunch; then
+              --sha "$SOURCE_SHA" --mode prelaunch; then
             echo "Template must never pass the external production gate."
             exit 1
           fi
-          python3 - "$GITHUB_SHA" <<'PY'
+          python3 - "$SOURCE_SHA" <<'PY'
           import importlib.util, json, pathlib, sys
           sha=sys.argv[1]
           path=pathlib.Path("scripts/ci/production_external_gate.py")
@@ -82,10 +89,10 @@ jobs:
           PY
           python3 scripts/ci/production_external_gate.py \
             --evidence /tmp/matree-external-gate-synthetic.json \
-            --sha "$GITHUB_SHA" --mode full --allow-ci-synthetic
+            --sha "$SOURCE_SHA" --mode full --allow-ci-synthetic
           if python3 scripts/ci/production_external_gate.py \
               --evidence /tmp/matree-external-gate-synthetic.json \
-              --sha "$GITHUB_SHA" --mode prelaunch; then
+              --sha "$SOURCE_SHA" --mode prelaunch; then
             echo "CI synthetic validator must be rejected without the explicit self-test flag."
             exit 1
           fi
@@ -125,7 +132,7 @@ jobs:
           if [ "$cleanup" -eq 1 ]; then
             rm -f app/build/outputs/bundle/release/*.aab
             cat > app/build/outputs/bundle/release/NON_PRODUCTION_FIREBASE_CONFIG.txt <<EOF
-          SHA: ${GITHUB_SHA}
+          SHA: ${SOURCE_SHA}
           Release/R8 code validation used the debug-only placeholder Firebase configuration.
           No production AAB is emitted until a real release google-services.json is supplied.
           EOF
@@ -134,12 +141,12 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python3 scripts/ci/release_evidence.py             --sha "$GITHUB_SHA"             --output app/build/outputs/bundle/release/RELEASE_EVIDENCE.md
+          python3 scripts/ci/release_evidence.py             --sha "$SOURCE_SHA"             --output app/build/outputs/bundle/release/RELEASE_EVIDENCE.md
       - name: Upload Android evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-code-evidence-${{ github.sha }}
+          name: android-code-evidence-${{ env.SOURCE_SHA }}
           if-no-files-found: warn
           retention-days: 30
           path: |
@@ -162,6 +169,8 @@ jobs:
         working-directory: MatchApp
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -221,7 +230,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: room-privacy-instrumentation-evidence-${{ github.sha }}
+          name: room-privacy-instrumentation-evidence-${{ env.SOURCE_SHA }}
           if-no-files-found: warn
           retention-days: 30
           path: |
@@ -238,6 +247,8 @@ jobs:
         working-directory: MatchApp/functions
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -267,7 +278,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: functions-evidence-${{ github.sha }}
+          name: functions-evidence-${{ env.SOURCE_SHA }}
           if-no-files-found: warn
           retention-days: 30
           path: |
@@ -283,6 +294,8 @@ jobs:
         working-directory: MatchApp/rules-tests
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -301,7 +314,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rules-evidence-${{ github.sha }}
+          name: rules-evidence-${{ env.SOURCE_SHA }}
           if-no-files-found: error
           retention-days: 30
           path: MatchApp/rules-tests/rules-test.log
