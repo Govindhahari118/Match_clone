@@ -19,6 +19,7 @@ import {
   safeUsageCount,
   usageAllowed,
 } from "./abusePolicy";
+import { validateInterestIntro } from "./interestIntroPolicy";
 
 const FREE_DAILY_INTEREST_LIMIT = 5;
 
@@ -57,6 +58,15 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", "You cannot send an interest to yourself");
   }
   const isSuperLike = data?.isSuperLike === true;
+  const intro = validateInterestIntro(data?.introNote);
+  if (!intro.allowed) {
+    const message = intro.reason === "too_long"
+      ? "Keep your introduction within 280 characters"
+      : intro.reason === "unsafe_money_request"
+        ? "Payment or money requests are not allowed in an interest introduction"
+        : "Contact details and external links can be shared only after a mutual match";
+    throw new functions.https.HttpsError("invalid-argument", message);
+  }
 
   const senderRef = db.collection("users").doc(senderUid);
   const targetRef = db.collection("users").doc(targetUid);
@@ -232,6 +242,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       fromUid: senderUid,
       toUid: targetUid,
       isSuperLike,
+      ...(intro.note ? { introNote: intro.note } : {}),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: false });
     tx.delete(responseRef);
