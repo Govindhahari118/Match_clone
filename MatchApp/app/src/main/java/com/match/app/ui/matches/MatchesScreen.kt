@@ -516,7 +516,14 @@ private fun DiscoveryCard(
     val supporting = buildList {
         result.mutualPreferenceScore?.let { score ->
             val percent = (score.coerceIn(0f, 1f) * 100f).toInt()
-            add(if (percent >= 90) "${percent}% strong mutual match" else "${percent}% mutual preferences")
+            val evidenceReady = result.mutualPreferenceCriteria >= 5
+            add(
+                if (percent >= 90 && evidenceReady) {
+                    "${percent}% strong mutual match • ${result.mutualPreferenceCriteria} criteria"
+                } else {
+                    "${percent}% mutual preferences • ${result.mutualPreferenceCriteria} criteria"
+                }
+            )
         }
         if (result.forwardPreferenceScore != null && result.reversePreferenceScore != null) {
             val theyFitYou = (result.forwardPreferenceScore.coerceIn(0f, 1f) * 100f).toInt()
