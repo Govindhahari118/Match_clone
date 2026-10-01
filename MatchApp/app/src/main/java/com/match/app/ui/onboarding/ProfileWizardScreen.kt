@@ -309,7 +309,7 @@ private fun StepPhysicalRelationship(vm: ProfileWizardViewModel) {
         ChoiceField(
         "Skin tone (optional, self-described)",
         s.complexion,
-        listOf("") + IndiaProfileCatalog.complexionOptions,
+        IndiaProfileCatalog.complexionOptions,
         { vm.update(s.copy(complexion = it)) }
     )
         ChoiceField("Physical status", s.physicalStatus, IndiaProfileCatalog.physicalStatuses, { vm.update(s.copy(physicalStatus = it)) })
