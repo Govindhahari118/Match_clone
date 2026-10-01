@@ -356,11 +356,14 @@ service cloud.firestore {
     match /notificationPrefs/{uid} {
       allow read: if isOwner(uid);
       allow create, update: if isOwner(uid) &&
-        request.resource.data.keys().hasOnly(['interests','matches','messages','system']) &&
+        request.resource.data.keys().hasOnly(['interests','matches','messages','system','quietHours','timeZone']) &&
         (!('interests' in request.resource.data) || request.resource.data.interests is bool) &&
         (!('matches' in request.resource.data) || request.resource.data.matches is bool) &&
         (!('messages' in request.resource.data) || request.resource.data.messages is bool) &&
-        (!('system' in request.resource.data) || request.resource.data.system is bool);
+        (!('system' in request.resource.data) || request.resource.data.system is bool) &&
+        (!('quietHours' in request.resource.data) || request.resource.data.quietHours is bool) &&
+        (!('timeZone' in request.resource.data) ||
+          (request.resource.data.timeZone is string && request.resource.data.timeZone.size() <= 64));
       allow delete: if isOwner(uid);
     }
     match /appearancePrefs/{uid} {
