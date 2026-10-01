@@ -62,6 +62,9 @@ class InterestsViewModel @Inject constructor(
     val received: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { uid -> social.observeReceivedInterestsRemote(uid).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val receivedNotes: StateFlow<Map<String, String>> = session.firebaseUid.filterNotNull()
+        .flatMapLatest { uid -> social.observeReceivedInterestNotesRemote(uid) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
     val sent: StateFlow<List<UserProfile>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { uid -> social.observeSentInterestsRemote(uid).map { ids -> ids.mapNotNull { userDao.findById(it)?.toProfile() } } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -125,6 +128,7 @@ fun InterestsScreen(
 ) {
     val tab by vm.tab.collectAsState()
     val received by vm.received.collectAsState()
+    val receivedNotes by vm.receivedNotes.collectAsState()
     val sent by vm.sent.collectAsState()
     val mutual by vm.mutual.collectAsState()
     val actions by vm.actions.collectAsState()
@@ -222,7 +226,12 @@ fun InterestsScreen(
                 ) {
                     items(list, key = { it.firebaseUid.ifBlank { it.id.toString() } }) { p ->
                         InterestCard(
-                            profile = p, tab = tab, busy = actions.busyId == p.id,
+                            profile = p,
+                            tab = tab,
+                            busy = actions.busyId == p.id,
+                            introNote = if (tab == InterestTab.RECEIVED) {
+                                receivedNotes[p.firebaseUid].orEmpty()
+                            } else "",
                             onOpen = { onOpenProfile(p.id) }, onKundli = { onCheckKundli(p.id) },
                             onChat = { onOpenChat(p.id) }, onAccept = { vm.accept(p.id) },
                             onDecline = { vm.decline(p.id) }, onWithdraw = { vm.withdraw(p.id) }
@@ -247,6 +256,7 @@ private fun InterestCard(
     profile: UserProfile,
     tab: InterestTab,
     busy: Boolean,
+    introNote: String,
     onOpen: () -> Unit,
     onKundli: () -> Unit,
     onChat: () -> Unit,
@@ -273,6 +283,28 @@ private fun InterestCard(
     ) {
         when (tab) {
             InterestTab.RECEIVED -> {
+                if (introNote.isNotBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(MatreeDesign.radii.input),
+                        modifier = Modifier.fillMaxWidth().testTag("interest_intro_${profile.id}")
+                    ) {
+                        Column(
+                            Modifier.padding(MatreeDesign.spacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                "Personal note",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                introNote,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
