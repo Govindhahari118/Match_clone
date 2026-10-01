@@ -6,6 +6,7 @@ This checklist describes the current production architecture on canonical `main`
 
 - [x] Canonical production and release branch is `main`. Never delete or replace it with a prototype branch.
 - [ ] Protect `main` in GitHub and require the Production CI checks (external repository administration).
+- [x] Production build/deploy entry points require `MATREE_RELEASE_SHA`, verify it equals clean checked-out HEAD, and fail closed on source drift.
 - [ ] Production CI is green on the exact release commit:
   - Android JVM tests
   - Android lint
@@ -205,7 +206,7 @@ The production shell intentionally exposes a smaller audited surface. Source fil
 ## 17. Machine-verified external evidence
 
 - [ ] Copy the external evidence template to an operator-controlled release record for the exact Git SHA.
-- [ ] Attach concrete references for Firebase production configuration, signing, release credentials, App Check/Play Integrity, auth device matrix, licensed billing, physical E2E, accessibility, performance SLO, penetration test, legal/Data Safety, Play pre-launch report and rollback drill.
+- [ ] Attach concrete references for the full prelaunch contract: merged/frozen source, Firebase project + rules/indexes/functions + secrets, App Check/Play Integrity, FCM/Crashlytics/Analytics, operator RBAC/master data, Play signing/catalog/service-account/API/RTDN, signed AAB, auth/billing, fresh+upgrade install, multi-device/network/device E2E, accessibility/performance/security, legal/Data Safety/store listing/support, Play pre-launch, closed testing, rollback drill, and verified fail-closed provider-dependent surfaces.
 - [ ] Run `python3 scripts/ci/production_external_gate.py --evidence <file> --sha <exact-sha> --mode prelaunch` before production promotion.
 - [ ] After controlled rollout and post-rollout health review, run the same exact SHA with `--mode full`.
 - [x] External-evidence gate rejects templates/CI synthetic provenance by default; CI synthetic validation requires the explicit `--allow-ci-synthetic` self-test flag.
