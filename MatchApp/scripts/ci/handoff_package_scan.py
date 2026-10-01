@@ -116,11 +116,13 @@ def main() -> int:
 
     external_gate = (ROOT / "scripts/ci/production_external_gate.py").read_text(encoding="utf-8")
     for external_contract in (
+        "mainBranchProtectionVerified",
         "firebaseRulesIndexesFunctionsDeployed",
         "firebaseSecretsConfigured",
         "playServiceAccountApiVerified",
         "playRtdnVerified",
         "signedReleaseAabVerified",
+        "supportedLocaleQaPassed",
         "closedTestingPassed",
         "disabledProviderSurfacesVerified",
     ):
