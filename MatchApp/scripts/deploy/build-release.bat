@@ -1,7 +1,14 @@
 @echo off
 setlocal
 :: Production release build. Run from MatchApp\.
-:: Exact release version and signing inputs are supplied outside source control.
+:: Exact release source, version and signing inputs are supplied outside source control.
+
+if "%MATREE_RELEASE_SHA%"=="" (
+  echo [ERROR] MATREE_RELEASE_SHA is required for a production build.
+  exit /b 1
+)
+python scripts\ci\release_source_guard.py --sha "%MATREE_RELEASE_SHA%"
+if errorlevel 1 exit /b 1
 
 if "%MATREE_VERSION_CODE%"=="" (
   echo [ERROR] MATREE_VERSION_CODE is required for a production build.
