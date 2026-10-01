@@ -38,6 +38,29 @@ export function partnerPreferencesReady(
   return preferences?.configured === true;
 }
 
+export const DEFAULT_STALE_DISCOVERY_DAYS = 90;
+
+/**
+ * Keep discovery inventory fresh without exposing precise activity timestamps.
+ * The backend may use private presence as an eligibility signal even when the member hides
+ * "last active" from other members. Unknown legacy activity remains eligible rather than being
+ * silently removed until the account has a trustworthy freshness anchor.
+ */
+export function profileFreshEnough(
+  createdAtMillis: number,
+  lastActiveAtMillis: number,
+  nowMillis: number,
+  maxInactiveDays = DEFAULT_STALE_DISCOVERY_DAYS
+): boolean {
+  const created = Number.isFinite(createdAtMillis) && createdAtMillis > 0 ? createdAtMillis : 0;
+  const active = Number.isFinite(lastActiveAtMillis) && lastActiveAtMillis > 0 ? lastActiveAtMillis : 0;
+  const anchor = active || created;
+  if (anchor === 0) return true;
+  const maxAgeMs = Math.max(1, Math.trunc(maxInactiveDays)) * 86_400_000;
+  return nowMillis - anchor <= maxAgeMs;
+}
+
+
 export function discoveryActorReady(
   profile: Record<string, unknown>,
   privateProfile: Record<string, unknown>,
