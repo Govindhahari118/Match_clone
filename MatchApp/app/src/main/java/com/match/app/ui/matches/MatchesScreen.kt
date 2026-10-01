@@ -518,6 +518,11 @@ private fun DiscoveryCard(
             val percent = (score.coerceIn(0f, 1f) * 100f).toInt()
             add(if (percent >= 90) "${percent}% strong mutual match" else "${percent}% mutual preferences")
         }
+        if (result.forwardPreferenceScore != null && result.reversePreferenceScore != null) {
+            val theyFitYou = (result.forwardPreferenceScore.coerceIn(0f, 1f) * 100f).toInt()
+            val youFitThem = (result.reversePreferenceScore.coerceIn(0f, 1f) * 100f).toInt()
+            add("They fit you ${theyFitYou}% • You fit them ${youFitThem}%")
+        }
         if (p.education.isNotBlank()) add(p.education)
         if (p.maritalStatus.isNotBlank()) add(p.maritalStatus)
         if (p.heightCm > 0) add("${p.heightCm} cm")
