@@ -106,6 +106,14 @@ def main() -> int:
     if "MATREE_FIREBASE_PROJECT_ID" not in firebase_deploy or "--project" not in firebase_deploy:
         fail("Firebase production deploy must require an explicit project id", failures)
 
+    local_ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    for release_secret_path in (
+        "/app/src/release/google-services.json",
+        "/app/google-services.json",
+    ):
+        if release_secret_path not in local_ignore:
+            fail(f"release-only Firebase config must stay outside source control: {release_secret_path}", failures)
+
     external_gate = (ROOT / "scripts/ci/production_external_gate.py").read_text(encoding="utf-8")
     for external_contract in (
         "firebaseRulesIndexesFunctionsDeployed",
