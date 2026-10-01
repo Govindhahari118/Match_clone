@@ -22,6 +22,7 @@ import {
 import {
   discoveryActorReady,
   discoveryCandidateReady,
+  normalizeStaleDiscoveryDays,
   profileFreshEnough,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
@@ -31,6 +32,12 @@ import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
 const MAX_KEYWORD_LENGTH = 64;
+
+// Server-owned product policy: operators can tune inventory freshness without an app release.
+// Values outside the supported range are clamped by normalizeStaleDiscoveryDays().
+const MAX_INACTIVE_DISCOVERY_DAYS = normalizeStaleDiscoveryDays(
+  functions.config().discovery?.max_inactive_days
+);
 
 // Only fields intentionally safe for another signed-in member may leave this endpoint. Birth
 // details, astrology inputs, income, precise activity and billing entitlement stay private.
@@ -597,7 +604,8 @@ export const discoverProfiles = functions
       if (!profileFreshEnough(
         createdAtMillis(candidate),
         privateLastActiveByUid.get(doc.id) || 0,
-        now
+        now,
+        MAX_INACTIVE_DISCOVERY_DAYS
       )) continue;
       if (candidate.stealthMode === true) continue;
 
