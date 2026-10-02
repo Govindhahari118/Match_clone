@@ -788,6 +788,7 @@ private fun ScoreRow(label: String, score: Float) {
 @Composable
 private fun ProfileFacts(p: UserProfile) {
     SectionCard("Profile details") {
+        Fact("Profile managed as", p.profileCreatedFor.displayLabel)
         Fact("Marital status", p.maritalStatus)
         Fact("Height", if (p.heightCm > 0) "${p.heightCm} cm" else "")
         Fact("Education", p.education)
