@@ -89,6 +89,7 @@ def main() -> int:
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
     for release_input in (
         "MATREE_APPLICATION_ID",
+        "MATREE_APP_LINK_HOST",
         "MATREE_VERSION_CODE",
         "MATREE_VERSION_NAME",
         "MATREE_KEYSTORE_PATH",
@@ -103,6 +104,8 @@ def main() -> int:
         release_text = (ROOT / release_script).read_text(encoding="utf-8")
         if "MATREE_APPLICATION_ID" not in release_text or "com.match.app" not in release_text:
             fail(f"{release_script} must reject the generic production application id", failures)
+        if "MATREE_APP_LINK_HOST" not in release_text or "invalid.matree.local" not in release_text:
+            fail(f"{release_script} must reject the non-production App Link host", failures)
 
     for rel in (
         "scripts/deploy/build-release.sh",
