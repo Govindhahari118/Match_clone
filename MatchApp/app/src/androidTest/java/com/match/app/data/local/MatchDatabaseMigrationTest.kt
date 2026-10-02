@@ -58,7 +58,7 @@ class MatchDatabaseMigrationTest {
     @Test
     fun migrationChainIsContiguousAndDeclaresTheSupportedBoundary() {
         assertEquals(13, Migrations.OLDEST_SUPPORTED_VERSION)
-        assertEquals(24, Migrations.CURRENT_VERSION)
+        assertEquals(25, Migrations.CURRENT_VERSION)
         assertEquals(
             Migrations.CURRENT_VERSION - Migrations.OLDEST_SUPPORTED_VERSION,
             Migrations.ALL.size
@@ -79,11 +79,7 @@ class MatchDatabaseMigrationTest {
                 // Minimal v13 shape containing every table/column referenced by the supported
                 // migration chain. The test is intentionally independent from current entities so
                 // a destructive migration cannot hide behind Room recreating the latest schema.
-                db.execSQL(
-                    "CREATE TABLE users (" +
-                        "id INTEGER NOT NULL PRIMARY KEY, " +
-                        "age INTEGER NOT NULL DEFAULT 0)"
-                )
+                db.execSQL("CREATE TABLE users (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `firebaseUid` TEXT NOT NULL DEFAULT '', `email` TEXT NOT NULL DEFAULT '', `passwordHash` TEXT NOT NULL DEFAULT '', `displayName` TEXT NOT NULL DEFAULT '', `age` INTEGER NOT NULL DEFAULT 0, `gender` TEXT NOT NULL DEFAULT '', `lookingFor` TEXT NOT NULL DEFAULT '', `city` TEXT NOT NULL DEFAULT '', `bio` TEXT NOT NULL DEFAULT '', `rasi` TEXT NOT NULL DEFAULT '', `nakshatra` TEXT NOT NULL DEFAULT '', `isSeed` INTEGER NOT NULL DEFAULT 0, `religion` TEXT NOT NULL DEFAULT '', `motherTongue` TEXT NOT NULL DEFAULT '', `education` TEXT NOT NULL DEFAULT '', `profession` TEXT NOT NULL DEFAULT '', `maritalStatus` TEXT NOT NULL DEFAULT '', `heightCm` INTEGER NOT NULL DEFAULT 0, `isVerified` INTEGER NOT NULL DEFAULT 0, `isPremium` INTEGER NOT NULL DEFAULT 0, `isShortlisted` INTEGER NOT NULL DEFAULT 0, `profileViewCount` INTEGER NOT NULL DEFAULT 0, `caste` TEXT NOT NULL DEFAULT '', `state` TEXT NOT NULL DEFAULT '', `subCaste` TEXT NOT NULL DEFAULT '', `gothra` TEXT NOT NULL DEFAULT '', `incomeBand` TEXT NOT NULL DEFAULT '', `diet` TEXT NOT NULL DEFAULT '', `familyType` TEXT NOT NULL DEFAULT '', `fatherOccupation` TEXT NOT NULL DEFAULT '', `motherOccupation` TEXT NOT NULL DEFAULT '', `siblings` INTEGER NOT NULL DEFAULT 0, `smoking` TEXT NOT NULL DEFAULT '', `drinking` TEXT NOT NULL DEFAULT '', `personalityType` TEXT NOT NULL DEFAULT '', `hobbies` TEXT NOT NULL DEFAULT '', `spokenLanguages` TEXT NOT NULL DEFAULT '', `videoUrl` TEXT NOT NULL DEFAULT '', `residentialStatus` TEXT NOT NULL DEFAULT '', `hasChildren` INTEGER NOT NULL DEFAULT 0, `boostActiveUntil` INTEGER NOT NULL DEFAULT 0, `nativeState` TEXT NOT NULL DEFAULT '', `countryOfResidence` TEXT NOT NULL DEFAULT '', `visaStatus` TEXT NOT NULL DEFAULT '', `willingToRelocate` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL DEFAULT 0)")
                 db.execSQL("CREATE TABLE likes (id INTEGER NOT NULL PRIMARY KEY)")
                 db.execSQL("CREATE TABLE pending_messages (id INTEGER NOT NULL PRIMARY KEY)")
                 db.execSQL("CREATE TABLE saved_searches (id INTEGER NOT NULL PRIMARY KEY)")
@@ -136,6 +132,11 @@ class MatchDatabaseMigrationTest {
             assertTrue("users." + column + " missing after migration", column in userColumns)
         }
 
+        assertTrue("users.passwordHash must be removed in v25", "passwordHash" !in userColumns)
+        assertTrue("users.isSeed must be removed in v25", "isSeed" !in userColumns)
+        assertIndexExists(db, "index_users_email")
+        assertIndexExists(db, "index_users_firebaseUid")
+
         val pendingColumns = columns(db, "pending_messages")
         listOf("localMessageId", "clientMessageId", "type", "mediaUri", "durationMs")
             .forEach { column ->
@@ -162,6 +163,11 @@ class MatchDatabaseMigrationTest {
         ).use { cursor ->
             assertTrue("client message id index missing", cursor.moveToFirst())
         }
+    }
+
+    private fun assertIndexExists(db: SupportSQLiteDatabase, indexName: String) {
+        db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = '" + indexName + "'")
+            .use { cursor -> assertTrue(indexName + " missing after migration", cursor.moveToFirst()) }
     }
 
     private fun columns(db: SupportSQLiteDatabase, table: String): Set<String> {

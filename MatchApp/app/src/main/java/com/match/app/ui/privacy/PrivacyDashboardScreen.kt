@@ -78,7 +78,7 @@ class PrivacyViewModel @Inject constructor(
 
     private val candidateProfiles: Flow<List<UserEntity>> = session.userId.filterNotNull().map { myId ->
         userDao.allExcluding(myId)
-            .filter { !it.isSeed && it.firebaseUid.isNotBlank() }
+            .filter { it.firebaseUid.isNotBlank() }
             .distinctBy { it.firebaseUid }
             .sortedBy { it.displayName.lowercase() }
     }

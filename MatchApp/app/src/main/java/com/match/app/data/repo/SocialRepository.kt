@@ -258,13 +258,11 @@ class SocialRepository @Inject constructor(
             val merged = remote.copy(
                 id = existing.id,
                 email = existing.email,
-                passwordHash = "",
-                isSeed = false
             )
             userDao.update(merged)
             return merged
         }
-        val cached = remote.copy(email = "${remote.firebaseUid}@cache.invalid", passwordHash = "", isSeed = false)
+        val cached = remote.copy(email = "${remote.firebaseUid}@cache.invalid")
         val id = userDao.insert(cached)
         return cached.copy(id = id)
     }

@@ -31,9 +31,6 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id != :excludeId")
     suspend fun allExcluding(excludeId: Long): List<UserEntity>
 
-    @Query("SELECT COUNT(*) FROM users WHERE isSeed = 1")
-    suspend fun seedCount(): Int
-
     @Query("DELETE FROM users WHERE id = :userId")
     suspend fun deleteById(userId: Long)
 

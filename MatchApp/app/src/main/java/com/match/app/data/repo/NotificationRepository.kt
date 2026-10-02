@@ -126,8 +126,6 @@ class NotificationRepository @Inject constructor(
             ?: return null
         val cached = remote.copy(
             email = "$firebaseUid@cache.invalid",
-            passwordHash = "",
-            isSeed = false
         )
         return runCatching { userDao.insert(cached) }
             .recoverCatching { userDao.findByFirebaseUid(firebaseUid)?.id ?: throw it }

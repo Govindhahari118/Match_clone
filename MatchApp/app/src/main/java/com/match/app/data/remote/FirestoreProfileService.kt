@@ -191,8 +191,6 @@ class FirestoreProfileService @Inject constructor(
         userDao.update(
             latest.copy(
                 id = local.id,
-                passwordHash = local.passwordHash,
-                isSeed = local.isSeed
             )
         )
     }
@@ -371,7 +369,6 @@ class FirestoreProfileService @Inject constructor(
     private fun mapToEntity(firebaseUid: String, data: Map<String, Any?>): UserEntity = UserEntity(
         firebaseUid = firebaseUid,
         email = data["email"] as? String ?: "",
-        passwordHash = "",
         displayName = data["displayName"] as? String ?: "",
         age = (data["age"] as? Number)?.toInt() ?: 0,
         gender = data["gender"] as? String ?: "OTHER",

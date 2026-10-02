@@ -411,6 +411,15 @@ def main() -> int:
             for label, pattern in deprecated_integration_patterns:
                 require(pattern.search(data) is None, f"{p.relative_to(ROOT)}: retired {label} reference", failures)
 
+    app_main_source = APP / "src/main"
+    if app_main_source.exists():
+        for source in app_main_source.rglob("*.kt"):
+            data = text(source)
+            require("passwordHash" not in data,
+                    f"{source.relative_to(ROOT)}: retired local password field reference returned", failures)
+            require("isSeed" not in data,
+                    f"{source.relative_to(ROOT)}: retired seed-authority field reference returned", failures)
+
     prod_roots = [APP / "src/main", ROOT / "functions/src"]
     forbidden = [
         ("emulator endpoint", re.compile(r"\b10\.0\.2\.2\b")),

@@ -179,16 +179,12 @@ class LocationRepository @Inject constructor(
             val merged = remote.copy(
                 id = existing.id,
                 email = existing.email,
-                passwordHash = "",
-                isSeed = false
             )
             userDao.update(merged)
             return merged
         }
         val cached = remote.copy(
             email = "$uid@cache.invalid",
-            passwordHash = "",
-            isSeed = false
         )
         val id = userDao.insert(cached)
         return cached.copy(id = id)

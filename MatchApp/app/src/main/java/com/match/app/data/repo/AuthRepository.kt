@@ -83,7 +83,6 @@ class AuthRepository @Inject constructor(
             val entity = UserEntity(
                 firebaseUid = firebaseUid,
                 email = e,
-                passwordHash = "",
                 displayName = displayName.trim(),
                 age = age,
                 gender = gender.name,
@@ -135,18 +134,16 @@ class AuthRepository @Inject constructor(
                         firestoreEntity.copy(
                             id = localUser.id,
                             email = e,
-                            passwordHash = "",
-                            isSeed = false
                         )
                     )
                 }
                 localId = localUser.id
             } else if (firestoreEntity != null) {
-                localId = userDao.insert(firestoreEntity.copy(email = e, passwordHash = "", isSeed = false))
+                localId = userDao.insert(firestoreEntity.copy(email = e))
             } else {
                 val legacyUser = userDao.findByEmail(e)
                     ?: return AuthResult.Error("Profile data is unavailable. Please contact support.")
-                val migratedUser = legacyUser.copy(firebaseUid = firebaseUid, passwordHash = "")
+                val migratedUser = legacyUser.copy(firebaseUid = firebaseUid)
                 userDao.update(migratedUser)
                 val synced = firestoreProfile.pushProfile(migratedUser)
                 userDao.update(synced)
@@ -350,8 +347,6 @@ class AuthRepository @Inject constructor(
                     val refreshed = remote.copy(
                         id = local.id,
                         email = local.email,
-                        passwordHash = local.passwordHash,
-                        isSeed = false
                     )
                     userDao.update(refreshed)
                     local = refreshed
@@ -551,10 +546,8 @@ class AuthRepository @Inject constructor(
                             firestoreEntity.copy(
                                 id = existingLocal.id,
                                 email = localEmail,
-                                passwordHash = "",
                                 phoneNumber = firebaseUser.phoneNumber
                                     ?: firestoreEntity.phoneNumber,
-                                isSeed = false
                             )
                         )
                     }
@@ -563,17 +556,14 @@ class AuthRepository @Inject constructor(
                 firestoreEntity != null -> userDao.insert(
                     firestoreEntity.copy(
                         email = firestoreEntity.email.ifBlank { localEmail },
-                        passwordHash = "",
                         phoneNumber = firebaseUser.phoneNumber
                             ?: firestoreEntity.phoneNumber,
-                        isSeed = false
                     )
                 )
                 else -> {
                     val entity = UserEntity(
                         firebaseUid = firebaseUid,
                         email = localEmail,
-                        passwordHash = "",
                         displayName = "Member",
                         age = 0,
                         gender = "OTHER",
@@ -626,23 +616,20 @@ class AuthRepository @Inject constructor(
                             firestoreEntity.copy(
                                 id = existingLocal.id,
                                 email = normalizedEmail.ifBlank { existingLocal.email },
-                                passwordHash = "",
-                                isSeed = false
                             )
                         )
                     } else if (existingLocal.firebaseUid != firebaseUid) {
-                        userDao.update(existingLocal.copy(firebaseUid = firebaseUid, passwordHash = ""))
+                        userDao.update(existingLocal.copy(firebaseUid = firebaseUid))
                     }
                     existingLocal.id
                 }
                 firestoreEntity != null -> userDao.insert(
-                    firestoreEntity.copy(email = normalizedEmail, passwordHash = "", isSeed = false)
+                    firestoreEntity.copy(email = normalizedEmail)
                 )
                 else -> {
                     val entity = UserEntity(
                         firebaseUid = firebaseUid,
                         email = normalizedEmail,
-                        passwordHash = "",
                         displayName = displayName.ifBlank { email.substringBefore('@') },
                         age = 0,
                         gender = "OTHER",
