@@ -2,6 +2,7 @@ export type PreferenceMode = "STRICT" | "PREFERRED" | "NO_PREFERENCE";
 
 export type PartnerPreferenceDocument = {
   configured: boolean;
+  sharePublicSummary: boolean;
   ageMode: PreferenceMode;
   ageMin: number;
   ageMax: number;
@@ -79,6 +80,7 @@ export type PartnerPreferenceDocument = {
 
 export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
   configured: false,
+  sharePublicSummary: false,
   ageMode: "NO_PREFERENCE",
   ageMin: 18,
   ageMax: 70,
@@ -238,6 +240,7 @@ export function normalizePartnerPreferences(
 
   return {
     configured: raw.configured === true,
+    sharePublicSummary: raw.sharePublicSummary === true,
     ageMode: mode(raw.ageMode),
     ageMin,
     ageMax,
