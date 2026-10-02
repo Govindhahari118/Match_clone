@@ -59,9 +59,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/ci/production_external_gate.py scripts/ci/release_source_guard.py scripts/release/generate_assetlinks.py scripts/release/verify_branch_protection.py
-          python3 scripts/release/generate_assetlinks.py \\
-            --package com.example.matree \\
-            --sha256 "AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA" \\
+          python3 scripts/release/generate_assetlinks.py \
+            --package com.example.matree \
+            --sha256 "AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA" \
             --output /tmp/matree-assetlinks.json
           python3 - <<'PY'
           import json
