@@ -63,16 +63,12 @@ class WhoViewedRepository @Inject constructor(
                         val merged = remote.copy(
                             id = existing.id,
                             email = existing.email,
-                            passwordHash = existing.passwordHash,
-                            isSeed = false
                         )
                         userDao.update(merged)
                         merged
                     } else {
                         val cached = remote.copy(
                             email = "${remote.firebaseUid}@cache.invalid",
-                            passwordHash = "",
-                            isSeed = false
                         )
                         val localId = runCatching { userDao.insert(cached) }.getOrNull()
                             ?: return@forEach
