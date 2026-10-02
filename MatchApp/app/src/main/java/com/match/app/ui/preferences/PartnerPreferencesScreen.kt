@@ -238,6 +238,33 @@ fun PartnerPreferencesScreen(
                     }
                 }
 
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.padding(MatreeDesign.spacing.md),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Show a summary on my profile",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Share only selected non-sensitive expectations such as age, location, education, occupation and lifestyle. Religion, community, faith, income, complexion, physical status, citizenship and visa preferences remain private.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                        Switch(
+                            checked = ui.value.sharePublicSummary,
+                            onCheckedChange = { enabled ->
+                                vm.update { it.copy(sharePublicSummary = enabled) }
+                            },
+                            enabled = ui.sensitiveConsentCurrent
+                        )
+                    }
+                }
+
                 if (ui.profileReligion.isNotBlank()) {
                     Card(Modifier.fillMaxWidth()) {
                         Column(
