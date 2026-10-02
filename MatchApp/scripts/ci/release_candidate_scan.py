@@ -317,6 +317,14 @@ def main() -> int:
     require("PROFILE_CREATED_FOR_VALUES" in profile_wizard and
             '"Profile created for"' in profile_wizard_screen,
             "profile-created-for onboarding contract missing", failures)
+    profile_domain = text(APP / "src/main/java/com/match/app/domain/model/Models.kt")
+    match_detail = text(APP / "src/main/java/com/match/app/ui/detail/MatchDetailScreen.kt")
+    require("enum class ProfileCreatedFor" in profile_domain and
+            "ProfileCreatedFor.fromWire(profileCreatedFor)" in
+                text(APP / "src/main/java/com/match/app/data/repo/AuthRepository.kt"),
+            "profile-created-for typed domain mapping missing", failures)
+    require('Fact("Profile managed as", p.profileCreatedFor.displayLabel)' in match_detail,
+            "family-assisted profile status must remain visible to prospective matches", failures)
     require("validProfileCreatedFor" in firestore_rules,
             "Firestore must validate profile-created-for canonical values", failures)
 
