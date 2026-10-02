@@ -32,6 +32,8 @@ REQUIRED = (
     "docs/release/PLAY_STORE_HANDOFF.md",
     "docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json",
     "scripts/ci/production_external_gate.py",
+    "scripts/release/generate_assetlinks.py",
+    "scripts/release/verify_branch_protection.py",
     "scripts/ci/release_source_guard.py",
     "scripts/ci/release_evidence.py",
     "scripts/ci/room_schema_evidence.py",
