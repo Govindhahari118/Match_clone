@@ -17,6 +17,7 @@ REQUIRED = (
     "docs/release/SECRETS_SPEC.md",
     "docs/release/API_SPEC.md",
     "docs/release/DATABASE_SCHEMA.md",
+    "docs/release/ROOM_V24_USERS_SCHEMA_EVIDENCE.md",
     "docs/release/MASTER_DATA.md",
     "docs/release/KNOWN_ISSUES.md",
     "docs/release/GO_NO_GO.md",
