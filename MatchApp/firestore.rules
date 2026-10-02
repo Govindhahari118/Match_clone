@@ -22,6 +22,12 @@ service cloud.firestore {
           'Parsi / Zoroastrian', 'Other', 'Prefer not to say'
         ]);
     }
+    function validProfileCreatedFor(data) {
+      return !('profileCreatedFor' in data) ||
+        (data.profileCreatedFor is string && data.profileCreatedFor in [
+          'SELF', 'SON', 'DAUGHTER', 'SIBLING', 'PARENT', 'RELATIVE'
+        ]);
+    }
     function unconfirmedReligionOnCreate() {
       return !('religion' in request.resource.data) || request.resource.data.religion == '';
     }
@@ -43,6 +49,7 @@ service cloud.firestore {
     function safeUserCreate() {
       return hasNoPrivateProfileFields() &&
              validReligionValue(request.resource.data) &&
+             validProfileCreatedFor(request.resource.data) &&
              unconfirmedReligionOnCreate() &&
              noClientReligionAuthorityOnCreate() &&
              validProfileRevisionOnCreate() &&
@@ -186,6 +193,7 @@ service cloud.firestore {
         hasNoPrivateProfileFields() &&
         userServerFieldsUnchanged() &&
         validReligionValue(request.resource.data) &&
+        validProfileCreatedFor(request.resource.data) &&
         validProfileRevisionUpdate();
       allow delete: if false;
     }
