@@ -5,7 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 object Migrations {
     const val OLDEST_SUPPORTED_VERSION = 13
-    const val CURRENT_VERSION = 24
+    const val CURRENT_VERSION = 25
     val MIGRATION_13_14 = object : Migration(13, 14) { override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE users ADD COLUMN lastActiveAt INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE users ADD COLUMN isIncognito INTEGER NOT NULL DEFAULT 0")
@@ -110,6 +110,15 @@ object Migrations {
     val MIGRATION_23_24 = object : Migration(23, 24) { override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE users ADD COLUMN profileCreatedFor TEXT NOT NULL DEFAULT 'SELF'")
     }}
+
+    val MIGRATION_24_25 = object : Migration(24, 25) { override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE users_v25 (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `firebaseUid` TEXT NOT NULL, `email` TEXT NOT NULL, `displayName` TEXT NOT NULL, `age` INTEGER NOT NULL, `gender` TEXT NOT NULL, `lookingFor` TEXT NOT NULL, `city` TEXT NOT NULL, `bio` TEXT NOT NULL, `rasi` TEXT NOT NULL, `nakshatra` TEXT NOT NULL, `religion` TEXT NOT NULL, `motherTongue` TEXT NOT NULL, `education` TEXT NOT NULL, `profession` TEXT NOT NULL, `maritalStatus` TEXT NOT NULL, `heightCm` INTEGER NOT NULL, `isVerified` INTEGER NOT NULL, `isPremium` INTEGER NOT NULL, `isShortlisted` INTEGER NOT NULL, `profileViewCount` INTEGER NOT NULL, `caste` TEXT NOT NULL, `state` TEXT NOT NULL, `subCaste` TEXT NOT NULL, `gothra` TEXT NOT NULL, `faithTradition` TEXT NOT NULL, `faithSubTradition` TEXT NOT NULL, `faithInstitution` TEXT NOT NULL, `incomeBand` TEXT NOT NULL, `diet` TEXT NOT NULL, `familyType` TEXT NOT NULL, `fatherOccupation` TEXT NOT NULL, `motherOccupation` TEXT NOT NULL, `siblings` INTEGER NOT NULL, `smoking` TEXT NOT NULL, `drinking` TEXT NOT NULL, `personalityType` TEXT NOT NULL, `hobbies` TEXT NOT NULL, `spokenLanguages` TEXT NOT NULL, `videoUrl` TEXT NOT NULL, `residentialStatus` TEXT NOT NULL, `hasChildren` INTEGER NOT NULL, `boostActiveUntil` INTEGER NOT NULL, `nativeState` TEXT NOT NULL, `countryOfResidence` TEXT NOT NULL, `visaStatus` TEXT NOT NULL, `willingToRelocate` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastActiveAt` INTEGER NOT NULL, `isIncognito` INTEGER NOT NULL, `phoneNumber` TEXT NOT NULL, `ageBucket` TEXT NOT NULL, `familyValues` TEXT NOT NULL, `aboutFamily` TEXT NOT NULL, `manglik` TEXT NOT NULL, `dateOfBirth` TEXT NOT NULL, `weight` REAL NOT NULL, `complexion` TEXT NOT NULL, `physicalStatus` TEXT NOT NULL, `birthTime` TEXT NOT NULL, `birthPlace` TEXT NOT NULL, `familyStatus` TEXT NOT NULL, `educationField` TEXT NOT NULL, `institution` TEXT NOT NULL, `graduationYear` INTEGER NOT NULL, `occupationCategory` TEXT NOT NULL, `employer` TEXT NOT NULL, `employerType` TEXT NOT NULL, `citizenship` TEXT NOT NULL, `isNRI` INTEGER NOT NULL, `fitnessActivities` TEXT NOT NULL, `matrimonyId` TEXT NOT NULL, `photoUrl` TEXT NOT NULL, `voiceBioUrl` TEXT NOT NULL, `profileCompleteness` REAL NOT NULL, `verificationLevel` INTEGER NOT NULL, `stealthMode` INTEGER NOT NULL, `showLastActive` INTEGER NOT NULL, `showHoroscope` INTEGER NOT NULL, `incomeDisclosure` TEXT NOT NULL, `subscriptionPlan` TEXT NOT NULL, `subscriptionExpiry` INTEGER NOT NULL, `matchScore` REAL NOT NULL, `username` TEXT NOT NULL, `profileCreatedFor` TEXT NOT NULL, `profileRevision` INTEGER NOT NULL)")
+        db.execSQL("INSERT INTO users_v25 (`id`, `firebaseUid`, `email`, `displayName`, `age`, `gender`, `lookingFor`, `city`, `bio`, `rasi`, `nakshatra`, `religion`, `motherTongue`, `education`, `profession`, `maritalStatus`, `heightCm`, `isVerified`, `isPremium`, `isShortlisted`, `profileViewCount`, `caste`, `state`, `subCaste`, `gothra`, `faithTradition`, `faithSubTradition`, `faithInstitution`, `incomeBand`, `diet`, `familyType`, `fatherOccupation`, `motherOccupation`, `siblings`, `smoking`, `drinking`, `personalityType`, `hobbies`, `spokenLanguages`, `videoUrl`, `residentialStatus`, `hasChildren`, `boostActiveUntil`, `nativeState`, `countryOfResidence`, `visaStatus`, `willingToRelocate`, `createdAt`, `lastActiveAt`, `isIncognito`, `phoneNumber`, `ageBucket`, `familyValues`, `aboutFamily`, `manglik`, `dateOfBirth`, `weight`, `complexion`, `physicalStatus`, `birthTime`, `birthPlace`, `familyStatus`, `educationField`, `institution`, `graduationYear`, `occupationCategory`, `employer`, `employerType`, `citizenship`, `isNRI`, `fitnessActivities`, `matrimonyId`, `photoUrl`, `voiceBioUrl`, `profileCompleteness`, `verificationLevel`, `stealthMode`, `showLastActive`, `showHoroscope`, `incomeDisclosure`, `subscriptionPlan`, `subscriptionExpiry`, `matchScore`, `username`, `profileCreatedFor`, `profileRevision`) SELECT `id`, `firebaseUid`, `email`, `displayName`, `age`, `gender`, `lookingFor`, `city`, `bio`, `rasi`, `nakshatra`, `religion`, `motherTongue`, `education`, `profession`, `maritalStatus`, `heightCm`, `isVerified`, `isPremium`, `isShortlisted`, `profileViewCount`, `caste`, `state`, `subCaste`, `gothra`, `faithTradition`, `faithSubTradition`, `faithInstitution`, `incomeBand`, `diet`, `familyType`, `fatherOccupation`, `motherOccupation`, `siblings`, `smoking`, `drinking`, `personalityType`, `hobbies`, `spokenLanguages`, `videoUrl`, `residentialStatus`, `hasChildren`, `boostActiveUntil`, `nativeState`, `countryOfResidence`, `visaStatus`, `willingToRelocate`, `createdAt`, `lastActiveAt`, `isIncognito`, `phoneNumber`, `ageBucket`, `familyValues`, `aboutFamily`, `manglik`, `dateOfBirth`, `weight`, `complexion`, `physicalStatus`, `birthTime`, `birthPlace`, `familyStatus`, `educationField`, `institution`, `graduationYear`, `occupationCategory`, `employer`, `employerType`, `citizenship`, `isNRI`, `fitnessActivities`, `matrimonyId`, `photoUrl`, `voiceBioUrl`, `profileCompleteness`, `verificationLevel`, `stealthMode`, `showLastActive`, `showHoroscope`, `incomeDisclosure`, `subscriptionPlan`, `subscriptionExpiry`, `matchScore`, `username`, `profileCreatedFor`, `profileRevision` FROM users")
+        db.execSQL("DROP TABLE users")
+        db.execSQL("ALTER TABLE users_v25 RENAME TO users")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_users_email ON users(email)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_users_firebaseUid ON users(firebaseUid)")
+    }}
     val ALL: List<Migration> = listOf(
         MIGRATION_13_14,
         MIGRATION_14_15,
@@ -121,7 +130,8 @@ object Migrations {
         MIGRATION_20_21,
         MIGRATION_21_22,
         MIGRATION_22_23,
-        MIGRATION_23_24
+        MIGRATION_23_24,
+        MIGRATION_24_25
     )
 
 }
