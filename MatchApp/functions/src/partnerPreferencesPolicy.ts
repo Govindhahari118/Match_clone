@@ -379,9 +379,6 @@ export function publicPartnerPreferenceSummary(
   addList("marital_status", p.maritalStatusMode, p.maritalStatuses);
   addList("education", p.educationMode, p.educationLevels);
   addList("occupation", p.occupationMode, p.occupationCategories);
-  addList("diet", p.dietMode, p.diets);
-  addList("smoking", p.smokingMode, p.smoking);
-  addList("drinking", p.drinkingMode, p.drinking);
   addList("family_values", p.familyValuesMode, p.familyValues);
   addList("relocation", p.relocationMode, p.relocationStatuses);
 
