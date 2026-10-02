@@ -83,5 +83,6 @@
   "what_they_are_looking_for": "What they are looking for",
   "must_match": "Must match",
   "preferred": "Preferred",
-  "shared_preferences_privacy": "Only the criteria this member chose to share are shown. Sensitive preferences stay private."
+  "shared_preferences_privacy": "Only the criteria this member chose to share are shown. Sensitive preferences stay private.",
+  "accept_and_chat": "Accept & chat"
 }
