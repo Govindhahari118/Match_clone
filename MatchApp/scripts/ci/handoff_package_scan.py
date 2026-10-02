@@ -23,6 +23,11 @@ REQUIRED = (
     "docs/release/PRODUCTION_CONFIG.template.md",
     "docs/release/FEATURE_FLAGS.md",
     "docs/release/ROLLBACK_RUNBOOK.md",
+    "docs/release/SECURITY_ACCEPTANCE.md",
+    "docs/release/REAL_DEVICE_ACCEPTANCE.md",
+    "docs/release/ACCESSIBILITY_PERFORMANCE_ACCEPTANCE.md",
+    "docs/release/INCIDENT_RESPONSE.md",
+    "docs/release/DATA_SAFETY_WORKSHEET.md",
     "docs/release/PLAY_STORE_HANDOFF.md",
     "docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json",
     "scripts/ci/production_external_gate.py",
@@ -117,12 +122,22 @@ def main() -> int:
     external_gate = (ROOT / "scripts/ci/production_external_gate.py").read_text(encoding="utf-8")
     for external_contract in (
         "mainBranchProtectionVerified",
+        "releaseIdentityVerified",
+        "httpsAppLinksVerified",
         "firebaseRulesIndexesFunctionsDeployed",
+        "firestoreAuthorizationAdversarialPassed",
+        "storageAbuseMatrixPassed",
         "firebaseSecretsConfigured",
         "playServiceAccountApiVerified",
         "playRtdnVerified",
         "signedReleaseAabVerified",
         "supportedLocaleQaPassed",
+        "screenCapturePhysicalMatrixPassed",
+        "notificationQuietHoursDeviceMatrixPassed",
+        "accountDeletionE2EPassed",
+        "productionMonitoringAlertsVerified",
+        "costBudgetAlertsVerified",
+        "incidentResponseOwnerVerified",
         "closedTestingPassed",
         "disabledProviderSurfacesVerified",
     ):
@@ -158,6 +173,24 @@ def main() -> int:
     go_no_go = (ROOT / "docs/release/GO_NO_GO.md").read_text(encoding="utf-8")
     if "Production GO" not in go_no_go or "external" not in go_no_go.lower():
         fail("GO/NO-GO report must preserve the external-evidence boundary", failures)
+
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    if not readme.startswith("# Matree"):
+        fail("README must use the canonical Matree product identity", failures)
+    if "# MatrimonyConnect" in readme:
+        fail("README must not restore retired MatrimonyConnect branding", failures)
+
+    for acceptance_doc, required_phrases in {
+        "docs/release/SECURITY_ACCEPTANCE.md": ("App Check", "Firestore", "Storage", "OWASP MASVS"),
+        "docs/release/REAL_DEVICE_ACCEPTANCE.md": ("two independent physical Android devices", "account deletion"),
+        "docs/release/ACCESSIBILITY_PERFORMANCE_ACCEPTANCE.md": ("TalkBack", "release build"),
+        "docs/release/INCIDENT_RESPONSE.md": ("P0", "exact Git SHA"),
+    }.items():
+        body = (ROOT / acceptance_doc).read_text(encoding="utf-8")
+        for phrase in required_phrases:
+            if phrase not in body:
+                fail(f"{acceptance_doc} missing required production contract phrase: {phrase}", failures)
 
     if failures:
         print("Production handoff package scan FAILED")
