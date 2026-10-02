@@ -10,6 +10,15 @@ if "%MATREE_RELEASE_SHA%"=="" (
 python scripts\ci\release_source_guard.py --sha "%MATREE_RELEASE_SHA%"
 if errorlevel 1 exit /b 1
 
+if "%MATREE_APPLICATION_ID%"=="" (
+  echo [ERROR] MATREE_APPLICATION_ID is required for a production build.
+  exit /b 1
+)
+if /I "%MATREE_APPLICATION_ID%"=="com.match.app" (
+  echo [ERROR] MATREE_APPLICATION_ID must be the final production package, not com.match.app.
+  exit /b 1
+)
+
 if "%MATREE_VERSION_CODE%"=="" (
   echo [ERROR] MATREE_VERSION_CODE is required for a production build.
   exit /b 1
