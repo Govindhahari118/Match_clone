@@ -5,6 +5,12 @@ set -euo pipefail
 : "${MATREE_RELEASE_SHA:?MATREE_RELEASE_SHA is required}"
 python3 scripts/ci/release_source_guard.py --sha "$MATREE_RELEASE_SHA"
 
+: "${MATREE_APPLICATION_ID:?MATREE_APPLICATION_ID is required}"
+if [[ "$MATREE_APPLICATION_ID" == "com.match.app" || ! "$MATREE_APPLICATION_ID" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*){2,}$ ]]; then
+  echo "[ERROR] MATREE_APPLICATION_ID must be the final reverse-DNS production package and cannot be com.match.app." >&2
+  exit 1
+fi
+
 : "${MATREE_VERSION_CODE:?MATREE_VERSION_CODE is required}"
 : "${MATREE_VERSION_NAME:?MATREE_VERSION_NAME is required}"
 
