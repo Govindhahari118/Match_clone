@@ -225,7 +225,6 @@ class FirestorePagingSource(
     private fun mapToEntity(uid: String, data: Map<String, Any?>): UserEntity = UserEntity(
         firebaseUid = uid,
         email = "",
-        passwordHash = "",
         displayName = data["displayName"] as? String ?: "",
         age = (data["age"] as? Number)?.toInt() ?: 25,
         gender = data["gender"] as? String ?: "MALE",
