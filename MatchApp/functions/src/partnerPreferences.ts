@@ -6,6 +6,7 @@ import { accountIsActive } from "./accountStatusPolicy";
 import {
   DEFAULT_PARTNER_PREFERENCES,
   normalizePartnerPreferences,
+  publicPartnerPreferenceSummary,
 } from "./partnerPreferencesPolicy";
 
 function publicPayload(value: unknown) {
@@ -16,57 +17,6 @@ function publicPayload(value: unknown) {
   };
 }
 
-
-type PublicPreferenceSummaryItem = {
-  key: string;
-  mode: "STRICT" | "PREFERRED";
-  value: string;
-};
-
-function publicSummary(value: unknown): { shared: boolean; items: PublicPreferenceSummaryItem[] } {
-  const p = normalizePartnerPreferences(value);
-  if (!p.configured || !p.sharePublicSummary) return { shared: false, items: [] };
-
-  const items: PublicPreferenceSummaryItem[] = [];
-  const addRange = (
-    key: string,
-    prefMode: "STRICT" | "PREFERRED" | "NO_PREFERENCE",
-    min: number,
-    max: number,
-    suffix = ""
-  ) => {
-    if (prefMode === "NO_PREFERENCE") return;
-    items.push({ key, mode: prefMode, value: `${min}–${max}${suffix}` });
-  };
-  const addList = (
-    key: string,
-    prefMode: "STRICT" | "PREFERRED" | "NO_PREFERENCE",
-    values: string[]
-  ) => {
-    if (prefMode === "NO_PREFERENCE" || values.length === 0) return;
-    items.push({
-      key,
-      mode: prefMode,
-      value: values.slice(0, 4).join(", "),
-    });
-  };
-
-  addRange("age", p.ageMode, p.ageMin, p.ageMax);
-  addRange("height", p.heightMode, p.heightMinCm, p.heightMaxCm, " cm");
-  addList("state", p.stateMode, p.states);
-  addList("city", p.cityMode, p.cities);
-  addList("country_of_residence", p.countryOfResidenceMode, p.countriesOfResidence);
-  addList("marital_status", p.maritalStatusMode, p.maritalStatuses);
-  addList("education", p.educationMode, p.educationLevels);
-  addList("occupation", p.occupationMode, p.occupationCategories);
-  addList("diet", p.dietMode, p.diets);
-  addList("smoking", p.smokingMode, p.smoking);
-  addList("drinking", p.drinkingMode, p.drinking);
-  addList("family_values", p.familyValuesMode, p.familyValues);
-  addList("relocation", p.relocationMode, p.relocationStatuses);
-
-  return { shared: true, items: items.slice(0, 12) };
-}
 
 /**
  * Returns only an explicitly shared, non-sensitive partner-expectation summary.
@@ -112,7 +62,7 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
     throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
   }
 
-  return publicSummary(preferences.exists ? preferences.data() : DEFAULT_PARTNER_PREFERENCES);
+  return publicPartnerPreferenceSummary(preferences.exists ? preferences.data() : DEFAULT_PARTNER_PREFERENCES);
 });
 
 /**
