@@ -74,7 +74,7 @@ android {
         versionCode = releaseVersionCode
         versionName = releaseVersionName
         manifestPlaceholders["matreeAppLinkHost"] = appLinkHost
-        buildConfigField("String", "MATREE_APP_LINK_HOST", "\\"$appLinkHost\"")
+        buildConfigField("String", "MATREE_APP_LINK_HOST", "\"$appLinkHost\"")
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "com.match.app.HiltTestRunner"
