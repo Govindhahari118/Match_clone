@@ -48,6 +48,13 @@ def main() -> int:
         print("Room schema evidence FAILED: users table missing")
         return 1
 
+    users = next(entity for entity in entities if entity.get("tableName") == "users")
+    user_columns = {field.get("columnName") for field in users.get("fields", [])}
+    retired = {"passwordHash", "isSeed"} & user_columns
+    if retired:
+        print("Room schema evidence FAILED: retired users columns remain: " + ", ".join(sorted(retired)))
+        return 1
+
     OUT.mkdir(parents=True, exist_ok=True)
     staged = OUT / f"MatchDatabase-v{version}.json"
     shutil.copyfile(schema_path, staged)
