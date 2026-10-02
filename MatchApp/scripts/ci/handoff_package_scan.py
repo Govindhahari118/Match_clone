@@ -33,6 +33,7 @@ REQUIRED = (
     "scripts/ci/production_external_gate.py",
     "scripts/ci/release_source_guard.py",
     "scripts/ci/release_evidence.py",
+    "scripts/ci/room_schema_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/screen_classification_scan.py",
     "scripts/deploy/build-release.sh",
