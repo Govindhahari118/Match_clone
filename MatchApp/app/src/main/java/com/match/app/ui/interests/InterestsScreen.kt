@@ -350,7 +350,7 @@ private fun InterestCard(
                         modifier = Modifier.weight(1f).testTag("interest_decline_${profile.id}")
                     )
                     MatreePrimaryButton(
-                        text = t("accept", "Accept"),
+                        text = t("accept_and_chat", "Accept & chat"),
                         icon = Icons.Filled.Check,
                         onClick = onAccept,
                         enabled = !busy,
