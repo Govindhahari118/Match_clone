@@ -31,6 +31,9 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
+import com.match.app.data.repo.PartnerPreferenceRepository
+import com.match.app.data.repo.PartnerPreferenceSummary
+import com.match.app.data.repo.PartnerPreferenceMode
 import com.match.app.data.repo.ShortlistRepository
 import com.match.app.data.repo.SocialRepository
 import com.match.app.data.repo.SubscriptionRepository
@@ -84,6 +87,7 @@ data class DetailUi(
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
     val trustSummary: TrustSummary? = null,
+    val partnerPreferenceSummary: PartnerPreferenceSummary? = null,
     val showInterestDialog: Boolean = false,
     val interestSending: Boolean = false,
     val interestError: String? = null,
@@ -105,7 +109,8 @@ class MatchDetailViewModel @Inject constructor(
     private val noteRepo: NoteRepository,
     private val subscriptionRepo: SubscriptionRepository,
     private val supportRepo: SupportRepository,
-    private val trustRepository: TrustRepository
+    private val trustRepository: TrustRepository,
+    private val partnerPreferenceRepository: PartnerPreferenceRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(DetailUi())
     val ui: StateFlow<DetailUi> = _ui.asStateFlow()
@@ -128,6 +133,9 @@ class MatchDetailViewModel @Inject constructor(
         val trustSummary = profile.firebaseUid
             .takeIf { it.isNotBlank() }
             ?.let { uid -> runCatching { trustRepository.load(uid) }.getOrNull() }
+        val preferenceSummary = profile.firebaseUid
+            .takeIf { it.isNotBlank() }
+            ?.let { uid -> runCatching { partnerPreferenceRepository.loadPublicSummary(uid) }.getOrNull() }
         val meLiked = social.isLiked(meId, userId)
         val theyLiked = social.isLiked(userId, meId)
         val me = auth.currentProfile(meId)
@@ -140,6 +148,7 @@ class MatchDetailViewModel @Inject constructor(
             isMutual = meLiked && theyLiked,
             meIsPremium = me?.isPremium == true,
             trustSummary = trustSummary,
+            partnerPreferenceSummary = preferenceSummary,
             loading = false
         )
 
@@ -617,6 +626,7 @@ fun MatchDetailScreen(
                     )
                 }
 
+                PartnerExpectationCard(ui.partnerPreferenceSummary)
                 TrustSummaryCard(ui.trustSummary)
                 ActualCompatibilityCard(ui)
                 MatreeSecondaryButton(
@@ -691,6 +701,62 @@ private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
         isVerified = profile.isVerified,
         isPremium = profile.isPremium
     )
+}
+
+
+@Composable
+private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
+    if (summary?.shared != true || summary.items.isEmpty()) return
+    SectionCard("What they are looking for") {
+        summary.items.forEach { item ->
+            val label = when (item.key) {
+                "age" -> "Age"
+                "height" -> "Height"
+                "state" -> "State"
+                "city" -> "City"
+                "country_of_residence" -> "Country"
+                "marital_status" -> "Marital status"
+                "education" -> "Education"
+                "occupation" -> "Occupation"
+                "diet" -> "Diet"
+                "smoking" -> "Smoking"
+                "drinking" -> "Drinking"
+                "family_values" -> "Family values"
+                "relocation" -> "Relocation"
+                else -> item.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
+            }
+            val mode = if (item.mode == PartnerPreferenceMode.STRICT) "Must match" else "Preferred"
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Column(Modifier.weight(0.42f)) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        mode,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (item.mode == PartnerPreferenceMode.STRICT) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                Text(
+                    item.value,
+                    modifier = Modifier.weight(0.58f),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        Text(
+            "Only the criteria this member chose to share are shown. Sensitive religion/community, faith, income, complexion, physical-status, citizenship and visa preferences stay private.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable
