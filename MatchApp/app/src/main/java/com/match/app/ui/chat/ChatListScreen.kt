@@ -92,12 +92,12 @@ class ChatListViewModel @Inject constructor(
         userDao.findByFirebaseUid(firebaseUid)?.let { cached ->
             // Refresh authorization and public activity data when the conversation list is loaded.
             val remote = runCatching { profileService.fetchProfile(firebaseUid) }.getOrNull() ?: return cached
-            val merged = remote.copy(id = cached.id, email = cached.email, passwordHash = cached.passwordHash, isSeed = false)
+            val merged = remote.copy(id = cached.id, email = cached.email)
             userDao.update(merged)
             return merged
         }
         val remote = runCatching { profileService.fetchProfile(firebaseUid) }.getOrNull() ?: return null
-        val cacheCopy = remote.copy(email = "$firebaseUid@cache.invalid", passwordHash = "", isSeed = false)
+        val cacheCopy = remote.copy(email = "$firebaseUid@cache.invalid")
         val id = userDao.insert(cacheCopy)
         return cacheCopy.copy(id = id)
     }
