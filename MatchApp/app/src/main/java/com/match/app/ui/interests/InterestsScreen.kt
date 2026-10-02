@@ -45,7 +45,11 @@ import javax.inject.Inject
 
 enum class InterestTab { RECEIVED, SENT, MUTUAL }
 
-data class InterestActionState(val busyId: Long? = null, val message: String? = null)
+data class InterestActionState(
+    val busyId: Long? = null,
+    val message: String? = null,
+    val matchedId: Long? = null
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -79,7 +83,7 @@ class InterestsViewModel @Inject constructor(
         val me = session.userId.first() ?: return@launch
         _actions.value = InterestActionState(busyId = targetId)
         runCatching { social.like(me, targetId) }
-            .onSuccess { _actions.value = InterestActionState(message = "Interest accepted. You are now matched.") }
+            .onSuccess { _actions.value = InterestActionState(message = "Interest accepted. You are now matched.", matchedId = targetId) }
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not accept this request.") }
     }
 
@@ -101,7 +105,7 @@ class InterestsViewModel @Inject constructor(
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not withdraw this interest.") }
     }
 
-    fun clearMessage() { _actions.update { it.copy(message = null) } }
+    fun clearMessage() { _actions.update { it.copy(message = null, matchedId = null) } }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
         id = id, firebaseUid = firebaseUid, email = email, displayName = displayName, age = age,
@@ -134,8 +138,18 @@ fun InterestsScreen(
     val actions by vm.actions.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(actions.message) {
-        actions.message?.let { snackbar.showSnackbar(it); vm.clearMessage() }
+    LaunchedEffect(actions.message, actions.matchedId) {
+        val message = actions.message ?: return@LaunchedEffect
+        val matchedId = actions.matchedId
+        val result = snackbar.showSnackbar(
+            message = message,
+            actionLabel = if (matchedId != null) "Chat" else null,
+            withDismissAction = matchedId != null
+        )
+        vm.clearMessage()
+        if (matchedId != null && result == SnackbarResult.ActionPerformed) {
+            onOpenChat(matchedId)
+        }
     }
 
     Scaffold(
