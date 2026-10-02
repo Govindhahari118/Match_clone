@@ -58,7 +58,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/ci/production_external_gate.py scripts/ci/release_source_guard.py
+          python3 -m py_compile scripts/ci/production_external_gate.py scripts/ci/release_source_guard.py scripts/release/generate_assetlinks.py scripts/release/verify_branch_protection.py
+          python3 scripts/release/generate_assetlinks.py \\
+            --package com.example.matree \\
+            --sha256 "AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA" \\
+            --output /tmp/matree-assetlinks.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open("/tmp/matree-assetlinks.json", encoding="utf-8"))
+          assert data[0]["target"]["package_name"] == "com.example.matree"
+          assert data[0]["relation"] == ["delegate_permission/common.handle_all_urls"]
+          PY
           if python3 scripts/ci/production_external_gate.py \
               --evidence docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json \
               --sha "$SOURCE_SHA" --mode prelaunch; then
