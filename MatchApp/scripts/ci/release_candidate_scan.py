@@ -271,6 +271,38 @@ def main() -> int:
     require("libs.jbcrypt" not in gradle,
             "obsolete BCrypt dependency must not ship in production", failures)
 
+    # The production app is Firebase/Firestore + Google Play Billing authoritative. The retired
+    # WEB_MATCH/Razorpay REST transport and its HTTP client stack must not silently return.
+    require(not (APP / "src/main/java/com/match/app/data/remote/Dtos.kt").exists(),
+            "retired WEB_MATCH/Razorpay DTO surface must not ship in production", failures)
+    for retired_dependency in [
+        "libs.retrofit",
+        "libs.okhttp",
+        "libs.okhttp.logging",
+        "libs.retrofit.kotlinx.serialization.converter",
+    ]:
+        require(retired_dependency not in gradle,
+                f"retired REST dependency must not return: {retired_dependency}", failures)
+
+    retired_transport_patterns = [
+        ("Razorpay transport", re.compile(r"\\brazorpay(?:OrderId|PaymentId|Signature)?\\b", re.I)),
+        ("WEB_MATCH backend", re.compile(r"\\bWEB_MATCH\\b")),
+        ("legacy REST regions API", re.compile(r"/api/meta/regions", re.I)),
+        ("legacy REST matches API", re.compile(r"/api/matches", re.I)),
+    ]
+    for base in [APP / "src/main", ROOT / "functions/src"]:
+        if not base.exists():
+            continue
+        for source in base.rglob("*"):
+            if not source.is_file() or source.suffix.lower() not in {
+                ".kt", ".java", ".ts", ".js", ".xml", ".json", ".kts"
+            }:
+                continue
+            source_text = text(source)
+            for label, pattern in retired_transport_patterns:
+                require(pattern.search(source_text) is None,
+                        f"{source.relative_to(ROOT)}: retired {label} reference", failures)
+
     # Analytics must never regain member identifiers or sensitive payload fields. Typed telemetry
     # has its own unit contract; this static gate protects retained legacy compatibility facades.
     analytics_sources = [
