@@ -65,3 +65,8 @@ checks retained data and asserts current migration artifacts/indexes.
 
 Composite Firestore indexes are committed in `firestore.indexes.json`. Exact production index
 deployment/query verification remains an external release gate.
+
+
+## v25 privacy cleanup
+
+Database v25 rebuilds the `users` table to remove the retired `passwordHash` and `isSeed` columns. The migration was derived from the generated v24 Room users schema captured by Production CI #1290, copies every retained column, and recreates `index_users_email` and `index_users_firebaseUid`. Emulator-backed CI migrates every supported historical version through v25 and asserts both legacy columns are absent while retained data survives.
