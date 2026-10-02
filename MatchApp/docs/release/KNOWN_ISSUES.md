@@ -15,7 +15,7 @@ The legacy Room fields `passwordHash` and `isSeed` remain inert compatibility co
 - NRI-specific promoted surface: BETA, OFF by default pending market/load/device evidence.
 - Profile video: hardened backend/media moderation exists, but broad exposure remains flag-gated.
 - Unsafe or post-launch source surfaces listed by `screen-classification.json` remain hidden.
-- Production package/application identity and HTTPS App Links remain external release identity decisions; the legacy custom scheme must not be treated as verified App Links.
+- Production package/application identity and App Link hostname are explicit release inputs. HTTPS routing is implemented, while domain ownership, Digital Asset Links publication, Play-signing fingerprint binding and device verification remain external evidence. The legacy custom scheme is compatibility-only and must not be treated as verified App Links.
 
 These are not permitted to be described as production-ready simply because source files exist.
 
