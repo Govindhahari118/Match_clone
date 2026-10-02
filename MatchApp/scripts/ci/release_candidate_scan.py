@@ -411,12 +411,9 @@ def main() -> int:
             for label, pattern in deprecated_integration_patterns:
                 require(pattern.search(data) is None, f"{p.relative_to(ROOT)}: retired {label} reference", failures)
 
-    user_entity = APP / "src/main/java/com/match/app/data/local/entity/UserEntity.kt"
-    user_dao = APP / "src/main/java/com/match/app/data/local/dao/UserDao.kt"
-    auth_repo = APP / "src/main/java/com/match/app/data/repo/AuthRepository.kt"
-    firestore_profile = APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt"
-    for source in (user_entity, user_dao, auth_repo, firestore_profile):
-        if source.exists():
+    app_main_source = APP / "src/main"
+    if app_main_source.exists():
+        for source in app_main_source.rglob("*.kt"):
             data = text(source)
             require("passwordHash" not in data,
                     f"{source.relative_to(ROOT)}: retired local password field reference returned", failures)
