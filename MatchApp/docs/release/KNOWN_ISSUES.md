@@ -6,7 +6,7 @@ This file records release-relevant gaps without converting missing external evid
 
 No intentionally exposed repository-controlled P0/P1 is accepted. A failing mandatory CI gate or a newly discovered critical defect immediately makes the candidate NO-GO until fixed or the affected surface is fail-closed.
 
-The legacy Room fields `passwordHash` and `isSeed` remain inert compatibility columns in database v24. They must not become authentication or seed-data authority. Removal is deferred until an authoritative generated Room schema is captured and a lossless v24 -> v25 table-rebuild migration is validated across every supported upgrade path.
+Room v25 removes the obsolete `passwordHash` and `isSeed` compatibility columns through a full users-table rebuild. The migration preserves every retained field, recreates the unique email/Firebase UID indexes, and is exercised from every supported historical version by emulator-backed CI. Firebase Auth remains the only authentication authority.
 
 ## Intentionally disabled / deferred
 
