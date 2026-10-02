@@ -303,6 +303,23 @@ def main() -> int:
                 require(pattern.search(source_text) is None,
                         f"{source.relative_to(ROOT)}: retired {label} reference", failures)
 
+    # Family-assisted profiles are a first-class matrimony contract, not a UI-only label.
+    user_entity = text(APP / "src/main/java/com/match/app/data/local/entity/UserEntity.kt")
+    profile_service = text(APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt")
+    profile_wizard = text(APP / "src/main/java/com/match/app/ui/onboarding/ProfileWizardViewModel.kt")
+    profile_wizard_screen = text(APP / "src/main/java/com/match/app/ui/onboarding/ProfileWizardScreen.kt")
+    firestore_rules = text(ROOT / "firestore.rules")
+    require('val profileCreatedFor: String = "SELF"' in user_entity,
+            "Room profile-created-for contract missing", failures)
+    require('"profileCreatedFor" to e.profileCreatedFor' in profile_service and
+            'data["profileCreatedFor"] as? String ?: "SELF"' in profile_service,
+            "Firestore profile-created-for persistence/hydration missing", failures)
+    require("PROFILE_CREATED_FOR_VALUES" in profile_wizard and
+            '"Profile created for"' in profile_wizard_screen,
+            "profile-created-for onboarding contract missing", failures)
+    require("validProfileCreatedFor" in firestore_rules,
+            "Firestore must validate profile-created-for canonical values", failures)
+
     # Analytics must never regain member identifiers or sensitive payload fields. Typed telemetry
     # has its own unit contract; this static gate protects retained legacy compatibility facades.
     analytics_sources = [
