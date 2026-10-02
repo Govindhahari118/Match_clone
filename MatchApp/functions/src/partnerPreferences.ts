@@ -3,6 +3,7 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { requireActiveConsent } from "./consent";
 import { accountIsActive } from "./accountStatusPolicy";
+import { discoveryCandidateReady } from "./discoveryEligibilityPolicy";
 import {
   DEFAULT_PARTNER_PREFERENCES,
   normalizePartnerPreferences,
@@ -41,6 +42,7 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
     targetBlock,
     requesterRelation,
     targetRelation,
+    reverseInterest,
   ] = await Promise.all([
     db.collection("users").doc(requesterUid).get(),
     db.collection("users").doc(targetUid).get(),
@@ -49,12 +51,17 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
     db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
     db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
     db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+    db.collection("interests").doc(`${targetUid}_${requesterUid}`).get(),
   ]);
 
   if (!requester.exists || !target.exists ||
       !accountIsActive(requester.data()?.accountStatus) ||
-      !accountIsActive(target.data()?.accountStatus)) {
+      !accountIsActive(target.data()?.accountStatus) ||
+      !discoveryCandidateReady(target.data() || {}, preferences.data())) {
     throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable");
+  }
+  if (target.data()?.stealthMode === true && !reverseInterest.exists) {
+    throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
   }
   if (requesterBlock.exists || targetBlock.exists ||
       requesterRelation.data()?.profileHidden === true ||
