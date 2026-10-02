@@ -20,6 +20,7 @@ import com.match.app.data.remote.ProfileConflictException
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.Gender
 import com.match.app.domain.model.LookingFor
+import com.match.app.domain.model.ProfileCreatedFor
 import com.match.app.domain.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -677,6 +678,7 @@ class AuthRepository @Inject constructor(
         age = age,
         gender = runCatching { Gender.valueOf(gender) }.getOrDefault(Gender.OTHER),
         lookingFor = runCatching { LookingFor.valueOf(lookingFor) }.getOrDefault(LookingFor.ANY),
+        profileCreatedFor = ProfileCreatedFor.fromWire(profileCreatedFor),
         city = city,
         bio = bio,
         rasi = rasi,
