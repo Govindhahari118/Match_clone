@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -23,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import com.match.app.core.config.RemoteConfigManager
 import com.match.app.core.update.InAppUpdateManager
 import com.match.app.data.billing.PlayBillingManager
+import com.match.app.data.repo.NotificationPreferenceRepository
 import com.match.app.data.repo.PresenceRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.navigation.DeepLinkRouteResolver
@@ -30,6 +32,7 @@ import com.match.app.ui.MatchRoot
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -43,6 +46,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var inAppUpdateManager: InAppUpdateManager
     @Inject lateinit var remoteConfig: RemoteConfigManager
     @Inject lateinit var presenceRepository: PresenceRepository
+    @Inject lateinit var notificationPreferenceRepository: NotificationPreferenceRepository
 
     private var isPermissionPromptInFlight = false
     private var isBiometricPromptShowing = false
@@ -70,11 +74,19 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Fail secure before Compose or asynchronous preference collection can render account data.
+        // A member who explicitly disabled capture protection will be honored by the collector below.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
         enableEdgeToEdge()
         splash.setKeepOnScreenCondition { !isReady }
         lifecycleScope.launch {
             try { kotlinx.coroutines.withTimeout(500) { session.userId.first() } } catch (_: Exception) {}
             isReady = true
+        }
+        lifecycleScope.launch {
+            session.screenshotProtection.collectLatest(::applyScreenshotProtection)
         }
         requestNotificationPermissionIfNeeded()
         handleIntent(intent)
@@ -84,7 +96,11 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         if (isPermissionPromptInFlight || isBiometricPromptShowing) return
-        lifecycleScope.launch { session.touchActivity() }
+        lifecycleScope.launch {
+            session.touchActivity()
+            runCatching { notificationPreferenceRepository.syncCurrentTimeZone() }
+                .onFailure { Log.w("MainActivity", "Timezone sync failed", it) }
+        }
         startPresenceHeartbeat()
         lifecycleScope.launch { if (session.biometricLock.first()) showBiometricPrompt() }
         playBilling.connect()
@@ -95,6 +111,14 @@ class MainActivity : FragmentActivity() {
         presenceJob?.cancel()
         presenceJob = null
         super.onPause()
+    }
+
+    private fun applyScreenshotProtection(enabled: Boolean) {
+        if (enabled) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     private fun startPresenceHeartbeat() {
@@ -119,7 +143,7 @@ class MainActivity : FragmentActivity() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { isBiometricPromptShowing = false }
         })
         prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock MatrimonyConnect")
+            .setTitle("Unlock Matree")
             .setSubtitle("Verify your identity to continue")
             .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
             .build())

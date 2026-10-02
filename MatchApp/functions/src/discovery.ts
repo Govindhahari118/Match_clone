@@ -17,10 +17,13 @@ import {
   DISCOVERY_RANKING_VERSION,
   behavioralAdjustment,
   blendedRecommendationRelevance,
+  recentImpressionAdjustment,
 } from "./recommendationPolicy";
 import {
   discoveryActorReady,
   discoveryCandidateReady,
+  normalizeStaleDiscoveryDays,
+  profileFreshEnough,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
 import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
@@ -29,6 +32,12 @@ import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 const SCAN_LIMIT = 60;
 const RETURN_LIMIT = 20;
 const MAX_KEYWORD_LENGTH = 64;
+
+// Server-owned product policy: operators can tune inventory freshness without an app release.
+// Values outside the supported range are clamped by normalizeStaleDiscoveryDays().
+const MAX_INACTIVE_DISCOVERY_DAYS = normalizeStaleDiscoveryDays(
+  functions.config().discovery?.max_inactive_days
+);
 
 // Only fields intentionally safe for another signed-in member may leave this endpoint. Birth
 // details, astrology inputs, income, precise activity and billing entitlement stay private.
@@ -385,13 +394,23 @@ export const discoverProfiles = functions
           .collection("targets")
           .doc(doc.id))
       : [];
+    const recentImpressionQuery = personalizationActive
+      ? db.collection("recommendationImpressionBatches")
+        .where("viewerUid", "==", viewerUid)
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get()
+      : Promise.resolve(null);
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
     const privateRefs = privateFilterRequested
       ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
       : [];
-    const presenceRefs = lastActiveFilterDays > 0
-      ? candidates.map((doc) => db.collection("presencePrivate").doc(doc.id))
-      : [];
+    // Presence is always read by trusted discovery code so stale inventory can be suppressed.
+    // Precise timestamps are still never returned unless the target's activity-visibility policy
+    // permits the explicit last-active filter path below.
+    const presenceRefs = candidates.map((doc) =>
+      db.collection("presencePrivate").doc(doc.id)
+    );
     const activitySettingsRefs = lastActiveFilterDays > 0
       ? candidates.map((doc) => db.collection("privacySettings").doc(doc.id))
       : [];
@@ -419,6 +438,7 @@ export const discoverProfiles = functions
       incomingInterestDocs,
       matchDocs,
       recommendationFeedbackDocs,
+      recentImpressionSnapshot,
     ] = await Promise.all([
       reverseBlockRefs.length ? db.getAll(...reverseBlockRefs) : Promise.resolve([]),
       hiddenFromViewerRefs.length ? db.getAll(...hiddenFromViewerRefs) : Promise.resolve([]),
@@ -435,6 +455,7 @@ export const discoverProfiles = functions
       recommendationFeedbackRefs.length
         ? db.getAll(...recommendationFeedbackRefs)
         : Promise.resolve([]),
+      recentImpressionQuery,
     ]);
 
     const reverseBlocked = new Set<string>();
@@ -475,7 +496,28 @@ export const discoverProfiles = functions
     recommendationFeedbackDocs.forEach((doc, index) => {
       if (doc.exists) feedbackByUid.set(candidates[index].id, doc.data() || {});
     });
+    const recentImpressionBatchByUid = new Map<string, number>();
+    recentImpressionSnapshot?.docs.forEach((batchDoc, batchIndex) => {
+      const targetUids = batchDoc.data()?.targetUids;
+      if (!Array.isArray(targetUids)) return;
+      targetUids.forEach((uid) => {
+        if (
+          typeof uid === "string" &&
+          uid &&
+          !recentImpressionBatchByUid.has(uid)
+        ) {
+          recentImpressionBatchByUid.set(uid, batchIndex);
+        }
+      });
+    });
     const visibleLastActiveByUid = new Map<string, number>();
+    const privateLastActiveByUid = new Map<string, number>();
+    presenceDocs.forEach((doc, index) => {
+      const lastActive = Number(doc.data()?.lastActiveAt || 0);
+      if (doc.exists && Number.isFinite(lastActive) && lastActive > 0) {
+        privateLastActiveByUid.set(candidates[index].id, lastActive);
+      }
+    });
     reverseDocs.forEach((doc, index) => {
       if (doc.exists) reverseBlocked.add(candidates[index].id);
     });
@@ -559,6 +601,12 @@ export const discoverProfiles = functions
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
       if (!discoveryCandidateReady(candidate, rawPartnerPreferencesByUid.get(doc.id))) continue;
+      if (!profileFreshEnough(
+        createdAtMillis(candidate),
+        privateLastActiveByUid.get(doc.id) || 0,
+        now,
+        MAX_INACTIVE_DISCOVERY_DAYS
+      )) continue;
       if (candidate.stealthMode === true) continue;
 
       const candidateAge = Number(candidate.age || 0);
@@ -617,7 +665,8 @@ export const discoverProfiles = functions
           pairPreferenceMatch.mutual * 100 < minMutualMatchPercent)
       ) continue;
       const behavior = personalizationActive
-        ? behavioralAdjustment(feedbackByUid.get(doc.id))
+        ? behavioralAdjustment(feedbackByUid.get(doc.id)) +
+          recentImpressionAdjustment(recentImpressionBatchByUid.get(doc.id))
         : 0;
       eligible.push({
         doc,

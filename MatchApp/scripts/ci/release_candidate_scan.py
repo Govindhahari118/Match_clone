@@ -271,6 +271,63 @@ def main() -> int:
     require("libs.jbcrypt" not in gradle,
             "obsolete BCrypt dependency must not ship in production", failures)
 
+    # The production app is Firebase/Firestore + Google Play Billing authoritative. The retired
+    # WEB_MATCH/Razorpay REST transport and its HTTP client stack must not silently return.
+    require(not (APP / "src/main/java/com/match/app/data/remote/Dtos.kt").exists(),
+            "retired WEB_MATCH/Razorpay DTO surface must not ship in production", failures)
+    for retired_dependency in [
+        "libs.retrofit",
+        "libs.okhttp",
+        "libs.okhttp.logging",
+        "libs.retrofit.kotlinx.serialization.converter",
+    ]:
+        require(retired_dependency not in gradle,
+                f"retired REST dependency must not return: {retired_dependency}", failures)
+
+    retired_transport_patterns = [
+        ("Razorpay transport", re.compile(r"\\brazorpay(?:OrderId|PaymentId|Signature)?\\b", re.I)),
+        ("WEB_MATCH backend", re.compile(r"\\bWEB_MATCH\\b")),
+        ("legacy REST regions API", re.compile(r"/api/meta/regions", re.I)),
+        ("legacy REST matches API", re.compile(r"/api/matches", re.I)),
+    ]
+    for base in [APP / "src/main", ROOT / "functions/src"]:
+        if not base.exists():
+            continue
+        for source in base.rglob("*"):
+            if not source.is_file() or source.suffix.lower() not in {
+                ".kt", ".java", ".ts", ".js", ".xml", ".json", ".kts"
+            }:
+                continue
+            source_text = text(source)
+            for label, pattern in retired_transport_patterns:
+                require(pattern.search(source_text) is None,
+                        f"{source.relative_to(ROOT)}: retired {label} reference", failures)
+
+    # Family-assisted profiles are a first-class matrimony contract, not a UI-only label.
+    user_entity = text(APP / "src/main/java/com/match/app/data/local/entity/UserEntity.kt")
+    profile_service = text(APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt")
+    profile_wizard = text(APP / "src/main/java/com/match/app/ui/onboarding/ProfileWizardViewModel.kt")
+    profile_wizard_screen = text(APP / "src/main/java/com/match/app/ui/onboarding/ProfileWizardScreen.kt")
+    firestore_rules = text(ROOT / "firestore.rules")
+    require('val profileCreatedFor: String = "SELF"' in user_entity,
+            "Room profile-created-for contract missing", failures)
+    require('"profileCreatedFor" to e.profileCreatedFor' in profile_service and
+            'data["profileCreatedFor"] as? String ?: "SELF"' in profile_service,
+            "Firestore profile-created-for persistence/hydration missing", failures)
+    require("PROFILE_CREATED_FOR_VALUES" in profile_wizard and
+            '"Profile created for"' in profile_wizard_screen,
+            "profile-created-for onboarding contract missing", failures)
+    profile_domain = text(APP / "src/main/java/com/match/app/domain/model/Models.kt")
+    match_detail = text(APP / "src/main/java/com/match/app/ui/detail/MatchDetailScreen.kt")
+    require("enum class ProfileCreatedFor" in profile_domain and
+            "ProfileCreatedFor.fromWire(profileCreatedFor)" in
+                text(APP / "src/main/java/com/match/app/data/repo/AuthRepository.kt"),
+            "profile-created-for typed domain mapping missing", failures)
+    require('Fact("Profile managed as", p.profileCreatedFor.displayLabel)' in match_detail,
+            "family-assisted profile status must remain visible to prospective matches", failures)
+    require("validProfileCreatedFor" in firestore_rules,
+            "Firestore must validate profile-created-for canonical values", failures)
+
     # Analytics must never regain member identifiers or sensitive payload fields. Typed telemetry
     # has its own unit contract; this static gate protects retained legacy compatibility facades.
     analytics_sources = [

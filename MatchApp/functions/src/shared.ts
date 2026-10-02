@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import * as crypto from "crypto";
 import { productionFeatureEnabled, ProductionFeature } from "./featureFlagPolicy";
+import { quietHoursActive } from "./notificationPreferencePolicy";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -185,7 +186,15 @@ export async function notificationPreferenceEnabled(
   // optional engagement notifications and therefore cannot be disabled by a marketing/system toggle.
   if (key === "critical") return true;
   const prefs = await db.collection("notificationPrefs").doc(uid).get();
-  return prefs.data()?.[key] !== false;
+  const value = prefs.data() || {};
+  if (value[key] === false) return false;
+  if (quietHoursActive(
+    value.quietHours === true,
+    String(value.timeZone || "")
+  )) {
+    return false;
+  }
+  return true;
 }
 
 /**

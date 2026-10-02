@@ -6,6 +6,20 @@ enum class Gender { MALE, FEMALE, OTHER }
 /** What the user wants (can be ANY). */
 enum class LookingFor { MALE, FEMALE, ANY }
 
+enum class ProfileCreatedFor(val displayLabel: String) {
+    SELF("Self-managed"),
+    SON("Managed by family for son"),
+    DAUGHTER("Managed by family for daughter"),
+    SIBLING("Managed by sibling"),
+    PARENT("Managed by family for parent"),
+    RELATIVE("Managed by another family member");
+
+    companion object {
+        fun fromWire(value: String): ProfileCreatedFor =
+            entries.firstOrNull { it.name == value } ?: SELF
+    }
+}
+
 data class UserProfile(
     val id: Long,
     val firebaseUid: String = "",
@@ -14,6 +28,7 @@ data class UserProfile(
     val age: Int,
     val gender: Gender,
     val lookingFor: LookingFor,
+    val profileCreatedFor: ProfileCreatedFor = ProfileCreatedFor.SELF,
     val city: String,
     val bio: String,
     val rasi: String,

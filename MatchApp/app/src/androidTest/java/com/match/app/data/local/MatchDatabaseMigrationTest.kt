@@ -44,10 +44,11 @@ class MatchDatabaseMigrationTest {
                 Migrations.CURRENT_VERSION,
                 db.version
             )
-            db.query("SELECT id, age FROM users WHERE id = 42").use { cursor ->
+            db.query("SELECT id, age, profileCreatedFor FROM users WHERE id = 42").use { cursor ->
                 assertTrue("existing user was lost from " + startVersion, cursor.moveToFirst())
                 assertEquals(42L, cursor.getLong(0))
                 assertEquals(31, cursor.getInt(1))
+                assertEquals("SELF", cursor.getString(2))
             }
             assertCurrentMigrationArtifacts(db)
             helper.close()
@@ -57,7 +58,7 @@ class MatchDatabaseMigrationTest {
     @Test
     fun migrationChainIsContiguousAndDeclaresTheSupportedBoundary() {
         assertEquals(13, Migrations.OLDEST_SUPPORTED_VERSION)
-        assertEquals(23, Migrations.CURRENT_VERSION)
+        assertEquals(24, Migrations.CURRENT_VERSION)
         assertEquals(
             Migrations.CURRENT_VERSION - Migrations.OLDEST_SUPPORTED_VERSION,
             Migrations.ALL.size
@@ -129,7 +130,8 @@ class MatchDatabaseMigrationTest {
             "faithTradition",
             "faithSubTradition",
             "faithInstitution",
-            "profileRevision"
+            "profileRevision",
+            "profileCreatedFor"
         ).forEach { column ->
             assertTrue("users." + column + " missing after migration", column in userColumns)
         }

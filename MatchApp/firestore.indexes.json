@@ -158,6 +158,14 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "readAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "recommendationImpressionBatches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "viewerUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

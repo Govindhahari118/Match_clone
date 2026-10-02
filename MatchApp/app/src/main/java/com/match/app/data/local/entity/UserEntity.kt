@@ -97,6 +97,8 @@ data class UserEntity(
     val subscriptionExpiry: Long = 0L,
     val matchScore: Float = 0f,
     val username: String = "",
+    /** Who the matrimonial profile represents. Canonical values are validated at UI and Firestore boundaries. */
+    val profileCreatedFor: String = "SELF",
     /** Optimistic-concurrency revision of the canonical Firestore profile. */
     val profileRevision: Long = 0L
 )

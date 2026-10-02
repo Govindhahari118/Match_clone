@@ -23,6 +23,7 @@ import java.time.Period
 import javax.inject.Inject
 
 data class WizardState(
+    val profileCreatedFor: String = "SELF",
     val username: String = "",
     val displayName: String = "",
     val dateOfBirth: String = "",
@@ -295,6 +296,7 @@ class ProfileWizardViewModel @Inject constructor(
 
     private fun validateRequiredIdentityAndLocation(): String? {
         val s = _wizardState.value
+        if (s.profileCreatedFor !in PROFILE_CREATED_FOR_VALUES) return "Choose who this matrimonial profile is for."
         if (s.displayName.trim().length < 2) return "Enter your full name."
         usernameRepository.validate(s.username)?.let { return it }
         val dob = runCatching { LocalDate.parse(s.dateOfBirth.trim()) }.getOrNull()
@@ -323,6 +325,7 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     private fun UserEntity.toWizardState() = WizardState(
+        profileCreatedFor = profileCreatedFor,
         username = username, displayName = displayName, dateOfBirth = dateOfBirth,
         state = state, city = city, motherTongue = motherTongue, bio = bio,
         religion = religion, caste = caste, subCaste = subCaste, gothra = gothra,
@@ -349,6 +352,7 @@ class ProfileWizardViewModel @Inject constructor(
         val isHindu = religionCategory == ReligionCategory.HINDU
         val schema = ReligionProfileSchemas.forReligion(s.religion)
         return copy(
+            profileCreatedFor = s.profileCreatedFor.takeIf { it in PROFILE_CREATED_FOR_VALUES } ?: "SELF",
             username = reservedUsername, displayName = s.displayName.trim(), dateOfBirth = s.dateOfBirth.trim(),
             age = ageFromDob?.takeIf { it in 18..99 } ?: age, state = s.state.trim(), city = s.city.trim(),
             motherTongue = s.motherTongue.trim(), bio = s.bio.trim().take(1000), religion = s.religion.trim(),
@@ -373,6 +377,7 @@ class ProfileWizardViewModel @Inject constructor(
     }
 
     private companion object {
+        val PROFILE_CREATED_FOR_VALUES = setOf("SELF", "SON", "DAUGHTER", "SIBLING", "PARENT", "RELATIVE")
         const val LAST_STEP = 7
         const val RELIGION_STEP = 1
         val REQUIRED_STEPS = setOf(0, 1, 2, 3)

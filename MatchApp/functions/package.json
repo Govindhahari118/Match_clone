@@ -1,7 +1,7 @@
 {
   "name": "match-functions",
   "version": "1.0.0",
-  "description": "Firebase Cloud Functions for MatrimonyConnect",
+  "description": "Firebase Cloud Functions for Matree",
   "license": "UNLICENSED",
   "scripts": {
     "lint": "eslint --ext .js,.ts src",

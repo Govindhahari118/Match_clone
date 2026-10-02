@@ -74,6 +74,7 @@ class SettingsViewModel @Inject constructor(
     val appearance = appearancePreferenceRepo.observe()
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppearancePreference())
     val biometricLock = session.biometricLock.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val screenshotProtection = session.screenshotProtection.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val planKey = session.subscriptionPlan.stateIn(viewModelScope, SharingStarted.Eagerly, "FREE")
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
     val currentFilter = session.filter.stateIn(viewModelScope, SharingStarted.Eagerly, MatchFilter())
@@ -160,6 +161,7 @@ class SettingsViewModel @Inject constructor(
     }
     fun setDisplayMode(value: DisplayMode) = viewModelScope.launch { session.setDisplayMode(value) }
     fun setBiometricLock(value: Boolean) = viewModelScope.launch { session.setBiometricLock(value) }
+    fun setScreenshotProtection(value: Boolean) = viewModelScope.launch { session.setScreenshotProtection(value) }
 
     fun setNotificationPreference(key: String, enabled: Boolean) = viewModelScope.launch {
         runCatching { notificationPreferenceRepo.update(key, enabled) }
@@ -252,6 +254,7 @@ fun SettingsScreen(
     val user by vm.user.collectAsState()
     val appearance by vm.appearance.collectAsState()
     val biometric by vm.biometricLock.collectAsState()
+    val screenshotProtection by vm.screenshotProtection.collectAsState()
     val plan by vm.planKey.collectAsState()
     val language by vm.uiLanguage.collectAsState()
     val accountState by vm.accountState.collectAsState()
@@ -572,6 +575,13 @@ fun SettingsScreen(
                 checked = notificationPreferences.system,
                 onCheckedChange = { vm.setNotificationPreference("system", it) }
             )
+            SettingToggle(
+                icon = Icons.Filled.Bedtime,
+                title = "Quiet hours",
+                subtitle = "Silence optional push delivery from 10 PM to 7 AM in your current timezone. Events still appear in Matree; critical safety and verification notices are never suppressed.",
+                checked = notificationPreferences.quietHours,
+                onCheckedChange = { vm.setNotificationPreference("quietHours", it) }
+            )
 
             Text("Language & security", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Card(onClick = onGoLanguage, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -591,6 +601,13 @@ fun SettingsScreen(
                 subtitle = "Require device biometrics or device credential when returning to the app.",
                 checked = biometric,
                 onCheckedChange = vm::setBiometricLock
+            )
+            SettingToggle(
+                icon = Icons.Filled.Security,
+                title = "Protect screen captures",
+                subtitle = "Block screenshots, screen recordings and non-secure display mirroring while Matree is open. Enabled by default.",
+                checked = screenshotProtection,
+                onCheckedChange = vm::setScreenshotProtection
             )
 
             MatreeInfoCard {

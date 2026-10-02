@@ -210,11 +210,38 @@ private fun SuggestionChips(values: List<String>, selected: String, onSelected: 
     }
 }
 
+private val profileCreatedForOptions = listOf(
+    "SELF" to "Myself",
+    "SON" to "Son",
+    "DAUGHTER" to "Daughter",
+    "SIBLING" to "Sibling",
+    "PARENT" to "Parent",
+    "RELATIVE" to "Other family member"
+)
+
 @Composable
 private fun StepIdentityLocation(vm: ProfileWizardViewModel) {
     val s by vm.wizardState.collectAsState()
     Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
         SectionHeader("Identity & location", "The app is the same for everyone. Your state and language only personalize your profile; partner discovery preferences remain separate.")
+        val createdForLabel = profileCreatedForOptions
+            .firstOrNull { it.first == s.profileCreatedFor }
+            ?.second ?: "Myself"
+        ChoiceField(
+            label = "Profile created for",
+            value = createdForLabel,
+            options = profileCreatedForOptions.map { it.second },
+            onSelected = { selected ->
+                val canonical = profileCreatedForOptions.first { it.second == selected }.first
+                vm.update(s.copy(profileCreatedFor = canonical))
+            },
+            required = true
+        )
+        Text(
+            "This tells members whether the account is self-managed or family-assisted. It does not change matching eligibility.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         OutlinedTextField(
             value = s.username,
             onValueChange = { vm.update(s.copy(username = it.lowercase().filter { ch -> ch.isLetterOrDigit() || ch == '.' || ch == '_' }.take(30))) },

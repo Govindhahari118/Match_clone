@@ -248,6 +248,7 @@ fun ProfileScreen(
         TrustAndVerificationCard(p, photos.isNotEmpty(), trustSummary, onGoVerification)
 
         ProfileSection("Personal details") {
+            InfoRow(Icons.Filled.SupervisorAccount, p.profileCreatedFor.displayLabel)
             InfoRow(Icons.Filled.Person, listOf("${p.age} years", p.maritalStatus).filter { it.isNotBlank() }.joinToString(" • "))
             InfoRow(Icons.Filled.Height, if (p.heightCm > 0) "${p.heightCm} cm" else "")
             InfoRow(Icons.Filled.Public, listOf(p.city, p.state, p.countryOfResidence).filter { it.isNotBlank() }.joinToString(", "))

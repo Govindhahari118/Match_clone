@@ -6,6 +6,9 @@ const {
   partnerPreferencesReady,
   discoveryActorReady,
   discoveryCandidateReady,
+  profileFreshEnough,
+  normalizeStaleDiscoveryDays,
+  DEFAULT_STALE_DISCOVERY_DAYS,
 } = require("../lib/discoveryEligibilityPolicy");
 
 const complete = {
@@ -57,4 +60,35 @@ test("candidate must have complete public profile and configured preferences", (
   );
   assert.equal(partnerPreferencesReady({ configured: true }), true);
   assert.equal(partnerPreferencesReady(undefined), false);
+});
+
+
+test("discovery freshness has explicit 89/90/91 day boundary semantics", () => {
+  const day = 86_400_000;
+  const now = 200 * day;
+  assert.equal(profileFreshEnough(now - 89 * day, 0, now), true);
+  assert.equal(profileFreshEnough(now - 90 * day, 0, now), true);
+  assert.equal(profileFreshEnough(now - 91 * day, 0, now), false);
+});
+
+test("private activity supersedes creation age without exposing the timestamp", () => {
+  const day = 86_400_000;
+  const now = 500 * day;
+  assert.equal(profileFreshEnough(now - 400 * day, now - 2 * day, now), true);
+  assert.equal(profileFreshEnough(now - 400 * day, now - 120 * day, now), false);
+});
+
+test("legacy/future freshness anchors fail safely", () => {
+  const day = 86_400_000;
+  const now = 200 * day;
+  assert.equal(profileFreshEnough(0, 0, now), true);
+  assert.equal(profileFreshEnough(now + 365 * day, 0, now), true);
+  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), true);
+});
+
+test("stale threshold is product-configurable but clamped to safe bounds", () => {
+  assert.equal(normalizeStaleDiscoveryDays(undefined), DEFAULT_STALE_DISCOVERY_DAYS);
+  assert.equal(normalizeStaleDiscoveryDays("45"), 45);
+  assert.equal(normalizeStaleDiscoveryDays(1), 14);
+  assert.equal(normalizeStaleDiscoveryDays(9999), 365);
 });

@@ -1,6 +1,6 @@
 # Matree production route inventory
 
-> Scope: reachable production navigation on `gpt/matree-master-plan-hardening-20260929`.
+> Scope: reachable production navigation on the current release lineage. The frozen 2026-10-01 release candidate is `5a4cda4087e5b49706dd6ea02b30d3d8d744eae5`; post-freeze improvements must use a new exact SHA and fresh CI/evidence.
 >
 > This inventory classifies navigation exposure, not overall release readiness. A `READY` route still
 > depends on the exact-head CI, Firebase/provider configuration, security rules and external gates.

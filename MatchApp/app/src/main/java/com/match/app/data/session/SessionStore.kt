@@ -52,6 +52,7 @@ class SessionStore(private val context: Context) {
     private val KEY_MANUAL_THEME = stringPreferencesKey("appearance_manual_theme")
     private val KEY_DISPLAY_MODE = stringPreferencesKey("appearance_display_mode")
     private val KEY_BIOMETRIC = booleanPreferencesKey("biometric_lock")
+    private val KEY_SCREENSHOT_PROTECTION = booleanPreferencesKey("screenshot_protection")
     private val KEY_INCOME_MIN = stringPreferencesKey("filter_income_min")
     private val KEY_INCOME_MAX = stringPreferencesKey("filter_income_max")
     private val KEY_EDUCATION  = stringPreferencesKey("filter_education")
@@ -208,6 +209,8 @@ class SessionStore(private val context: Context) {
         )
     }
     val biometricLock: Flow<Boolean> = context.dataStore.data.map { it[KEY_BIOMETRIC] ?: false }
+    /** Device-scoped privacy control. Secure screen capture is ON by default. */
+    val screenshotProtection: Flow<Boolean> = context.dataStore.data.map { it[KEY_SCREENSHOT_PROTECTION] ?: true }
     val subscriptionPlan: Flow<String> = context.dataStore.data.map { it[KEY_SUB_PLAN] ?: "FREE" }
     val uiLanguage: Flow<String> = context.dataStore.data.map { prefs -> normalizeUiLanguage(prefs[KEY_UI_LANG]) }
     val communitySetupDone: Flow<Boolean> = context.dataStore.data.map { it[KEY_COMMUNITY_SETUP_DONE] ?: false }
@@ -231,6 +234,7 @@ class SessionStore(private val context: Context) {
         val displayMode = prefs[KEY_DISPLAY_MODE]
         val legacyDarkMode = prefs[KEY_DARK]
         val biometricLock = prefs[KEY_BIOMETRIC]
+        val screenshotProtection = prefs[KEY_SCREENSHOT_PROTECTION]
 
         prefs.clear()
 
@@ -238,6 +242,7 @@ class SessionStore(private val context: Context) {
         displayMode?.let { prefs[KEY_DISPLAY_MODE] = it }
         legacyDarkMode?.let { prefs[KEY_DARK] = it }
         biometricLock?.let { prefs[KEY_BIOMETRIC] = it }
+        screenshotProtection?.let { prefs[KEY_SCREENSHOT_PROTECTION] = it }
     }
     suspend fun setMode(m: MatchMode) = context.dataStore.edit {
         it[KEY_MODE] = when (m) { MatchMode.QUESTIONNAIRE -> 0L; MatchMode.ASTROLOGY -> 1L; MatchMode.ADVANCED -> 2L }
@@ -351,6 +356,7 @@ class SessionStore(private val context: Context) {
         prefs[KEY_MANUAL_THEME] = key
     }
     suspend fun setBiometricLock(v: Boolean) = context.dataStore.edit { it[KEY_BIOMETRIC] = v }
+    suspend fun setScreenshotProtection(v: Boolean) = context.dataStore.edit { it[KEY_SCREENSHOT_PROTECTION] = v }
     suspend fun setUiLanguage(lang: String) = context.dataStore.edit { it[KEY_UI_LANG] = normalizeUiLanguage(lang) }
     suspend fun setCommunitySetupDone(v: Boolean) = context.dataStore.edit { it[KEY_COMMUNITY_SETUP_DONE] = v }
     suspend fun setHasQuestionnaire(v: Boolean) = context.dataStore.edit { it[booleanPreferencesKey("has_questionnaire")] = v }
