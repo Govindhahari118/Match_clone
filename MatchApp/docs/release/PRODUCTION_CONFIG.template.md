@@ -103,7 +103,8 @@ Operator-controlled values:
 - Terms URL: `<external>`
 - Support URL/contact: `<external>`
 - Account deletion information URL: `<external>`
-- verified App Links domain / Digital Asset Links: `<external or disabled>`
+- verified App Links host: set `MATREE_APP_LINK_HOST=<production hostname>`; the release scripts reject the non-production `invalid.matree.local` placeholder.
+- Digital Asset Links: publish `https://<MATREE_APP_LINK_HOST>/.well-known/assetlinks.json` for the exact Play signing certificate/package and verify Android domain association before promotion.
 
 ## Promotion rule
 
