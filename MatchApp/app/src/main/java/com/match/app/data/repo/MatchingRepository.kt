@@ -99,7 +99,6 @@ class MatchingRepository @Inject constructor(
 
             userDao.allExcluding(seekerId)
                 .asSequence()
-                .filter { !it.isSeed }
                 .filter { it.firebaseUid.isNotBlank() && it.firebaseUid in authorizedCandidates.keys }
                 .filter { it.id !in blockedIds }
                 .filter { !it.stealthMode }
@@ -295,8 +294,6 @@ class MatchingRepository @Inject constructor(
             val merged = remote.copy(
                 id = existing.id,
                 email = existing.email,
-                passwordHash = existing.passwordHash,
-                isSeed = false
             )
             userDao.update(merged)
             return merged
@@ -304,8 +301,6 @@ class MatchingRepository @Inject constructor(
 
         val cached = remote.copy(
             email = "${firebaseUid}@cache.invalid",
-            passwordHash = "",
-            isSeed = false
         )
         val id = userDao.insert(cached)
         return cached.copy(id = id)
