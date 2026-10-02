@@ -32,6 +32,12 @@ val productionApplicationId = nonBlankEnv("MATREE_APPLICATION_ID")?.also { value
     }
 } ?: "com.match.app"
 
+val appLinkHost = nonBlankEnv("MATREE_APP_LINK_HOST")?.also { value ->
+    require(value.matches(Regex("(?i)^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"))) {
+        "MATREE_APP_LINK_HOST must be a hostname without scheme, path, port, query, or fragment"
+    }
+} ?: "invalid.matree.local"
+
 val releaseVersionCode = nonBlankEnv("MATREE_VERSION_CODE")?.let { raw ->
     raw.toIntOrNull()?.takeIf { it > 0 }
         ?: error("MATREE_VERSION_CODE must be a positive integer")
@@ -67,6 +73,8 @@ android {
         targetSdk = 36
         versionCode = releaseVersionCode
         versionName = releaseVersionName
+        manifestPlaceholders["matreeAppLinkHost"] = appLinkHost
+        buildConfigField("String", "MATREE_APP_LINK_HOST", "\\"$appLinkHost\"")
 
         vectorDrawables { useSupportLibrary = true }
         testInstrumentationRunner = "com.match.app.HiltTestRunner"
