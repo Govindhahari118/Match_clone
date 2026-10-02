@@ -25,6 +25,7 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -234,6 +235,33 @@ fun PartnerPreferencesScreen(
                             checked = ui.sensitiveConsentCurrent,
                             onCheckedChange = vm::setSensitiveConsent,
                             enabled = !ui.consentSaving
+                        )
+                    }
+                }
+
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.padding(MatreeDesign.spacing.md),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                t("show_partner_summary_title", "Show a summary on my profile"),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                t("show_partner_summary_body", "Share only selected non-sensitive expectations such as age, location, education, occupation and lifestyle. Sensitive criteria remain private."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                        Switch(
+                            checked = ui.value.sharePublicSummary,
+                            onCheckedChange = { enabled ->
+                                vm.update { it.copy(sharePublicSummary = enabled) }
+                            },
+                            enabled = ui.sensitiveConsentCurrent
                         )
                     }
                 }

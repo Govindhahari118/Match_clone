@@ -11,8 +11,20 @@ enum class PartnerPreferenceMode {
     NO_PREFERENCE
 }
 
+data class PartnerPreferenceSummaryItem(
+    val key: String,
+    val mode: PartnerPreferenceMode,
+    val value: String
+)
+
+data class PartnerPreferenceSummary(
+    val shared: Boolean = false,
+    val items: List<PartnerPreferenceSummaryItem> = emptyList()
+)
+
 data class PartnerPreferences(
     val configured: Boolean = false,
+    val sharePublicSummary: Boolean = false,
     val ageMode: PartnerPreferenceMode = PartnerPreferenceMode.NO_PREFERENCE,
     val ageMin: Int = 18,
     val ageMax: Int = 70,
@@ -99,6 +111,28 @@ class PartnerPreferenceRepository @Inject constructor() {
         return fromMap(data)
     }
 
+    suspend fun loadPublicSummary(targetUid: String): PartnerPreferenceSummary {
+        require(targetUid.isNotBlank()) { "Target profile is required" }
+        val result = functions.getHttpsCallable("getPartnerPreferenceSummary")
+            .call(mapOf("targetUid" to targetUid))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: emptyMap()
+        val items = (data["items"] as? List<*>).orEmpty().mapNotNull { raw ->
+            @Suppress("UNCHECKED_CAST")
+            val item = raw as? Map<String, Any?> ?: return@mapNotNull null
+            val key = item["key"] as? String ?: return@mapNotNull null
+            val value = item["value"] as? String ?: return@mapNotNull null
+            val mode = mode(item["mode"])
+            if (mode == PartnerPreferenceMode.NO_PREFERENCE || value.isBlank()) return@mapNotNull null
+            PartnerPreferenceSummaryItem(key = key, mode = mode, value = value)
+        }
+        return PartnerPreferenceSummary(
+            shared = data["shared"] as? Boolean ?: false,
+            items = items
+        )
+    }
+
     suspend fun save(value: PartnerPreferences): PartnerPreferences {
         val result = functions.getHttpsCallable("setPartnerPreferences")
             .call(toMap(value))
@@ -109,6 +143,7 @@ class PartnerPreferenceRepository @Inject constructor() {
     }
 
     private fun toMap(value: PartnerPreferences): Map<String, Any> = mapOf(
+        "sharePublicSummary" to value.sharePublicSummary,
         "ageMode" to value.ageMode.name,
         "ageMin" to value.ageMin,
         "ageMax" to value.ageMax,
@@ -186,6 +221,7 @@ class PartnerPreferenceRepository @Inject constructor() {
 
     private fun fromMap(data: Map<String, Any?>): PartnerPreferences = PartnerPreferences(
         configured = data["configured"] as? Boolean ?: false,
+        sharePublicSummary = data["sharePublicSummary"] as? Boolean ?: false,
         ageMode = mode(data["ageMode"]),
         ageMin = int(data["ageMin"], 18),
         ageMax = int(data["ageMax"], 70),

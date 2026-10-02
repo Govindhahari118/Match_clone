@@ -2,6 +2,7 @@ export type PreferenceMode = "STRICT" | "PREFERRED" | "NO_PREFERENCE";
 
 export type PartnerPreferenceDocument = {
   configured: boolean;
+  sharePublicSummary: boolean;
   ageMode: PreferenceMode;
   ageMin: number;
   ageMax: number;
@@ -79,6 +80,7 @@ export type PartnerPreferenceDocument = {
 
 export const DEFAULT_PARTNER_PREFERENCES: PartnerPreferenceDocument = {
   configured: false,
+  sharePublicSummary: false,
   ageMode: "NO_PREFERENCE",
   ageMin: 18,
   ageMax: 70,
@@ -238,6 +240,7 @@ export function normalizePartnerPreferences(
 
   return {
     configured: raw.configured === true,
+    sharePublicSummary: raw.sharePublicSummary === true,
     ageMode: mode(raw.ageMode),
     ageMin,
     ageMax,
@@ -329,6 +332,57 @@ export function normalizePartnerPreferences(
     visaStatusMode: modeForValues(raw.visaStatusMode, raw.visaStatuses),
     visaStatuses: strings(raw.visaStatuses),
   };
+}
+
+export type PublicPartnerPreferenceSummaryItem = {
+  key: string;
+  mode: "STRICT" | "PREFERRED";
+  value: string;
+};
+
+export type PublicPartnerPreferenceSummary = {
+  shared: boolean;
+  items: PublicPartnerPreferenceSummaryItem[];
+};
+
+export function publicPartnerPreferenceSummary(
+  value: unknown
+): PublicPartnerPreferenceSummary {
+  const p = normalizePartnerPreferences(value);
+  if (!p.configured || !p.sharePublicSummary) return { shared: false, items: [] };
+
+  const items: PublicPartnerPreferenceSummaryItem[] = [];
+  const addRange = (
+    key: string,
+    prefMode: PreferenceMode,
+    min: number,
+    max: number,
+    suffix = ""
+  ) => {
+    if (prefMode === "NO_PREFERENCE") return;
+    items.push({ key, mode: prefMode, value: `${min}–${max}${suffix}` });
+  };
+  const addList = (
+    key: string,
+    prefMode: PreferenceMode,
+    values: string[]
+  ) => {
+    if (prefMode === "NO_PREFERENCE" || values.length === 0) return;
+    items.push({ key, mode: prefMode, value: values.slice(0, 4).join(", ") });
+  };
+
+  addRange("age", p.ageMode, p.ageMin, p.ageMax);
+  addRange("height", p.heightMode, p.heightMinCm, p.heightMaxCm, " cm");
+  addList("state", p.stateMode, p.states);
+  addList("city", p.cityMode, p.cities);
+  addList("country_of_residence", p.countryOfResidenceMode, p.countriesOfResidence);
+  addList("marital_status", p.maritalStatusMode, p.maritalStatuses);
+  addList("education", p.educationMode, p.educationLevels);
+  addList("occupation", p.occupationMode, p.occupationCategories);
+  addList("family_values", p.familyValuesMode, p.familyValues);
+  addList("relocation", p.relocationMode, p.relocationStatuses);
+
+  return { shared: true, items: items.slice(0, 12) };
 }
 
 function sameOne(expected: string[], actual: unknown): boolean {

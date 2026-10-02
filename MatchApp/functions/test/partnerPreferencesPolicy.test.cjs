@@ -7,6 +7,7 @@ const {
   preferredPreferenceFit,
   bilateralPreferredFit,
   bilateralPreferenceMatch,
+  publicPartnerPreferenceSummary,
 } = require("../lib/partnerPreferencesPolicy");
 
 test("normalizes invalid ranges and unknown modes safely", () => {
@@ -25,6 +26,7 @@ test("normalizes invalid ranges and unknown modes safely", () => {
   assert.equal(prefs.cityMode, "PREFERRED");
   assert.deepEqual(prefs.cities, ["Hyderabad"]);
   assert.equal(prefs.religionMode, "NO_PREFERENCE");
+  assert.equal(prefs.sharePublicSummary, false);
 });
 
 test("STRICT preference excludes outside subject but PREFERRED does not", () => {
@@ -358,7 +360,7 @@ test("mutual score is unavailable unless both members express scorable preferenc
 });
 
 
-test("schema v4 body and income normalization clamps ranges and preserves explicit lists", () => {
+test("schema v5 body and income normalization clamps ranges and preserves explicit lists", () => {
   const prefs = normalizePartnerPreferences({
     weightMode: "STRICT",
     weightMinKg: 80,
@@ -373,4 +375,51 @@ test("schema v4 body and income normalization clamps ranges and preserves explic
   assert.equal(prefs.weightMaxKg, 80);
   assert.deepEqual(prefs.incomeBands, ["₹15–25L"]);
   assert.deepEqual(prefs.complexions, ["Medium"]);
+});
+
+
+test("public preference summary sharing is explicit opt-in", () => {
+  assert.equal(normalizePartnerPreferences({}).sharePublicSummary, false);
+  assert.equal(normalizePartnerPreferences({ sharePublicSummary: true }).sharePublicSummary, true);
+  assert.equal(normalizePartnerPreferences({ sharePublicSummary: "true" }).sharePublicSummary, false);
+});
+
+
+test("public summary exposes only opt-in non-sensitive criteria", () => {
+  const hidden = publicPartnerPreferenceSummary({
+    configured: true,
+    sharePublicSummary: false,
+    cityMode: "PREFERRED",
+    cities: ["Hyderabad"],
+  });
+  assert.deepEqual(hidden, { shared: false, items: [] });
+
+  const visible = publicPartnerPreferenceSummary({
+    configured: true,
+    sharePublicSummary: true,
+    ageMode: "STRICT",
+    ageMin: 26,
+    ageMax: 32,
+    cityMode: "PREFERRED",
+    cities: ["Hyderabad"],
+    educationMode: "PREFERRED",
+    educationLevels: ["Masters"],
+    religionMode: "STRICT",
+    religions: ["Hindu"],
+    casteMode: "STRICT",
+    castes: ["Reddy"],
+    incomeBandMode: "PREFERRED",
+    incomeBands: ["₹15–25L"],
+    physicalStatusMode: "PREFERRED",
+    physicalStatuses: ["Normal"],
+    visaStatusMode: "PREFERRED",
+    visaStatuses: ["H-1B"],
+  });
+
+  assert.equal(visible.shared, true);
+  assert.deepEqual(visible.items.map((item) => item.key), ["age", "city", "education"]);
+  assert.equal(JSON.stringify(visible).includes("Hindu"), false);
+  assert.equal(JSON.stringify(visible).includes("Reddy"), false);
+  assert.equal(JSON.stringify(visible).includes("₹15–25L"), false);
+  assert.equal(JSON.stringify(visible).includes("H-1B"), false);
 });

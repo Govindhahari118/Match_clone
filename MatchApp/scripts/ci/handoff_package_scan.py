@@ -44,6 +44,7 @@ REQUIRED = (
     "scripts/deploy/firebase-full.sh",
     "scripts/deploy/firebase-full.bat",
     "scripts/ci/callable_contract_scan.py",
+    "scripts/ci/interest_chat_contract_scan.py",
     "scripts/perf/discovery-load.mjs",
     "functions/src/health.ts",
     "functions/src/chatMediaOrphanPolicy.ts",
