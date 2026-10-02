@@ -25,6 +25,7 @@ test("normalizes invalid ranges and unknown modes safely", () => {
   assert.equal(prefs.cityMode, "PREFERRED");
   assert.deepEqual(prefs.cities, ["Hyderabad"]);
   assert.equal(prefs.religionMode, "NO_PREFERENCE");
+  assert.equal(prefs.sharePublicSummary, false);
 });
 
 test("STRICT preference excludes outside subject but PREFERRED does not", () => {
@@ -358,7 +359,7 @@ test("mutual score is unavailable unless both members express scorable preferenc
 });
 
 
-test("schema v4 body and income normalization clamps ranges and preserves explicit lists", () => {
+test("schema v5 body and income normalization clamps ranges and preserves explicit lists", () => {
   const prefs = normalizePartnerPreferences({
     weightMode: "STRICT",
     weightMinKg: 80,
@@ -373,4 +374,11 @@ test("schema v4 body and income normalization clamps ranges and preserves explic
   assert.equal(prefs.weightMaxKg, 80);
   assert.deepEqual(prefs.incomeBands, ["₹15–25L"]);
   assert.deepEqual(prefs.complexions, ["Medium"]);
+});
+
+
+test("public preference summary sharing is explicit opt-in", () => {
+  assert.equal(normalizePartnerPreferences({}).sharePublicSummary, false);
+  assert.equal(normalizePartnerPreferences({ sharePublicSummary: true }).sharePublicSummary, true);
+  assert.equal(normalizePartnerPreferences({ sharePublicSummary: "true" }).sharePublicSummary, false);
 });
