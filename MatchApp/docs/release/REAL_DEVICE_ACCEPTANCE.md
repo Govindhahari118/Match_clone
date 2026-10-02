@@ -16,7 +16,7 @@ Production promotion requires two independent physical Android devices and two i
 11. exercise quiet hours;
 12. block/report;
 13. sign out, sign back in, reinstall and recover;
-14. delete the account and verify post-deletion access is denied.
+14. complete account deletion and verify post-deletion access is denied.
 
 ## Privacy/device behavior
 Validate screenshot blocking, recent-app preview privacy, screen recording behavior, user opt-out persistence, Android notification permission denial/grant, reboot, token rotation and multi-device sign-out.
