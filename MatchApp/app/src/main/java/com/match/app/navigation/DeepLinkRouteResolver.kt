@@ -7,29 +7,32 @@ package com.match.app.navigation
  * Repositories/screens remain the final authorization boundary for profile/chat content.
  */
 object DeepLinkRouteResolver {
-    const val SCHEME = "matrimonyconnect"
+    const val LEGACY_SCHEME = "matrimonyconnect"
+    const val APP_LINK_SCHEME = "https"
+    private const val APP_LINK_PREFIX = "app"
 
     fun fromUri(
         scheme: String?,
         userInfo: String?,
         host: String?,
         pathSegments: List<String>,
-        hasQueryOrFragment: Boolean
+        hasQueryOrFragment: Boolean,
+        appLinkHost: String? = null
     ): String? {
-        if (!scheme.equals(SCHEME, ignoreCase = true) || userInfo != null) return null
+        if (userInfo != null || hasQueryOrFragment) return null
 
-        return when (host?.lowercase()) {
-            "match" -> positiveIdRoute(pathSegments, hasQueryOrFragment, "detail")
-            "chat" -> positiveIdRoute(pathSegments, hasQueryOrFragment, "chat")
-            "notifications" -> staticRoute(pathSegments, hasQueryOrFragment, "notifications")
-            "interests" -> staticRoute(pathSegments, hasQueryOrFragment, "interests")
-            "matches" -> staticRoute(pathSegments, hasQueryOrFragment, "matches")
-            "who_viewed" -> staticRoute(pathSegments, hasQueryOrFragment, "who_viewed")
-            "pricing" -> staticRoute(pathSegments, hasQueryOrFragment, "pricing")
-            "verification" -> staticRoute(pathSegments, hasQueryOrFragment, "verification")
-            "nearby" -> staticRoute(pathSegments, hasQueryOrFragment, "nearby")
-            else -> null
+        if (scheme.equals(LEGACY_SCHEME, ignoreCase = true)) {
+            return legacyRoute(host, pathSegments)
         }
+
+        if (scheme.equals(APP_LINK_SCHEME, ignoreCase = true)) {
+            val expectedHost = appLinkHost?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            if (!host.equals(expectedHost, ignoreCase = true)) return null
+            if (pathSegments.firstOrNull() != APP_LINK_PREFIX) return null
+            return appLinkRoute(pathSegments.drop(1))
+        }
+
+        return null
     }
 
     fun notificationAccountMatches(expectedUid: String?, currentUid: String?): Boolean =
@@ -53,22 +56,44 @@ object DeepLinkRouteResolver {
         else -> null
     }
 
-    private fun positiveIdRoute(
-        pathSegments: List<String>,
-        hasQueryOrFragment: Boolean,
-        route: String
-    ): String? {
-        if (hasQueryOrFragment || pathSegments.size != 1) return null
-        return pathSegments.single().toLongOrNull()
-            ?.takeIf { it > 0 }
-            ?.let { "$route/$it" }
+    private fun legacyRoute(host: String?, pathSegments: List<String>): String? = when (host?.lowercase()) {
+        "match" -> positiveIdRoute(pathSegments, "detail")
+        "chat" -> positiveIdRoute(pathSegments, "chat")
+        "notifications" -> staticRoute(pathSegments, "notifications")
+        "interests" -> staticRoute(pathSegments, "interests")
+        "matches" -> staticRoute(pathSegments, "matches")
+        "who_viewed" -> staticRoute(pathSegments, "who_viewed")
+        "pricing" -> staticRoute(pathSegments, "pricing")
+        "verification" -> staticRoute(pathSegments, "verification")
+        "nearby" -> staticRoute(pathSegments, "nearby")
+        else -> null
     }
 
-    private fun staticRoute(
-        pathSegments: List<String>,
-        hasQueryOrFragment: Boolean,
-        route: String
-    ): String? = route.takeIf { pathSegments.isEmpty() && !hasQueryOrFragment }
+    private fun appLinkRoute(pathSegments: List<String>): String? {
+        val route = pathSegments.firstOrNull()?.lowercase() ?: return null
+        val remainder = pathSegments.drop(1)
+        return when (route) {
+            "match" -> positiveIdRoute(remainder, "detail")
+            "chat" -> positiveIdRoute(remainder, "chat")
+            "notifications" -> staticRoute(remainder, "notifications")
+            "interests" -> staticRoute(remainder, "interests")
+            "matches" -> staticRoute(remainder, "matches")
+            "who_viewed" -> staticRoute(remainder, "who_viewed")
+            "pricing" -> staticRoute(remainder, "pricing")
+            "verification" -> staticRoute(remainder, "verification")
+            "nearby" -> staticRoute(remainder, "nearby")
+            else -> null
+        }
+    }
+
+    private fun positiveIdRoute(pathSegments: List<String>, route: String): String? =
+        pathSegments.singleOrNull()
+            ?.toLongOrNull()
+            ?.takeIf { it > 0 }
+            ?.let { "$route/$it" }
+
+    private fun staticRoute(pathSegments: List<String>, route: String): String? =
+        route.takeIf { pathSegments.isEmpty() }
 
     private fun positiveId(value: Long?): Long? = value?.takeIf { it > 0 }
 }
