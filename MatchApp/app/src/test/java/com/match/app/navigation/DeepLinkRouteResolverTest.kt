@@ -21,7 +21,7 @@ class DeepLinkRouteResolverTest {
             assertEquals(
                 route,
                 DeepLinkRouteResolver.fromUri(
-                    DeepLinkRouteResolver.SCHEME,
+                    DeepLinkRouteResolver.LEGACY_SCHEME,
                     null,
                     host,
                     emptyList(),
@@ -30,7 +30,7 @@ class DeepLinkRouteResolverTest {
             )
             assertNull(
                 DeepLinkRouteResolver.fromUri(
-                    DeepLinkRouteResolver.SCHEME,
+                    DeepLinkRouteResolver.LEGACY_SCHEME,
                     null,
                     host,
                     listOf("unexpected"),
@@ -39,7 +39,7 @@ class DeepLinkRouteResolverTest {
             )
             assertNull(
                 DeepLinkRouteResolver.fromUri(
-                    DeepLinkRouteResolver.SCHEME,
+                    DeepLinkRouteResolver.LEGACY_SCHEME,
                     null,
                     host,
                     emptyList(),
@@ -70,6 +70,22 @@ class DeepLinkRouteResolverTest {
         assertNull(
             DeepLinkRouteResolver.fromUri("matrimonyconnect", null, "chat", listOf("1"), true)
         )
+    }
+
+    @Test
+    fun `verified https app links require configured host and app path prefix`() {
+        assertEquals(
+            "detail/42",
+            DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("app", "match", "42"), false, "links.matree.example")
+        )
+        assertEquals(
+            "matches",
+            DeepLinkRouteResolver.fromUri("HTTPS", null, "LINKS.MATREE.EXAMPLE", listOf("app", "matches"), false, "links.matree.example")
+        )
+        assertNull(DeepLinkRouteResolver.fromUri("https", null, "evil.example", listOf("app", "matches"), false, "links.matree.example"))
+        assertNull(DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("matches"), false, "links.matree.example"))
+        assertNull(DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("app", "match", "42"), true, "links.matree.example"))
+        assertNull(DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("app", "matches"), false, null))
     }
 
     @Test
