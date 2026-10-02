@@ -174,17 +174,18 @@ class MainActivity : FragmentActivity() {
             return
         }
 
-        // Only accept the documented custom scheme. Never concatenate arbitrary URI text into a
-        // Navigation route: malformed path values can otherwise bypass typed route assumptions or
-        // crash argument parsing. External profile/chat links currently use a positive local id;
-        // profile/chat repositories remain the authorization boundary for the destination data.
+        // Accept only the legacy custom scheme or the configured verified HTTPS App Link host.
+        // Never concatenate arbitrary URI text into Navigation routes: malformed values can otherwise
+        // bypass typed route assumptions or crash argument parsing. Destination repositories remain
+        // the authorization boundary for profile/chat data.
         pendingDeepLinkRecipientUid = null
         pendingDeepLink = DeepLinkRouteResolver.fromUri(
             scheme = uri.scheme,
             userInfo = uri.userInfo,
             host = uri.host,
             pathSegments = uri.pathSegments,
-            hasQueryOrFragment = !uri.query.isNullOrBlank() || !uri.fragment.isNullOrBlank()
+            hasQueryOrFragment = !uri.query.isNullOrBlank() || !uri.fragment.isNullOrBlank(),
+            appLinkHost = BuildConfig.MATREE_APP_LINK_HOST
         )
 
         if (pendingDeepLink == null) rejectDeepLink(uri.toString())
