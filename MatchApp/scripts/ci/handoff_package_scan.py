@@ -88,6 +88,7 @@ def main() -> int:
 
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
     for release_input in (
+        "MATREE_APPLICATION_ID",
         "MATREE_VERSION_CODE",
         "MATREE_VERSION_NAME",
         "MATREE_KEYSTORE_PATH",
@@ -97,6 +98,11 @@ def main() -> int:
     ):
         if release_input not in gradle:
             fail(f"Android release configuration omits {release_input}", failures)
+
+    for release_script in ("scripts/deploy/build-release.sh", "scripts/deploy/build-release.bat"):
+        release_text = (ROOT / release_script).read_text(encoding="utf-8")
+        if "MATREE_APPLICATION_ID" not in release_text or "com.match.app" not in release_text:
+            fail(f"{release_script} must reject the generic production application id", failures)
 
     for rel in (
         "scripts/deploy/build-release.sh",
