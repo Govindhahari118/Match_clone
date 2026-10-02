@@ -104,10 +104,22 @@ Operator-controlled values:
 - Support URL/contact: `<external>`
 - Account deletion information URL: `<external>`
 - verified App Links host: set `MATREE_APP_LINK_HOST=<production hostname>`; the release scripts reject the non-production `invalid.matree.local` placeholder.
-- Digital Asset Links: publish `https://<MATREE_APP_LINK_HOST>/.well-known/assetlinks.json` for the exact Play signing certificate/package and verify Android domain association before promotion.
+- Digital Asset Links: generate deterministically with `python3 scripts/release/generate_assetlinks.py --package "$MATREE_APPLICATION_ID" --sha256 "<PLAY_SIGNING_SHA256>" --output assetlinks.json`, publish it at `https://<MATREE_APP_LINK_HOST>/.well-known/assetlinks.json`, then verify Android domain association before promotion.
 
 ## Promotion rule
 
 This template is configuration guidance, not evidence. The completed production values and their
 deployment/test references must be recorded in the external evidence file for the exact SHA and pass
 `production_external_gate.py`.
+
+
+## GitHub governance verification
+
+After protecting `main`, verify the live repository settings with an administration-readable token:
+
+```bash
+GITHUB_TOKEN=<token> python3 scripts/release/verify_branch_protection.py \\
+  --repo Govindhahari118/Match_clone --branch main --required-check "Production CI"
+```
+
+Store the successful command output or CI/operator record as the evidence reference for `mainBranchProtectionVerified`. The verifier requires Production CI, at least one approving review, conversation resolution, and rejects force-push or deletion permission.
