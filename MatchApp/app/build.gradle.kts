@@ -23,6 +23,15 @@ fun nonBlankEnv(name: String): String? =
 fun releaseSecret(envName: String, propertyName: String): String? =
     nonBlankEnv(envName) ?: keystoreProps.getProperty(propertyName)?.trim()?.takeIf { it.isNotEmpty() }
 
+val productionApplicationId = nonBlankEnv("MATREE_APPLICATION_ID")?.also { value ->
+    require(value != "com.match.app") {
+        "MATREE_APPLICATION_ID must be the final production package, not com.match.app"
+    }
+    require(value.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){2,}"))) {
+        "MATREE_APPLICATION_ID must be a valid reverse-DNS Android application id"
+    }
+} ?: "com.match.app"
+
 val releaseVersionCode = nonBlankEnv("MATREE_VERSION_CODE")?.let { raw ->
     raw.toIntOrNull()?.takeIf { it > 0 }
         ?: error("MATREE_VERSION_CODE must be a positive integer")
@@ -53,7 +62,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.match.app"
+        applicationId = productionApplicationId
         minSdk = 24
         targetSdk = 36
         versionCode = releaseVersionCode
