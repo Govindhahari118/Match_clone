@@ -142,8 +142,8 @@ def main() -> int:
 
     preference_policy = text(ROOT / "functions/src/partnerPreferencesPolicy.ts")
     preference_callable = text(ROOT / "functions/src/partnerPreferences.ts")
-    require("schemaVersion: 4" in preference_callable,
-            "partner-preference schema must remain v4 for reciprocal profile-preference matching", failures)
+    require("schemaVersion: 5" in preference_callable,
+            "partner-preference schema must remain v5 with opt-in public-summary privacy", failures)
     for preference_field in [
         "gothraMode",
         "faithTraditionMode",
@@ -157,6 +157,7 @@ def main() -> int:
         "weightMode",
         "incomeBandMode",
         "complexionMode",
+        "sharePublicSummary",
     ]:
         require(preference_field in preference_policy,
                 f"backend partner-preference contract missing {preference_field}", failures)
