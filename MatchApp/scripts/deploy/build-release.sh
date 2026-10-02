@@ -11,6 +11,12 @@ if [[ "$MATREE_APPLICATION_ID" == "com.match.app" || ! "$MATREE_APPLICATION_ID" 
   exit 1
 fi
 
+: "${MATREE_APP_LINK_HOST:?MATREE_APP_LINK_HOST is required}"
+if [[ "$MATREE_APP_LINK_HOST" == "invalid.matree.local" || ! "$MATREE_APP_LINK_HOST" =~ ^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]; then
+  echo "[ERROR] MATREE_APP_LINK_HOST must be the verified production hostname without scheme/path/port." >&2
+  exit 1
+fi
+
 : "${MATREE_VERSION_CODE:?MATREE_VERSION_CODE is required}"
 : "${MATREE_VERSION_NAME:?MATREE_VERSION_NAME is required}"
 
