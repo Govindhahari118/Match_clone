@@ -1,11 +1,11 @@
-# MatrimonyConnect
+# Matree
 
-Production-grade Android matrimony app with Firebase backend.
+Production-oriented Android matrimony app with a Firebase backend. Repository CI certifies code-controlled gates; production release still requires exact-SHA external evidence, provider configuration, real-device acceptance, and Play promotion.
 
 ## Project Structure
 
 ```
-Match/
+Match_clone/
 ├── MatchApp/                  # Android application (Kotlin + Jetpack Compose)
 ├── docs/
 │   ├── analysis/              # Market & competitive analysis reports
@@ -31,4 +31,4 @@ cd MatchApp
 ./gradlew assembleDebug
 ```
 
-See [docs/README.md](docs/README.md) for full documentation.
+See [docs/README.md](docs/README.md) for product/engineering documentation and [docs/release/GO_NO_GO.md](docs/release/GO_NO_GO.md) for the exact production promotion contract.

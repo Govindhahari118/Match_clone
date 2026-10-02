@@ -23,11 +23,17 @@ REQUIRED = (
     "docs/release/PRODUCTION_CONFIG.template.md",
     "docs/release/FEATURE_FLAGS.md",
     "docs/release/ROLLBACK_RUNBOOK.md",
+    "docs/release/SECURITY_ACCEPTANCE.md",
+    "docs/release/REAL_DEVICE_ACCEPTANCE.md",
+    "docs/release/ACCESSIBILITY_PERFORMANCE_ACCEPTANCE.md",
+    "docs/release/INCIDENT_RESPONSE.md",
+    "docs/release/DATA_SAFETY_WORKSHEET.md",
     "docs/release/PLAY_STORE_HANDOFF.md",
     "docs/release/PRODUCTION_EXTERNAL_EVIDENCE.template.json",
     "scripts/ci/production_external_gate.py",
     "scripts/ci/release_source_guard.py",
     "scripts/ci/release_evidence.py",
+    "scripts/ci/room_schema_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/screen_classification_scan.py",
     "scripts/deploy/build-release.sh",
@@ -82,6 +88,8 @@ def main() -> int:
 
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
     for release_input in (
+        "MATREE_APPLICATION_ID",
+        "MATREE_APP_LINK_HOST",
         "MATREE_VERSION_CODE",
         "MATREE_VERSION_NAME",
         "MATREE_KEYSTORE_PATH",
@@ -91,6 +99,13 @@ def main() -> int:
     ):
         if release_input not in gradle:
             fail(f"Android release configuration omits {release_input}", failures)
+
+    for release_script in ("scripts/deploy/build-release.sh", "scripts/deploy/build-release.bat"):
+        release_text = (ROOT / release_script).read_text(encoding="utf-8")
+        if "MATREE_APPLICATION_ID" not in release_text or "com.match.app" not in release_text:
+            fail(f"{release_script} must reject the generic production application id", failures)
+        if "MATREE_APP_LINK_HOST" not in release_text or "invalid.matree.local" not in release_text:
+            fail(f"{release_script} must reject the non-production App Link host", failures)
 
     for rel in (
         "scripts/deploy/build-release.sh",
@@ -117,12 +132,22 @@ def main() -> int:
     external_gate = (ROOT / "scripts/ci/production_external_gate.py").read_text(encoding="utf-8")
     for external_contract in (
         "mainBranchProtectionVerified",
+        "releaseIdentityVerified",
+        "httpsAppLinksVerified",
         "firebaseRulesIndexesFunctionsDeployed",
+        "firestoreAuthorizationAdversarialPassed",
+        "storageAbuseMatrixPassed",
         "firebaseSecretsConfigured",
         "playServiceAccountApiVerified",
         "playRtdnVerified",
         "signedReleaseAabVerified",
         "supportedLocaleQaPassed",
+        "screenCapturePhysicalMatrixPassed",
+        "notificationQuietHoursDeviceMatrixPassed",
+        "accountDeletionE2EPassed",
+        "productionMonitoringAlertsVerified",
+        "costBudgetAlertsVerified",
+        "incidentResponseOwnerVerified",
         "closedTestingPassed",
         "disabledProviderSurfacesVerified",
     ):
@@ -158,6 +183,24 @@ def main() -> int:
     go_no_go = (ROOT / "docs/release/GO_NO_GO.md").read_text(encoding="utf-8")
     if "Production GO" not in go_no_go or "external" not in go_no_go.lower():
         fail("GO/NO-GO report must preserve the external-evidence boundary", failures)
+
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    if not readme.startswith("# Matree"):
+        fail("README must use the canonical Matree product identity", failures)
+    if "# MatrimonyConnect" in readme:
+        fail("README must not restore retired MatrimonyConnect branding", failures)
+
+    for acceptance_doc, required_phrases in {
+        "docs/release/SECURITY_ACCEPTANCE.md": ("App Check", "Firestore", "Storage", "OWASP MASVS"),
+        "docs/release/REAL_DEVICE_ACCEPTANCE.md": ("two independent physical Android devices", "account deletion"),
+        "docs/release/ACCESSIBILITY_PERFORMANCE_ACCEPTANCE.md": ("TalkBack", "release build"),
+        "docs/release/INCIDENT_RESPONSE.md": ("P0", "exact Git SHA"),
+    }.items():
+        body = (ROOT / acceptance_doc).read_text(encoding="utf-8")
+        for phrase in required_phrases:
+            if phrase not in body:
+                fail(f"{acceptance_doc} missing required production contract phrase: {phrase}", failures)
 
     if failures:
         print("Production handoff package scan FAILED")

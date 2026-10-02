@@ -4,9 +4,9 @@ This file records release-relevant gaps without converting missing external evid
 
 ## Repository-controlled P0/P1
 
-At the time this document was added, no intentionally exposed repository-controlled P0/P1 is accepted.
-A failing mandatory CI gate or a newly discovered critical defect changes that statement immediately
-and blocks release until fixed or the affected feature is fail-closed.
+No intentionally exposed repository-controlled P0/P1 is accepted. A failing mandatory CI gate or a newly discovered critical defect immediately makes the candidate NO-GO until fixed or the affected surface is fail-closed.
+
+The legacy Room fields `passwordHash` and `isSeed` remain inert compatibility columns in database v24. They must not become authentication or seed-data authority. Removal is deferred until an authoritative generated Room schema is captured and a lossless v24 -> v25 table-rebuild migration is validated across every supported upgrade path.
 
 ## Intentionally disabled / deferred
 
@@ -15,14 +15,24 @@ and blocks release until fixed or the affected feature is fail-closed.
 - NRI-specific promoted surface: BETA, OFF by default pending market/load/device evidence.
 - Profile video: hardened backend/media moderation exists, but broad exposure remains flag-gated.
 - Unsafe or post-launch source surfaces listed by `screen-classification.json` remain hidden.
+- Production package/application identity and App Link hostname are explicit release inputs. HTTPS routing is implemented, while domain ownership, Digital Asset Links publication, Play-signing fingerprint binding and device verification remain external evidence. The legacy custom scheme is compatibility-only and must not be treated as verified App Links.
 
 These are not permitted to be described as production-ready simply because source files exist.
 
 ## External release blockers
 
-Production Firebase/config/deployment, release signing, App Check/Play Integrity enforcement, licensed
-billing tests, KYC/provider credentials, operator provisioning/Hosting verification, physical-device E2E,
-accessibility, performance SLO, penetration/security review, legal/Data Safety approval, Play pre-launch
-report and rollback drill require operator evidence for the exact release SHA.
+The release remains NO-GO until operator-controlled evidence exists for the exact candidate SHA covering at least:
 
-The external gate must remain red until those references exist.
+- protected `main` and required CI;
+- final package/product identity and verified HTTPS App Links;
+- production Firebase configuration/deployment, secrets and App Check / Play Integrity;
+- production signing, Play App Signing, catalog, API and RTDN;
+- licensed billing matrix;
+- physical-device core journeys, screenshot/privacy behavior, notification quiet hours and account deletion;
+- Firestore/Storage adversarial authorization testing and penetration/security review;
+- accessibility, supported-locale and release-build performance acceptance;
+- Crashlytics/monitoring, cost budgets/alerts and named incident ownership;
+- legal, privacy policy, Data Safety, store listing/content rating and support escalation;
+- Play pre-launch report, closed testing, rollback drill and controlled rollout/post-rollout health.
+
+The external gate must remain red until those references exist. Missing provider credentials or external evidence must never be converted into a synthetic pass.

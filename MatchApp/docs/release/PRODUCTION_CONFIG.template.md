@@ -7,11 +7,11 @@ owned by deployment/release operations. Do not commit the completed production c
 
 - Git SHA: `<exact 40-character release SHA>`
 - Export the same value as `MATREE_RELEASE_SHA`; production build/deploy scripts reject any HEAD mismatch or dirty source tree.
-- Android application ID: `com.match.app`
+- Android application ID: set `MATREE_APPLICATION_ID=<final reverse-DNS package>`; production build scripts reject the generic `com.match.app`.
 - Version code: set `MATREE_VERSION_CODE=<positive integer greater than every prior Play upload>`
 - Version name: set `MATREE_VERSION_NAME=<release version>`
 - Firebase production project: `<external>`
-- Google Play application: `com.match.app`
+- Google Play application: must exactly match `MATREE_APPLICATION_ID` and the package registered in the production Firebase configuration.
 
 ## Android release signing inputs
 
@@ -103,7 +103,8 @@ Operator-controlled values:
 - Terms URL: `<external>`
 - Support URL/contact: `<external>`
 - Account deletion information URL: `<external>`
-- verified App Links domain / Digital Asset Links: `<external or disabled>`
+- verified App Links host: set `MATREE_APP_LINK_HOST=<production hostname>`; the release scripts reject the non-production `invalid.matree.local` placeholder.
+- Digital Asset Links: publish `https://<MATREE_APP_LINK_HOST>/.well-known/assetlinks.json` for the exact Play signing certificate/package and verify Android domain association before promotion.
 
 ## Promotion rule
 

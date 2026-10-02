@@ -98,6 +98,12 @@ jobs:
           fi
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
+      - name: Generate and validate current Room schema evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon kspDebugKotlin
+          python3 scripts/ci/room_schema_evidence.py
       - name: Android lint
         shell: bash
         run: |
@@ -158,6 +164,7 @@ jobs:
             MatchApp/app/build/outputs/bundle/release/*.aab
             MatchApp/app/build/outputs/bundle/release/*.txt
             MatchApp/app/build/outputs/mapping/release/**
+            MatchApp/app/build/outputs/room-schema/**
 
 
   room-migrations:
