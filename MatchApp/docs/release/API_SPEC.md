@@ -26,6 +26,7 @@ profile-view notification processing and inactivity/profile-completion scheduled
 - `discoverProfiles`
 - `getPartnerPreferences`
 - `setPartnerPreferences`
+- `getPartnerPreferenceSummary` — returns only an explicitly shared non-sensitive expectation summary; sensitive preference dimensions remain private
 - `saveSavedSearch`
 - `deleteSavedSearch`
 - `touchPresence`
