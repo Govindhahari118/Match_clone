@@ -147,8 +147,6 @@ class MatchFcmService : FirebaseMessagingService() {
         val remote = runCatching { profileService.fetchProfileFromServer(firebaseUid) }.getOrNull() ?: return null
         val cached = remote.copy(
             email = "$firebaseUid@cache.invalid",
-            passwordHash = "",
-            isSeed = false
         )
         return runCatching { userDao.insert(cached) }
             .recoverCatching { userDao.findByFirebaseUid(firebaseUid)?.id ?: throw it }
