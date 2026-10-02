@@ -13,7 +13,6 @@ data class UserEntity(
     /** Firebase Auth UID — the canonical user identity used in Firestore. */
     val firebaseUid: String = "",
     val email: String,
-    val passwordHash: String,
     val displayName: String,
     val age: Int,
     val gender: String,
@@ -22,7 +21,6 @@ data class UserEntity(
     val bio: String,
     val rasi: String,
     val nakshatra: String,
-    val isSeed: Boolean = false,
     val religion: String = "",
     val motherTongue: String = "",
     val education: String = "",
