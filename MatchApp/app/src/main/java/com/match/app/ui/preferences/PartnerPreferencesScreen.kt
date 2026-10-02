@@ -25,6 +25,7 @@ import com.match.app.data.session.SessionStore
 import com.match.app.domain.profile.IndiaProfileCatalog
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -245,11 +246,11 @@ fun PartnerPreferencesScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "Show a summary on my profile",
+                                t("show_partner_summary_title", "Show a summary on my profile"),
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Share only selected non-sensitive expectations such as age, location, education, occupation and lifestyle. Religion, community, faith, income, complexion, physical status, citizenship and visa preferences remain private.",
+                                t("show_partner_summary_body", "Share only selected non-sensitive expectations such as age, location, education, occupation and lifestyle. Sensitive criteria remain private."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
