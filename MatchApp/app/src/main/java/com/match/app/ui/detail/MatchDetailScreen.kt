@@ -55,6 +55,7 @@ import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -707,7 +708,7 @@ private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
 @Composable
 private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
     if (summary?.shared != true || summary.items.isEmpty()) return
-    SectionCard("What they are looking for") {
+    SectionCard(t("what_they_are_looking_for", "What they are looking for")) {
         summary.items.forEach { item ->
             val label = when (item.key) {
                 "age" -> "Age"
@@ -725,7 +726,7 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
                 "relocation" -> "Relocation"
                 else -> item.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
             }
-            val mode = if (item.mode == PartnerPreferenceMode.STRICT) "Must match" else "Preferred"
+            val mode = if (item.mode == PartnerPreferenceMode.STRICT) t("must_match", "Must match") else t("preferred", "Preferred")
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                 Column(Modifier.weight(0.42f)) {
                     Text(
@@ -752,7 +753,7 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
             }
         }
         Text(
-            "Only the criteria this member chose to share are shown. Sensitive religion/community, faith, income, complexion, physical-status, citizenship and visa preferences stay private.",
+            t("shared_preferences_privacy", "Only the criteria this member chose to share are shown. Sensitive preferences stay private."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
