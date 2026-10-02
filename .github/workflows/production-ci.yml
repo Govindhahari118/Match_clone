@@ -48,6 +48,8 @@ jobs:
         run: python3 scripts/ci/screen_classification_scan.py
       - name: Android / Functions callable contract gate
         run: python3 scripts/ci/callable_contract_scan.py
+      - name: Interest to chat journey contract gate
+        run: python3 scripts/ci/interest_chat_contract_scan.py
       - name: Exact-source release guard
         run: python3 scripts/ci/release_source_guard.py --sha "$SOURCE_SHA"
       - name: Release candidate repository scan
