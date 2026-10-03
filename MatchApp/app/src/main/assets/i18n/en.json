@@ -394,5 +394,6 @@
   "enable_sensitive_before_preset": "Enable sensitive-preference processing before using this preset.",
   "enable_sensitive_before_saving": "Review and enable sensitive-preference processing before saving.",
   "could_not_update_sensitive_consent": "Could not update sensitive-preference consent.",
-  "could_not_save_preferences": "Could not save partner preferences."
+  "could_not_save_preferences": "Could not save partner preferences.",
+  "religion_example": "Hindu, Muslim, Christian…"
 }
