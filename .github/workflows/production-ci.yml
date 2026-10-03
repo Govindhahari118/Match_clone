@@ -50,6 +50,8 @@ jobs:
         run: python3 scripts/ci/i18n_catalog_scan.py
       - name: Chat localization gate
         run: python3 scripts/ci/chat_localization_scan.py
+      - name: Discovery/preferences localization gate
+        run: python3 scripts/ci/discovery_preferences_localization_scan.py
       - name: Android / Functions callable contract gate
         run: python3 scripts/ci/callable_contract_scan.py
       - name: Interest to chat journey contract gate

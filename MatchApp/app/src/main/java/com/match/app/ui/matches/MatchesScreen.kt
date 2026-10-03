@@ -42,6 +42,7 @@ import com.match.app.ui.components.MatreeProfileCard
 import com.match.app.ui.components.MatreeProfileCardVariant
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -62,8 +63,8 @@ data class MatchesUi(
     val astrologyApplicable: Boolean = false
 )
 
-enum class DiscoverySort(val label: String) {
-    BEST("Best match"), NEWEST("Newest"), AGE_LOW("Age: low to high"), AGE_HIGH("Age: high to low")
+enum class DiscoverySort {
+    BEST, NEWEST, AGE_LOW, AGE_HIGH
 }
 
 @HiltViewModel
@@ -201,8 +202,17 @@ fun MatchesScreen(
         delay(450)
         if (keyword.trim() != ui.filter.keyword) vm.setKeyword(keyword)
     }
-    LaunchedEffect(ui.message) {
-        ui.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
+    val localizedMessage = when (ui.message) {
+        "Search saved to your account." -> t("search_saved", "Search saved to your account.")
+        "Saved search deleted." -> t("saved_search_deleted", "Saved search deleted.")
+        "Could not save this search." -> t("could_not_save_search", "Could not save this search.")
+        "Could not delete saved search." -> t("could_not_delete_search", "Could not delete saved search.")
+        "Could not update interest." -> t("could_not_update_interest", "Could not update interest.")
+        "Could not update shortlist." -> t("could_not_update_shortlist", "Could not update shortlist.")
+        else -> ui.message
+    }
+    LaunchedEffect(localizedMessage) {
+        localizedMessage?.let { snackbar.showSnackbar(it); vm.consumeMessage() }
     }
 
     val sortedItems = remember(ui.items, sort) {
@@ -220,29 +230,29 @@ fun MatchesScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("Discover") },
+                title = { Text(t("discover", "Discover")) },
                 actions = {
                     IconButton(onClick = { showSaveSearch = true }, modifier = Modifier.testTag("save_search")) {
-                        Icon(Icons.Filled.BookmarkAdd, "Save this search")
+                        Icon(Icons.Filled.BookmarkAdd, t("save_this_search", "Save this search"))
                     }
                     IconButton(onClick = { showFilters = true }, modifier = Modifier.testTag("filter_open")) {
                         BadgedBox(badge = { if (activeCount > 0) Badge { Text(activeCount.toString()) } }) {
-                            Icon(Icons.Filled.Tune, "Filters")
+                            Icon(Icons.Filled.Tune, t("filters", "Filters"))
                         }
                     }
                     Box {
-                        IconButton(onClick = { sortMenu = true }) { Icon(Icons.Filled.Sort, "Sort") }
+                        IconButton(onClick = { sortMenu = true }) { Icon(Icons.Filled.Sort, t("sort", "Sort")) }
                         DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
                             DiscoverySort.entries.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option.label) },
+                                    text = { Text(discoverySortLabel(option)) },
                                     leadingIcon = { if (option == sort) Icon(Icons.Filled.Check, null) },
                                     onClick = { sort = option; sortMenu = false }
                                 )
                             }
                         }
                     }
-                    IconButton(onClick = vm::refresh) { Icon(Icons.Filled.Refresh, "Refresh") }
+                    IconButton(onClick = vm::refresh) { Icon(Icons.Filled.Refresh, t("refresh", "Refresh")) }
                 }
             )
         }
@@ -251,11 +261,11 @@ fun MatchesScreen(
             OutlinedTextField(
                 value = keyword,
                 onValueChange = { keyword = it.take(64) },
-                placeholder = { Text("Search name, @username, profile ID, job or city") },
+                placeholder = { Text(t("search_profiles_hint", "Search name, @username, profile ID, job or city")) },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {
                     if (keyword.isNotBlank()) IconButton(onClick = { keyword = "" }) {
-                        Icon(Icons.Filled.Close, "Clear search")
+                        Icon(Icons.Filled.Close, t("clear_search", "Clear search"))
                     }
                 },
                 singleLine = true,
@@ -278,7 +288,7 @@ fun MatchesScreen(
             when {
                 ui.loading -> MatreeLoadingState(
                     modifier = Modifier.padding(MatreeDesign.spacing.md),
-                    message = "Finding eligible profiles…",
+                    message = t("finding_eligible_profiles", "Finding eligible profiles…"),
                     rows = 4
                 )
                 ui.error != null -> Box(
@@ -286,11 +296,11 @@ fun MatchesScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     MatreeStatePanel(
-                        title = "Unable to load profiles",
-                        message = ui.error ?: "Try again.",
+                        title = t("unable_load_profiles", "Unable to load profiles"),
+                        message = ui.error ?: t("try_again", "Try again."),
                         icon = Icons.Filled.CloudOff,
                         tone = MatreeStatusTone.ERROR,
-                        primaryActionLabel = "Retry",
+                        primaryActionLabel = t("retry", "Retry"),
                         onPrimaryAction = vm::refresh
                     )
                 }
@@ -299,10 +309,10 @@ fun MatchesScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     MatreeStatePanel(
-                        title = "No profiles found",
-                        message = emptyState.message,
+                        title = t("no_profiles_found", "No profiles found"),
+                        message = localizedEmptyStateMessage(emptyState, ui.filter),
                         icon = Icons.Filled.SearchOff,
-                        primaryActionLabel = emptyState.actionLabel,
+                        primaryActionLabel = localizedEmptyStateAction(emptyState),
                         onPrimaryAction = when (emptyState.action) {
                             DiscoveryEmptyState.Action.RESET -> {
                                 { vm.clearFilters(); Unit }
@@ -324,7 +334,7 @@ fun MatchesScreen(
                 ) {
                     item {
                         Text(
-                            "${sortedItems.size} profiles in this result set",
+                            t("result_count", mapOf("count" to sortedItems.size), "{count} profiles in this result set"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -370,7 +380,7 @@ private fun QuickFilters(filter: MatchFilter, onChange: (MatchFilter) -> Unit, o
             FilterChip(
                 selected = filter.lastActiveWithinDays == 1,
                 onClick = { onChange(filter.copy(lastActiveWithinDays = if (filter.lastActiveWithinDays == 1) 0 else 1)) },
-                label = { Text("Active today") },
+                label = { Text(t("active_today", "Active today")) },
                 leadingIcon = { Icon(Icons.Filled.Circle, null, Modifier.size(9.dp), tint = MatreeDesign.colors.online) }
             )
         }
@@ -385,31 +395,31 @@ private fun QuickFilters(filter: MatchFilter, onChange: (MatchFilter) -> Unit, o
                         )
                     )
                 },
-                label = { Text("90%+ mutual") }
+                label = { Text(t("mutual_90_plus", "90%+ mutual")) }
             )
         }
         item {
             FilterChip(
                 selected = filter.verifiedOnly,
                 onClick = { onChange(filter.copy(verifiedOnly = !filter.verifiedOnly)) },
-                label = { Text("Verified") }
+                label = { Text(t("verified", "Verified")) }
             )
         }
         item {
             FilterChip(
                 selected = filter.withPhotoOnly,
                 onClick = { onChange(filter.copy(withPhotoOnly = !filter.withPhotoOnly)) },
-                label = { Text("With photo") }
+                label = { Text(t("with_photo", "With photo")) }
             )
         }
         item {
             FilterChip(
                 selected = filter.nriOnly,
                 onClick = { onChange(filter.copy(nriOnly = !filter.nriOnly)) },
-                label = { Text("NRI") }
+                label = { Text(t("nri", "NRI")) }
             )
         }
-        item { AssistChip(onClick = onAllFilters, label = { Text("All filters") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }) }
+        item { AssistChip(onClick = onAllFilters, label = { Text(t("all_filters", "All filters")) }, leadingIcon = { Icon(Icons.Filled.Tune, null) }) }
     }
 }
 
@@ -421,7 +431,7 @@ private fun SavedSearchRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
-            "Saved searches",
+            t("saved_searches", "Saved searches"),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp)
@@ -438,7 +448,7 @@ private fun SavedSearchRow(
                     leadingIcon = { Icon(Icons.Filled.Bookmark, null, Modifier.size(16.dp)) },
                     trailingIcon = {
                         IconButton(onClick = { onDelete(preset) }, modifier = Modifier.size(26.dp)) {
-                            Icon(Icons.Filled.Close, "Delete ${preset.name}", Modifier.size(15.dp))
+                            Icon(Icons.Filled.Close, t("delete_saved_search", mapOf("name" to preset.name), "Delete {name}"), Modifier.size(15.dp))
                         }
                     }
                 )
@@ -455,11 +465,11 @@ private fun ActiveFilterSummary(filter: MatchFilter, count: Int, onClear: () -> 
         if (filter.religion.isNotBlank()) add(filter.religion)
         if (filter.caste.isNotBlank()) add(filter.caste)
         if (filter.subCaste.isNotBlank()) add(filter.subCaste)
-        if (filter.ageMin != 18 || filter.ageMax != 70) add("${filter.ageMin}-${filter.ageMax} yrs")
+        if (filter.ageMin != 18 || filter.ageMax != 70) add("${filter.ageMin}-${filter.ageMax} ${t("years_suffix", "yrs")}")
         if (filter.heightMinCm != 90 || filter.heightMaxCm != 250) {
             add("${filter.heightMinCm}-${filter.heightMaxCm} cm")
         }
-        if (filter.lastActiveWithinDays > 0) add("Active ≤ ${filter.lastActiveWithinDays}d")
+        if (filter.lastActiveWithinDays > 0) add(t("active_within_days", mapOf("days" to filter.lastActiveWithinDays), "Active ≤ {days}d"))
     }
     if (summary.isEmpty() && count == 0) return
     Surface(
@@ -468,12 +478,12 @@ private fun ActiveFilterSummary(filter: MatchFilter, count: Int, onClear: () -> 
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                summary.take(5).joinToString(" • ").ifBlank { "$count filters active" },
+                summary.take(5).joinToString(" • ").ifBlank { t("filters_active", mapOf("count" to count), "{count} filters active") },
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2
             )
-            TextButton(onClick = onClear) { Text("Reset") }
+            TextButton(onClick = onClear) { Text(t("reset", "Reset")) }
         }
     }
 }
@@ -488,10 +498,10 @@ private fun ModeRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item { FilterChip(selected == MatchMode.ADVANCED, { onSelect(MatchMode.ADVANCED) }, { Text("Balanced") }) }
-        item { FilterChip(selected == MatchMode.QUESTIONNAIRE, { onSelect(MatchMode.QUESTIONNAIRE) }, { Text("Values") }) }
+        item { FilterChip(selected == MatchMode.ADVANCED, { onSelect(MatchMode.ADVANCED) }, { Text(t("balanced", "Balanced")) }) }
+        item { FilterChip(selected == MatchMode.QUESTIONNAIRE, { onSelect(MatchMode.QUESTIONNAIRE) }, { Text(t("values", "Values")) }) }
         if (astrologyApplicable) {
-            item { FilterChip(selected == MatchMode.ASTROLOGY, { onSelect(MatchMode.ASTROLOGY) }, { Text("Astrology") }) }
+            item { FilterChip(selected == MatchMode.ASTROLOGY, { onSelect(MatchMode.ASTROLOGY) }, { Text(t("astrology", "Astrology")) }) }
         }
     }
 }
@@ -519,16 +529,16 @@ private fun DiscoveryCard(
             val evidenceReady = result.mutualPreferenceCriteria >= 5
             add(
                 if (percent >= 90 && evidenceReady) {
-                    "${percent}% strong mutual match • ${result.mutualPreferenceCriteria} criteria"
+                    t("strong_mutual_match", mapOf("percent" to percent, "count" to result.mutualPreferenceCriteria), "{percent}% strong mutual match • {count} criteria")
                 } else {
-                    "${percent}% mutual preferences • ${result.mutualPreferenceCriteria} criteria"
+                    t("mutual_preferences", mapOf("percent" to percent, "count" to result.mutualPreferenceCriteria), "{percent}% mutual preferences • {count} criteria")
                 }
             )
         }
         if (result.forwardPreferenceScore != null && result.reversePreferenceScore != null) {
             val theyFitYou = (result.forwardPreferenceScore.coerceIn(0f, 1f) * 100f).toInt()
             val youFitThem = (result.reversePreferenceScore.coerceIn(0f, 1f) * 100f).toInt()
-            add("They fit you ${theyFitYou}% • You fit them ${youFitThem}%")
+            add(t("reciprocal_fit", mapOf("they" to theyFitYou, "you" to youFitThem), "They fit you {they}% • You fit them {you}%"))
         }
         if (p.education.isNotBlank()) add(p.education)
         if (p.maritalStatus.isNotBlank()) add(p.maritalStatus)
@@ -556,7 +566,7 @@ private fun DiscoveryCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             MatreePrimaryButton(
-                text = if (liked) "Interested" else "Send interest",
+                text = if (liked) t("interested", "Interested") else t("send_interest", "Send interest"),
                 icon = if (liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send,
                 onClick = onInterest,
                 modifier = Modifier.weight(1f)
@@ -567,14 +577,14 @@ private fun DiscoveryCard(
             ) {
                 Icon(
                     if (shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                    contentDescription = if (shortlisted) "Remove from shortlist" else "Add to shortlist"
+                    contentDescription = if (shortlisted) t("remove_shortlist", "Remove from shortlist") else t("add_shortlist", "Add to shortlist")
                 )
             }
             OutlinedIconButton(
                 onClick = onOpen,
                 modifier = Modifier.size(MatreeDesign.sizes.touchTarget)
             ) {
-                Icon(Icons.Filled.Visibility, "View profile")
+                Icon(Icons.Filled.Visibility, t("view_profile", "View profile"))
             }
         }
     }
@@ -586,21 +596,21 @@ private fun SaveSearchDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Filled.BookmarkAdd, null) },
-        title = { Text("Save this search") },
+        title = { Text(t("save_this_search", "Save this search")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Save the current filters to your account and reuse them on your other signed-in devices.")
+                Text(t("save_search_body", "Save the current filters to your account and reuse them on your other signed-in devices."))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(60) },
-                    label = { Text("Name") },
-                    placeholder = { Text("e.g. Karnataka Telugu, Chennai professionals") },
+                    label = { Text(t("name", "Name")) },
+                    placeholder = { Text(t("save_search_example", "e.g. Karnataka Telugu, Chennai professionals")) },
                     singleLine = true
                 )
             }
         },
-        confirmButton = { Button(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { Button(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text(t("save", "Save")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("cancel", "Cancel")) } }
     )
 }
 
@@ -620,25 +630,25 @@ private fun AllIndiaFilterSheet(
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 26.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Search preferences", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("State → language → religion → community, plus any other preference you choose.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("search_preferences", "Search preferences"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(t("search_preferences_subtitle", "State → language → religion → community, plus any other preference you choose."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = { f = MatchFilter() }) { Text("Reset") }
+                TextButton(onClick = { f = MatchFilter() }) { Text(t("reset", "Reset")) }
             }
             Spacer(Modifier.height(10.dp))
             Column(
                 Modifier.weight(1f, fill = false).verticalScroll(scroll),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                FilterBlock("Basic") {
-                    Text("Age ${f.ageMin}–${f.ageMax}")
+                FilterBlock(t("basic", "Basic")) {
+                    Text(t("age_range", mapOf("min" to f.ageMin, "max" to f.ageMax), "Age {min}–{max}"))
                     RangeSlider(
                         value = f.ageMin.toFloat()..f.ageMax.toFloat(),
                         onValueChange = { f = f.copy(ageMin = it.start.toInt(), ageMax = it.endInclusive.toInt()) },
                         valueRange = 18f..70f,
                         steps = 51
                     )
-                    Text("Height ${f.heightMinCm}–${f.heightMaxCm} cm")
+                    Text(t("height_range", mapOf("min" to f.heightMinCm, "max" to f.heightMaxCm), "Height {min}–{max} cm"))
                     RangeSlider(
                         value = f.heightMinCm.toFloat()..f.heightMaxCm.toFloat(),
                         onValueChange = {
@@ -650,83 +660,83 @@ private fun AllIndiaFilterSheet(
                         valueRange = 90f..250f,
                         steps = 159
                     )
-                    OptionDropdown("Marital status", f.maritalStatus, listOf("Any") + IndiaProfileCatalog.maritalStatuses) { f = f.copy(maritalStatus = anyToBlank(it)) }
-                    OptionDropdown("Last active", activityLabel(f.lastActiveWithinDays), listOf("Any time", "Online / today", "Last 7 days", "Last 30 days")) {
+                    OptionDropdown(t("marital_status", "Marital status"), f.maritalStatus, listOf("Any") + IndiaProfileCatalog.maritalStatuses) { f = f.copy(maritalStatus = anyToBlank(it)) }
+                    OptionDropdown(t("last_active", "Last active"), activityLabel(f.lastActiveWithinDays), listOf("Any time", "Online / today", "Last 7 days", "Last 30 days")) {
                         f = f.copy(lastActiveWithinDays = when (it) { "Online / today" -> 1; "Last 7 days" -> 7; "Last 30 days" -> 30; else -> 0 })
                     }
-                    OptionDropdown("Recently joined", recentlyJoinedLabel(f.recentlyJoinedDays), listOf("Any time", "Last 7 days", "Last 30 days", "Last 90 days")) {
+                    OptionDropdown(t("recently_joined", "Recently joined"), recentlyJoinedLabel(f.recentlyJoinedDays), listOf("Any time", "Last 7 days", "Last 30 days", "Last 90 days")) {
                         f = f.copy(recentlyJoinedDays = when (it) { "Last 7 days" -> 7; "Last 30 days" -> 30; "Last 90 days" -> 90; else -> 0 })
                     }
-                    ToggleRow("Verified profiles only", f.verifiedOnly) { f = f.copy(verifiedOnly = it) }
-                    ToggleRow("Profiles with photo", f.withPhotoOnly) { f = f.copy(withPhotoOnly = it) }
-                    ToggleRow("Paid members only", f.premiumOnly) { f = f.copy(premiumOnly = it) }
+                    ToggleRow(t("verified_profiles_only", "Verified profiles only"), f.verifiedOnly) { f = f.copy(verifiedOnly = it) }
+                    ToggleRow(t("profiles_with_photo", "Profiles with photo"), f.withPhotoOnly) { f = f.copy(withPhotoOnly = it) }
+                    ToggleRow(t("paid_members_only", "Paid members only"), f.premiumOnly) { f = f.copy(premiumOnly = it) }
                 }
 
-                FilterBlock("Location") {
-                    OptionDropdown("State / union territory", f.state, listOf("Any") + IndiaProfileCatalog.statesAndUnionTerritories) { selected ->
+                FilterBlock(t("location", "Location")) {
+                    OptionDropdown(t("state_union_territory", "State / union territory"), f.state, listOf("Any") + IndiaProfileCatalog.statesAndUnionTerritories) { selected ->
                         f = f.copy(state = anyToBlank(selected), motherTongue = if (selected == "Any") f.motherTongue else f.motherTongue)
                     }
-                    OutlinedTextField(f.city, { f = f.copy(city = it.take(80)) }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OptionDropdown("Native state", f.nativeState, listOf("Any") + IndiaProfileCatalog.statesAndUnionTerritories) { f = f.copy(nativeState = anyToBlank(it)) }
-                    OutlinedTextField(f.countryOfResidence, { f = f.copy(countryOfResidence = it.take(80)) }, label = { Text("Country of residence") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.citizenship, { f = f.copy(citizenship = it.take(80)) }, label = { Text("Citizenship") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OptionDropdown("Residential status", f.residentialStatus, listOf("Any") + IndiaProfileCatalog.residentialStatuses) { f = f.copy(residentialStatus = anyToBlank(it)) }
-                    OutlinedTextField(f.visaStatus, { f = f.copy(visaStatus = it.take(80)) }, label = { Text("Visa / permit status") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    ToggleRow("NRI only", f.nriOnly) { f = f.copy(nriOnly = it) }
-                    ToggleRow("Willing to relocate", f.willingToRelocate) { f = f.copy(willingToRelocate = it) }
+                    OutlinedTextField(f.city, { f = f.copy(city = it.take(80)) }, label = { Text(t("city", "City")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OptionDropdown(t("native_state", "Native state"), f.nativeState, listOf("Any") + IndiaProfileCatalog.statesAndUnionTerritories) { f = f.copy(nativeState = anyToBlank(it)) }
+                    OutlinedTextField(f.countryOfResidence, { f = f.copy(countryOfResidence = it.take(80)) }, label = { Text(t("country_of_residence", "Country of residence")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.citizenship, { f = f.copy(citizenship = it.take(80)) }, label = { Text(t("citizenship", "Citizenship")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OptionDropdown(t("residential_status", "Residential status"), f.residentialStatus, listOf("Any") + IndiaProfileCatalog.residentialStatuses) { f = f.copy(residentialStatus = anyToBlank(it)) }
+                    OutlinedTextField(f.visaStatus, { f = f.copy(visaStatus = it.take(80)) }, label = { Text(t("visa_permit_status", "Visa / permit status")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    ToggleRow(t("nri_only", "NRI only"), f.nriOnly) { f = f.copy(nriOnly = it) }
+                    ToggleRow(t("willing_to_relocate", "Willing to relocate"), f.willingToRelocate) { f = f.copy(willingToRelocate = it) }
                 }
 
-                FilterBlock("Language, religion & community") {
+                FilterBlock(t("language_religion_community", "Language, religion & community")) {
                     val suggestedLanguages = (IndiaProfileCatalog.languageSuggestionsForState(f.state) + IndiaProfileCatalog.indianLanguages).distinct()
-                    OptionDropdown("Mother tongue", f.motherTongue, listOf("Any") + suggestedLanguages) { f = f.copy(motherTongue = anyToBlank(it)) }
-                    OptionDropdown("Religion", f.religion, listOf("Any") + IndiaProfileCatalog.religions) { f = f.copy(religion = anyToBlank(it), caste = "", subCaste = "") }
-                    Text("Common communities", style = MaterialTheme.typography.labelMedium)
+                    OptionDropdown(t("mother_tongue", "Mother tongue"), f.motherTongue, listOf("Any") + suggestedLanguages) { f = f.copy(motherTongue = anyToBlank(it)) }
+                    OptionDropdown(t("religion", "Religion"), f.religion, listOf("Any") + IndiaProfileCatalog.religions) { f = f.copy(religion = anyToBlank(it), caste = "", subCaste = "") }
+                    Text(t("common_communities", "Common communities"), style = MaterialTheme.typography.labelMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(IndiaProfileCatalog.communitySuggestions(f.religion)) { community ->
                             SuggestionChip(onClick = { if (community != "Other") f = f.copy(caste = community) }, label = { Text(community) })
                         }
                     }
-                    OutlinedTextField(f.caste, { f = f.copy(caste = it.take(80)) }, label = { Text("Community / caste") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.subCaste, { f = f.copy(subCaste = it.take(80)) }, label = { Text("Sub-community / sub-caste") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.gothra, { f = f.copy(gothra = it.take(80)) }, label = { Text("Gothra / clan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.faithTradition, { f = f.copy(faithTradition = it.take(80)) }, label = { Text("Faith tradition / denomination") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.faithSubTradition, { f = f.copy(faithSubTradition = it.take(80)) }, label = { Text("Faith sub-tradition") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.faithInstitution, { f = f.copy(faithInstitution = it.take(100)) }, label = { Text("Faith institution / community") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.caste, { f = f.copy(caste = it.take(80)) }, label = { Text(t("community_caste", "Community / caste")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.subCaste, { f = f.copy(subCaste = it.take(80)) }, label = { Text(t("subcommunity_subcaste", "Sub-community / sub-caste")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.gothra, { f = f.copy(gothra = it.take(80)) }, label = { Text(t("gothra_clan", "Gothra / clan")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithTradition, { f = f.copy(faithTradition = it.take(80)) }, label = { Text(t("faith_tradition_denomination", "Faith tradition / denomination")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithSubTradition, { f = f.copy(faithSubTradition = it.take(80)) }, label = { Text(t("faith_subtradition", "Faith sub-tradition")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.faithInstitution, { f = f.copy(faithInstitution = it.take(100)) }, label = { Text(t("faith_institution_community", "Faith institution / community")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
 
-                FilterBlock("Education & career") {
-                    OptionDropdown("Education", f.educationLevel, listOf("Any") + IndiaProfileCatalog.educationLevels) { f = f.copy(educationLevel = anyToBlank(it)) }
-                    OptionDropdown("Occupation category", f.occupationCategory, listOf("Any") + IndiaProfileCatalog.occupationCategories) { f = f.copy(occupationCategory = anyToBlank(it)) }
-                    OptionDropdown("Employer type", f.employerType, listOf("Any") + IndiaProfileCatalog.employerTypes) { f = f.copy(employerType = anyToBlank(it)) }
-                    OutlinedTextField(f.educationField, { f = f.copy(educationField = it.take(100)) }, label = { Text("Field of study") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(f.incomeMin, { f = f.copy(incomeMin = it.take(80)) }, label = { Text("Income range keyword") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                FilterBlock(t("education_career", "Education & career")) {
+                    OptionDropdown(t("education", "Education"), f.educationLevel, listOf("Any") + IndiaProfileCatalog.educationLevels) { f = f.copy(educationLevel = anyToBlank(it)) }
+                    OptionDropdown(t("occupation_category", "Occupation category"), f.occupationCategory, listOf("Any") + IndiaProfileCatalog.occupationCategories) { f = f.copy(occupationCategory = anyToBlank(it)) }
+                    OptionDropdown(t("employer_type", "Employer type"), f.employerType, listOf("Any") + IndiaProfileCatalog.employerTypes) { f = f.copy(employerType = anyToBlank(it)) }
+                    OutlinedTextField(f.educationField, { f = f.copy(educationField = it.take(100)) }, label = { Text(t("field_of_study", "Field of study")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(f.incomeMin, { f = f.copy(incomeMin = it.take(80)) }, label = { Text(t("income_range_keyword", "Income range keyword")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
 
-                FilterBlock("Lifestyle & family") {
-                    OptionDropdown("Diet", f.diet, listOf("Any") + IndiaProfileCatalog.diets) { f = f.copy(diet = anyToBlank(it)) }
-                    OptionDropdown("Smoking", f.smoking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(smoking = anyToBlank(it)) }
-                    OptionDropdown("Drinking", f.drinking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(drinking = anyToBlank(it)) }
-                    OptionDropdown("Family type", f.familyType, listOf("Any") + IndiaProfileCatalog.familyTypes) { f = f.copy(familyType = anyToBlank(it)) }
-                    OptionDropdown("Family status", f.familyStatus, listOf("Any") + IndiaProfileCatalog.familyStatuses) { f = f.copy(familyStatus = anyToBlank(it)) }
-                    OptionDropdown("Children", f.hasChildrenFilter.ifBlank { "Don't mind" }, listOf("Don't mind", "No children", "Has children")) {
+                FilterBlock(t("lifestyle_family", "Lifestyle & family")) {
+                    OptionDropdown(t("diet", "Diet"), f.diet, listOf("Any") + IndiaProfileCatalog.diets) { f = f.copy(diet = anyToBlank(it)) }
+                    OptionDropdown(t("smoking", "Smoking"), f.smoking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(smoking = anyToBlank(it)) }
+                    OptionDropdown(t("drinking", "Drinking"), f.drinking, listOf("Any") + IndiaProfileCatalog.habitOptions) { f = f.copy(drinking = anyToBlank(it)) }
+                    OptionDropdown(t("family_type", "Family type"), f.familyType, listOf("Any") + IndiaProfileCatalog.familyTypes) { f = f.copy(familyType = anyToBlank(it)) }
+                    OptionDropdown(t("family_status", "Family status"), f.familyStatus, listOf("Any") + IndiaProfileCatalog.familyStatuses) { f = f.copy(familyStatus = anyToBlank(it)) }
+                    OptionDropdown(t("children", "Children"), f.hasChildrenFilter.ifBlank { "Don't mind" }, listOf("Don't mind", "No children", "Has children")) {
                         f = f.copy(hasChildrenFilter = if (it == "Don't mind") "" else it)
                     }
-                    OptionDropdown("Physical status", f.physicalStatus, listOf("Any") + IndiaProfileCatalog.physicalStatuses) { f = f.copy(physicalStatus = anyToBlank(it)) }
-                    OutlinedTextField(f.hobbies, { f = f.copy(hobbies = it.take(200)) }, label = { Text("Hobby / interest keyword") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OptionDropdown(t("physical_status", "Physical status"), f.physicalStatus, listOf("Any") + IndiaProfileCatalog.physicalStatuses) { f = f.copy(physicalStatus = anyToBlank(it)) }
+                    OutlinedTextField(f.hobbies, { f = f.copy(hobbies = it.take(200)) }, label = { Text(t("hobby_interest_keyword", "Hobby / interest keyword")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
 
                 if (astrologyApplicable) {
-                    FilterBlock("Astrology / Kundali") {
-                        OptionDropdown("Horoscope", f.hasHoroscope.ifBlank { "Any" }, listOf("Any", "Yes", "No")) { f = f.copy(hasHoroscope = anyToBlank(it)) }
-                        OutlinedTextField(f.rasi, { f = f.copy(rasi = it.take(60)) }, label = { Text("Rasi / moon sign") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(f.nakshatra, { f = f.copy(nakshatra = it.take(60)) }, label = { Text("Nakshatra / birth star") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                        OptionDropdown("Manglik", f.manglik.ifBlank { "Any" }, listOf("Any", "Yes", "No", "Partial (Anshik)", "Don't know")) { f = f.copy(manglik = anyToBlank(it)) }
+                    FilterBlock(t("astrology_kundali", "Astrology / Kundali")) {
+                        OptionDropdown(t("horoscope", "Horoscope"), f.hasHoroscope.ifBlank { "Any" }, listOf("Any", "Yes", "No")) { f = f.copy(hasHoroscope = anyToBlank(it)) }
+                        OutlinedTextField(f.rasi, { f = f.copy(rasi = it.take(60)) }, label = { Text(t("rasi_moon_sign", "Rasi / moon sign")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(f.nakshatra, { f = f.copy(nakshatra = it.take(60)) }, label = { Text(t("nakshatra_birth_star", "Nakshatra / birth star")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OptionDropdown(t("manglik", "Manglik"), f.manglik.ifBlank { "Any" }, listOf("Any", "Yes", "No", "Partial (Anshik)", "Don't know")) { f = f.copy(manglik = anyToBlank(it)) }
                     }
                 }
             }
             Spacer(Modifier.height(14.dp))
             Button(onClick = { onApply(f) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Icon(Icons.Filled.Check, null); Spacer(Modifier.width(8.dp)); Text("Apply filters")
+                Icon(Icons.Filled.Check, null); Spacer(Modifier.width(8.dp)); Text(t("apply_filters", "Apply filters"))
             }
         }
     }
@@ -747,12 +757,12 @@ private fun OptionDropdown(label: String, value: String, options: List<String>, 
     Box(Modifier.fillMaxWidth()) {
         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
             Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value.ifBlank { "Any" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(localizedDiscoveryOption(value.ifBlank { "Any" }), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.width(6.dp)); Icon(Icons.Filled.ArrowDropDown, null)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.distinct().forEach { option ->
-                DropdownMenuItem(text = { Text(option) }, onClick = { onSelect(option); expanded = false })
+                DropdownMenuItem(text = { Text(localizedDiscoveryOption(option)) }, onClick = { onSelect(option); expanded = false })
             }
         }
     }
@@ -763,6 +773,68 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f)); Switch(checked = checked, onCheckedChange = onChange)
     }
+}
+
+
+@Composable
+private fun discoverySortLabel(sort: DiscoverySort): String = when (sort) {
+    DiscoverySort.BEST -> t("sort_best_match", "Best match")
+    DiscoverySort.NEWEST -> t("sort_newest", "Newest")
+    DiscoverySort.AGE_LOW -> t("sort_age_low", "Age: low to high")
+    DiscoverySort.AGE_HIGH -> t("sort_age_high", "Age: high to low")
+}
+
+@Composable
+private fun localizedEmptyStateMessage(
+    state: DiscoveryEmptyState,
+    filter: MatchFilter
+): String = when (state.action) {
+    DiscoveryEmptyState.Action.RELAX_MUTUAL_MATCH -> t(
+        "no_mutual_threshold_profiles",
+        mapOf("percent" to filter.minMutualMatchPercent),
+        "No profiles currently meet your {percent}%+ reciprocal preference threshold. Your strict preferences have not been changed."
+    )
+    DiscoveryEmptyState.Action.RESET -> t(
+        "no_filter_profiles",
+        "No profiles matched your current search settings. Reset or widen them to search a broader eligible set."
+    )
+    DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO -> t(
+        "no_photo_profiles",
+        "No eligible profiles with a photo are available in this result set. You can include profiles without a photo."
+    )
+    DiscoveryEmptyState.Action.NONE -> t(
+        "no_eligible_profiles",
+        "No eligible profiles are available in this result set right now. Try refreshing later."
+    )
+}
+
+@Composable
+private fun localizedEmptyStateAction(state: DiscoveryEmptyState): String? = when (state.action) {
+    DiscoveryEmptyState.Action.RELAX_MUTUAL_MATCH ->
+        t("show_other_eligible_matches", "Show other eligible matches")
+    DiscoveryEmptyState.Action.RESET ->
+        t("reset_search_settings", "Reset search settings")
+    DiscoveryEmptyState.Action.INCLUDE_NO_PHOTO ->
+        t("include_profiles_without_photos", "Include profiles without photos")
+    DiscoveryEmptyState.Action.NONE -> null
+}
+
+@Composable
+private fun localizedDiscoveryOption(value: String): String = when (value) {
+    "Any" -> t("any", "Any")
+    "Any time" -> t("any_time", "Any time")
+    "Online / today" -> t("online_today", "Online / today")
+    "Last 7 days" -> t("last_7_days", "Last 7 days")
+    "Last 30 days" -> t("last_30_days", "Last 30 days")
+    "Last 90 days" -> t("last_90_days", "Last 90 days")
+    "Don't mind" -> t("dont_mind", "Don't mind")
+    "No children" -> t("no_children", "No children")
+    "Has children" -> t("has_children", "Has children")
+    "Yes" -> t("yes", "Yes")
+    "No" -> t("no", "No")
+    "Partial (Anshik)" -> t("partial_anshik", "Partial (Anshik)")
+    "Don't know" -> t("dont_know", "Don't know")
+    else -> value
 }
 
 private fun anyToBlank(value: String) = if (value == "Any" || value == "Any time") "" else value
