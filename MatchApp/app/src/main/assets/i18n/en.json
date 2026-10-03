@@ -398,5 +398,11 @@
   "religion_example": "Hindu, Muslim, Christian…",
   "unread_count": "{count} unread",
   "review_interest": "Review interest",
-  "open_chat": "Open chat"
+  "open_chat": "Open chat",
+  "new_interest_title": "New interest",
+  "new_interest_body": "Someone is interested in your profile. Open the app to view it.",
+  "new_mutual_match_title": "New mutual match",
+  "new_mutual_match_body": "You have a new mutual match. Open the app to view the profile.",
+  "new_message_title": "New message",
+  "new_message_body": "Open the app to view your message."
 }
