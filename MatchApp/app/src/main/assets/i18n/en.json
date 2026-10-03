@@ -179,5 +179,6 @@
   "days_ago": "{count}d ago",
   "private_match_conversation": "Private match conversation",
   "report_submitted": "Report submitted for moderation.",
-  "report_failed": "Report could not be submitted. Check your connection and try again."
+  "report_failed": "Report could not be submitted. Check your connection and try again.",
+  "typing": "Typing…"
 }
