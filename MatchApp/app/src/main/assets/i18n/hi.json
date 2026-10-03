@@ -398,5 +398,11 @@
   "religion_example": "हिंदू, मुस्लिम, ईसाई…",
   "unread_count": "{count} अपठित",
   "review_interest": "रुचि देखें",
-  "open_chat": "चैट खोलें"
+  "open_chat": "चैट खोलें",
+  "new_interest_title": "नई रुचि",
+  "new_interest_body": "किसी ने आपकी प्रोफ़ाइल में रुचि दिखाई है। देखने के लिए ऐप खोलें।",
+  "new_mutual_match_title": "नया पारस्परिक मैच",
+  "new_mutual_match_body": "आपका नया पारस्परिक मैच हुआ है। प्रोफ़ाइल देखने के लिए ऐप खोलें।",
+  "new_message_title": "नया संदेश",
+  "new_message_body": "अपना संदेश देखने के लिए ऐप खोलें।"
 }
