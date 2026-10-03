@@ -215,3 +215,24 @@ test('typing state is server-owned and readable only by valid chat participants'
     updatedAt: serverTimestamp(),
   }));
 });
+
+
+test('typing visibility closes immediately when either profile privacy relation hides the pair', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats/thread1/typing/alice'), {
+      uid: 'alice',
+      typing: true,
+      expiresAtMillis: Date.now() + 7000,
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(doc(db, 'privacyRelations/alice/members/bob'), {
+      profileHidden: true,
+    });
+  });
+
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(bob, 'chats/thread1/typing/alice')));
+});
