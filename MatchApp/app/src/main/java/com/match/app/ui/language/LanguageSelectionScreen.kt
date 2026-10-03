@@ -16,7 +16,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.match.app.data.remote.FcmDeviceRegistry
 import com.match.app.data.session.SessionStore
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.messaging.FirebaseMessaging
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeTopBar
 import com.match.app.ui.i18n.SupportedUiLocales
@@ -26,6 +29,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 private data class LangEntry(val code: String, val label: String, val native: String)
@@ -42,12 +46,20 @@ private val SUPPORTED_LANGUAGES = listOf(
 
 @HiltViewModel
 class LanguageSelectionViewModel @Inject constructor(
-    private val session: SessionStore
+    private val session: SessionStore,
+    private val fcmDeviceRegistry: FcmDeviceRegistry
 ) : ViewModel() {
     val uiLanguage = session.uiLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, "en")
 
     fun setLanguage(code: String) = viewModelScope.launch {
-        if (code in SupportedUiLocales.codes) session.setUiLanguage(code)
+        if (code !in SupportedUiLocales.codes) return@launch
+        session.setUiLanguage(code)
+        if (FirebaseAuth.getInstance().currentUser != null) {
+            runCatching {
+                val token = FirebaseMessaging.getInstance().token.await()
+                fcmDeviceRegistry.register(token, code)
+            }
+        }
     }
 }
 
