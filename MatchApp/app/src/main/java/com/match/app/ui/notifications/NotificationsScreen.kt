@@ -86,7 +86,7 @@ fun NotificationsScreen(
         Column(Modifier.padding(pad).fillMaxSize().testTag("notifications_screen")) {
             if (unread > 0) {
                 MatreeInlineNotice(
-                    message = "$unread unread",
+                    message = t("unread_count", mapOf("count" to unread), "{count} unread"),
                     icon = Icons.Filled.Notifications,
                     tone = MatreeStatusTone.INTEREST,
                     modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md, vertical = MatreeDesign.spacing.xs)
