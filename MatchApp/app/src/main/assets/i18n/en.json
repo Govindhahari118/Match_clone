@@ -215,5 +215,7 @@
   "chat_respect_notice": "Be respectful and avoid sharing sensitive information too early.",
   "both_accept_before_messages": "Both members must accept each other's interest before messages can be sent.",
   "tap_to_retry": "Tap to retry",
-  "voice_message": "Voice message"
+  "voice_message": "Voice message",
+  "play": "Play",
+  "pause": "Pause"
 }
