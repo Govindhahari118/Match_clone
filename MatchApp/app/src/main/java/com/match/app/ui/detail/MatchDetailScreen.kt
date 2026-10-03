@@ -622,7 +622,7 @@ fun MatchDetailScreen(
                 }
 
                 MatreeSecondaryButton(
-                    text = if (ui.isMutual) "Secure call" else "Secure call after match",
+                    text = if (ui.isMutual) t("secure_call", "Secure Call") else t("secure_call_after_match", "Secure call after match"),
                     icon = Icons.Filled.PhoneInTalk,
                     onClick = onSecureCall,
                     enabled = ui.isMutual && !ui.blocked,
