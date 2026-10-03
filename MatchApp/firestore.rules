@@ -328,6 +328,14 @@ service cloud.firestore {
           !blockedEitherWay(
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          ) &&
+          !profileHiddenFrom(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          ) &&
+          !profileHiddenFrom(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0]
           );
         // Typing state is trusted-server authority through setChatTyping.
         allow create, update, delete: if false;
