@@ -140,10 +140,12 @@ fun InterestsScreen(
     val actions by vm.actions.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(actions.message, actions.messageKey, actions.matchedId) {
-        val message = actions.messageKey?.let { key ->
-            t(key, actions.messageFallback.orEmpty())
-        } ?: actions.message ?: return@LaunchedEffect
+    val localizedActionMessage = actions.messageKey?.let { key ->
+        t(key, actions.messageFallback.orEmpty())
+    } ?: actions.message
+
+    LaunchedEffect(localizedActionMessage, actions.matchedId) {
+        val message = localizedActionMessage ?: return@LaunchedEffect
         val matchedId = actions.matchedId
         val result = snackbar.showSnackbar(
             message = message,
