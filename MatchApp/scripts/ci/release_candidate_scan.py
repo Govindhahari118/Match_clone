@@ -559,6 +559,9 @@ def main() -> int:
         require("const COMMUNICATION_PROVIDER_IMPLEMENTED = false;" in calls,
                 "secure calls must remain fail-closed until the audited provider adapter replaces the placeholder contract",
                 failures)
+        require("productionFeatureEnabled(functions.config().features?.secure_calls)" in calls,
+                "secure calls must require an independent backend rollout flag even after a provider adapter exists",
+                failures)
 
     family_screen = APP / "src/main/java/com/match/app/ui/family/FamilyScreen.kt"
     if family_screen.exists():

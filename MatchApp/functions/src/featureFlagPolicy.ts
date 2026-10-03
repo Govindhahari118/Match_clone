@@ -1,4 +1,4 @@
-export type ProductionFeature = "nearby" | "kundali" | "video_profiles";
+export type ProductionFeature = "nearby" | "kundali" | "video_profiles" | "secure_calls";
 
 /**
  * Backend production-feature flags are independent from client navigation flags.

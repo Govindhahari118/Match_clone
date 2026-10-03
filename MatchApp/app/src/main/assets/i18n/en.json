@@ -84,5 +84,16 @@
   "must_match": "Must match",
   "preferred": "Preferred",
   "shared_preferences_privacy": "Only the criteria this member chose to share are shown. Sensitive preferences stay private.",
-  "accept_and_chat": "Accept & chat"
+  "accept_and_chat": "Accept & chat",
+  "secure_call": "Secure Call",
+  "secure_call_with": "Secure Call with {name}",
+  "secure_call_eligible": "Your relationship is eligible for secure communication.",
+  "secure_call_not_mutual": "Secure calling unlocks only after both members express interest.",
+  "secure_call_blocked": "Secure calling is unavailable because this relationship is blocked.",
+  "secure_call_privacy": "Secure calling is unavailable because a member's privacy settings restrict contact.",
+  "secure_call_inactive": "Secure calling is unavailable while either account is inactive.",
+  "secure_call_invalid": "Secure calling is unavailable for this member.",
+  "secure_call_unconfirmed": "Secure-call eligibility could not be confirmed.",
+  "secure_call_provider_pending": "Your match is eligible, but live calling is not enabled yet. Matree will not show a fake dialer, relay number, call history or minutes until a real audited provider is connected.",
+  "secure_call_after_match": "Secure call after match"
 }

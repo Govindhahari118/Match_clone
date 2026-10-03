@@ -25,6 +25,7 @@ REQUIRED = (
     "docs/release/FEATURE_FLAGS.md",
     "docs/release/ROLLBACK_RUNBOOK.md",
     "docs/release/SECURITY_ACCEPTANCE.md",
+    "docs/release/SECURE_CALL_PROVIDER_ACCEPTANCE.md",
     "docs/release/REAL_DEVICE_ACCEPTANCE.md",
     "docs/release/ACCESSIBILITY_PERFORMANCE_ACCEPTANCE.md",
     "docs/release/INCIDENT_RESPONSE.md",

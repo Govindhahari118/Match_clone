@@ -60,6 +60,12 @@ preference signal.
 Chat message creation is server-authoritative and rate-limited; Storage rules bind chat media to the
 authorized participant/thread contract.
 
+## Secure communication
+
+- `getSecureCallCapability` — returns fresh relationship/privacy eligibility separately from provider readiness.
+
+Live provider session creation remains intentionally unavailable until an audited communications adapter, server-side rollout flag, provider callbacks and physical-device acceptance satisfy `SECURE_CALL_PROVIDER_ACCEPTANCE.md`.
+
 ## Verification, consent, trust and risk
 
 - `getVerificationOptions`

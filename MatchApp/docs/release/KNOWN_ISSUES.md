@@ -36,3 +36,8 @@ The release remains NO-GO until operator-controlled evidence exists for the exac
 - Play pre-launch report, closed testing, rollback drill and controlled rollout/post-rollout health.
 
 The external gate must remain red until those references exist. Missing provider credentials or external evidence must never be converted into a synthetic pass.
+
+
+## Secure calling
+
+The app now exposes a real server-backed secure-call capability screen from mutual profiles. Relationship eligibility, blocks and privacy restrictions are checked against fresh backend state. Live voice/video session creation remains deliberately disabled until a real audited communications provider satisfies `SECURE_CALL_PROVIDER_ACCEPTANCE.md`; no fake dialer or call history is shown.

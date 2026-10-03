@@ -49,6 +49,7 @@ import com.match.app.ui.family.FamilyAccessScreen
 import com.match.app.ui.family.FamilyScreen
 import com.match.app.ui.help.HelpScreen
 import com.match.app.ui.interests.InterestsScreen
+import com.match.app.ui.securecall.SecureCallScreen
 import com.match.app.ui.kundli.KundliScreen
 import com.match.app.ui.legal.LegalScreen
 import com.match.app.ui.matches.MatchesScreen
@@ -114,9 +115,11 @@ object MainRoutes {
     const val LANGUAGE_SELECT = "language_select"
     const val DETAIL = "detail/{userId}"
     const val CHAT = "chat/{peerId}"
+    const val SECURE_CALL = "secure_call/{peerId}"
 
     fun detail(userId: Long) = "detail/$userId"
     fun chat(peerId: Long) = "chat/$peerId"
+    fun secureCall(peerId: Long) = "secure_call/$peerId"
     fun kundli(targetId: Long) = "kundli/$targetId"
     fun compatibility(candidateId: Long) = "compatibility/$candidateId"
 }
@@ -553,6 +556,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                         userId = userId,
                         onBack = { nav.popBackStack() },
                         onChat = { nav.navigate(MainRoutes.chat(userId)) },
+                        onSecureCall = { nav.navigate(MainRoutes.secureCall(userId)) },
                         onPricing = { nav.navigate(MainRoutes.PRICING) },
                         onKundli = { if (optionalRoutes.kundali) nav.navigate(MainRoutes.kundli(userId)) },
                         onCompatibilityBreakdown = { nav.navigate(MainRoutes.compatibility(userId)) }
@@ -572,6 +576,10 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
                     val peerId = backStack.arguments?.getLong("peerId") ?: return@composable
                     ChatScreen(peerId = peerId, onBack = { nav.popBackStack() }, onUpgrade = { nav.navigate(MainRoutes.PRICING) })
+                }
+                composable(MainRoutes.SECURE_CALL, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
+                    val peerId = backStack.arguments?.getLong("peerId") ?: return@composable
+                    SecureCallScreen(peerId = peerId, onBack = { nav.popBackStack() })
                 }
             }
         }
