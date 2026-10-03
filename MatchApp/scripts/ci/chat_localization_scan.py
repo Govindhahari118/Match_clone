@@ -2,7 +2,6 @@
 """Require critical production chat surfaces to resolve visible copy through i18n."""
 from __future__ import annotations
 import pathlib
-import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CHAT = ROOT / "app/src/main/java/com/match/app/ui/chat/ChatScreen.kt"
@@ -30,9 +29,9 @@ def main() -> int:
     failures: list[str] = []
     for path, keys in REQUIRED.items():
         text = path.read_text(encoding="utf-8")
+        compact = "".join(text.split())
         for key in sorted(keys):
-            pattern = re.compile(r't\\(\\s*"' + re.escape(key) + r'"')
-            if not pattern.search(text):
+            if f't("{key}"' not in compact:
                 failures.append(f"{path.relative_to(ROOT)} missing i18n usage for {key}")
     if failures:
         print("Chat localization scan FAILED")
