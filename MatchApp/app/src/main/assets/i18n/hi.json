@@ -165,5 +165,8 @@
   "occupation": "पेशा",
   "smoking": "धूम्रपान",
   "drinking": "शराब",
-  "relocation": "स्थानांतरण"
+  "relocation": "स्थानांतरण",
+  "interest_accepted_matched": "रुचि स्वीकार की गई। अब आप दोनों मैच हैं।",
+  "request_declined": "रुचि अनुरोध अस्वीकार किया गया।",
+  "interest_withdrawn": "रुचि वापस ले ली गई।"
 }
