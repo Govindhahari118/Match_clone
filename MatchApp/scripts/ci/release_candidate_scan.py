@@ -324,8 +324,8 @@ def main() -> int:
             "ProfileCreatedFor.fromWire(profileCreatedFor)" in
                 text(APP / "src/main/java/com/match/app/data/repo/AuthRepository.kt"),
             "profile-created-for typed domain mapping missing", failures)
-    require('Fact("Profile managed as", p.profileCreatedFor.displayLabel)' in match_detail,
-            "family-assisted profile status must remain visible to prospective matches", failures)
+    require('Fact(t("profile_managed_as", "Profile managed as"), p.profileCreatedFor.displayLabel)' in match_detail,
+            "family-assisted profile status must remain visible to prospective matches through the localized label", failures)
     require("validProfileCreatedFor" in firestore_rules,
             "Firestore must validate profile-created-for canonical values", failures)
 

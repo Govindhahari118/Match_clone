@@ -46,6 +46,8 @@ jobs:
         run: python3 scripts/ci/truthfulness_scan.py
       - name: Screen classification gate
         run: python3 scripts/ci/screen_classification_scan.py
+      - name: Translation catalog gate
+        run: python3 scripts/ci/i18n_catalog_scan.py
       - name: Android / Functions callable contract gate
         run: python3 scripts/ci/callable_contract_scan.py
       - name: Interest to chat journey contract gate

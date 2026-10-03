@@ -418,18 +418,18 @@ fun MatchDetailScreen(
         var introNote by remember(p.firebaseUid) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = vm::dismissInterestDialog,
-            title = { Text("Send interest") },
+            title = { Text(t("send_interest_title", "Send interest")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                     Text(
-                        "Add an optional personal introduction. Contact details, external links and payment requests are blocked until you both match.",
+                        t("interest_intro_help", "Add an optional personal introduction. Contact details, external links and payment requests are blocked until you both match."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = introNote,
                         onValueChange = { introNote = it.take(280) },
-                        label = { Text("Personal note (optional)") },
+                        label = { Text(t("personal_note_optional", "Personal note (optional)")) },
                         supportingText = { Text("${introNote.length}/280") },
                         minLines = 3,
                         maxLines = 5,
@@ -458,14 +458,14 @@ fun MatchDetailScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                     }
-                    Text(if (ui.interestSending) "Sending…" else "Send interest")
+                    Text(if (ui.interestSending) t("sending", "Sending…") else t("send_interest", "Send interest"))
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = vm::dismissInterestDialog,
                     enabled = !ui.interestSending
-                ) { Text("Cancel") }
+                ) { Text(t("cancel", "Cancel")) }
             }
         )
     }
@@ -473,30 +473,37 @@ fun MatchDetailScreen(
     if (showNote) {
         AlertDialog(
             onDismissRequest = { showNote = false },
-            title = { Text("Private note") },
+            title = { Text(t("private_note", "Private note")) },
             text = {
                 OutlinedTextField(
                     value = noteText,
                     onValueChange = { noteText = it.take(1000) },
-                    label = { Text("Only you can see this on this app account") },
+                    label = { Text(t("private_note_only_you", "Only you can see this on this app account")) },
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
                 )
             },
-            confirmButton = { TextButton(onClick = { vm.saveNote(noteText); showNote = false }) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { showNote = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { vm.saveNote(noteText); showNote = false }) { Text(t("save", "Save")) } },
+            dismissButton = { TextButton(onClick = { showNote = false }) { Text(t("cancel", "Cancel")) } }
         )
     }
 
     if (ui.showReportDialog) {
-        val reasons = listOf("Fake profile", "Inappropriate content", "Harassment", "Spam or scam", "Under age", "Other")
+        val reasons = listOf(
+            t("fake_profile", "Fake profile"),
+            t("inappropriate_content", "Inappropriate content"),
+            t("harassment", "Harassment"),
+            t("spam_or_scam", "Spam or scam"),
+            t("under_age", "Under age"),
+            t("other", "Other")
+        )
         var selected by remember { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { if (!ui.reportSubmitting) vm.dismissReportDialog() },
-            title = { Text("Report profile") },
+            title = { Text(t("report_profile", "Report profile")) },
             text = {
                 Column {
-                    Text("Choose the reason that best describes the issue.")
+                    Text(t("report_choose_reason", "Choose the reason that best describes the issue."))
                     reasons.forEach { reason ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = selected == reason, onClick = { selected = reason }, enabled = !ui.reportSubmitting)
@@ -511,10 +518,10 @@ fun MatchDetailScreen(
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(6.dp))
                     }
-                    Text(if (ui.reportSubmitting) "Submitting…" else "Submit report")
+                    Text(if (ui.reportSubmitting) t("submitting", "Submitting…") else t("submit_report", "Submit report"))
                 }
             },
-            dismissButton = { TextButton(onClick = vm::dismissReportDialog, enabled = !ui.reportSubmitting) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = vm::dismissReportDialog, enabled = !ui.reportSubmitting) { Text(t("cancel", "Cancel")) } }
         )
     }
 
@@ -522,17 +529,17 @@ fun MatchDetailScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             MatreeTopBar(
-                title = p?.displayName ?: "Profile",
+                title = p?.displayName ?: t("profile", "Profile"),
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = onKundli, enabled = p?.showHoroscope == true && !ui.blocked) {
-                        Icon(Icons.Filled.AutoAwesome, "Check Kundali")
+                        Icon(Icons.Filled.AutoAwesome, t("check_kundali_compatibility", "Check Kundali compatibility"))
                     }
                     IconButton(onClick = { showNote = true }, enabled = p != null) {
-                        Icon(Icons.Filled.Note, "Private note")
+                        Icon(Icons.Filled.Note, t("private_note", "Private note"))
                     }
                     IconButton(onClick = vm::showReportDialog, enabled = p != null) {
-                        Icon(Icons.Filled.Flag, "Report profile")
+                        Icon(Icons.Filled.Flag, t("report_profile", "Report profile"))
                     }
                 }
             )
@@ -543,15 +550,15 @@ fun MatchDetailScreen(
                 Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
                 contentAlignment = Alignment.Center
             ) {
-                MatreeLoadingState(message = "Loading profile…", rows = 3)
+                MatreeLoadingState(message = t("loading_profile", "Loading profile…"), rows = 3)
             }
             p == null -> Box(
                 Modifier.padding(pad).fillMaxSize().padding(MatreeDesign.spacing.xl),
                 contentAlignment = Alignment.Center
             ) {
                 MatreeStatePanel(
-                    title = "Profile unavailable",
-                    message = "This profile is no longer available with your current relationship or privacy state.",
+                    title = t("profile_unavailable", "Profile unavailable"),
+                    message = t("profile_unavailable_message", "This profile is no longer available with your current relationship or privacy state."),
                     icon = Icons.Filled.PersonOff,
                     tone = MatreeStatusTone.WARNING
                 )
@@ -566,7 +573,7 @@ fun MatchDetailScreen(
 
                 if (ui.blocked) {
                     MatreeInlineNotice(
-                        message = "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them.",
+                        message = t("blocked_member_notice", "You blocked this member. Interests, messaging and contact reveal stay unavailable until you unblock them."),
                         icon = Icons.Filled.Block,
                         tone = MatreeStatusTone.ERROR
                     )
@@ -577,14 +584,14 @@ fun MatchDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     MatreePrimaryButton(
-                        text = if (ui.liked) "Interest sent" else "Send interest",
+                        text = if (ui.liked) t("interest_sent", "Interest sent") else t("send_interest", "Send interest"),
                         icon = if (ui.liked) Icons.Filled.Favorite else Icons.AutoMirrored.Filled.Send,
                         onClick = vm::toggleLike,
                         enabled = !ui.blocked,
                         modifier = Modifier.weight(1f)
                     )
                     MatreeSecondaryButton(
-                        text = if (ui.shortlisted) "Saved" else "Shortlist",
+                        text = if (ui.shortlisted) t("saved", "Saved") else t("shortlist", "Shortlist"),
                         icon = if (ui.shortlisted) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                         onClick = vm::toggleShortlist,
                         enabled = !ui.blocked,
@@ -594,7 +601,7 @@ fun MatchDetailScreen(
 
                 if (p.showHoroscope && !ui.blocked) {
                     MatreeSecondaryButton(
-                        text = "Check Kundali compatibility",
+                        text = t("check_kundali_compatibility", "Check Kundali compatibility"),
                         icon = Icons.Filled.AutoAwesome,
                         onClick = onKundli,
                         modifier = Modifier.fillMaxWidth().testTag("profile_check_kundli")
@@ -606,14 +613,14 @@ fun MatchDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     MatreePrimaryButton(
-                        text = if (ui.isMutual) "Message" else "Message after match",
+                        text = if (ui.isMutual) t("message", "Message") else t("message_after_match", "Message after match"),
                         icon = Icons.AutoMirrored.Filled.Chat,
                         onClick = onChat,
                         enabled = ui.isMutual && !ui.blocked,
                         modifier = Modifier.weight(1f)
                     )
                     MatreeSecondaryButton(
-                        text = "Contact",
+                        text = t("contact", "Contact"),
                         icon = Icons.Filled.Phone,
                         onClick = vm::showContactUnlock,
                         enabled = ui.isMutual && !ui.blocked,
@@ -631,7 +638,7 @@ fun MatchDetailScreen(
 
                 if (!ui.isMutual && !ui.blocked) {
                     MatreeInlineNotice(
-                        message = "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest.",
+                        message = t("mutual_unlock_notice", "Messaging and contact reveal unlock only after both members express interest. You can review this profile and Kundali before accepting or sending interest."),
                         icon = Icons.Filled.Info
                     )
                 }
@@ -640,7 +647,7 @@ fun MatchDetailScreen(
                 TrustSummaryCard(ui.trustSummary)
                 ActualCompatibilityCard(ui)
                 MatreeSecondaryButton(
-                    text = "Compatibility breakdown",
+                    text = t("compatibility_breakdown", "Compatibility breakdown"),
                     icon = Icons.Filled.Insights,
                     onClick = onCompatibilityBreakdown,
                     enabled = !ui.blocked,
@@ -648,8 +655,8 @@ fun MatchDetailScreen(
                 )
                 ProfileFacts(p)
 
-                if (p.bio.isNotBlank()) SectionCard("About") { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
-                if (ui.privateNote.isNotBlank()) SectionCard("Your private note") { Text(ui.privateNote, style = MaterialTheme.typography.bodySmall) }
+                if (p.bio.isNotBlank()) SectionCard(t("about", "About")) { Text(p.bio, style = MaterialTheme.typography.bodyMedium) }
+                if (ui.privateNote.isNotBlank()) SectionCard(t("your_private_note", "Your private note")) { Text(ui.privateNote, style = MaterialTheme.typography.bodySmall) }
 
                 OutlinedButton(
                     onClick = vm::toggleBlock,
@@ -658,12 +665,12 @@ fun MatchDetailScreen(
                 ) {
                     Icon(if (ui.blocked) Icons.Filled.LockOpen else Icons.Filled.Block, null)
                     Spacer(Modifier.width(MatreeDesign.spacing.xs))
-                    Text(if (ui.blocked) "Unblock member" else "Block member")
+                    Text(if (ui.blocked) t("unblock_member", "Unblock member") else t("block_member", "Block member"))
                 }
                 TextButton(onClick = vm::showReportDialog, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Flag, null)
                     Spacer(Modifier.width(MatreeDesign.spacing.xs))
-                    Text("Report profile")
+                    Text(t("report_profile", "Report profile"))
                 }
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
@@ -720,19 +727,19 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
     SectionCard(t("what_they_are_looking_for", "What they are looking for")) {
         summary.items.forEach { item ->
             val label = when (item.key) {
-                "age" -> "Age"
-                "height" -> "Height"
-                "state" -> "State"
-                "city" -> "City"
-                "country_of_residence" -> "Country"
-                "marital_status" -> "Marital status"
-                "education" -> "Education"
-                "occupation" -> "Occupation"
-                "diet" -> "Diet"
-                "smoking" -> "Smoking"
-                "drinking" -> "Drinking"
-                "family_values" -> "Family values"
-                "relocation" -> "Relocation"
+                "age" -> t("age", "Age")
+                "height" -> t("height", "Height")
+                "state" -> t("state", "State")
+                "city" -> t("city", "City")
+                "country_of_residence" -> t("country", "Country")
+                "marital_status" -> t("marital_status", "Marital status")
+                "education" -> t("education", "Education")
+                "occupation" -> t("occupation", "Occupation")
+                "diet" -> t("diet", "Diet")
+                "smoking" -> t("smoking", "Smoking")
+                "drinking" -> t("drinking", "Drinking")
+                "family_values" -> t("family_values", "Family values")
+                "relocation" -> t("relocation", "Relocation")
                 else -> item.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
             }
             val mode = if (item.mode == PartnerPreferenceMode.STRICT) t("must_match", "Must match") else t("preferred", "Preferred")
@@ -773,12 +780,12 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
 private fun TrustSummaryCard(trust: TrustSummary?) {
     if (trust == null) {
         MatreeInlineNotice(
-            message = "Trust Score is temporarily unavailable. Verification badges remain authoritative.",
+            message = t("trust_unavailable", "Trust Score is temporarily unavailable. Verification badges remain authoritative."),
             icon = Icons.Filled.VerifiedUser
         )
         return
     }
-    SectionCard("Trust & verification") {
+    SectionCard(t("trust_and_verification", "Trust & verification")) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${trust.score}/100",
@@ -790,7 +797,7 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
             Column {
                 Text(trust.tierLabel, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Server-authoritative Trust Score",
+                    t("server_authoritative_trust", "Server-authoritative Trust Score"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -813,7 +820,7 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
             }
         }
         Text(
-            "Paid membership does not increase Trust Score. Fraud-detection details stay private so they cannot be gamed.",
+            t("trust_paid_note", "Paid membership does not increase Trust Score. Fraud-detection details stay private so they cannot be gamed."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -823,13 +830,13 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
 @Composable
 private fun ActualCompatibilityCard(ui: DetailUi) {
     if (ui.compatibilityFactors.isEmpty()) return
-    SectionCard("Compatibility") {
+    SectionCard(t("compatibility", "Compatibility")) {
         ui.compatibilityFactors.forEach { factor ->
             val label = when (factor.key) {
-                "questionnaire" -> "Questionnaire"
-                "astrology" -> "Astrology"
-                "demographics_lifestyle" -> "Profile fit"
-                "mutual_trust" -> "Mutual trust"
+                "questionnaire" -> t("questionnaire", "Questionnaire")
+                "astrology" -> t("astrology", "Astrology")
+                "demographics_lifestyle" -> t("profile_fit", "Profile fit")
+                "mutual_trust" -> t("mutual_trust", "Mutual trust")
                 else -> factor.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
             }
             ScoreRow(label, factor.score)
@@ -841,9 +848,9 @@ private fun ActualCompatibilityCard(ui: DetailUi) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        ScoreRow("Overall", ui.combinedScore)
+        ScoreRow(t("overall", "Overall"), ui.combinedScore)
         Text(
-            "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship.",
+            t("compatibility_disclaimer", "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -863,19 +870,19 @@ private fun ScoreRow(label: String, score: Float) {
 
 @Composable
 private fun ProfileFacts(p: UserProfile) {
-    SectionCard("Profile details") {
-        Fact("Profile managed as", p.profileCreatedFor.displayLabel)
-        Fact("Marital status", p.maritalStatus)
-        Fact("Height", if (p.heightCm > 0) "${p.heightCm} cm" else "")
-        Fact("Education", p.education)
-        Fact("Profession", p.profession)
-        Fact("Religion", p.religion)
-        Fact("Community", p.caste)
-        Fact("Mother tongue", p.motherTongue)
-        Fact("Family type", p.familyType)
-        Fact("Family values", p.familyValues)
-        Fact("Diet", p.diet)
-        Fact("Country", p.countryOfResidence)
+    SectionCard(t("profile_details", "Profile details")) {
+        Fact(t("profile_managed_as", "Profile managed as"), p.profileCreatedFor.displayLabel)
+        Fact(t("marital_status", "Marital status"), p.maritalStatus)
+        Fact(t("height", "Height"), if (p.heightCm > 0) "${p.heightCm} cm" else "")
+        Fact(t("education", "Education"), p.education)
+        Fact(t("profession", "Profession"), p.profession)
+        Fact(t("religion", "Religion"), p.religion)
+        Fact(t("community", "Community"), p.caste)
+        Fact(t("mother_tongue", "Mother tongue"), p.motherTongue)
+        Fact(t("family_type", "Family type"), p.familyType)
+        Fact(t("family_values", "Family values"), p.familyValues)
+        Fact(t("diet", "Diet"), p.diet)
+        Fact(t("country", "Country"), p.countryOfResidence)
         if (p.showHoroscope && ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) {
             Fact("Rasi / Nakshatra", listOf(p.rasi, p.nakshatra).filter { it.isNotBlank() }.joinToString(" • "))
         }
