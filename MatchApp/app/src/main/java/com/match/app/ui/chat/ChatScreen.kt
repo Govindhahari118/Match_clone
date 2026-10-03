@@ -355,7 +355,7 @@ fun ChatScreen(
                                 state.presence.online -> t("online_now", "Online now")
                                 state.presence.lastActiveAt > 0L -> t(
                                     "last_active",
-                                    mapOf("time" to relativePresenceTime(state.presence.lastActiveAt)),
+                                    mapOf("time" to localizedPresenceTime(state.presence.lastActiveAt)),
                                     "Last active {time}"
                                 )
                                 else -> t("private_match_conversation", "Private match conversation")
@@ -367,14 +367,6 @@ fun ChatScreen(
                                     MatreeDesign.colors.online
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(t("report_profile", "Report profile")) },
-                                leadingIcon = { Icon(Icons.Filled.Flag, null) },
-                                onClick = {
-                                    showMenu = false
-                                    showReportDialog = true
                                 }
                             )
                         }
@@ -391,6 +383,14 @@ fun ChatScreen(
                                 onClick = {
                                     showMenu = false
                                     if (state.isBlocked) vm.unblockUser() else showBlockDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("report_profile", "Report profile")) },
+                                leadingIcon = { Icon(Icons.Filled.Flag, null) },
+                                onClick = {
+                                    showMenu = false
+                                    showReportDialog = true
                                 }
                             )
                         }
@@ -583,13 +583,14 @@ fun ChatScreen(
     }
 }
 
-private fun relativePresenceTime(lastActiveAt: Long, now: Long = System.currentTimeMillis()): String {
-    val deltaMinutes = ((now - lastActiveAt).coerceAtLeast(0L) / 60_000L).toInt()
+@Composable
+private fun localizedPresenceTime(lastActiveAt: Long): String {
+    val deltaMinutes = ((System.currentTimeMillis() - lastActiveAt).coerceAtLeast(0L) / 60_000L).toInt()
     return when {
-        deltaMinutes < 1 -> "just now"
-        deltaMinutes < 60 -> "${deltaMinutes}m ago"
-        deltaMinutes < 24 * 60 -> "${deltaMinutes / 60}h ago"
-        else -> "${deltaMinutes / (24 * 60)}d ago"
+        deltaMinutes < 1 -> t("just_now", "just now")
+        deltaMinutes < 60 -> t("minutes_ago", mapOf("count" to deltaMinutes), "{count}m ago")
+        deltaMinutes < 24 * 60 -> t("hours_ago", mapOf("count" to (deltaMinutes / 60)), "{count}h ago")
+        else -> t("days_ago", mapOf("count" to (deltaMinutes / (24 * 60))), "{count}d ago")
     }
 }
 
