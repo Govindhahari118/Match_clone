@@ -134,3 +134,6 @@ verification review queue/cases, risk review queue and account payment views.
 Android may request actions, but server-owned state such as entitlement, verification, moderation,
 account enforcement, Trust/risk, protected-media publication and lifecycle authority is never accepted
 from the client as truth.
+
+- `getSecureCallCapability` — server-authoritative relationship/provider capability check; does not allocate a session.
+- `startSecureCallSession` — server-authoritative provider-session allocation boundary. Requires an active mutual match, current block/privacy eligibility, configured provider adapter, rollout flag, per-account/per-pair rate limits, and returns only short-lived client allocation material. The default adapter fails closed.
