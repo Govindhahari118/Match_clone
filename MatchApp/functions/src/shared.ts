@@ -97,14 +97,27 @@ export function requireOpsRole(
 
 export type NotificationPreferenceKey = "interests" | "matches" | "messages" | "system" | "critical";
 
+export type SupportedNotificationLocale = "en" | "te" | "hi";
+
+export type NotificationCopyByLocale = Partial<Record<
+  SupportedNotificationLocale,
+  { title: string; body: string }
+>>;
+
 type FcmDeviceToken = {
   deviceId: string;
   token: string;
+  locale: SupportedNotificationLocale;
   ref: admin.firestore.DocumentReference;
 };
 
 function validFcmToken(value: unknown): value is string {
   return typeof value === "string" && value.trim().length >= 20 && value.trim().length <= 4096;
+}
+
+export function normalizeNotificationLocale(value: unknown): SupportedNotificationLocale {
+  const locale = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return locale === "te" || locale === "hi" ? locale : "en";
 }
 
 async function migrateLegacyFcmToken(uid: string): Promise<FcmDeviceToken | undefined> {
@@ -132,6 +145,7 @@ async function migrateLegacyFcmToken(uid: string): Promise<FcmDeviceToken | unde
       deviceId,
       token,
       platform: "android",
+      locale: "en",
       migratedLegacy: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
@@ -154,7 +168,7 @@ async function migrateLegacyFcmToken(uid: string): Promise<FcmDeviceToken | unde
   }
   await cleanup.commit();
 
-  return { deviceId, token, ref: tokenRef };
+  return { deviceId, token, locale: "en", ref: tokenRef };
 }
 
 /**
@@ -169,6 +183,7 @@ export async function getFcmDeviceTokens(uid: string): Promise<FcmDeviceToken[]>
     return validFcmToken(token) ? [{
       deviceId: doc.id,
       token: token.trim(),
+      locale: normalizeNotificationLocale(doc.data()?.locale),
       ref: doc.ref,
     }] : [];
   });
@@ -205,7 +220,8 @@ export async function sendDataToUserDevices(
   uid: string,
   data: Record<string, string>,
   android: admin.messaging.AndroidConfig,
-  preferenceKey: NotificationPreferenceKey
+  preferenceKey: NotificationPreferenceKey,
+  localizedCopy?: NotificationCopyByLocale
 ): Promise<void> {
   if (!(await notificationPreferenceEnabled(uid, preferenceKey))) return;
 
@@ -213,25 +229,45 @@ export async function sendDataToUserDevices(
   if (records.length === 0) return;
 
   const unique = Array.from(new Map(records.map((record) => [record.token, record])).values());
-  for (let offset = 0; offset < unique.length; offset += 500) {
-    const chunk = unique.slice(offset, offset + 500);
-    const response = await messaging.sendEachForMulticast({
-      tokens: chunk.map((record) => record.token),
-      data,
-      android,
-    });
+  const groups = new Map<SupportedNotificationLocale, FcmDeviceToken[]>();
+  unique.forEach((record) => {
+    const bucket = groups.get(record.locale) ?? [];
+    bucket.push(record);
+    groups.set(record.locale, bucket);
+  });
 
-    const cleanup = db.batch();
-    let cleanupCount = 0;
-    response.responses.forEach((result, index) => {
-      const code = result.error?.code;
-      if (code === "messaging/registration-token-not-registered" ||
-          code === "messaging/invalid-registration-token") {
-        cleanup.delete(chunk[index].ref);
-        cleanupCount += 1;
-      }
-    });
-    if (cleanupCount > 0) await cleanup.commit();
+  for (const [locale, group] of groups.entries()) {
+    const copy = localizedCopy?.[locale] ?? localizedCopy?.en;
+    const localizedData = copy ? {
+      ...data,
+      title: copy.title,
+      body: copy.body,
+      locale,
+    } : {
+      ...data,
+      locale,
+    };
+
+    for (let offset = 0; offset < group.length; offset += 500) {
+      const chunk = group.slice(offset, offset + 500);
+      const response = await messaging.sendEachForMulticast({
+        tokens: chunk.map((record) => record.token),
+        data: localizedData,
+        android,
+      });
+
+      const cleanup = db.batch();
+      let cleanupCount = 0;
+      response.responses.forEach((result, index) => {
+        const code = result.error?.code;
+        if (code === "messaging/registration-token-not-registered" ||
+            code === "messaging/invalid-registration-token") {
+          cleanup.delete(chunk[index].ref);
+          cleanupCount += 1;
+        }
+      });
+      if (cleanupCount > 0) await cleanup.commit();
+    }
   }
 }
 
@@ -250,6 +286,7 @@ export type PersistedNotificationInput = {
   preferenceKey: NotificationPreferenceKey;
   priority?: "high" | "normal";
   fromFirebaseUid?: string;
+  localizedCopy?: NotificationCopyByLocale;
 };
 
 /**
@@ -299,7 +336,8 @@ export async function persistAndSendNotification(
       } : {}),
     },
     { priority: input.priority ?? "high" },
-    input.preferenceKey
+    input.preferenceKey,
+    input.localizedCopy
   );
 
   await ref.set({

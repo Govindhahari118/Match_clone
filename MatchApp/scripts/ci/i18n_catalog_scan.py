@@ -17,6 +17,8 @@ CRITICAL_TELUGU_KEYS = {
     "private_chat_safety_notice", "chat_safety_full", "replying_to", "voice_message",
     "what_they_are_looking_for", "trust_and_verification", "compatibility",
     "profile_details", "marital_status", "education", "profession", "mother_tongue",
+    "new_interest_title", "new_interest_body", "new_mutual_match_title",
+    "new_mutual_match_body", "new_message_title", "new_message_body",
 }
 
 def load(code: str) -> dict[str, str]:
