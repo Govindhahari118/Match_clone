@@ -165,5 +165,8 @@
   "occupation": "వృత్తి",
   "smoking": "ధూమపానం",
   "drinking": "మద్యపానం",
-  "relocation": "స్థల మార్పు"
+  "relocation": "స్థల మార్పు",
+  "interest_accepted_matched": "ఆసక్తిని అంగీకరించారు. ఇప్పుడు మీరు ఇద్దరూ మ్యాచ్ అయ్యారు.",
+  "request_declined": "ఆసక్తి అభ్యర్థనను తిరస్కరించారు.",
+  "interest_withdrawn": "ఆసక్తిని వెనక్కి తీసుకున్నారు."
 }
