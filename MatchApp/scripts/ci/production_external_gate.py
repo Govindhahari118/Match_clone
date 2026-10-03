@@ -57,6 +57,9 @@ PRELAUNCH_GATES = (
     "playPreLaunchReportPassed",
     "closedTestingPassed",
     "rollbackDrillPassed",
+    "secureCallProviderIntegrated",
+    "secureCallWebhookSecurityPassed",
+    "secureCallPhysicalMatrixPassed",
     "disabledProviderSurfacesVerified",
 )
 
