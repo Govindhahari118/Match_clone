@@ -168,5 +168,16 @@
   "relocation": "स्थानांतरण",
   "interest_accepted_matched": "रुचि स्वीकार की गई। अब आप दोनों मैच हैं।",
   "request_declined": "रुचि अनुरोध अस्वीकार किया गया।",
-  "interest_withdrawn": "रुचि वापस ले ली गई।"
+  "interest_withdrawn": "रुचि वापस ले ली गई।",
+  "chat_unlocks_after_mutual": "पारस्परिक रुचि के बाद चैट खुलेगी",
+  "chat_blocked_status": "बातचीत ब्लॉक की गई है",
+  "online_now": "अभी ऑनलाइन",
+  "last_active": "अंतिम सक्रियता: {time}",
+  "just_now": "अभी",
+  "minutes_ago": "{count} मिनट पहले",
+  "hours_ago": "{count} घंटे पहले",
+  "days_ago": "{count} दिन पहले",
+  "private_match_conversation": "निजी मैच बातचीत",
+  "report_submitted": "रिपोर्ट मॉडरेशन के लिए जमा की गई।",
+  "report_failed": "रिपोर्ट जमा नहीं हो सकी। कनेक्शन जाँचकर फिर कोशिश करें।"
 }
