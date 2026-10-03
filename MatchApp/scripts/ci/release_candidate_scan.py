@@ -556,11 +556,15 @@ def main() -> int:
     calls_backend = ROOT / "functions/src/calls.ts"
     if calls_backend.exists():
         calls = text(calls_backend)
-        require("const COMMUNICATION_PROVIDER_IMPLEMENTED = false;" in calls,
-                "secure calls must remain fail-closed until the audited provider adapter replaces the placeholder contract",
+        provider_contract = (ROOT / "functions/src/communicationProvider.ts").read_text(encoding="utf-8")
+        require("class DisabledCommunicationProvider" in provider_contract and
+                "new DisabledCommunicationProvider()" in provider_contract and
+                "readonly ready = false" in provider_contract,
+                "secure calls must remain fail-closed until an audited provider adapter replaces the disabled default",
                 failures)
-        require("productionFeatureEnabled(functions.config().features?.secure_calls)" in calls,
-                "secure calls must require an independent backend rollout flag even after a provider adapter exists",
+        require("productionFeatureEnabled(functions.config().features?.secure_calls)" in calls and
+                "communicationProvider.ready" in calls,
+                "secure calls must require both provider readiness and an independent backend rollout flag",
                 failures)
 
     family_screen = APP / "src/main/java/com/match/app/ui/family/FamilyScreen.kt"
