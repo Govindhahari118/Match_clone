@@ -28,9 +28,11 @@ I18N_LEGACY_RULES = [
     ("corrupted UTF-8/mojibake", re.compile(r"â‚¹|â€”|â†[‘’“”]|Â©|Ã°|Å¸|Â")),
 ]
 
-# These surfaces are explicitly HIDDEN/UNAVAILABLE in the production route inventory. Their source
-# files may remain for future audited promotion, but the production shell/deep-link resolver must not
-# expose them accidentally.
+# These surfaces are explicitly HIDDEN in the production route inventory. Their source files may
+# remain for future audited promotion, but the production shell/deep-link resolver must not expose
+# them accidentally. Secure Call is intentionally not listed here: its reachable screen is a
+# server-backed capability/readiness surface only; release_candidate_scan.py separately enforces
+# that live provider calling remains fail-closed.
 PRODUCTION_ROUTE_SURFACES = {
     ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app" / "ui" / "main" / "MainShell.kt",
     ROOT / "app" / "src" / "main" / "java" / "com" / "match" / "app" / "navigation" / "DeepLinkRouteResolver.kt",
@@ -39,7 +41,7 @@ HIDDEN_ROUTE_IDENTIFIERS = [
     "BackgroundCheck", "BioGenerator", "BoostScreen", "Circles", "CommunityBrowse",
     "Counselling", "SwipeDiscovery", "EventsScreen", "FamilyPortal", "GuidesScreen",
     "AdvancedHoroscope", "LikesScreen", "VirtualMeet", "Muhurat", "PhotoEditor",
-    "Referral", "Regions", "DailyRewards", "SecondMarriage", "SecureCall",
+    "Referral", "Regions", "DailyRewards", "SecondMarriage",
     "SuccessStories", "Testimonials", "RelationshipTimeline", "WeddingPlanner",
 ]
 
@@ -64,6 +66,7 @@ _REACHABLE_UI_RELATIVE = [
     "ui/matches/MatchesScreen.kt", "ui/nearby/NearbyMatchesScreen.kt",
     "ui/interests/InterestsScreen.kt", "ui/shortlist/ShortlistScreen.kt",
     "ui/chat/ChatListScreen.kt", "ui/chat/ChatScreen.kt",
+    "ui/securecall/SecureCallScreen.kt",
     "ui/questionnaire/QuestionnaireScreen.kt",
     "ui/profile/ProfileScreen.kt", "ui/profile/ReligionExperienceCard.kt",
     "ui/detail/MatchDetailScreen.kt", "ui/settings/SettingsScreen.kt",
