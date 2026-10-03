@@ -317,6 +317,21 @@ service cloud.firestore {
             ));
         allow delete: if false;
       }
+      match /typing/{uid} {
+        allow read: if isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
+          get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids.size() == 2 &&
+          activePair(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          ) &&
+          !blockedEitherWay(
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+            get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+          );
+        // Typing state is trusted-server authority through setChatTyping.
+        allow create, update, delete: if false;
+      }
     }
 
     match /events/{eventId} { allow read: if isSignedIn(); allow write: if false; }
