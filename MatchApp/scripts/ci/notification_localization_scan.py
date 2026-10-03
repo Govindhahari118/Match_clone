@@ -18,11 +18,14 @@ def main() -> int:
     registry = text(ANDROID / "data/remote/FcmDeviceRegistry.kt")
     language = text(ANDROID / "ui/language/LanguageSelectionScreen.kt")
     cards = text(ANDROID / "ui/notifications/NotificationsScreen.kt")
+    fcm_service = text(ANDROID / "service/MatchFcmService.kt")
     notifications = text(FUNCTIONS / "notifications.ts")
     shared = text(FUNCTIONS / "shared.ts")
 
     if '"locale" to normalizedLocale' not in registry:
         failures.append("FCM registration must send the normalized device UI locale")
+    if 'CHANNEL_NAME = "Matree"' not in fcm_service or "MatrimonyConnect" in fcm_service:
+        failures.append("Android notification surfaces must use Matree branding")
     if "fcmDeviceRegistry.register(token, code)" not in language:
         failures.append("changing app language must refresh the registered notification locale")
     if "locale: SupportedNotificationLocale" not in shared or "groups.set(record.locale" not in shared:
