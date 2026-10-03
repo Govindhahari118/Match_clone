@@ -38,7 +38,7 @@ def main() -> int:
         "new_mutual_match_title", "new_mutual_match_body",
         "new_message_title", "new_message_body",
     ):
-        if f't("{key}"' not in cards:
+        if f'"{key}"' not in cards:
             failures.append(f"Notifications screen must localize durable card copy: {key}")
 
     catalogs = {}
