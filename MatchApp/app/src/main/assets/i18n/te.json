@@ -395,5 +395,8 @@
   "enable_sensitive_before_saving": "సేవ్ చేసే ముందు సున్నితమైన ప్రాధాన్యతల ప్రాసెసింగ్‌ను సమీక్షించి ఆన్ చేయండి.",
   "could_not_update_sensitive_consent": "సున్నితమైన ప్రాధాన్యత అనుమతిని అప్‌డేట్ చేయలేకపోయాం.",
   "could_not_save_preferences": "భాగస్వామి ప్రాధాన్యతలను సేవ్ చేయలేకపోయాం.",
-  "religion_example": "హిందూ, ముస్లిం, క్రైస్తవ…"
+  "religion_example": "హిందూ, ముస్లిం, క్రైస్తవ…",
+  "unread_count": "{count} చదవనివి",
+  "review_interest": "ఆసక్తిని పరిశీలించండి",
+  "open_chat": "చాట్ తెరవండి"
 }
