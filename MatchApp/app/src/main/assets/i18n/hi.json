@@ -143,5 +143,8 @@
   "conversation_started": "बातचीत शुरू हुई",
   "unread_count": "{count} अपठित",
   "microphone_permission_required": "वॉइस संदेशों के लिए माइक्रोफ़ोन अनुमति आवश्यक है।",
-  "voice_recording_failed": "वॉइस रिकॉर्डिंग शुरू नहीं हो सकी।"
+  "voice_recording_failed": "वॉइस रिकॉर्डिंग शुरू नहीं हो सकी।",
+  "interest_accepted_matched": "रुचि स्वीकार हुई। अब आप दोनों मैच हैं।",
+  "request_declined": "अनुरोध अस्वीकार किया गया।",
+  "interest_withdrawn": "रुचि वापस ली गई।"
 }
