@@ -31,14 +31,15 @@ class FcmDeviceRegistry @Inject constructor(
             return generated
         }
 
-    suspend fun register(token: String) {
+    suspend fun register(token: String, locale: String = "en") {
         require(token.isNotBlank())
         functions.getHttpsCallable("registerFcmDevice")
             .call(
                 mapOf(
                     "deviceId" to deviceId,
                     "token" to token,
-                    "appVersion" to BuildConfig.VERSION_NAME
+                    "appVersion" to BuildConfig.VERSION_NAME,
+                    "locale" to locale.lowercase().takeIf { it in setOf("en", "te", "hi") }.orEmpty().ifBlank { "en" }
                 )
             )
             .await()
