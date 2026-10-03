@@ -140,7 +140,7 @@ fun ChatListScreen(
                 leadingIcon = { Icon(Icons.Filled.Search, null, Modifier.size(20.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Filled.Close, "Clear", Modifier.size(18.dp))
+                        Icon(Icons.Filled.Close, t("clear", "Clear"), Modifier.size(18.dp))
                     }
                 },
                 singleLine = true,
@@ -157,11 +157,11 @@ fun ChatListScreen(
                 ) {
                     MatreeStatePanel(
                         title = t("no_conversations_yet", "No conversations yet"),
-                        message = "Messaging opens after a mutual interest. Start from the Mutual tab in Interests.",
+                        message = t("no_conversations_hint", "Messaging opens after a mutual interest. Start from the Mutual tab in Interests."),
                         icon = Icons.Filled.Forum
                     )
                     MatreeInlineNotice(
-                        message = "Chat safely: never share passwords, OTPs or financial credentials; verify the person and meet first in a public place.",
+                        message = t("chat_safety_hint", "Chat safely: never share passwords, OTPs or financial credentials; verify the person and meet first in a public place."),
                         icon = Icons.Filled.Security,
                         tone = MatreeStatusTone.WARNING
                     )
@@ -172,8 +172,8 @@ fun ChatListScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     MatreeStatePanel(
-                        title = "No matching conversations",
-                        message = "No conversations match your current search.",
+                        title = t("no_matching_conversations", "No matching conversations"),
+                        message = t("no_matching_conversations_hint", "No conversations match your current search."),
                         icon = Icons.Filled.SearchOff
                     )
                 }
@@ -232,11 +232,11 @@ private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(conv.peerName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (conv.isVerified) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(15.dp), tint = MatreeDesign.colors.verified) }
+                    if (conv.isVerified) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.Verified, t("verified", "Verified"), Modifier.size(15.dp), tint = MatreeDesign.colors.verified) }
                     if (time.isNotBlank()) { Spacer(Modifier.width(8.dp)); Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 if (conv.username.isNotBlank()) Text("@${conv.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                Text(conv.lastMessage.ifBlank { "Conversation started" }, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(conv.lastMessage.ifBlank { t("conversation_started", "Conversation started") }, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (conv.showLastActive) {
                     Text(activity.label, style = MaterialTheme.typography.labelSmall, color = if (activity.isOnline) MatreeDesign.colors.online else MaterialTheme.colorScheme.outline)
                 }
