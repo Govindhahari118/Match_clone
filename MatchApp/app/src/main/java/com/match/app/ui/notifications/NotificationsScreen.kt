@@ -113,10 +113,11 @@ fun NotificationsScreen(
                     items(notifications, key = { it.id }) { n ->
                         NotificationCard(n, onClick = {
                             vm.markRead(n.id)
-                            when (n.type) {
-                                "LIKE", "INTEREST" -> onOpenInterests()
-                                "MATCH", "MESSAGE" -> n.fromUserId?.let(onOpenChat)
-                                "VIEW" -> n.fromUserId?.let(onOpenProfile)
+                            when (notificationCardDestination(n.type, n.fromUserId != null)) {
+                                NotificationCardDestination.INTERESTS -> onOpenInterests()
+                                NotificationCardDestination.CHAT -> n.fromUserId?.let(onOpenChat)
+                                NotificationCardDestination.PROFILE -> n.fromUserId?.let(onOpenProfile)
+                                NotificationCardDestination.NONE -> Unit
                             }
                         })
                     }
