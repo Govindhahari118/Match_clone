@@ -1,6 +1,10 @@
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import {
+  notificationActionFor,
+  notificationDeepLink,
+} from "./notificationLinkPolicy";
+import {
   db,
   persistAndSendNotification,
   requireAppCheck,
@@ -164,6 +168,7 @@ async function deliverPersistedNotification(
     entityType: payload.entityType,
     entityId: payload.entityId,
     deepLink: payload.deepLink,
+    action: notificationActionFor(payload.type),
     pushType,
     preferenceKey: preferenceFor(payload.type),
     priority: "high",
@@ -189,7 +194,7 @@ export const onInterestCreated = functions.firestore
         body: "Someone is interested in your profile. Open the app to view it.",
         entityType: "profile",
         entityId: fromUid,
-        deepLink: "matrimonyconnect://interests",
+        deepLink: notificationDeepLink("interests", functions.config().app_links?.host),
         fromFirebaseUid: fromUid,
       }
     );
@@ -214,7 +219,7 @@ export const onMatchCreated = functions.firestore
           body: "You have a new mutual match. Open the app to view the profile.",
           entityType: "profile",
           entityId: uid2,
-          deepLink: "matrimonyconnect://matches",
+          deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid2,
         }
       ),
@@ -227,7 +232,7 @@ export const onMatchCreated = functions.firestore
           body: "You have a new mutual match. Open the app to view the profile.",
           entityType: "profile",
           entityId: uid1,
-          deepLink: "matrimonyconnect://matches",
+          deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid1,
         }
       ),
@@ -256,7 +261,7 @@ export const onNewMessage = functions.firestore
         body: "Open the app to view your message.",
         entityType: "chat",
         entityId: context.params.threadId,
-        deepLink: "matrimonyconnect://notifications",
+        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
         fromFirebaseUid,
       }
     );
