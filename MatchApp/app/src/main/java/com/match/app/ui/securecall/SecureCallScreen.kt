@@ -143,13 +143,13 @@ private fun SecureCallCapabilityCard(
     capability: SecureCallCapability
 ) {
     val relationshipMessage = when (capability.reason) {
-        "eligible" -> "Your relationship is eligible for secure communication."
-        "not_mutual_match" -> "Secure calling unlocks only after both members express interest."
-        "blocked" -> "Secure calling is unavailable because this relationship is blocked."
-        "privacy_restricted" -> "Secure calling is unavailable because a member's privacy settings restrict contact."
-        "inactive_account" -> "Secure calling is unavailable while either account is inactive."
-        "invalid_pair" -> "Secure calling is unavailable for this member."
-        else -> "Secure-call eligibility could not be confirmed."
+        "eligible" -> t("secure_call_eligible", "Your relationship is eligible for secure communication.")
+        "not_mutual_match" -> t("secure_call_not_mutual", "Secure calling unlocks only after both members express interest.")
+        "blocked" -> t("secure_call_blocked", "Secure calling is unavailable because this relationship is blocked.")
+        "privacy_restricted" -> t("secure_call_privacy", "Secure calling is unavailable because a member's privacy settings restrict contact.")
+        "inactive_account" -> t("secure_call_inactive", "Secure calling is unavailable while either account is inactive.")
+        "invalid_pair" -> t("secure_call_invalid", "Secure calling is unavailable for this member.")
+        else -> t("secure_call_unconfirmed", "Secure-call eligibility could not be confirmed.")
     }
 
     ElevatedCard(
@@ -163,7 +163,7 @@ private fun SecureCallCapabilityCard(
         ) {
             Icon(Icons.Filled.Phone, null, tint = MaterialTheme.colorScheme.primary)
             Text(
-                if (memberName.isBlank()) "Secure Call" else "Secure Call with $memberName",
+                if (memberName.isBlank()) t("secure_call", "Secure Call") else t("secure_call_with", mapOf("name" to memberName), "Secure Call with {name}"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -176,7 +176,7 @@ private fun SecureCallCapabilityCard(
 
             if (capability.eligible && !capability.providerReady) {
                 MatreeInlineNotice(
-                    message = "Your match is eligible, but live calling is not enabled yet. Matree will not expose a fake dialer, relay number, call history or minutes until a real audited provider is connected.",
+                    message = t("secure_call_provider_pending", "Your match is eligible, but live calling is not enabled yet. Matree will not show a fake dialer, relay number, call history or minutes until a real audited provider is connected."),
                     icon = Icons.Filled.Security
                 )
             } else if (capability.providerReady) {
