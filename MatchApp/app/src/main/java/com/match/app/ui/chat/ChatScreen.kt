@@ -40,6 +40,9 @@ import com.match.app.core.analytics.AnalyticsManager
 import com.match.app.data.local.entity.MessageEntity
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ChatRepository
+import com.match.app.data.repo.MemberPresence
+import com.match.app.data.repo.PresenceRepository
+import com.match.app.data.repo.SupportRepository
 import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.UserProfile
@@ -47,6 +50,7 @@ import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -65,6 +69,9 @@ data class ChatUi(
     val isMutual: Boolean = false,
     val isBlocked: Boolean = false,
     val replyingTo: MessageEntity? = null,
+    val presence: MemberPresence = MemberPresence(),
+    val reportSubmitting: Boolean = false,
+    val reportMessage: String? = null,
     val loading: Boolean = true,
     val error: String? = null
 )
@@ -75,6 +82,8 @@ class ChatViewModel @Inject constructor(
     private val auth: AuthRepository,
     private val chat: ChatRepository,
     private val social: SocialRepository,
+    private val presenceRepository: PresenceRepository,
+    private val supportRepository: SupportRepository,
     private val analytics: AnalyticsManager
 ) : ViewModel() {
     private val peerIdFlow = MutableStateFlow<Long?>(null)
@@ -95,6 +104,22 @@ class ChatViewModel @Inject constructor(
             val blocked = social.isBlocked(me, peerId)
             _state.update { it.copy(peer = peer, meId = me, isMutual = mutual, isBlocked = blocked, loading = false) }
             if (mutual && !blocked) chat.markRead(me, peerId)
+        }
+
+        viewModelScope.launch {
+            while (peerIdFlow.value == peerId) {
+                val current = _state.value
+                val targetUid = current.peer?.firebaseUid.orEmpty()
+                if (current.isMutual && !current.isBlocked && targetUid.isNotBlank()) {
+                    presenceRepository.memberPresence(targetUid)
+                        .onSuccess { memberPresence ->
+                            _state.update { it.copy(presence = memberPresence) }
+                        }
+                } else {
+                    _state.update { it.copy(presence = MemberPresence()) }
+                }
+                delay(60_000)
+            }
         }
 
         viewModelScope.launch {
@@ -158,6 +183,25 @@ class ChatViewModel @Inject constructor(
 
     fun setReplyTo(message: MessageEntity?) = _state.update { it.copy(replyingTo = message) }
     fun clearError() = _state.update { it.copy(error = null) }
+    fun clearReportMessage() = _state.update { it.copy(reportMessage = null) }
+
+    fun reportMember(reason: String) = viewModelScope.launch {
+        val targetUid = _state.value.peer?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || reason.isBlank() || _state.value.reportSubmitting) return@launch
+        _state.update { it.copy(reportSubmitting = true, reportMessage = null) }
+        supportRepository.submitProfileReport(targetUid, reason, "Reported from private match conversation")
+            .onSuccess {
+                analytics.logProfileReported(reason)
+                _state.update {
+                    it.copy(reportSubmitting = false, reportMessage = "report_submitted")
+                }
+            }
+            .onFailure {
+                _state.update {
+                    it.copy(reportSubmitting = false, reportMessage = "report_failed")
+                }
+            }
+    }
 
     fun blockUser() = viewModelScope.launch {
         val peer = peerIdFlow.value ?: return@launch
@@ -190,6 +234,7 @@ fun ChatScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var showBlockDialog by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
 
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
@@ -268,6 +313,17 @@ fun ChatScreen(
             vm.clearError()
         }
     }
+    val reportFeedback = when (state.reportMessage) {
+        "report_submitted" -> t("report_submitted", "Report submitted for moderation.")
+        "report_failed" -> t("report_failed", "Report could not be submitted. Check your connection and try again.")
+        else -> null
+    }
+    LaunchedEffect(reportFeedback) {
+        reportFeedback?.let {
+            snackbar.showSnackbar(it)
+            vm.clearReportMessage()
+        }
+    }
     DisposableEffect(Unit) {
         onDispose {
             runCatching { recorder?.release() }
@@ -292,11 +348,26 @@ fun ChatScreen(
                         }
                         Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column {
-                            Text(state.peer?.displayName ?: "Chat", style = MaterialTheme.typography.titleMedium)
+                            Text(state.peer?.displayName ?: t("chat", "Chat"), style = MaterialTheme.typography.titleMedium)
+                            val subtitle = when {
+                                !state.isMutual -> t("chat_unlocks_after_mutual", "Chat unlocks after mutual interest")
+                                state.isBlocked -> t("chat_blocked_status", "Conversation blocked")
+                                state.presence.online -> t("online_now", "Online now")
+                                state.presence.lastActiveAt > 0L -> t(
+                                    "last_active",
+                                    mapOf("time" to localizedPresenceTime(state.presence.lastActiveAt)),
+                                    "Last active {time}"
+                                )
+                                else -> t("private_match_conversation", "Private match conversation")
+                            }
                             Text(
-                                if (state.isMutual) "Private match conversation" else "Chat unlocks after mutual interest",
+                                subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (state.presence.online && state.isMutual && !state.isBlocked) {
+                                    MatreeDesign.colors.online
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
@@ -307,11 +378,19 @@ fun ChatScreen(
                         IconButton(onClick = { showMenu = true }) { Icon(Icons.Filled.MoreVert, "More options") }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text(if (state.isBlocked) "Unblock member" else "Block member") },
+                                text = { Text(if (state.isBlocked) t("unblock_member", "Unblock member") else t("block_member", "Block member")) },
                                 leadingIcon = { Icon(if (state.isBlocked) Icons.Filled.LockOpen else Icons.Filled.Block, null) },
                                 onClick = {
                                     showMenu = false
                                     if (state.isBlocked) vm.unblockUser() else showBlockDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("report_profile", "Report profile")) },
+                                leadingIcon = { Icon(Icons.Filled.Flag, null) },
+                                onClick = {
+                                    showMenu = false
+                                    showReportDialog = true
                                 }
                             )
                         }
@@ -451,6 +530,43 @@ fun ChatScreen(
         }
     }
 
+    if (showReportDialog) {
+        val reasons = listOf(
+            t("fake_profile", "Fake profile"),
+            t("inappropriate_content", "Inappropriate content"),
+            t("harassment", "Harassment"),
+            t("spam_or_scam", "Spam or scam"),
+            t("under_age", "Under age"),
+            t("other", "Other")
+        )
+        AlertDialog(
+            onDismissRequest = { if (!state.reportSubmitting) showReportDialog = false },
+            title = { Text(t("report_profile", "Report profile")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    Text(t("report_choose_reason", "Choose the reason that best describes the issue."))
+                    reasons.forEach { reason ->
+                        TextButton(
+                            onClick = {
+                                showReportDialog = false
+                                vm.reportMember(reason)
+                            },
+                            enabled = !state.reportSubmitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(reason) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { showReportDialog = false },
+                    enabled = !state.reportSubmitting
+                ) { Text(t("cancel", "Cancel")) }
+            }
+        )
+    }
+
     if (showBlockDialog) {
         AlertDialog(
             onDismissRequest = { showBlockDialog = false },
@@ -464,6 +580,17 @@ fun ChatScreen(
             },
             dismissButton = { TextButton(onClick = { showBlockDialog = false }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun localizedPresenceTime(lastActiveAt: Long): String {
+    val deltaMinutes = ((System.currentTimeMillis() - lastActiveAt).coerceAtLeast(0L) / 60_000L).toInt()
+    return when {
+        deltaMinutes < 1 -> t("just_now", "just now")
+        deltaMinutes < 60 -> t("minutes_ago", mapOf("count" to deltaMinutes), "{count}m ago")
+        deltaMinutes < 24 * 60 -> t("hours_ago", mapOf("count" to (deltaMinutes / 60)), "{count}h ago")
+        else -> t("days_ago", mapOf("count" to (deltaMinutes / (24 * 60))), "{count}d ago")
     }
 }
 

@@ -168,5 +168,16 @@
   "relocation": "Relocation",
   "interest_accepted_matched": "Interest accepted. You are now matched.",
   "request_declined": "Request declined.",
-  "interest_withdrawn": "Interest withdrawn."
+  "interest_withdrawn": "Interest withdrawn.",
+  "chat_unlocks_after_mutual": "Chat unlocks after mutual interest",
+  "chat_blocked_status": "Conversation blocked",
+  "online_now": "Online now",
+  "last_active": "Last active {time}",
+  "just_now": "just now",
+  "minutes_ago": "{count}m ago",
+  "hours_ago": "{count}h ago",
+  "days_ago": "{count}d ago",
+  "private_match_conversation": "Private match conversation",
+  "report_submitted": "Report submitted for moderation.",
+  "report_failed": "Report could not be submitted. Check your connection and try again."
 }
