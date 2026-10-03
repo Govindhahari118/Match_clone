@@ -340,8 +340,8 @@
     {
       "path": "ui/securecall/SecureCallScreen.kt",
       "symbol": "SecureCallScreen",
-      "status": "UNSAFE",
-      "exposure": "hidden",
+      "status": "READY",
+      "exposure": "reachable",
       "requiredFlag": null
     },
     {
