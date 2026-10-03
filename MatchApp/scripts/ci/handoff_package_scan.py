@@ -156,6 +156,9 @@ def main() -> int:
         "costBudgetAlertsVerified",
         "incidentResponseOwnerVerified",
         "closedTestingPassed",
+        "secureCallProviderIntegrated",
+        "secureCallWebhookSecurityPassed",
+        "secureCallPhysicalMatrixPassed",
         "disabledProviderSurfacesVerified",
     ):
         if external_contract not in external_gate:
