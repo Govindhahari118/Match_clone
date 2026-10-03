@@ -143,5 +143,8 @@
   "conversation_started": "సంభాషణ ప్రారంభమైంది",
   "unread_count": "{count} చదవని నోటిఫికేషన్లు",
   "microphone_permission_required": "వాయిస్ సందేశాలకు మైక్రోఫోన్ అనుమతి అవసరం.",
-  "voice_recording_failed": "వాయిస్ రికార్డింగ్ ప్రారంభించలేకపోయాము."
+  "voice_recording_failed": "వాయిస్ రికార్డింగ్ ప్రారంభించలేకపోయాము.",
+  "interest_accepted_matched": "ఆసక్తిని అంగీకరించారు. ఇప్పుడు మీరు ఇద్దరూ మ్యాచ్ అయ్యారు.",
+  "request_declined": "అభ్యర్థనను తిరస్కరించారు.",
+  "interest_withdrawn": "ఆసక్తిని వెనక్కి తీసుకున్నారు."
 }
