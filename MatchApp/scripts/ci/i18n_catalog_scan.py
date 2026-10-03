@@ -13,7 +13,7 @@ CRITICAL_TELUGU_KEYS = {
     "start_chatting", "chat", "pending_interests", "personal_note", "decline",
     "withdraw_interest", "message", "message_after_match", "contact",
     "secure_call", "shortlist", "report_profile", "profile_unavailable",
-    "online_now", "last_active", "private_match_conversation",
+    "online_now", "last_active", "private_match_conversation", "typing",
     "what_they_are_looking_for", "trust_and_verification", "compatibility",
     "profile_details", "marital_status", "education", "profession", "mother_tongue",
 }
