@@ -70,6 +70,7 @@ data class ChatUi(
     val isBlocked: Boolean = false,
     val replyingTo: MessageEntity? = null,
     val presence: MemberPresence = MemberPresence(),
+    val isPeerTyping: Boolean = false,
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
     val loading: Boolean = true,
@@ -90,6 +91,7 @@ class ChatViewModel @Inject constructor(
     private val _state = MutableStateFlow(ChatUi())
     val state: StateFlow<ChatUi> = _state.asStateFlow()
     private var boundPeerId: Long? = null
+    private var typingPublished = false
 
     fun bind(peerId: Long) {
         if (boundPeerId == peerId) return
@@ -134,6 +136,24 @@ class ChatViewModel @Inject constructor(
             val mutual = social.isLiked(me, peerId) && social.isLiked(peerId, me)
             val blocked = social.isBlocked(me, peerId)
             if (mutual && !blocked) chat.startFirestoreSync(me, peerId)
+        }
+
+        viewModelScope.launch {
+            val myUid = session.firebaseUid.filterNotNull().first()
+            val peer = auth.currentProfile(peerId)
+            val peerUid = peer?.firebaseUid.orEmpty()
+            val mutual = social.isLiked(session.userId.filterNotNull().first(), peerId) &&
+                social.isLiked(peerId, session.userId.filterNotNull().first())
+            val blocked = social.isBlocked(session.userId.filterNotNull().first(), peerId)
+            if (mutual && !blocked && myUid.isNotBlank() && peerUid.isNotBlank()) {
+                chat.observePeerTyping(myUid, peerUid)
+                    .catch { emit(false) }
+                    .collect { typing ->
+                        _state.update { it.copy(isPeerTyping = typing) }
+                    }
+            } else {
+                _state.update { it.copy(isPeerTyping = false) }
+            }
         }
     }
 
@@ -183,6 +203,22 @@ class ChatViewModel @Inject constructor(
 
     fun setReplyTo(message: MessageEntity?) = _state.update { it.copy(replyingTo = message) }
     fun clearError() = _state.update { it.copy(error = null) }
+
+    fun setTyping(typing: Boolean) {
+        val current = _state.value
+        val peerUid = current.peer?.firebaseUid.orEmpty()
+        val allowed = current.isMutual && !current.isBlocked && peerUid.isNotBlank()
+        val desired = typing && allowed
+        if (typingPublished == desired) return
+        typingPublished = desired
+        viewModelScope.launch {
+            runCatching { chat.setTyping(peerUid, desired) }
+                .onFailure {
+                    if (desired) typingPublished = false
+                }
+        }
+    }
+
     fun clearReportMessage() = _state.update { it.copy(reportMessage = null) }
 
     fun reportMember(reason: String) = viewModelScope.launch {
@@ -307,6 +343,15 @@ fun ChatScreen(
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.lastIndex)
     }
+    LaunchedEffect(draft, state.isMutual, state.isBlocked) {
+        if (draft.isBlank() || !state.isMutual || state.isBlocked) {
+            vm.setTyping(false)
+        } else {
+            vm.setTyping(true)
+            delay(2_500)
+            vm.setTyping(false)
+        }
+    }
     LaunchedEffect(state.error) {
         state.error?.let {
             snackbar.showSnackbar(it)
@@ -324,8 +369,9 @@ fun ChatScreen(
             vm.clearReportMessage()
         }
     }
-    DisposableEffect(Unit) {
+    DisposableEffect(peerId) {
         onDispose {
+            vm.setTyping(false)
             runCatching { recorder?.release() }
             recorder = null
         }
@@ -352,6 +398,7 @@ fun ChatScreen(
                             val subtitle = when {
                                 !state.isMutual -> t("chat_unlocks_after_mutual", "Chat unlocks after mutual interest")
                                 state.isBlocked -> t("chat_blocked_status", "Conversation blocked")
+                                state.isPeerTyping -> t("typing", "Typing…")
                                 state.presence.online -> t("online_now", "Online now")
                                 state.presence.lastActiveAt > 0L -> t(
                                     "last_active",
