@@ -48,6 +48,7 @@ enum class InterestTab { RECEIVED, SENT, MUTUAL }
 data class InterestActionState(
     val busyId: Long? = null,
     val message: String? = null,
+    val messageKey: String? = null,
     val matchedId: Long? = null
 )
 
@@ -83,7 +84,7 @@ class InterestsViewModel @Inject constructor(
         val me = session.userId.first() ?: return@launch
         _actions.value = InterestActionState(busyId = targetId)
         runCatching { social.like(me, targetId) }
-            .onSuccess { _actions.value = InterestActionState(message = "Interest accepted. You are now matched.", matchedId = targetId) }
+            .onSuccess { _actions.value = InterestActionState(messageKey = "interest_accepted_matched", matchedId = targetId) }
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not accept this request.") }
     }
 
@@ -92,7 +93,7 @@ class InterestsViewModel @Inject constructor(
         val me = session.userId.first() ?: return@launch
         _actions.value = InterestActionState(busyId = targetId)
         runCatching { social.declineIncoming(me, targetId) }
-            .onSuccess { _actions.value = InterestActionState(message = "Request declined.") }
+            .onSuccess { _actions.value = InterestActionState(messageKey = "request_declined") }
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not decline this request.") }
     }
 
@@ -101,11 +102,11 @@ class InterestsViewModel @Inject constructor(
         val me = session.userId.first() ?: return@launch
         _actions.value = InterestActionState(busyId = targetId)
         runCatching { social.unlike(me, targetId) }
-            .onSuccess { _actions.value = InterestActionState(message = "Interest withdrawn.") }
+            .onSuccess { _actions.value = InterestActionState(messageKey = "interest_withdrawn") }
             .onFailure { _actions.value = InterestActionState(message = it.message ?: "Could not withdraw this interest.") }
     }
 
-    fun clearMessage() { _actions.update { it.copy(message = null, matchedId = null) } }
+    fun clearMessage() { _actions.update { it.copy(message = null, messageKey = null, matchedId = null) } }
 
     private fun com.match.app.data.local.entity.UserEntity.toProfile() = UserProfile(
         id = id, firebaseUid = firebaseUid, email = email, displayName = displayName, age = age,
@@ -138,8 +139,15 @@ fun InterestsScreen(
     val actions by vm.actions.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(actions.message, actions.matchedId) {
-        val message = actions.message ?: return@LaunchedEffect
+    val actionMessage = actions.message ?: when (actions.messageKey) {
+        "interest_accepted_matched" -> t("interest_accepted_matched", "Interest accepted. You are now matched.")
+        "request_declined" -> t("request_declined", "Request declined.")
+        "interest_withdrawn" -> t("interest_withdrawn", "Interest withdrawn.")
+        else -> null
+    }
+
+    LaunchedEffect(actionMessage, actions.matchedId) {
+        val message = actionMessage ?: return@LaunchedEffect
         val matchedId = actions.matchedId
         val result = snackbar.showSnackbar(
             message = message,
