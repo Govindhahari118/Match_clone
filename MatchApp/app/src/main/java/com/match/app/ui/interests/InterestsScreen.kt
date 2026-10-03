@@ -143,13 +143,14 @@ fun InterestsScreen(
     val localizedActionMessage = actions.messageKey?.let { key ->
         t(key, actions.messageFallback.orEmpty())
     } ?: actions.message
+    val localizedChatLabel = t("chat", "Chat")
 
     LaunchedEffect(localizedActionMessage, actions.matchedId) {
         val message = localizedActionMessage ?: return@LaunchedEffect
         val matchedId = actions.matchedId
         val result = snackbar.showSnackbar(
             message = message,
-            actionLabel = if (matchedId != null) t("chat", "Chat") else null,
+            actionLabel = if (matchedId != null) localizedChatLabel else null,
             withDismissAction = matchedId != null
         )
         vm.clearMessage()
