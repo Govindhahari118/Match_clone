@@ -165,5 +165,8 @@
   "occupation": "Occupation",
   "smoking": "Smoking",
   "drinking": "Drinking",
-  "relocation": "Relocation"
+  "relocation": "Relocation",
+  "interest_accepted_matched": "Interest accepted. You are now matched.",
+  "request_declined": "Request declined.",
+  "interest_withdrawn": "Interest withdrawn."
 }
