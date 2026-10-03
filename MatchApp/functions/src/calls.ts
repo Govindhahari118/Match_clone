@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import { evaluateCallEligibility } from "./callPolicy";
 
@@ -66,12 +67,16 @@ export const getSecureCallCapability = functions.https.onCall(async (data, conte
       targetPrivacy.data()?.contactHidden === true,
   });
 
+  const rolloutEnabled = productionFeatureEnabled(functions.config().features?.secure_calls);
+  const providerReady = COMMUNICATION_PROVIDER_IMPLEMENTED && rolloutEnabled;
+
   return {
     eligible: result.eligible,
     reason: result.reason,
-    providerReady: COMMUNICATION_PROVIDER_IMPLEMENTED,
-    voiceAvailable: result.eligible && COMMUNICATION_PROVIDER_IMPLEMENTED,
-    videoAvailable: result.eligible && COMMUNICATION_PROVIDER_IMPLEMENTED,
-    numberMaskingAvailable: result.eligible && COMMUNICATION_PROVIDER_IMPLEMENTED,
+    providerReady,
+    rolloutEnabled,
+    voiceAvailable: result.eligible && providerReady,
+    videoAvailable: result.eligible && providerReady,
+    numberMaskingAvailable: result.eligible && providerReady,
   };
 });
