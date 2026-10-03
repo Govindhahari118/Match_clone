@@ -43,6 +43,7 @@ import com.match.app.data.repo.ChatRepository
 import com.match.app.data.repo.SocialRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.domain.model.UserProfile
+import com.match.app.ui.i18n.t
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreeStatePanel
@@ -190,6 +191,8 @@ fun ChatScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var showBlockDialog by remember { mutableStateOf(false) }
+    val microphonePermissionRequired = t("microphone_permission_required", "Microphone permission is required for voice messages.")
+    val voiceRecordingFailed = t("voice_recording_failed", "Could not start voice recording.")
 
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
@@ -205,7 +208,7 @@ fun ChatScreen(
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasMicPermission = granted
-        if (!granted) scope.launch { snackbar.showSnackbar("Microphone permission is required for voice messages.") }
+        if (!granted) scope.launch { snackbar.showSnackbar(microphonePermissionRequired) }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { vm.sendImage(it.toString()) }
@@ -248,7 +251,7 @@ fun ChatScreen(
             recordStartedAt = System.currentTimeMillis()
             isRecording = true
         }.onFailure {
-            scope.launch { snackbar.showSnackbar("Could not start voice recording.") }
+            scope.launch { snackbar.showSnackbar(voiceRecordingFailed) }
         }
     }
 
@@ -292,9 +295,9 @@ fun ChatScreen(
                         }
                         Spacer(Modifier.width(MatreeDesign.spacing.sm))
                         Column {
-                            Text(state.peer?.displayName ?: "Chat", style = MaterialTheme.typography.titleMedium)
+                            Text(state.peer?.displayName ?: t("chat", "Chat"), style = MaterialTheme.typography.titleMedium)
                             Text(
-                                if (state.isMutual) "Private match conversation" else "Chat unlocks after mutual interest",
+                                if (state.isMutual) t("private_match_conversation", "Private match conversation") else t("chat_after_mutual", "Chat unlocks after mutual interest"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -304,10 +307,10 @@ fun ChatScreen(
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Filled.MoreVert, "More options") }
+                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Filled.MoreVert, t("more_options", "More options")) }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text(if (state.isBlocked) "Unblock member" else "Block member") },
+                                text = { Text(if (state.isBlocked) t("unblock_member", "Unblock member") else t("block_member", "Block member")) },
                                 leadingIcon = { Icon(if (state.isBlocked) Icons.Filled.LockOpen else Icons.Filled.Block, null) },
                                 onClick = {
                                     showMenu = false
@@ -323,19 +326,19 @@ fun ChatScreen(
             when {
                 state.loading -> Unit
                 state.isBlocked -> StatusBar(
-                    "You blocked this member. Unblock them to continue the conversation.",
+                    t("blocked_chat_notice", "You blocked this member. Unblock them to continue the conversation."),
                     MatreeStatusTone.ERROR
                 )
                 !state.isMutual -> StatusBar(
-                    "Messaging is available only after both members accept each other's interest.",
+                    t("mutual_chat_required", "Messaging is available only after both members accept each other's interest."),
                     MatreeStatusTone.WARNING
                 )
                 isRecording -> {
                     Surface(tonalElevation = 2.dp) {
                         Row(Modifier.fillMaxWidth().padding(MatreeDesign.spacing.sm), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { stopRecorder(delete = true, send = false) }) { Icon(Icons.Filled.Delete, "Cancel recording", tint = MaterialTheme.colorScheme.error) }
-                            Text("Recording  %02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                            FilledIconButton(onClick = { stopRecorder(delete = false, send = true) }) { Icon(Icons.Filled.Send, "Send voice") }
+                            IconButton(onClick = { stopRecorder(delete = true, send = false) }) { Icon(Icons.Filled.Delete, t("cancel_recording", "Cancel recording"), tint = MaterialTheme.colorScheme.error) }
+                            Text(t("recording", mapOf("time" to "%02d:%02d".format(recordingSeconds / 60, recordingSeconds % 60)), "Recording {time}"), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            FilledIconButton(onClick = { stopRecorder(delete = false, send = true) }) { Icon(Icons.Filled.Send, t("send_voice", "Send voice")) }
                         }
                     }
                 }
@@ -352,10 +355,10 @@ fun ChatScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(Modifier.weight(1f)) {
-                                            Text("Replying to ${if (reply.fromUserId == state.meId) "your message" else state.peer?.displayName.orEmpty()}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            Text(t("replying_to", mapOf("name" to if (reply.fromUserId == state.meId) t("your_message", "your message") else state.peer?.displayName.orEmpty()), "Replying to {name}"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                             Text(reply.body.take(80), style = MaterialTheme.typography.bodySmall, maxLines = 1)
                                         }
-                                        IconButton(onClick = { vm.setReplyTo(null) }) { Icon(Icons.Filled.Close, "Cancel reply") }
+                                        IconButton(onClick = { vm.setReplyTo(null) }) { Icon(Icons.Filled.Close, t("cancel_reply", "Cancel reply")) }
                                     }
                                 }
                             }
@@ -363,23 +366,23 @@ fun ChatScreen(
                                 Modifier.fillMaxWidth().padding(MatreeDesign.spacing.xs),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = { imagePicker.launch("image/*") }) { Icon(Icons.Filled.AddPhotoAlternate, "Send image") }
+                                IconButton(onClick = { imagePicker.launch("image/*") }) { Icon(Icons.Filled.AddPhotoAlternate, t("send_image", "Send image")) }
                                 OutlinedTextField(
                                     value = draft,
                                     onValueChange = { draft = it.take(3000) },
-                                    placeholder = { Text("Message") },
+                                    placeholder = { Text(t("message", "Message")) },
                                     modifier = Modifier.weight(1f).testTag("chat_input"),
                                     maxLines = 4
                                 )
                                 Spacer(Modifier.width(MatreeDesign.spacing.xs))
                                 if (draft.isBlank()) {
-                                    FilledIconButton(onClick = ::startRecording) { Icon(Icons.Filled.Mic, "Record voice") }
+                                    FilledIconButton(onClick = ::startRecording) { Icon(Icons.Filled.Mic, t("record_voice", "Record voice")) }
                                 } else {
                                     FilledIconButton(onClick = {
                                         val text = draft
                                         draft = ""
                                         vm.send(text)
-                                    }) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+                                    }) { Icon(Icons.AutoMirrored.Filled.Send, t("send", "Send")) }
                                 }
                             }
                         }
@@ -393,15 +396,15 @@ fun ChatScreen(
                 Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
                 contentAlignment = Alignment.Center
             ) {
-                MatreeLoadingState(message = "Loading conversation…", rows = 2)
+                MatreeLoadingState(message = t("loading_conversation", "Loading conversation…"), rows = 2)
             }
             state.peer == null -> Box(
                 Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
                 contentAlignment = Alignment.Center
             ) {
                 MatreeStatePanel(
-                    title = "Conversation unavailable",
-                    message = "This conversation can no longer be opened with your current account or relationship state.",
+                    title = t("conversation_unavailable", "Conversation unavailable"),
+                    message = t("conversation_unavailable_body", "This conversation can no longer be opened with your current account or relationship state."),
                     icon = Icons.Filled.Forum,
                     tone = MatreeStatusTone.WARNING
                 )
@@ -412,11 +415,11 @@ fun ChatScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     MatreeStatePanel(
-                        title = if (state.isMutual) "Start your conversation" else "Mutual interest required",
+                        title = if (state.isMutual) t("start_conversation", "Start your conversation") else t("mutual_interest_required", "Mutual interest required"),
                         message = if (state.isMutual) {
-                            "Be respectful and avoid sharing sensitive information too early."
+                            t("chat_respect_hint", "Be respectful and avoid sharing sensitive information too early.")
                         } else {
-                            "Both members must accept each other's interest before messages can be sent."
+                            t("chat_mutual_hint", "Both members must accept each other's interest before messages can be sent.")
                         },
                         icon = Icons.Filled.Forum,
                         tone = if (state.isMutual) MatreeStatusTone.NEUTRAL else MatreeStatusTone.WARNING
@@ -432,7 +435,7 @@ fun ChatScreen(
                 ) {
                     item("privacy_notice") {
                         MatreeInlineNotice(
-                            message = "Private match conversation. Local message copies are protected on this device; report or block any misuse.",
+                            message = t("private_chat_notice", "Private match conversation. Local message copies are protected on this device; report or block any misuse."),
                             icon = Icons.Filled.Security,
                             modifier = Modifier.padding(bottom = MatreeDesign.spacing.xs)
                         )
@@ -454,15 +457,15 @@ fun ChatScreen(
     if (showBlockDialog) {
         AlertDialog(
             onDismissRequest = { showBlockDialog = false },
-            title = { Text("Block ${state.peer?.displayName ?: "this member"}?") },
-            text = { Text("Blocking stops new interactions between you and this member. You can unblock them later.") },
+            title = { Text(t("block_member_title", mapOf("name" to (state.peer?.displayName ?: t("this_member", "this member"))), "Block {name}?")) },
+            text = { Text(t("block_member_body", "Blocking stops new interactions between you and this member. You can unblock them later.")) },
             confirmButton = {
                 Button(
                     onClick = { showBlockDialog = false; vm.blockUser() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Block") }
             },
-            dismissButton = { TextButton(onClick = { showBlockDialog = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showBlockDialog = false }) { Text(t("cancel", "Cancel")) } }
         )
     }
 }
@@ -538,7 +541,7 @@ private fun MessageBubble(
                     if (message.status.equals("failed", true)) {
                         Spacer(Modifier.width(MatreeDesign.spacing.xxs))
                         Text(
-                            "Tap to retry",
+                            t("tap_to_retry", "Tap to retry"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -581,6 +584,6 @@ private fun VoiceMessage(message: MessageEntity, foreground: Color) {
                 }.onFailure { playing = false }
             }
         }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", tint = foreground) }
-        Text(if (seconds > 0) "%02d:%02d".format(seconds / 60, seconds % 60) else "Voice message", color = foreground)
+        Text(if (seconds > 0) "%02d:%02d".format(seconds / 60, seconds % 60) else t("voice_message", "Voice message"), color = foreground)
     }
 }
