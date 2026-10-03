@@ -103,7 +103,7 @@ Operator-controlled values:
 - Terms URL: `<external>`
 - Support URL/contact: `<external>`
 - Account deletion information URL: `<external>`
-- verified App Links host: set `MATREE_APP_LINK_HOST=<production hostname>`; the release scripts reject the non-production `invalid.matree.local` placeholder.
+- verified App Links host: set `MATREE_APP_LINK_HOST=<production hostname>`; the release scripts reject the non-production `invalid.matree.local` placeholder. Configure the same host for Functions as `app_links.host` so persisted/push notification metadata uses the identical verified HTTPS App Link domain.
 - Digital Asset Links: generate deterministically with `python3 scripts/release/generate_assetlinks.py --package "$MATREE_APPLICATION_ID" --sha256 "<PLAY_SIGNING_SHA256>" --output assetlinks.json`, publish it at `https://<MATREE_APP_LINK_HOST>/.well-known/assetlinks.json`, then verify Android domain association before promotion.
 
 ## Promotion rule
