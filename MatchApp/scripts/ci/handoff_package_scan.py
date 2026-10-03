@@ -40,6 +40,7 @@ REQUIRED = (
     "scripts/ci/room_schema_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/screen_classification_scan.py",
+    "scripts/ci/i18n_catalog_scan.py",
     "scripts/deploy/build-release.sh",
     "scripts/deploy/build-release.bat",
     "scripts/deploy/firebase-full.sh",
