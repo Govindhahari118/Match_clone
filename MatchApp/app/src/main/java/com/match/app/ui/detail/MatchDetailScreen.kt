@@ -465,7 +465,7 @@ fun MatchDetailScreen(
                 TextButton(
                     onClick = vm::dismissInterestDialog,
                     enabled = !ui.interestSending
-                ) { Text("Cancel") }
+                ) { Text(t("cancel", "Cancel")) }
             }
         )
     }
@@ -484,7 +484,7 @@ fun MatchDetailScreen(
                 )
             },
             confirmButton = { TextButton(onClick = { vm.saveNote(noteText); showNote = false }) { Text(t("save", "Save")) } },
-            dismissButton = { TextButton(onClick = { showNote = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showNote = false }) { Text(t("cancel", "Cancel")) } }
         )
     }
 
@@ -521,7 +521,7 @@ fun MatchDetailScreen(
                     Text(if (ui.reportSubmitting) t("submitting", "Submitting…") else t("submit_report", "Submit report"))
                 }
             },
-            dismissButton = { TextButton(onClick = vm::dismissReportDialog, enabled = !ui.reportSubmitting) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = vm::dismissReportDialog, enabled = !ui.reportSubmitting) { Text(t("cancel", "Cancel")) } }
         )
     }
 
