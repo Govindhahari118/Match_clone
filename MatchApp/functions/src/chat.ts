@@ -352,3 +352,106 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
     return { success: true, alreadySent: false, sentAt };
   });
 });
+
+/**
+ * Writes short-lived server-owned typing state for an existing private match conversation.
+ *
+ * The client never writes Firestore typing documents directly. Every update re-checks current
+ * account, mutual-match, block and profile-privacy state. typing=true expires automatically from
+ * the product's point of view after a few seconds even if a disconnect prevents an explicit clear.
+ */
+export const setChatTyping = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const senderUid = context.auth?.uid;
+  if (!senderUid) {
+    throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  }
+
+  const recipientUid = cleanUid(data?.recipientUid);
+  if (recipientUid === senderUid) {
+    throw new functions.https.HttpsError("invalid-argument", "Cannot type to yourself");
+  }
+  const typing = data?.typing === true;
+  const threadId = canonicalThreadId(senderUid, recipientUid);
+  const pair = [senderUid, recipientUid].sort();
+
+  const senderRef = db.collection("users").doc(senderUid);
+  const recipientRef = db.collection("users").doc(recipientUid);
+  const matchRef = db.collection("matches").doc(pair.join("_"));
+  const senderBlockRef = db.collection("blocks").doc(senderUid).collection("blocked").doc(recipientUid);
+  const recipientBlockRef = db.collection("blocks").doc(recipientUid).collection("blocked").doc(senderUid);
+  const senderPrivacyRef = db.collection("privacyRelations").doc(senderUid).collection("members").doc(recipientUid);
+  const recipientPrivacyRef = db.collection("privacyRelations").doc(recipientUid).collection("members").doc(senderUid);
+  const threadRef = db.collection("chats").doc(threadId);
+  const typingRef = threadRef.collection("typing").doc(senderUid);
+
+  return db.runTransaction(async (tx) => {
+    const [
+      sender,
+      recipient,
+      match,
+      senderBlock,
+      recipientBlock,
+      senderPrivacy,
+      recipientPrivacy,
+      thread,
+    ] = await Promise.all([
+      tx.get(senderRef),
+      tx.get(recipientRef),
+      tx.get(matchRef),
+      tx.get(senderBlockRef),
+      tx.get(recipientBlockRef),
+      tx.get(senderPrivacyRef),
+      tx.get(recipientPrivacyRef),
+      tx.get(threadRef),
+    ]);
+
+    if (!sender.exists || !recipient.exists ||
+        !accountIsActive(sender.data()?.accountStatus) ||
+        !accountIsActive(recipient.data()?.accountStatus)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Typing state is unavailable while an account is inactive"
+      );
+    }
+
+    const matchUsers = Array.isArray(match.data()?.users) ? match.data()?.users : [];
+    if (!match.exists || !matchUsers.includes(senderUid) || !matchUsers.includes(recipientUid)) {
+      throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    }
+    if (senderBlock.exists || recipientBlock.exists) {
+      throw new functions.https.HttpsError("permission-denied", "Typing state is unavailable after a block");
+    }
+    if (senderPrivacy.data()?.profileHidden === true ||
+        recipientPrivacy.data()?.profileHidden === true) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Typing state is unavailable for this privacy relationship"
+      );
+    }
+
+    const participants = Array.isArray(thread.data()?.participantUids) ?
+      thread.data()?.participantUids : [];
+    if (!thread.exists || participants.length !== 2 ||
+        !participants.includes(senderUid) || !participants.includes(recipientUid)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Private conversation is not available"
+      );
+    }
+
+    if (!typing) {
+      tx.delete(typingRef);
+      return { success: true, typing: false, expiresAtMillis: 0 };
+    }
+
+    const expiresAtMillis = Date.now() + 7_000;
+    tx.set(typingRef, {
+      uid: senderUid,
+      typing: true,
+      expiresAtMillis,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: false });
+    return { success: true, typing: true, expiresAtMillis };
+  });
+});

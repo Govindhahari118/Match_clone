@@ -4,9 +4,12 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 import javax.inject.Inject
@@ -26,6 +29,44 @@ class FirestoreChatService @Inject constructor() {
                 .digest(canonical.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
         }
+    }
+
+    fun observePeerTyping(myUid: String, peerUid: String): Flow<Boolean> = callbackFlow {
+        val tid = threadId(myUid, peerUid)
+        var expiryJob: Job? = null
+        val registration = db.collection("chats").document(tid)
+            .collection("typing").document(peerUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                expiryJob?.cancel()
+                val expiresAt = snapshot?.getLong("expiresAtMillis") ?: 0L
+                val active = snapshot?.getBoolean("typing") == true &&
+                    expiresAt > System.currentTimeMillis()
+                trySend(active)
+                if (active) {
+                    expiryJob = launch {
+                        delay((expiresAt - System.currentTimeMillis()).coerceAtLeast(1L))
+                        trySend(false)
+                    }
+                }
+            }
+        awaitClose {
+            expiryJob?.cancel()
+            registration.remove()
+        }
+    }
+
+    suspend fun setTyping(recipientUid: String, typing: Boolean) {
+        require(recipientUid.isNotBlank())
+        val result = functions.getHttpsCallable("setChatTyping")
+            .call(mapOf("recipientUid" to recipientUid, "typing" to typing))
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: error("Invalid typing response")
+        check(payload["success"] == true) { "Typing state was not accepted by the server" }
     }
 
     fun observeThreads(myUid: String): Flow<List<FirestoreChatThread>> = callbackFlow {

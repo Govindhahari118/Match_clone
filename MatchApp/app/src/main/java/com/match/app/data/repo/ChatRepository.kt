@@ -42,6 +42,12 @@ class ChatRepository @Inject constructor(
     }
     fun unread(me: Long): Flow<Int> = dao.observeUnread(me)
 
+    fun observePeerTyping(myUid: String, peerUid: String): Flow<Boolean> =
+        firestoreChat.observePeerTyping(myUid, peerUid)
+
+    suspend fun setTyping(peerUid: String, typing: Boolean) =
+        firestoreChat.setTyping(peerUid, typing)
+
     /** Kept for older UI callers. Messaging is not monetized client-side. */
     suspend fun isFreeLimitReached(me: Long, peer: Long): Boolean = false
 

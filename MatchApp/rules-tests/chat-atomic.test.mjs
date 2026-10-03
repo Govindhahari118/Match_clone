@@ -185,3 +185,54 @@ test('inactive account immediately loses chat read and receipt access', async ()
     { deliveredAt: serverTimestamp() },
   ));
 });
+
+
+test('typing state is server-owned and readable only by valid chat participants', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats/thread1/typing/alice'), {
+      uid: 'alice',
+      typing: true,
+      expiresAtMillis: Date.now() + 7000,
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const mallory = env.authenticatedContext('mallory').firestore();
+
+  await assertSucceeds(getDoc(doc(bob, 'chats/thread1/typing/alice')));
+  await assertSucceeds(getDoc(doc(alice, 'chats/thread1/typing/alice')));
+  await assertFails(getDoc(doc(mallory, 'chats/thread1/typing/alice')));
+
+  await assertFails(setDoc(doc(alice, 'chats/thread1/typing/alice'), {
+    uid: 'alice',
+    typing: true,
+    expiresAtMillis: Date.now() + 7000,
+    updatedAt: serverTimestamp(),
+  }));
+});
+
+
+test('typing visibility closes immediately when either profile privacy relation hides the pair', async () => {
+  await seedUsersAndMatch();
+  await seedServerThreadAndMessage();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats/thread1/typing/alice'), {
+      uid: 'alice',
+      typing: true,
+      expiresAtMillis: Date.now() + 7000,
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(doc(db, 'privacyRelations/alice/members/bob'), {
+      profileHidden: true,
+    });
+  });
+
+  const bob = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(bob, 'chats/thread1/typing/alice')));
+});

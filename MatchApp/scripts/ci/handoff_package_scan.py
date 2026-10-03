@@ -182,6 +182,7 @@ def main() -> int:
         "discoverProfiles",
         "sendInterest",
         "sendChatMessage",
+        "setChatTyping",
         "verifyGooglePlayPurchase",
         "submitVerificationRequest",
         "getTrustSummary",
