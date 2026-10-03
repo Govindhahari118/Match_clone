@@ -377,6 +377,7 @@ fun MatchDetailScreen(
     userId: Long,
     onBack: () -> Unit,
     onChat: () -> Unit,
+    onSecureCall: () -> Unit = {},
     onPricing: () -> Unit = {},
     onKundli: () -> Unit = {},
     onCompatibilityBreakdown: () -> Unit = {},
@@ -619,6 +620,14 @@ fun MatchDetailScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                MatreeSecondaryButton(
+                    text = if (ui.isMutual) "Secure call" else "Secure call after match",
+                    icon = Icons.Filled.PhoneInTalk,
+                    onClick = onSecureCall,
+                    enabled = ui.isMutual && !ui.blocked,
+                    modifier = Modifier.fillMaxWidth().testTag("profile_secure_call")
+                )
 
                 if (!ui.isMutual && !ui.blocked) {
                     MatreeInlineNotice(
