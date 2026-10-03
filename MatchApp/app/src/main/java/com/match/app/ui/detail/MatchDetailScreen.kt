@@ -727,19 +727,19 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
     SectionCard(t("what_they_are_looking_for", "What they are looking for")) {
         summary.items.forEach { item ->
             val label = when (item.key) {
-                "age" -> "Age"
-                "height" -> "Height"
-                "state" -> "State"
-                "city" -> "City"
-                "country_of_residence" -> "Country"
-                "marital_status" -> "Marital status"
-                "education" -> "Education"
-                "occupation" -> "Occupation"
-                "diet" -> "Diet"
-                "smoking" -> "Smoking"
-                "drinking" -> "Drinking"
-                "family_values" -> "Family values"
-                "relocation" -> "Relocation"
+                "age" -> t("age", "Age")
+                "height" -> t("height", "Height")
+                "state" -> t("state", "State")
+                "city" -> t("city", "City")
+                "country_of_residence" -> t("country", "Country")
+                "marital_status" -> t("marital_status", "Marital status")
+                "education" -> t("education", "Education")
+                "occupation" -> t("occupation", "Occupation")
+                "diet" -> t("diet", "Diet")
+                "smoking" -> t("smoking", "Smoking")
+                "drinking" -> t("drinking", "Drinking")
+                "family_values" -> t("family_values", "Family values")
+                "relocation" -> t("relocation", "Relocation")
                 else -> item.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
             }
             val mode = if (item.mode == PartnerPreferenceMode.STRICT) t("must_match", "Must match") else t("preferred", "Preferred")
@@ -780,12 +780,12 @@ private fun PartnerExpectationCard(summary: PartnerPreferenceSummary?) {
 private fun TrustSummaryCard(trust: TrustSummary?) {
     if (trust == null) {
         MatreeInlineNotice(
-            message = "Trust Score is temporarily unavailable. Verification badges remain authoritative.",
+            message = t("trust_unavailable", "Trust Score is temporarily unavailable. Verification badges remain authoritative."),
             icon = Icons.Filled.VerifiedUser
         )
         return
     }
-    SectionCard("Trust & verification") {
+    SectionCard(t("trust_and_verification", "Trust & verification")) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${trust.score}/100",
@@ -797,7 +797,7 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
             Column {
                 Text(trust.tierLabel, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Server-authoritative Trust Score",
+                    t("server_authoritative_trust", "Server-authoritative Trust Score"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -820,7 +820,7 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
             }
         }
         Text(
-            "Paid membership does not increase Trust Score. Fraud-detection details stay private so they cannot be gamed.",
+            t("trust_paid_note", "Paid membership does not increase Trust Score. Fraud-detection details stay private so they cannot be gamed."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -830,13 +830,13 @@ private fun TrustSummaryCard(trust: TrustSummary?) {
 @Composable
 private fun ActualCompatibilityCard(ui: DetailUi) {
     if (ui.compatibilityFactors.isEmpty()) return
-    SectionCard("Compatibility") {
+    SectionCard(t("compatibility", "Compatibility")) {
         ui.compatibilityFactors.forEach { factor ->
             val label = when (factor.key) {
-                "questionnaire" -> "Questionnaire"
-                "astrology" -> "Astrology"
-                "demographics_lifestyle" -> "Profile fit"
-                "mutual_trust" -> "Mutual trust"
+                "questionnaire" -> t("questionnaire", "Questionnaire")
+                "astrology" -> t("astrology", "Astrology")
+                "demographics_lifestyle" -> t("profile_fit", "Profile fit")
+                "mutual_trust" -> t("mutual_trust", "Mutual trust")
                 else -> factor.key.replace('_', ' ').replaceFirstChar { it.uppercase() }
             }
             ScoreRow(label, factor.score)
@@ -848,9 +848,9 @@ private fun ActualCompatibilityCard(ui: DetailUi) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        ScoreRow("Overall", ui.combinedScore)
+        ScoreRow(t("overall", "Overall"), ui.combinedScore)
         Text(
-            "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship.",
+            t("compatibility_disclaimer", "Compatibility scores are decision-support signals from the information available in the app; they are not predictions or guarantees about a relationship."),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -870,19 +870,19 @@ private fun ScoreRow(label: String, score: Float) {
 
 @Composable
 private fun ProfileFacts(p: UserProfile) {
-    SectionCard("Profile details") {
-        Fact("Profile managed as", p.profileCreatedFor.displayLabel)
-        Fact("Marital status", p.maritalStatus)
-        Fact("Height", if (p.heightCm > 0) "${p.heightCm} cm" else "")
-        Fact("Education", p.education)
-        Fact("Profession", p.profession)
-        Fact("Religion", p.religion)
-        Fact("Community", p.caste)
-        Fact("Mother tongue", p.motherTongue)
-        Fact("Family type", p.familyType)
-        Fact("Family values", p.familyValues)
-        Fact("Diet", p.diet)
-        Fact("Country", p.countryOfResidence)
+    SectionCard(t("profile_details", "Profile details")) {
+        Fact(t("profile_managed_as", "Profile managed as"), p.profileCreatedFor.displayLabel)
+        Fact(t("marital_status", "Marital status"), p.maritalStatus)
+        Fact(t("height", "Height"), if (p.heightCm > 0) "${p.heightCm} cm" else "")
+        Fact(t("education", "Education"), p.education)
+        Fact(t("profession", "Profession"), p.profession)
+        Fact(t("religion", "Religion"), p.religion)
+        Fact(t("community", "Community"), p.caste)
+        Fact(t("mother_tongue", "Mother tongue"), p.motherTongue)
+        Fact(t("family_type", "Family type"), p.familyType)
+        Fact(t("family_values", "Family values"), p.familyValues)
+        Fact(t("diet", "Diet"), p.diet)
+        Fact(t("country", "Country"), p.countryOfResidence)
         if (p.showHoroscope && ReligionCategory.fromReligion(p.religion) == ReligionCategory.HINDU) {
             Fact("Rasi / Nakshatra", listOf(p.rasi, p.nakshatra).filter { it.isNotBlank() }.joinToString(" • "))
         }
