@@ -143,5 +143,8 @@
   "conversation_started": "Conversation started",
   "unread_count": "{count} unread",
   "microphone_permission_required": "Microphone permission is required for voice messages.",
-  "voice_recording_failed": "Could not start voice recording."
+  "voice_recording_failed": "Could not start voice recording.",
+  "interest_accepted_matched": "Interest accepted. You are now matched.",
+  "request_declined": "Request declined.",
+  "interest_withdrawn": "Interest withdrawn."
 }
