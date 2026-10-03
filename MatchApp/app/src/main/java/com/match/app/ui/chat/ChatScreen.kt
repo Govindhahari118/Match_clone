@@ -757,7 +757,11 @@ private fun VoiceMessage(message: MessageEntity, foreground: Color) {
                     playing = true
                 }.onFailure { playing = false }
             }
-        }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", tint = foreground) }
+        }) { Icon(
+            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            if (playing) t("pause", "Pause") else t("play", "Play"),
+            tint = foreground
+        ) }
         Text(if (seconds > 0) "%02d:%02d".format(seconds / 60, seconds % 60) else t("voice_message", "Voice message"), color = foreground)
     }
 }
