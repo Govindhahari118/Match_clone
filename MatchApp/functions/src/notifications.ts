@@ -10,6 +10,7 @@ import {
   requireAppCheck,
 } from "./shared";
 import { deviceAccountSwitchIsReviewSignal } from "./riskSignalPolicy";
+import { accountIsActive } from "./accountStatusPolicy";
 
 type NotificationPayload = {
   userId: string;
@@ -105,6 +106,10 @@ export const revokeFcmDevice = functions.https.onCall(async (data, context) => {
   return { revoked: true };
 });
 
+function relationshipMatchId(uidA: string, uidB: string): string {
+  return [uidA, uidB].sort().join("_");
+}
+
 function preferenceFor(type: string): "interests" | "matches" | "messages" | "system" {
   if (type === "INTEREST") return "interests";
   if (type === "MATCH") return "matches";
@@ -136,19 +141,45 @@ async function chatNotificationStillAllowed(
   fromUid: string,
   toUid: string
 ): Promise<boolean> {
-  const [thread, blockAB, blockBA] = await Promise.all([
+  const [
+    thread,
+    match,
+    sender,
+    recipient,
+    blockAB,
+    blockBA,
+    privacyAB,
+    privacyBA,
+  ] = await Promise.all([
     db.collection("chats").doc(threadId).get(),
+    db.collection("matches").doc(relationshipMatchId(fromUid, toUid)).get(),
+    db.collection("users").doc(fromUid).get(),
+    db.collection("users").doc(toUid).get(),
     db.collection("blocks").doc(fromUid).collection("blocked").doc(toUid).get(),
     db.collection("blocks").doc(toUid).collection("blocked").doc(fromUid).get(),
+    db.collection("privacyRelations").doc(fromUid).collection("members").doc(toUid).get(),
+    db.collection("privacyRelations").doc(toUid).collection("members").doc(fromUid).get(),
   ]);
   const participants = thread.data()?.participantUids;
+  const matchUsers = match.data()?.users;
   return thread.exists &&
+    match.exists &&
+    sender.exists &&
+    recipient.exists &&
+    accountIsActive(sender.data()?.accountStatus) &&
+    accountIsActive(recipient.data()?.accountStatus) &&
     Array.isArray(participants) &&
     participants.length === 2 &&
     participants.includes(fromUid) &&
     participants.includes(toUid) &&
+    Array.isArray(matchUsers) &&
+    matchUsers.length === 2 &&
+    matchUsers.includes(fromUid) &&
+    matchUsers.includes(toUid) &&
     !blockAB.exists &&
-    !blockBA.exists;
+    !blockBA.exists &&
+    privacyAB.data()?.profileHidden !== true &&
+    privacyBA.data()?.profileHidden !== true;
 }
 
 async function deliverPersistedNotification(
