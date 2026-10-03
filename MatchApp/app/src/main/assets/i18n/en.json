@@ -395,5 +395,8 @@
   "enable_sensitive_before_saving": "Review and enable sensitive-preference processing before saving.",
   "could_not_update_sensitive_consent": "Could not update sensitive-preference consent.",
   "could_not_save_preferences": "Could not save partner preferences.",
-  "religion_example": "Hindu, Muslim, Christian…"
+  "religion_example": "Hindu, Muslim, Christian…",
+  "unread_count": "{count} unread",
+  "review_interest": "Review interest",
+  "open_chat": "Open chat"
 }
