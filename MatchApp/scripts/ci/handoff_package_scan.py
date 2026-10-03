@@ -49,6 +49,8 @@ REQUIRED = (
     "scripts/perf/discovery-load.mjs",
     "functions/src/health.ts",
     "functions/src/chatMediaOrphanPolicy.ts",
+    "functions/src/callSessionPolicy.ts",
+    "functions/src/communicationProvider.ts",
     "firestore.rules",
     "firestore.indexes.json",
     "storage.rules",
@@ -179,6 +181,8 @@ def main() -> int:
         "verifyGooglePlayPurchase",
         "submitVerificationRequest",
         "getTrustSummary",
+        "getSecureCallCapability",
+        "startSecureCallSession",
         "deleteUserAccount",
         "healthReady",
     ):
