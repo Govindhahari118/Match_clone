@@ -61,4 +61,12 @@ Run on at least two independent physical Android devices/accounts:
 
 ## Promotion rule
 
-Until this checklist is complete, keep `COMMUNICATION_PROVIDER_IMPLEMENTED = false` and keep the secure-call rollout disabled. The UI may show relationship eligibility and provider status, but it must not simulate an active dialer, relay number, call history, minutes or billing.
+Until this checklist is complete, keep the default `DisabledCommunicationProvider` adapter in place and keep the secure-call rollout disabled. The UI may show relationship eligibility and provider status, but it must not simulate an active dialer, relay number, call history, minutes or billing.
+
+
+## Repository contract now enforced
+
+- `callSessionPolicy.ts` defines forward-only call lifecycle transitions and initiation rate policy.
+- `communicationProvider.ts` defines the provider-neutral allocation interface and ships with a fail-closed disabled adapter.
+- `startSecureCallSession` re-checks current mutual-match, account, block and privacy state, reserves per-account/per-pair hourly initiation budget, creates a server-owned session record, and only then requests short-lived provider allocation material.
+- Failed provider allocation marks the server session failed and returns no synthetic dialer/session data.
