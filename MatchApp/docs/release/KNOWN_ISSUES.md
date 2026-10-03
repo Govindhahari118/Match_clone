@@ -33,11 +33,11 @@ The release remains NO-GO until operator-controlled evidence exists for the exac
 - accessibility, supported-locale and release-build performance acceptance;
 - Crashlytics/monitoring, cost budgets/alerts and named incident ownership;
 - legal, privacy policy, Data Safety, store listing/content rating and support escalation;
-- Play pre-launch report, closed testing, rollback drill and controlled rollout/post-rollout health.
+- Play pre-launch report, closed testing, rollback drill and controlled rollout/post-rollout health;\n- audited secure-call provider integration, signed/replay-safe provider webhooks and the physical-device voice/video acceptance matrix.
 
 The external gate must remain red until those references exist. Missing provider credentials or external evidence must never be converted into a synthetic pass.
 
 
 ## Secure calling
 
-The app now exposes a real server-backed secure-call capability screen from mutual profiles. Relationship eligibility, blocks and privacy restrictions are checked against fresh backend state. Live voice/video session creation remains deliberately disabled until a real audited communications provider satisfies `SECURE_CALL_PROVIDER_ACCEPTANCE.md`; no fake dialer or call history is shown.
+The app now exposes a real server-backed secure-call capability screen from mutual profiles. Relationship eligibility, blocks and privacy restrictions are checked against fresh backend state. Live voice/video session creation remains deliberately disabled until a real audited communications provider satisfies `SECURE_CALL_PROVIDER_ACCEPTANCE.md`; no fake dialer or call history is shown. Because secure calling is now a launch-parity requirement, production GO additionally requires `secureCallProviderIntegrated`, `secureCallWebhookSecurityPassed`, and `secureCallPhysicalMatrixPassed` evidence for the exact release SHA.
