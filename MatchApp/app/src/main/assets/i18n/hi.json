@@ -394,5 +394,6 @@
   "enable_sensitive_before_preset": "यह प्रीसेट उपयोग करने से पहले संवेदनशील प्राथमिकता प्रोसेसिंग चालू करें।",
   "enable_sensitive_before_saving": "सहेजने से पहले संवेदनशील प्राथमिकता प्रोसेसिंग की समीक्षा कर इसे चालू करें।",
   "could_not_update_sensitive_consent": "संवेदनशील प्राथमिकता अनुमति अपडेट नहीं हो सकी।",
-  "could_not_save_preferences": "साथी प्राथमिकताएँ सहेजी नहीं जा सकीं।"
+  "could_not_save_preferences": "साथी प्राथमिकताएँ सहेजी नहीं जा सकीं।",
+  "religion_example": "हिंदू, मुस्लिम, ईसाई…"
 }
