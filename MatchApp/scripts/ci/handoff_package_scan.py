@@ -54,6 +54,7 @@ REQUIRED = (
     "functions/src/chatMediaOrphanPolicy.ts",
     "functions/src/callSessionPolicy.ts",
     "functions/src/communicationProvider.ts",
+    "functions/src/notificationLinkPolicy.ts",
     "firestore.rules",
     "firestore.indexes.json",
     "storage.rules",

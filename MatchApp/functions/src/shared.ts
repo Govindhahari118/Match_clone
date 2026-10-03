@@ -245,6 +245,7 @@ export type PersistedNotificationInput = {
   entityType: string;
   entityId: string;
   deepLink: string;
+  action?: string;
   pushType: string;
   preferenceKey: NotificationPreferenceKey;
   priority?: "high" | "normal";
@@ -259,6 +260,7 @@ export type PersistedNotificationInput = {
 export async function persistAndSendNotification(
   input: PersistedNotificationInput
 ): Promise<void> {
+  const action = input.action?.trim() || "NOTIFICATIONS";
   const ref = db.collection("notifications").doc(input.notificationId);
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(ref);
@@ -271,6 +273,7 @@ export async function persistAndSendNotification(
         entityType: input.entityType,
         entityId: input.entityId,
         deepLink: input.deepLink,
+        action,
         ...(input.fromFirebaseUid ? { fromFirebaseUid: input.fromFirebaseUid } : {}),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         readAt: null,
@@ -289,6 +292,7 @@ export async function persistAndSendNotification(
       entity_type: input.entityType,
       entity_id: input.entityId,
       deep_link: input.deepLink,
+      action,
       ...(input.fromFirebaseUid ? {
         user_id: input.fromFirebaseUid,
         peer_uid: input.fromFirebaseUid,

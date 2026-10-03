@@ -113,6 +113,25 @@ def main() -> int:
             failures,
         )
 
+    notifications_backend = text(ROOT / "functions/src/notifications.ts")
+    notification_link_policy = text(ROOT / "functions/src/notificationLinkPolicy.ts")
+    require("notificationDeepLink" in notifications_backend and
+            "notificationActionFor" in notifications_backend,
+            "notification delivery must preserve canonical action/App Link routing metadata",
+            failures)
+    require("https://" in notification_link_policy and
+            "invalid.matree.local" in notification_link_policy,
+            "notification App Link policy must prefer validated HTTPS and reject the placeholder host",
+            failures)
+    for legacy_notification_link in (
+        'deepLink: "matrimonyconnect://interests"',
+        'deepLink: "matrimonyconnect://matches"',
+        'deepLink: "matrimonyconnect://notifications"',
+    ):
+        require(legacy_notification_link not in notifications_backend,
+                "notification triggers must not hard-code legacy custom-scheme routing",
+                failures)
+
     # Abuse/risk counters must have one canonical writer per authoritative action.
     trust_functions = text(ROOT / "functions/src/trust.ts")
     require("onInterestBehaviorRiskSignal" not in trust_functions,

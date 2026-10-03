@@ -61,6 +61,7 @@ class NotificationsViewModel @Inject constructor(
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit = {},
+    onOpenInterests: () -> Unit = {},
     onOpenProfile: (Long) -> Unit = {},
     onOpenChat: (Long) -> Unit = {},
     vm: NotificationsViewModel = hiltViewModel()
@@ -86,7 +87,7 @@ fun NotificationsScreen(
         Column(Modifier.padding(pad).fillMaxSize().testTag("notifications_screen")) {
             if (unread > 0) {
                 MatreeInlineNotice(
-                    message = "$unread unread",
+                    message = t("unread_count", mapOf("count" to unread), "{count} unread"),
                     icon = Icons.Filled.Notifications,
                     tone = MatreeStatusTone.INTEREST,
                     modifier = Modifier.padding(horizontal = MatreeDesign.spacing.md, vertical = MatreeDesign.spacing.xs)
@@ -112,11 +113,11 @@ fun NotificationsScreen(
                     items(notifications, key = { it.id }) { n ->
                         NotificationCard(n, onClick = {
                             vm.markRead(n.id)
-                            n.fromUserId?.let { from ->
-                                when (n.type) {
-                                    "LIKE", "INTEREST", "MATCH", "VIEW" -> onOpenProfile(from)
-                                    "MESSAGE" -> onOpenChat(from)
-                                }
+                            when (notificationCardDestination(n.type, n.fromUserId != null)) {
+                                NotificationCardDestination.INTERESTS -> onOpenInterests()
+                                NotificationCardDestination.CHAT -> n.fromUserId?.let(onOpenChat)
+                                NotificationCardDestination.PROFILE -> n.fromUserId?.let(onOpenProfile)
+                                NotificationCardDestination.NONE -> Unit
                             }
                         })
                     }
@@ -136,6 +137,7 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
         "INTEREST" -> Icons.Filled.PersonAdd to MaterialTheme.colorScheme.primary
         "MATCH" -> Icons.Filled.Stars to semantic.premium
         "VIEW" -> Icons.Filled.Visibility to semantic.verified
+        "MESSAGE" -> Icons.Filled.Forum to MaterialTheme.colorScheme.primary
         else -> Icons.Filled.Notifications to MaterialTheme.colorScheme.primary
     }
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("notif_${n.id}"), shape = RoundedCornerShape(MatreeDesign.radii.card), colors = CardDefaults.elevatedCardColors(containerColor = if (!n.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface)) {
@@ -146,6 +148,20 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
                 Text(n.title, fontWeight = if (!n.isRead) FontWeight.SemiBold else FontWeight.Normal, style = MaterialTheme.typography.bodyMedium)
                 Text(n.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formattedTime, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                val actionLabel = when (n.type) {
+                    "LIKE", "INTEREST" -> t("review_interest", "Review interest")
+                    "MATCH", "MESSAGE" -> t("open_chat", "Open chat")
+                    "VIEW" -> t("view_profile", "View profile")
+                    else -> null
+                }
+                actionLabel?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
             if (!n.isRead) Box(Modifier.size(8.dp).padding(start = 4.dp)) { Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary) {} }
         }

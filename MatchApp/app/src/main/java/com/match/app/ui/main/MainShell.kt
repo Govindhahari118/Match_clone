@@ -496,6 +496,7 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 composable(MainRoutes.NOTIFICATIONS) {
                     NotificationsScreen(
                         onBack = { nav.popBackStack() },
+                        onOpenInterests = { nav.navigate(MainRoutes.INTERESTS) },
                         onOpenProfile = { nav.navigate(MainRoutes.detail(it)) },
                         onOpenChat = { nav.navigate(MainRoutes.chat(it)) }
                     )
