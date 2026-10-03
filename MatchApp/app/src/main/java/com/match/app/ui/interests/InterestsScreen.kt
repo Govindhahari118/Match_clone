@@ -143,7 +143,7 @@ fun InterestsScreen(
         val matchedId = actions.matchedId
         val result = snackbar.showSnackbar(
             message = message,
-            actionLabel = if (matchedId != null) "Chat" else null,
+            actionLabel = if (matchedId != null) t("chat", "Chat") else null,
             withDismissAction = matchedId != null
         )
         vm.clearMessage()
@@ -162,7 +162,7 @@ fun InterestsScreen(
                         BadgedBox(
                             badge = { Badge(containerColor = MaterialTheme.colorScheme.error) { Text("${received.size}") } },
                             modifier = Modifier.padding(end = 16.dp)
-                        ) { Icon(Icons.Filled.MoveToInbox, contentDescription = "Pending interests") }
+                        ) { Icon(Icons.Filled.MoveToInbox, contentDescription = t("pending_interests", "Pending interests")) }
                     }
                 }
             )
@@ -217,7 +217,7 @@ fun InterestsScreen(
                         InterestTab.RECEIVED -> Triple(
                             Icons.Filled.MoveToInbox,
                             t("no_interests_received", "No interests received yet"),
-                            "New pending requests will appear here after server validation."
+                            t("pending_requests_hint", "New pending requests will appear here after server validation.")
                         )
                         InterestTab.SENT -> Triple(
                             Icons.AutoMirrored.Filled.Send,
@@ -308,7 +308,7 @@ private fun InterestCard(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                "Personal note",
+                                t("personal_note", "Personal note"),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -324,14 +324,14 @@ private fun InterestCard(
                     horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     MatreeSecondaryButton(
-                        text = "Profile",
+                        text = t("profile", "Profile"),
                         icon = Icons.Filled.Person,
                         onClick = onOpen,
                         enabled = !busy,
                         modifier = Modifier.weight(1f)
                     )
                     MatreeSecondaryButton(
-                        text = "Kundali",
+                        text = t("kundali", "Kundali"),
                         icon = Icons.Filled.AutoAwesome,
                         onClick = onKundli,
                         enabled = !busy && profile.showHoroscope,
@@ -343,7 +343,7 @@ private fun InterestCard(
                     horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
                 ) {
                     MatreeSecondaryButton(
-                        text = "Decline",
+                        text = t("decline", "Decline"),
                         icon = Icons.Filled.Close,
                         onClick = onDecline,
                         enabled = !busy,
@@ -360,7 +360,7 @@ private fun InterestCard(
             }
             InterestTab.SENT -> {
                 MatreeSecondaryButton(
-                    text = "Withdraw interest",
+                    text = t("withdraw_interest", "Withdraw interest"),
                     icon = Icons.Filled.Undo,
                     onClick = onWithdraw,
                     enabled = !busy,
