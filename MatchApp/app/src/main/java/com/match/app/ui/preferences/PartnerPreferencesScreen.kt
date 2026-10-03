@@ -175,18 +175,35 @@ fun PartnerPreferencesScreen(
     val ui by vm.ui.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
-    LaunchedEffect(ui.message, ui.error) {
-        val message = ui.error ?: ui.message
-        if (message != null) {
+    val localizedFeedback = when (val raw = ui.error ?: ui.message) {
+        "Could not update sensitive-preference consent." ->
+            t("could_not_update_sensitive_consent", "Could not update sensitive-preference consent.")
+        "Your profile does not have a confirmed religion to use." ->
+            t("profile_religion_missing", "Your profile does not have a confirmed religion to use.")
+        "Enable sensitive-preference processing before using this preset." ->
+            t("enable_sensitive_before_preset", "Enable sensitive-preference processing before using this preset.")
+        "Using your confirmed religion as a strict preference. Save to apply it." ->
+            t("confirmed_religion_preset_ready", "Using your confirmed religion as a strict preference. Save to apply it.")
+        "Review and enable sensitive-preference processing before saving." ->
+            t("enable_sensitive_before_saving", "Review and enable sensitive-preference processing before saving.")
+        "Partner preferences saved and applied to discovery." ->
+            t("preferences_saved", "Partner preferences saved and applied to discovery.")
+        "Could not save partner preferences." ->
+            t("could_not_save_preferences", "Could not save partner preferences.")
+        else -> raw
+    }
+
+    LaunchedEffect(localizedFeedback) {
+        if (localizedFeedback != null) {
             if (ui.error == null && ui.value.configured) onSaved()
-            snackbar.showSnackbar(message)
+            snackbar.showSnackbar(localizedFeedback)
             vm.consumeMessage()
         }
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { MatreeTopBar(title = "Partner Preferences", onBack = onBack) }
+        topBar = { MatreeTopBar(title = t("partner_preferences", "Partner Preferences"), onBack = onBack) }
     ) { padding ->
         when {
             ui.loading -> Box(
@@ -204,7 +221,7 @@ fun PartnerPreferencesScreen(
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md)
             ) {
                 MatreeInlineNotice(
-                    message = "Strict preferences exclude profiles in both directions. Preferred preferences improve ordering but do not hide otherwise eligible members."
+                    message = t("strict_preference_explanation", "Strict preferences exclude profiles in both directions. Preferred preferences improve ordering but do not hide otherwise eligible members.")
                 )
 
                 Card(Modifier.fillMaxWidth()) {
@@ -214,17 +231,17 @@ fun PartnerPreferencesScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "Sensitive preference processing",
+                                t("sensitive_preference_processing", "Sensitive preference processing"),
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Some partner preferences can reveal sensitive personal choices. Enable this only if you want Matree to store and use these preferences for reciprocal discovery. You can withdraw this choice later in Privacy & visibility.",
+                                t("sensitive_preference_body", "Some partner preferences can reveal sensitive personal choices. Enable this only if you want Matree to store and use these preferences for reciprocal discovery. You can withdraw this choice later in Privacy & visibility."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (ui.sensitiveConsentVersion.isNotBlank()) {
                                 Text(
-                                    "Notice version ${ui.sensitiveConsentVersion}",
+                                    t("notice_version", mapOf("version" to ui.sensitiveConsentVersion), "Notice version {version}"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -273,12 +290,12 @@ fun PartnerPreferencesScreen(
                             verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
                         ) {
                             Text(
-                                "Quick setup",
+                                t("quick_setup", "Quick setup"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "Your confirmed profile religion is ${ui.profileReligion}. Matching does not use it automatically.",
+                                t("confirmed_religion_notice", mapOf("religion" to ui.profileReligion), "Your confirmed profile religion is {religion}. Matching does not use it automatically."),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -286,30 +303,30 @@ fun PartnerPreferencesScreen(
                                 onClick = vm::useMyConfirmedReligion,
                                 enabled = ui.sensitiveConsentCurrent
                             ) {
-                                Text("Use my confirmed religion")
+                                Text(t("use_confirmed_religion", "Use my confirmed religion"))
                             }
                         }
                     }
                 }
 
                 PreferenceSectionHeader(
-                    title = "Core preferences",
-                    subtitle = "Start with the few criteria that matter most. Every item remains optional."
+                    title = t("core_preferences", "Core preferences"),
+                    subtitle = t("core_preferences_subtitle", "Start with the few criteria that matter most. Every item remains optional.")
                 )
                 RangePreferenceCard(
-                    title = "Age",
+                    title = t("age", "Age"),
                     mode = ui.value.ageMode,
                     min = ui.value.ageMin,
                     max = ui.value.ageMax,
                     minAllowed = 18,
                     maxAllowed = 99,
-                    suffix = "years",
+                    suffix = t("years_unit", "years"),
                     onMode = { mode -> vm.update { it.copy(ageMode = mode) } },
                     onRange = { min, max -> vm.update { it.copy(ageMin = min, ageMax = max) } }
                 )
 
                 RangePreferenceCard(
-                    title = "Height",
+                    title = t("height", "Height"),
                     mode = ui.value.heightMode,
                     min = ui.value.heightMinCm,
                     max = ui.value.heightMaxCm,
@@ -322,20 +339,20 @@ fun PartnerPreferencesScreen(
                     }
                 )
                 RangePreferenceCard(
-                    title = "Weight",
+                    title = t("weight", "Weight"),
                     mode = ui.value.weightMode,
                     min = ui.value.weightMinKg,
                     max = ui.value.weightMaxKg,
                     minAllowed = 30,
                     maxAllowed = 250,
-                    suffix = "kg",
+                    suffix = t("kg_unit", "kg"),
                     onMode = { mode -> vm.update { it.copy(weightMode = mode) } },
                     onRange = { min, max ->
                         vm.update { it.copy(weightMinKg = min, weightMaxKg = max) }
                     }
                 )
                 ChoicePreferenceCard(
-                    title = "Annual income range",
+                    title = t("annual_income_range", "Annual income range"),
                     mode = ui.value.incomeBandMode,
                     selected = ui.value.incomeBands,
                     options = IndiaProfileCatalog.incomeBands.map { it to it },
@@ -343,7 +360,7 @@ fun PartnerPreferencesScreen(
                     onSelected = { values -> vm.update { it.copy(incomeBands = values) } }
                 )
                 ChoicePreferenceCard(
-                    title = "Skin tone (optional, self-described)",
+                    title = t("skin_tone_optional", "Skin tone (optional, self-described)"),
                     mode = ui.value.complexionMode,
                     selected = ui.value.complexions,
                     options = IndiaProfileCatalog.complexionOptions.map { it to it },
@@ -352,267 +369,267 @@ fun PartnerPreferencesScreen(
                 )
 
                 PreferenceSectionHeader(
-                    title = "Community & faith",
-                    subtitle = "Use only the religious or community details that matter to you."
+                    title = t("community_faith", "Community & faith"),
+                    subtitle = t("community_faith_subtitle", "Use only the religious or community details that matter to you.")
                 )
                 ListPreferenceCard(
-                    title = "Religion",
+                    title = t("religion", "Religion"),
                     mode = ui.value.religionMode,
                     values = ui.value.religions,
-                    hint = "Hindu, Muslim, Christian…",
+                    hint = t("religion_example", "Hindu, Muslim, Christian…"),
                     onMode = { mode -> vm.update { it.copy(religionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(religions = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Community / caste",
+                    title = t("community_caste", "Community / caste"),
                     mode = ui.value.casteMode,
                     values = ui.value.castes,
-                    hint = "Reddy, Brahmin, Kamma…",
+                    hint = t("community_example", "Reddy, Brahmin, Kamma…"),
                     onMode = { mode -> vm.update { it.copy(casteMode = mode) } },
                     onValues = { values -> vm.update { it.copy(castes = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Sub-community / sub-caste",
+                    title = t("subcommunity_subcaste", "Sub-community / sub-caste"),
                     mode = ui.value.subCasteMode,
                     values = ui.value.subCastes,
-                    hint = "Optional sub-community preferences",
+                    hint = t("subcommunity_hint", "Optional sub-community preferences"),
                     onMode = { mode -> vm.update { it.copy(subCasteMode = mode) } },
                     onValues = { values -> vm.update { it.copy(subCastes = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Gothra / lineage",
+                    title = t("gothra_clan", "Gothra / clan"),
                     mode = ui.value.gothraMode,
                     values = ui.value.gothras,
-                    hint = "Optional lineage preference",
+                    hint = t("gothra_hint", "Optional lineage preference"),
                     onMode = { mode -> vm.update { it.copy(gothraMode = mode) } },
                     onValues = { values -> vm.update { it.copy(gothras = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Faith tradition",
+                    title = t("faith_tradition_denomination", "Faith tradition / denomination"),
                     mode = ui.value.faithTraditionMode,
                     values = ui.value.faithTraditions,
-                    hint = "Denomination, sect, tradition…",
+                    hint = t("faith_tradition_hint", "Denomination, sect, tradition…"),
                     onMode = { mode -> vm.update { it.copy(faithTraditionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(faithTraditions = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Faith sub-tradition",
+                    title = t("faith_subtradition", "Faith sub-tradition"),
                     mode = ui.value.faithSubTraditionMode,
                     values = ui.value.faithSubTraditions,
-                    hint = "Optional sub-tradition",
+                    hint = t("faith_subtradition_hint", "Optional sub-tradition"),
                     onMode = { mode -> vm.update { it.copy(faithSubTraditionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(faithSubTraditions = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Faith institution / community",
+                    title = t("faith_institution_community", "Faith institution / community"),
                     mode = ui.value.faithInstitutionMode,
                     values = ui.value.faithInstitutions,
-                    hint = "Optional church, jamaat, samaj or institution",
+                    hint = t("faith_institution_hint", "Optional church, jamaat, samaj or institution"),
                     onMode = { mode -> vm.update { it.copy(faithInstitutionMode = mode) } },
                     onValues = { values -> vm.update { it.copy(faithInstitutions = values) } }
                 )
                 PreferenceSectionHeader(
-                    title = "Location & residence",
-                    subtitle = "Set geography, citizenship, overseas residence and relocation choices."
+                    title = t("location_residence", "Location & residence"),
+                    subtitle = t("location_residence_subtitle", "Set geography, citizenship, overseas residence and relocation choices.")
                 )
                 ListPreferenceCard(
-                    title = "State / region",
+                    title = t("state_region", "State / region"),
                     mode = ui.value.stateMode,
                     values = ui.value.states,
-                    hint = "Telangana, Karnataka…",
+                    hint = t("state_example", "Telangana, Karnataka…"),
                     onMode = { mode -> vm.update { it.copy(stateMode = mode) } },
                     onValues = { values -> vm.update { it.copy(states = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Native state",
+                    title = t("native_state", "Native state"),
                     mode = ui.value.nativeStateMode,
                     values = ui.value.nativeStates,
-                    hint = "Telangana, Andhra Pradesh…",
+                    hint = t("native_state_example", "Telangana, Andhra Pradesh…"),
                     onMode = { mode -> vm.update { it.copy(nativeStateMode = mode) } },
                     onValues = { values -> vm.update { it.copy(nativeStates = values) } }
                 )
                 ListPreferenceCard(
-                    title = "City",
+                    title = t("city", "City"),
                     mode = ui.value.cityMode,
                     values = ui.value.cities,
-                    hint = "Hyderabad, Bengaluru…",
+                    hint = t("city_example", "Hyderabad, Bengaluru…"),
                     onMode = { mode -> vm.update { it.copy(cityMode = mode) } },
                     onValues = { values -> vm.update { it.copy(cities = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Country of residence",
+                    title = t("country_of_residence", "Country of residence"),
                     mode = ui.value.countryOfResidenceMode,
                     values = ui.value.countriesOfResidence,
-                    hint = "India, United States, UAE…",
+                    hint = t("country_example", "India, United States, UAE…"),
                     onMode = { mode -> vm.update { it.copy(countryOfResidenceMode = mode) } },
                     onValues = { values -> vm.update { it.copy(countriesOfResidence = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Citizenship",
+                    title = t("citizenship", "Citizenship"),
                     mode = ui.value.citizenshipMode,
                     values = ui.value.citizenships,
-                    hint = "India, United States…",
+                    hint = t("citizenship_example", "India, United States…"),
                     onMode = { mode -> vm.update { it.copy(citizenshipMode = mode) } },
                     onValues = { values -> vm.update { it.copy(citizenships = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Residential status",
+                    title = t("residential_status", "Residential status"),
                     mode = ui.value.residentialStatusMode,
                     values = ui.value.residentialStatuses,
-                    hint = "Citizen, Permanent Resident, Work Visa…",
+                    hint = t("residential_status_example", "Citizen, Permanent Resident, Work Visa…"),
                     onMode = { mode -> vm.update { it.copy(residentialStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(residentialStatuses = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Visa status",
+                    title = t("visa_permit_status", "Visa / permit status"),
                     mode = ui.value.visaStatusMode,
                     values = ui.value.visaStatuses,
-                    hint = "Citizen, PR, H-1B, student visa…",
+                    hint = t("visa_status_example", "Citizen, PR, H-1B, student visa…"),
                     onMode = { mode -> vm.update { it.copy(visaStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(visaStatuses = values) } }
                 )
                 ChoicePreferenceCard(
-                    title = "Residence class",
+                    title = t("residence_class", "Residence class"),
                     mode = ui.value.nriMode,
                     selected = ui.value.nriStatuses,
                     options = listOf(
-                        "INDIA_RESIDENT" to "India resident",
-                        "NRI" to "NRI / overseas resident"
+                        "INDIA_RESIDENT" to t("india_resident", "India resident"),
+                        "NRI" to t("nri_overseas_resident", "NRI / overseas resident")
                     ),
                     onMode = { mode -> vm.update { it.copy(nriMode = mode) } },
                     onSelected = { values -> vm.update { it.copy(nriStatuses = values) } }
                 )
                 ChoicePreferenceCard(
-                    title = "Relocation",
+                    title = t("relocation", "Relocation"),
                     mode = ui.value.relocationMode,
                     selected = ui.value.relocationStatuses,
                     options = listOf(
-                        "WILLING_TO_RELOCATE" to "Willing to relocate",
-                        "NOT_WILLING_TO_RELOCATE" to "Not willing to relocate"
+                        "WILLING_TO_RELOCATE" to t("willing_to_relocate", "Willing to relocate"),
+                        "NOT_WILLING_TO_RELOCATE" to t("not_willing_to_relocate", "Not willing to relocate")
                     ),
                     onMode = { mode -> vm.update { it.copy(relocationMode = mode) } },
                     onSelected = { values -> vm.update { it.copy(relocationStatuses = values) } }
                 )
                 PreferenceSectionHeader(
-                    title = "Language, family & career",
-                    subtitle = "Refine life-stage, education, work and family-background preferences."
+                    title = t("language_family_career", "Language, family & career"),
+                    subtitle = t("language_family_career_subtitle", "Refine life-stage, education, work and family-background preferences.")
                 )
                 ListPreferenceCard(
-                    title = "Mother tongue",
+                    title = t("mother_tongue", "Mother tongue"),
                     mode = ui.value.motherTongueMode,
                     values = ui.value.motherTongues,
-                    hint = "Telugu, Hindi…",
+                    hint = t("mother_tongue_example", "Telugu, Hindi…"),
                     onMode = { mode -> vm.update { it.copy(motherTongueMode = mode) } },
                     onValues = { values -> vm.update { it.copy(motherTongues = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Marital status",
+                    title = t("marital_status", "Marital status"),
                     mode = ui.value.maritalStatusMode,
                     values = ui.value.maritalStatuses,
-                    hint = "Never Married, Divorced…",
+                    hint = t("marital_status_example", "Never Married, Divorced…"),
                     onMode = { mode -> vm.update { it.copy(maritalStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(maritalStatuses = values) } }
                 )
                 ChoicePreferenceCard(
-                    title = "Children",
+                    title = t("children", "Children"),
                     mode = ui.value.childrenMode,
                     selected = ui.value.childrenStatuses,
                     options = listOf(
-                        "NO_CHILDREN" to "No children",
-                        "HAS_CHILDREN" to "Has children"
+                        "NO_CHILDREN" to t("no_children", "No children"),
+                        "HAS_CHILDREN" to t("has_children", "Has children")
                     ),
                     onMode = { mode -> vm.update { it.copy(childrenMode = mode) } },
                     onSelected = { values -> vm.update { it.copy(childrenStatuses = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Education",
+                    title = t("education", "Education"),
                     mode = ui.value.educationMode,
                     values = ui.value.educationLevels,
-                    hint = "Bachelors, Masters…",
+                    hint = t("education_example", "Bachelors, Masters…"),
                     onMode = { mode -> vm.update { it.copy(educationMode = mode) } },
                     onValues = { values -> vm.update { it.copy(educationLevels = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Education field",
+                    title = t("education_field", "Education field"),
                     mode = ui.value.educationFieldMode,
                     values = ui.value.educationFields,
-                    hint = "Engineering, Medicine, Commerce…",
+                    hint = t("education_field_example", "Engineering, Medicine, Commerce…"),
                     onMode = { mode -> vm.update { it.copy(educationFieldMode = mode) } },
                     onValues = { values -> vm.update { it.copy(educationFields = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Occupation",
+                    title = t("occupation", "Occupation"),
                     mode = ui.value.occupationMode,
                     values = ui.value.occupationCategories,
-                    hint = "Software, Healthcare…",
+                    hint = t("occupation_example", "Software, Healthcare…"),
                     onMode = { mode -> vm.update { it.copy(occupationMode = mode) } },
                     onValues = { values -> vm.update { it.copy(occupationCategories = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Employer type",
+                    title = t("employer_type", "Employer type"),
                     mode = ui.value.employerTypeMode,
                     values = ui.value.employerTypes,
-                    hint = "Private, Government, Self-employed…",
+                    hint = t("employer_type_example", "Private, Government, Self-employed…"),
                     onMode = { mode -> vm.update { it.copy(employerTypeMode = mode) } },
                     onValues = { values -> vm.update { it.copy(employerTypes = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Family type",
+                    title = t("family_type", "Family type"),
                     mode = ui.value.familyTypeMode,
                     values = ui.value.familyTypes,
-                    hint = "Nuclear, Joint…",
+                    hint = t("family_type_example", "Nuclear, Joint…"),
                     onMode = { mode -> vm.update { it.copy(familyTypeMode = mode) } },
                     onValues = { values -> vm.update { it.copy(familyTypes = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Family status",
+                    title = t("family_status", "Family status"),
                     mode = ui.value.familyStatusMode,
                     values = ui.value.familyStatuses,
-                    hint = "Middle class, Upper middle class…",
+                    hint = t("family_status_example", "Middle class, Upper middle class…"),
                     onMode = { mode -> vm.update { it.copy(familyStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(familyStatuses = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Family values",
+                    title = t("family_values", "Family values"),
                     mode = ui.value.familyValuesMode,
                     values = ui.value.familyValues,
-                    hint = "Traditional, Moderate, Liberal…",
+                    hint = t("family_values_example", "Traditional, Moderate, Liberal…"),
                     onMode = { mode -> vm.update { it.copy(familyValuesMode = mode) } },
                     onValues = { values -> vm.update { it.copy(familyValues = values) } }
                 )
                 PreferenceSectionHeader(
-                    title = "Lifestyle & wellbeing",
-                    subtitle = "Optional lifestyle criteria. Leave them at No preference to keep discovery broad."
+                    title = t("lifestyle_wellbeing", "Lifestyle & wellbeing"),
+                    subtitle = t("lifestyle_wellbeing_subtitle", "Optional lifestyle criteria. Leave them at No preference to keep discovery broad.")
                 )
                 ListPreferenceCard(
-                    title = "Physical status",
+                    title = t("physical_status", "Physical status"),
                     mode = ui.value.physicalStatusMode,
                     values = ui.value.physicalStatuses,
-                    hint = "Normal, Differently abled…",
+                    hint = t("physical_status_example", "Normal, Differently abled…"),
                     onMode = { mode -> vm.update { it.copy(physicalStatusMode = mode) } },
                     onValues = { values -> vm.update { it.copy(physicalStatuses = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Diet",
+                    title = t("diet", "Diet"),
                     mode = ui.value.dietMode,
                     values = ui.value.diets,
-                    hint = "Vegetarian, Non-vegetarian…",
+                    hint = t("diet_example", "Vegetarian, Non-vegetarian…"),
                     onMode = { mode -> vm.update { it.copy(dietMode = mode) } },
                     onValues = { values -> vm.update { it.copy(diets = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Smoking",
+                    title = t("smoking", "Smoking"),
                     mode = ui.value.smokingMode,
                     values = ui.value.smoking,
-                    hint = "Never, Occasionally…",
+                    hint = t("habit_example", "Never, Occasionally…"),
                     onMode = { mode -> vm.update { it.copy(smokingMode = mode) } },
                     onValues = { values -> vm.update { it.copy(smoking = values) } }
                 )
                 ListPreferenceCard(
-                    title = "Drinking",
+                    title = t("drinking", "Drinking"),
                     mode = ui.value.drinkingMode,
                     values = ui.value.drinking,
-                    hint = "Never, Occasionally…",
+                    hint = t("habit_example", "Never, Occasionally…"),
                     onMode = { mode -> vm.update { it.copy(drinkingMode = mode) } },
                     onValues = { values -> vm.update { it.copy(drinking = values) } }
                 )
@@ -633,7 +650,7 @@ fun PartnerPreferencesScreen(
                         Icon(Icons.Filled.Tune, contentDescription = null)
                     }
                     Spacer(Modifier.width(MatreeDesign.spacing.xs))
-                    Text(if (ui.saving) "Saving…" else "Save partner preferences")
+                    Text(if (ui.saving) t("saving", "Saving…") else t("save_partner_preferences", "Save partner preferences"))
                 }
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
@@ -677,9 +694,9 @@ private fun PreferenceModeRow(
                 label = {
                     Text(
                         when (mode) {
-                            PartnerPreferenceMode.STRICT -> "Strict"
-                            PartnerPreferenceMode.PREFERRED -> "Preferred"
-                            PartnerPreferenceMode.NO_PREFERENCE -> "No preference"
+                            PartnerPreferenceMode.STRICT -> t("strict", "Strict")
+                            PartnerPreferenceMode.PREFERRED -> t("preferred", "Preferred")
+                            PartnerPreferenceMode.NO_PREFERENCE -> t("no_preference", "No preference")
                         }
                     )
                 }
@@ -710,7 +727,7 @@ private fun RangePreferenceCard(
             if (mode != PartnerPreferenceMode.NO_PREFERENCE) {
                 Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)) {
                     NumericPreferenceField(
-                        label = "Minimum",
+                        label = t("minimum", "Minimum"),
                         value = min,
                         allowed = minAllowed..maxAllowed,
                         suffix = suffix,
@@ -718,7 +735,7 @@ private fun RangePreferenceCard(
                         onValue = { value -> onRange(value, max.coerceAtLeast(value)) }
                     )
                     NumericPreferenceField(
-                        label = "Maximum",
+                        label = t("maximum", "Maximum"),
                         value = max,
                         allowed = minAllowed..maxAllowed,
                         suffix = suffix,
@@ -793,7 +810,7 @@ private fun ChoicePreferenceCard(
                 }
                 if (selected.isEmpty()) {
                     Text(
-                        "Choose at least one option or use No preference.",
+                        t("choose_option_or_no_preference", "Choose at least one option or use No preference."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -831,10 +848,10 @@ private fun ListPreferenceCard(
                                 .take(20)
                         )
                     },
-                    label = { Text("Accepted values") },
+                    label = { Text(t("accepted_values", "Accepted values")) },
                     placeholder = { Text(hint) },
                     supportingText = {
-                        Text("Separate multiple values with commas.")
+                        Text(t("separate_values_commas", "Separate multiple values with commas."))
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
