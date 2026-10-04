@@ -33,6 +33,20 @@ class NotificationCardActionPolicyTest {
     }
 
     @Test
+    fun callCoordinationNotificationsOpenChatOnlyWithResolvedPeer() {
+        listOf("CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED").forEach { type ->
+            assertEquals(
+                NotificationCardDestination.CHAT,
+                notificationCardDestination(type, hasActor = true)
+            )
+            assertEquals(
+                NotificationCardDestination.NONE,
+                notificationCardDestination(type, hasActor = false)
+            )
+        }
+    }
+
+    @Test
     fun profileViewsOpenProfileOnlyWithResolvedPeer() {
         assertEquals(
             NotificationCardDestination.PROFILE,
