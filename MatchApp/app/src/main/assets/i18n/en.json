@@ -420,5 +420,10 @@
   "request_contact_access": "Request contact access",
   "contact_requests": "Contact requests",
   "contact_requests_body": "Approve only members you are comfortable sharing your phone number with. Membership still controls whether they can reveal it.",
-  "approve": "Approve"
+  "approve": "Approve",
+  "conversation_starters_title": "Start respectfully",
+  "conversation_starters_body": "Choose a starter, edit it if you want, then send it yourself.",
+  "conversation_starter_1": "Hi! I’m glad we matched. What would you like me to know about you first?",
+  "conversation_starter_2": "Hello! I enjoyed reading your profile. What matters most to you in a life partner?",
+  "conversation_starter_3": "Hi! Would you like to start by talking about family, work, interests, or something else?"
 }
