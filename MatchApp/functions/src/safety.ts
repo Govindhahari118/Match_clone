@@ -66,6 +66,10 @@ export const blockUser = functions.https.onCall(async (data, context) => {
     tx.delete(db.collection("contactGrants").doc(blockedUid).collection("viewers").doc(blockerUid));
     tx.delete(db.collection("contactRequests").doc(`${blockerUid}_${blockedUid}`));
     tx.delete(db.collection("contactRequests").doc(`${blockedUid}_${blockerUid}`));
+    tx.delete(db.collection("photoGrants").doc(blockerUid).collection("viewers").doc(blockedUid));
+    tx.delete(db.collection("photoGrants").doc(blockedUid).collection("viewers").doc(blockerUid));
+    tx.delete(db.collection("photoRequests").doc(`${blockerUid}_${blockedUid}`));
+    tx.delete(db.collection("photoRequests").doc(`${blockedUid}_${blockerUid}`));
   });
 
   functions.logger.info("Member blocked and relationship state removed", { blockerUid, blockedUid });
