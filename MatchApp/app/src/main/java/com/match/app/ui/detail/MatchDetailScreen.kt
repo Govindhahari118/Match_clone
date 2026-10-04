@@ -68,6 +68,7 @@ data class DetailUi(
     val profile: UserProfile? = null,
     val photos: List<PhotoEntity> = emptyList(),
     val photoRequestStatus: String = "NONE",
+    val photoRequestRetryAfterMillis: Long = 0L,
     val photoRequestLoading: Boolean = false,
     val photoRequestMessage: String? = null,
     val liked: Boolean = false,
@@ -145,9 +146,10 @@ class MatchDetailViewModel @Inject constructor(
         val preferenceSummary = profile.firebaseUid
             .takeIf { it.isNotBlank() }
             ?.let { uid -> runCatching { partnerPreferenceRepository.loadPublicSummary(uid) }.getOrNull() }
-        val photoRequestStatus = profile.firebaseUid
+        val photoRequestState = profile.firebaseUid
             .takeIf { it.isNotBlank() && profile.photoUrl.isBlank() }
-            ?.let { uid -> photoRequestRepository.status(uid).getOrNull()?.status }
+            ?.let { uid -> photoRequestRepository.status(uid).getOrNull() }
+        val photoRequestStatus = photoRequestState?.status
             ?: if (profile.photoUrl.isNotBlank()) "PHOTO_AVAILABLE" else "NONE"
         val meLiked = social.isLiked(meId, userId)
         val theyLiked = social.isLiked(userId, meId)
@@ -156,6 +158,7 @@ class MatchDetailViewModel @Inject constructor(
             profile = profile,
             photos = photos,
             photoRequestStatus = photoRequestStatus,
+            photoRequestRetryAfterMillis = photoRequestState?.retryAfterMillis ?: 0L,
             liked = meLiked,
             blocked = social.isBlocked(meId, userId),
             shortlisted = shortlistRepo.isSaved(meId, userId),
@@ -296,7 +299,7 @@ class MatchDetailViewModel @Inject constructor(
         val targetUid = current.profile?.firebaseUid.orEmpty()
         if (targetUid.isBlank() || current.blocked || current.photoRequestLoading ||
             current.profile?.photoUrl?.isNotBlank() == true ||
-            current.photoRequestStatus == "PENDING" ||
+            (current.photoRequestStatus == "PENDING" && current.photoRequestRetryAfterMillis > 0L) ||
             current.photoRequestStatus == "PHOTO_AVAILABLE" ||
             current.photoRequestStatus == "UNAVAILABLE") return@launch
 
@@ -312,6 +315,7 @@ class MatchDetailViewModel @Inject constructor(
                     it.copy(
                         photoRequestLoading = false,
                         photoRequestStatus = result.status,
+                        photoRequestRetryAfterMillis = result.retryAfterMillis,
                         photoRequestMessage = message
                     )
                 }
@@ -673,21 +677,30 @@ fun MatchDetailScreen(
             ) {
                 ProfileHero(p, ui.photos)
 
-                if (p.photoUrl.isBlank() &&
+                val noDisplayedPhoto = p.photoUrl.isBlank() &&
+                    p.primaryPhotoPath.isNullOrBlank() &&
+                    ui.photos.isEmpty()
+                if (noDisplayedPhoto &&
                     ui.photoRequestStatus != "PHOTO_AVAILABLE" &&
                     ui.photoRequestStatus != "UNAVAILABLE") {
                     MatreeSecondaryButton(
                         text = when {
                             ui.photoRequestLoading -> t("requesting_photo", "Requesting…")
-                            ui.photoRequestStatus == "PENDING" -> t("photo_requested", "Photo requested")
+                            ui.photoRequestStatus == "PENDING" && ui.photoRequestRetryAfterMillis > 0L ->
+                                t("photo_requested", "Photo requested")
                             else -> t("request_photo", "Request photo")
                         },
-                        icon = if (ui.photoRequestStatus == "PENDING") Icons.Filled.CheckCircle else Icons.Filled.AddAPhoto,
+                        icon = if (ui.photoRequestStatus == "PENDING" && ui.photoRequestRetryAfterMillis > 0L) {
+                            Icons.Filled.CheckCircle
+                        } else {
+                            Icons.Filled.AddAPhoto
+                        },
                         onClick = vm::requestPhoto,
-                        enabled = !ui.blocked && !ui.photoRequestLoading && ui.photoRequestStatus != "PENDING",
+                        enabled = !ui.blocked && !ui.photoRequestLoading &&
+                            !(ui.photoRequestStatus == "PENDING" && ui.photoRequestRetryAfterMillis > 0L),
                         modifier = Modifier.fillMaxWidth().testTag("profile_request_photo")
                     )
-                    if (ui.photoRequestStatus == "PENDING") {
+                    if (ui.photoRequestStatus == "PENDING" && ui.photoRequestRetryAfterMillis > 0L) {
                         Text(
                             t(
                                 "photo_request_privacy_note",
