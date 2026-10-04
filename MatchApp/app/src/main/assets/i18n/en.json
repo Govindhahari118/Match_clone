@@ -398,5 +398,10 @@
   "religion_example": "Hindu, Muslim, Christian…",
   "unread_count": "{count} unread",
   "review_interest": "Review interest",
-  "open_chat": "Open chat"
+  "open_chat": "Open chat",
+  "conversation_starters_title": "Need a starting point?",
+  "conversation_starters_body": "Choose a respectful starter. It only fills your message box—you can edit it before sending.",
+  "conversation_starter_1": "Hi! It’s nice to connect. I’d love to know more about you and your family.",
+  "conversation_starter_2": "Would you like to talk about our work, interests and what we’re looking for in a partner?",
+  "conversation_starter_3": "I’m happy to continue chatting here first. We can share contact details only when we’re both comfortable."
 }
