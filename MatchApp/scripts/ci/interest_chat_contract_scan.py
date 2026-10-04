@@ -42,6 +42,16 @@ CONTRACTS = {
         '"Message after match"',
         "enabled = ui.isMutual",
     ),
+    "app/src/main/java/com/match/app/ui/chat/ChatScreen.kt": (
+        "onSecureCall: () -> Unit",
+        'Modifier.testTag("chat_secure_call")',
+        't("secure_call", "Secure Call")',
+        "state.isMutual && !state.isBlocked",
+    ),
+    "app/src/main/java/com/match/app/ui/main/MainShell.kt": (
+        "onSecureCall = { nav.navigate(MainRoutes.secureCall(peerId)) }",
+        "SecureCallScreen(peerId = peerId",
+    ),
 }
 
 def main() -> int:
