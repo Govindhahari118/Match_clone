@@ -68,7 +68,7 @@ class MatchFcmService : FirebaseMessagingService() {
 
         private fun channelFor(type: String) = when (type) {
             "message" -> CH_MESSAGES
-            "interest_received", "like" -> CH_INTERESTS
+            "interest_received", "like", "photo_request" -> CH_INTERESTS
             "new_match", "mutual_match", "daily_match" -> CH_MATCHES
             "safety_alert", "sos" -> CH_SAFETY
             "boost_expiring", "verification", "verification_update", "reward", "notification",
@@ -78,6 +78,7 @@ class MatchFcmService : FirebaseMessagingService() {
 
         private fun localType(remoteType: String): String = when (remoteType) {
             "interest_received", "like" -> "INTEREST"
+            "photo_request" -> "PHOTO_REQUEST"
             "new_match", "mutual_match", "daily_match" -> "MATCH"
             "message" -> "MESSAGE"
             "profile_viewed" -> "VIEW"
