@@ -336,8 +336,10 @@ export const onContactRequestPending = functions.firestore
       targetUid
     )) return;
 
+    const updatedAt = data.updatedAt instanceof admin.firestore.Timestamp ?
+      data.updatedAt.toMillis() : 0;
     await deliverPersistedNotification(
-      `contact_request_${context.params.requestId}_${targetUid}_${Date.now()}`,
+      `contact_request_${context.params.requestId}_${targetUid}_${updatedAt}`,
       {
         userId: targetUid,
         type: "CONTACT_REQUEST",
