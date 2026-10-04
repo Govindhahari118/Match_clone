@@ -3,11 +3,9 @@ import * as functions from "firebase-functions/v1";
 import * as crypto from "crypto";
 import {
   db,
-  persistAndSendNotification,
   requireAppCheck,
 } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
-import { notificationActionFor, notificationDeepLink } from "./notificationLinkPolicy";
 import {
   PHOTO_REQUEST_COOLDOWN_MS,
   photoRequestCooldownRemaining,
@@ -215,23 +213,7 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
     return { status: "PENDING", requestedAtMillis: now, retryAfterMillis: PHOTO_REQUEST_COOLDOWN_MS };
   });
 
-  if (result.status === "PENDING" && result.requestedAtMillis === now) {
-    const notificationId = `photo_request_${requestId(requesterUid, targetUid)}_${now}`;
-    await persistAndSendNotification({
-      notificationId,
-      userId: targetUid,
-      type: "PHOTO_REQUEST",
-      title: "Photo request",
-      body: "A member viewed your profile and requested that you add a profile photo.",
-      entityType: "profile",
-      entityId: requesterUid,
-      deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
-      action: notificationActionFor("PHOTO_REQUEST"),
-      pushType: "photo_request",
-      preferenceKey: "system",
-      fromFirebaseUid: requesterUid,
-    });
-  }
+
 
   return result;
 });
