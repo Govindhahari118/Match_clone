@@ -210,19 +210,37 @@ export const onPublicProfilePhotoAvailable = functions.firestore
     const targetUid = context.params.uid;
     const pending = await db.collection("photoRequests")
       .where("targetUid", "==", targetUid)
-      .where("status", "==", "PENDING")
       .limit(250)
       .get();
     if (pending.empty) return;
 
     const batch = db.batch();
     const stamp = admin.firestore.FieldValue.serverTimestamp();
-    pending.docs.forEach((doc) => {
+    pending.docs
+      .filter((doc) => String(doc.data()?.status || "").toUpperCase() === "PENDING")
+      .forEach((doc) => {
       batch.update(doc.ref, {
         status: "FULFILLED",
         fulfilledAt: stamp,
         updatedAt: stamp,
       });
     });
+    await batch.commit();
+  });
+
+/** Remove photo-request state tied to a deleted account. */
+export const cleanupPhotoRequestsOnUserDelete = functions.firestore
+  .document("users/{uid}")
+  .onDelete(async (_snap, context) => {
+    const uid = context.params.uid;
+    const [sent, received] = await Promise.all([
+      db.collection("photoRequests").where("requesterUid", "==", uid).limit(250).get(),
+      db.collection("photoRequests").where("targetUid", "==", uid).limit(250).get(),
+    ]);
+    const refs = new Map<string, FirebaseFirestore.DocumentReference>();
+    [...sent.docs, ...received.docs].forEach((doc) => refs.set(doc.ref.path, doc.ref));
+    if (refs.size === 0) return;
+    const batch = db.batch();
+    refs.forEach((ref) => batch.delete(ref));
     await batch.commit();
   });
