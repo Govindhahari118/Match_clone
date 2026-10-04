@@ -427,5 +427,6 @@
   "photo_request_sent": "Photo request sent.",
   "photo_now_available": "A profile photo is now available.",
   "photo_request_failed": "Photo request could not be sent. Please try again.",
-  "photo_request_privacy_note": "This asks the member to add a profile photo. It does not reveal hidden photos or change their privacy settings."
+  "photo_request_privacy_note": "This asks the member to add a profile photo. It does not reveal hidden photos or change their privacy settings.",
+  "add_profile_photo": "Add profile photo"
 }
