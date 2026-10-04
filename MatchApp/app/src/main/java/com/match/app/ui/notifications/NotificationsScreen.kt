@@ -151,6 +151,8 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
                 val actionLabel = when (n.type) {
                     "LIKE", "INTEREST" -> t("review_interest", "Review interest")
                     "MATCH", "MESSAGE" -> t("open_chat", "Open chat")
+                    "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" ->
+                        t("review_call_request", "Review call request")
                     "VIEW" -> t("view_profile", "View profile")
                     else -> null
                 }
