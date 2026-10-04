@@ -121,9 +121,12 @@ class PrivacyViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val incomingContactRequests = session.firebaseUid.filterNotNull()
+        .flatMapLatest(subscriptionRepository::observeIncomingContactRequests)
+
     val pendingContactRequests: StateFlow<List<ContactRequestUi>> = combine(
         candidateProfiles,
-        subscriptionRepository.observeIncomingContactRequests()
+        incomingContactRequests
     ) { candidates, requests ->
         val byUid = candidates.associateBy { it.firebaseUid }
         requests.map { request ->
