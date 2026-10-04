@@ -139,3 +139,5 @@ from the client as truth.
 - `startSecureCallSession` — server-authoritative provider-session allocation boundary. Requires an active mutual match, current block/privacy eligibility, configured provider adapter, rollout flag, per-account/per-pair rate limits, and returns only short-lived client allocation material. The default adapter fails closed.
 
 - `setChatTyping` — App Check/authenticated, mutual-match-only ephemeral typing signal. Re-checks active accounts, both-direction blocks and profile privacy; writes only short-lived server-owned typing state under the authorized chat thread. Clients cannot write typing documents directly.
+
+- `requestSecureCall` / `getSecureCallRequest` / `respondSecureCallRequest` / `cancelSecureCallRequest` — provider-independent post-match call coordination. Requires an active mutual match and current block/privacy eligibility; proposed times are constrained to 15 minutes–14 days, active requests are anti-spam limited, and state changes emit durable notifications. These endpoints do not allocate a live provider session.

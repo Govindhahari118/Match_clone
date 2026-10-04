@@ -40,5 +40,9 @@ test("notification actions are explicit and stable", () => {
   assert.equal(notificationActionFor("INTEREST"), "INTERESTS");
   assert.equal(notificationActionFor("MATCH"), "MATCHES");
   assert.equal(notificationActionFor("MESSAGE"), "CHAT");
+  assert.equal(notificationActionFor("CALL_REQUEST"), "CHAT");
+  assert.equal(notificationActionFor("CALL_ACCEPTED"), "CHAT");
+  assert.equal(notificationActionFor("CALL_DECLINED"), "CHAT");
+  assert.equal(notificationActionFor("CALL_CANCELLED"), "CHAT");
   assert.equal(notificationActionFor("SYSTEM"), "NOTIFICATIONS");
 });
