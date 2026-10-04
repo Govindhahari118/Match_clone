@@ -229,7 +229,7 @@ service cloud.firestore {
         (!('photoVisibility' in request.resource.data) ||
           (('photoVisibility' in resource.data) &&
             request.resource.data.photoVisibility == resource.data.photoVisibility));
-      allow delete: if isOwner(ownerUid);
+      allow delete: if false;
     }
     match /contactGrants/{ownerUid}/viewers/{viewerUid} {
       allow read: if isOwner(ownerUid);
