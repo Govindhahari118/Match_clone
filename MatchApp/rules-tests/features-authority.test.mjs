@@ -42,7 +42,15 @@ beforeEach(async () => {
     await setDoc(doc(db, 'referrals/ref1'), { referrerUid: 'alice', referredEmail: 'friend@example.test', status: 'pending' });
     await setDoc(doc(db, 'rmRequests/rm1'), { uid: 'alice', status: 'pending' });
     await setDoc(doc(db, 'backgroundChecks/bg1'), { requestedBy: 'alice', targetUid: 'bob', status: 'submitted' });
-    await setDoc(doc(db, 'callRequests/call1'), { fromUid: 'alice', toUid: 'bob', status: 'requested', type: 'voice' });
+    await setDoc(doc(db, 'callRequests/call1'), {
+      pairId: 'alice_bob',
+      requesterUid: 'alice',
+      targetUid: 'bob',
+      users: ['alice', 'bob'],
+      status: 'PENDING',
+      kind: 'VOICE',
+      proposedAtMs: Date.now() + 60 * 60_000,
+    });
     await setDoc(doc(db, 'communities/community1/members/alice'), { uid: 'alice' });
   });
 });
@@ -65,7 +73,15 @@ test('clients cannot forge server-managed feature mutations', async () => {
   await assertFails(setDoc(doc(db, 'referrals/fake'), { referrerUid: 'alice', status: 'joined' }));
   await assertFails(setDoc(doc(db, 'rmRequests/fake'), { uid: 'alice', status: 'approved', plan: 'PLATINUM' }));
   await assertFails(setDoc(doc(db, 'backgroundChecks/fake'), { requestedBy: 'alice', targetUid: 'bob', status: 'approved' }));
-  await assertFails(setDoc(doc(db, 'callRequests/fake'), { fromUid: 'alice', toUid: 'bob', status: 'accepted', type: 'video' }));
+  await assertFails(setDoc(doc(db, 'callRequests/fake'), {
+    pairId: 'alice_bob',
+    requesterUid: 'alice',
+    targetUid: 'bob',
+    users: ['alice', 'bob'],
+    status: 'ACCEPTED',
+    kind: 'VIDEO',
+    proposedAtMs: Date.now() + 60 * 60_000,
+  }));
   await assertFails(setDoc(doc(db, 'communities/community1/members/fake'), { uid: 'alice' }));
 });
 
