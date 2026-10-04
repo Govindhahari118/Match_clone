@@ -111,7 +111,7 @@ function relationshipMatchId(uidA: string, uidB: string): string {
 }
 
 function preferenceFor(type: string): "interests" | "matches" | "messages" | "system" {
-  if (type === "INTEREST") return "interests";
+  if (type === "INTEREST" || type === "PHOTO_REQUEST") return "interests";
   if (type === "MATCH") return "matches";
   if (type === "MESSAGE") return "messages";
   return "system";
@@ -181,6 +181,36 @@ async function contactRequestNotificationStillAllowed(
     privacyBA.data()?.profileHidden !== true &&
     privacyBA.data()?.contactHidden !== true &&
     String(targetSettings.data()?.contactVisibility || "selected_people") !== "nobody";
+}
+
+async function photoRequestNotificationStillAllowed(
+  requesterUid: string,
+  targetUid: string
+): Promise<boolean> {
+  const [
+    requester,
+    target,
+    requesterBlock,
+    targetBlock,
+    requesterPrivacy,
+    targetPrivacy,
+  ] = await Promise.all([
+    db.collection("users").doc(requesterUid).get(),
+    db.collection("users").doc(targetUid).get(),
+    db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
+    db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
+    db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+  ]);
+  return requester.exists &&
+    target.exists &&
+    accountIsActive(requester.data()?.accountStatus) &&
+    accountIsActive(target.data()?.accountStatus) &&
+    !String(target.data()?.photoUrl || "").trim() &&
+    !requesterBlock.exists &&
+    !targetBlock.exists &&
+    requesterPrivacy.data()?.profileHidden !== true &&
+    targetPrivacy.data()?.profileHidden !== true;
 }
 
 async function chatNotificationStillAllowed(
@@ -346,6 +376,37 @@ export const onContactRequestPending = functions.firestore
         type: "CONTACT_REQUEST",
         title: "Contact access request",
         body: "A mutual match requested permission to reveal your contact. Open Privacy & visibility to respond.",
+        entityType: "profile",
+        entityId: requesterUid,
+        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+        fromFirebaseUid: requesterUid,
+      }
+    );
+  });
+
+export const onPhotoRequestChanged = functions.firestore
+  .document("photoRequests/{requestId}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return;
+    const data = change.after.data();
+    if (!data || String(data.status || "").toUpperCase() !== "PENDING") return;
+
+    const requesterUid = String(data.requesterUid || "");
+    const targetUid = String(data.targetUid || "");
+    const requestedAtMillis = Number(data.requestedAtMillis || 0);
+    const beforeRequestedAtMillis = change.before.exists ?
+      Number(change.before.data()?.requestedAtMillis || 0) : 0;
+    if (!requesterUid || !targetUid || requesterUid === targetUid ||
+        requestedAtMillis <= 0 || requestedAtMillis === beforeRequestedAtMillis) return;
+    if (!await photoRequestNotificationStillAllowed(requesterUid, targetUid)) return;
+
+    await deliverPersistedNotification(
+      `photo_request_${context.params.requestId}_${requestedAtMillis}`,
+      {
+        userId: targetUid,
+        type: "PHOTO_REQUEST",
+        title: "Photo request",
+        body: "A member viewed your profile and requested that you add a profile photo.",
         entityType: "profile",
         entityId: requesterUid,
         deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
