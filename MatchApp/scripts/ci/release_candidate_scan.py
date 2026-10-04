@@ -323,6 +323,20 @@ def main() -> int:
                 require(pattern.search(source_text) is None,
                         f"{source.relative_to(ROOT)}: retired {label} reference", failures)
 
+    # Safety reports must use stable codes and preserve server-owned message evidence.
+    safety = text(ROOT / "functions/src/safety.ts")
+    report_policy = text(ROOT / "functions/src/reportReasonPolicy.ts")
+    chat_identity = text(ROOT / "functions/src/chatIdentityPolicy.ts")
+    firestore_rules = text(ROOT / "firestore.rules")
+    require("submitChatMessageReport" in safety and "chatMessageReports" in safety,
+            "chat message evidence reporting must remain server-authoritative", failures)
+    require("normalizeReportReason" in safety and "REPORT_REASON_CODES" in report_policy,
+            "profile/message reports must use stable backend reason codes", failures)
+    require("canonicalChatThreadId" in safety and "canonicalChatThreadId" in chat_identity,
+            "message reporting must share canonical chat thread identity", failures)
+    require("match /chatMessageReports/{reportId} { allow read, write: if false; }" in firestore_rules,
+            "chat-message moderation evidence must remain client-inaccessible", failures)
+
     # Family-assisted profiles are a first-class matrimony contract, not a UI-only label.
     user_entity = text(APP / "src/main/java/com/match/app/data/local/entity/UserEntity.kt")
     profile_service = text(APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt")
