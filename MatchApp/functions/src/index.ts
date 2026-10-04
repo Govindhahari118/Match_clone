@@ -6,7 +6,7 @@
 export * from "./users";
 export * from "./religionProfile";
 export * from "./notifications";
-export { consumeContactReveal } from "./privacy";
+export { consumeContactReveal, requestContactAccess, respondContactAccess } from "./privacy";
 export * from "./interests";
 export * from "./playBilling";
 export * from "./safety";

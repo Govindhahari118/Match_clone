@@ -35,6 +35,7 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.DataExportLink
 import com.match.app.data.repo.ConsentState
+import com.match.app.data.repo.SubscriptionRepository
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeHero
 import com.match.app.ui.components.MatreeInfoCard
@@ -43,12 +44,20 @@ import com.match.app.ui.components.MatreePrimaryButton
 import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeStatusTone
 import com.match.app.ui.components.MatreeTopBar
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class ContactRequestUi(
+    val requesterUid: String,
+    val displayName: String,
+    val city: String,
+    val requestedAtMillis: Long
+)
 
 data class PrivacyMemberUi(
     val uid: String,
@@ -67,6 +76,7 @@ class PrivacyViewModel @Inject constructor(
     private val userDao: UserDao,
     private val firestoreProfile: FirestoreProfileService,
     private val privacy: FirestorePrivacyService,
+    private val subscriptionRepository: SubscriptionRepository,
     private val consentRepository: ConsentRepository,
     private val authRepository: AuthRepository
 ) : ViewModel() {
@@ -107,6 +117,25 @@ class PrivacyViewModel @Inject constructor(
                 contactHidden = relation?.contactHidden == true,
                 phoneGranted = grant?.phoneAllowed == true,
                 whatsappGranted = grant?.whatsappAllowed == true
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val incomingContactRequests = session.firebaseUid.filterNotNull()
+        .flatMapLatest(subscriptionRepository::observeIncomingContactRequests)
+
+    val pendingContactRequests: StateFlow<List<ContactRequestUi>> = combine(
+        candidateProfiles,
+        incomingContactRequests
+    ) { candidates, requests ->
+        val byUid = candidates.associateBy { it.firebaseUid }
+        requests.map { request ->
+            val profile = byUid[request.requesterUid]
+            ContactRequestUi(
+                requesterUid = request.requesterUid,
+                displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: "Member",
+                city = profile?.city.orEmpty(),
+                requestedAtMillis = request.updatedAtMillis.takeIf { it > 0 } ?: request.createdAtMillis
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -166,6 +195,17 @@ class PrivacyViewModel @Inject constructor(
     fun setIncognito(value: Boolean) = viewModelScope.launch { session.setIncognitoMode(value) }
     fun setHoroscopeVisible(value: Boolean) = updateUser { it.copy(showHoroscope = value) }
     fun setIncomeDisclosure(value: String) = updateUser { it.copy(incomeDisclosure = value) }
+
+    fun respondContactRequest(requesterUid: String, approve: Boolean) = viewModelScope.launch {
+        _saving.value = true
+        _error.value = null
+        subscriptionRepository.respondContactAccess(requesterUid, approve)
+            .onFailure { error ->
+                _error.value = error.message?.take(180)
+                    ?: "Could not update this contact request. Please try again."
+            }
+        _saving.value = false
+    }
 
     fun setContactVisibility(value: ContactVisibility) = privacyUpdate {
         val uid = session.firebaseUid.first() ?: error("Sign in required")
@@ -258,6 +298,7 @@ fun PrivacyDashboardScreen(
     val incognito by vm.incognito.collectAsState()
     val user by vm.user.collectAsState()
     val members by vm.members.collectAsState()
+    val pendingContactRequests by vm.pendingContactRequests.collectAsState()
     val contactVisibility by vm.contactVisibility.collectAsState()
     val activityPrivacy by vm.activityPrivacy.collectAsState()
     val saving by vm.saving.collectAsState()
@@ -372,6 +413,49 @@ fun PrivacyDashboardScreen(
                             onClick = { vm.setIncomeDisclosure(value) },
                             enabled = user != null && !saving
                         )
+                    }
+                }
+            }
+
+            if (pendingContactRequests.isNotEmpty()) {
+                MatreeInfoCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.MarkEmailUnread, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                        Column(Modifier.weight(1f)) {
+                            Text(t("contact_requests", "Contact requests"), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                t("contact_requests_body", "Approve only members you are comfortable sharing your phone number with. Membership still controls whether they can reveal it."),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    pendingContactRequests.forEach { request ->
+                        HorizontalDivider()
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = MatreeDesign.spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(request.displayName, fontWeight = FontWeight.Medium)
+                                if (request.city.isNotBlank()) {
+                                    Text(
+                                        request.city,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = { vm.respondContactRequest(request.requesterUid, false) },
+                                enabled = !saving
+                            ) { Text(t("decline", "Decline")) }
+                            Button(
+                                onClick = { vm.respondContactRequest(request.requesterUid, true) },
+                                enabled = !saving
+                            ) { Text(t("approve", "Approve")) }
+                        }
                     }
                 }
             }

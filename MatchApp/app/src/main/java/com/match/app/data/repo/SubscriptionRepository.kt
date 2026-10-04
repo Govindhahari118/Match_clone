@@ -26,6 +26,14 @@ class SubscriptionRepository @Inject constructor(
         val consumptionPending: Boolean
     )
     data class RevealedContact(val phoneNumber: String, val contactsUsed: Int, val contactsLimit: Int)
+    data class ContactAccessRequestResult(val status: String, val canReveal: Boolean)
+    data class ContactAccessRequest(
+        val requesterUid: String,
+        val targetUid: String,
+        val status: String,
+        val createdAtMillis: Long,
+        val updatedAtMillis: Long
+    )
 
     private val db = FirebaseFirestore.getInstance()
     private val functions = FirebaseFunctions.getInstance()
@@ -157,6 +165,56 @@ class SubscriptionRepository @Inject constructor(
             userDao.updateBoostExpiry(localId, boostUntil)
         }
         return boostUntil
+    }
+
+    fun observeIncomingContactRequests(targetUid: String): Flow<List<ContactAccessRequest>> = callbackFlow {
+        require(targetUid.isNotBlank()) { "Missing account identity" }
+        val reg = db.collection("contactRequests")
+            .whereEqualTo("targetUid", targetUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val values = snapshot?.documents.orEmpty().mapNotNull { doc ->
+                    val requesterUid = doc.getString("requesterUid")?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val targetUid = doc.getString("targetUid")?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val status = doc.getString("status").orEmpty()
+                    if (status != "PENDING") return@mapNotNull null
+                    ContactAccessRequest(
+                        requesterUid = requesterUid,
+                        targetUid = targetUid,
+                        status = status,
+                        createdAtMillis = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L,
+                        updatedAtMillis = doc.getTimestamp("updatedAt")?.toDate()?.time ?: 0L
+                    )
+                }.sortedByDescending { it.updatedAtMillis }
+                trySend(values)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun requestContactAccess(targetUid: String): Result<ContactAccessRequestResult> = runCatching {
+        require(targetUid.isNotBlank()) { "Missing target profile" }
+        val result = functions.getHttpsCallable("requestContactAccess")
+            .call(mapOf("targetUid" to targetUid)).await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid contact request response")
+        ContactAccessRequestResult(
+            status = data["status"] as? String ?: "UNKNOWN",
+            canReveal = data["canReveal"] as? Boolean ?: false
+        )
+    }
+
+    suspend fun respondContactAccess(requesterUid: String, approve: Boolean): Result<String> = runCatching {
+        require(requesterUid.isNotBlank()) { "Missing requester profile" }
+        val result = functions.getHttpsCallable("respondContactAccess")
+            .call(mapOf("requesterUid" to requesterUid, "approve" to approve)).await()
+        @Suppress("UNCHECKED_CAST")
+        val data = result.data as? Map<String, Any?> ?: error("Invalid contact response")
+        data["status"] as? String ?: error("Missing contact request status")
     }
 
     /** Contact reveal is a privileged server action; no client-side counter mutation. */
