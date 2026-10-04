@@ -258,6 +258,7 @@ class ChatViewModel @Inject constructor(
 fun ChatScreen(
     peerId: Long,
     onBack: () -> Unit,
+    onSecureCall: () -> Unit = {},
     onUpgrade: () -> Unit = {},
     vm: ChatViewModel = hiltViewModel()
 ) {
@@ -424,6 +425,17 @@ fun ChatScreen(
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
+                    if (state.isMutual && !state.isBlocked) {
+                        IconButton(
+                            onClick = onSecureCall,
+                            modifier = Modifier.testTag("chat_secure_call")
+                        ) {
+                            Icon(
+                                Icons.Filled.Phone,
+                                contentDescription = t("secure_call", "Secure Call")
+                            )
+                        }
+                    }
                     Box {
                         IconButton(onClick = { showMenu = true }) { Icon(Icons.Filled.MoreVert, "More options") }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
