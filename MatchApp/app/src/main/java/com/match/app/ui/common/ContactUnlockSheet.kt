@@ -15,6 +15,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.match.app.ui.i18n.t
 
 /**
  * Contact details are never supplied from the public profile document. The caller
@@ -31,8 +32,12 @@ fun ContactUnlockSheet(
     contactsUsed: Int,
     contactsLimit: Int,
     isLoading: Boolean,
+    requestLoading: Boolean,
+    requestStatus: String,
+    requestMessage: String?,
     errorMessage: String?,
     onReveal: () -> Unit,
+    onRequestAccess: () -> Unit,
     onUpgrade: () -> Unit,
     onMessage: () -> Unit,
     onDismiss: () -> Unit
@@ -67,7 +72,7 @@ fun ContactUnlockSheet(
             }
 
             Text(
-                if (revealedPhone.isNotBlank()) "Contact details" else "Unlock contact",
+                if (revealedPhone.isNotBlank()) t("contact_details", "Contact details") else t("unlock_contact", "Unlock contact"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -75,7 +80,7 @@ fun ContactUnlockSheet(
             when {
                 revealedPhone.isNotBlank() -> {
                     Text(
-                        "Contact access was authorized for your mutual match with $matchName.",
+t("contact_authorized_for_match", mapOf("name" to matchName), "Contact access was authorized for your mutual match with {name}."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -96,23 +101,23 @@ fun ContactUnlockSheet(
                                 clipboard.setText(AnnotatedString(revealedPhone))
                                 copied = true
                             }) {
-                                Icon(if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy, "Copy phone")
+                                Icon(if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy, t("copy_phone", "Copy phone"))
                             }
                         }
                     }
                     if (contactsLimit > 0) {
                         Text(
-                            "Contacts unlocked: $contactsUsed / $contactsLimit for this membership",
+t("contacts_unlocked_count", mapOf("used" to contactsUsed, "limit" to contactsLimit), "Contacts unlocked: {used} / {limit} for this membership"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                    Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(t("done", "Done")) }
                 }
 
                 !isMutual -> {
                     Text(
-                        "Contact details become eligible after both members accept each other's interest.",
+t("contact_after_mutual", "Contact details become eligible after both members accept each other's interest."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -120,13 +125,13 @@ fun ContactUnlockSheet(
                     OutlinedButton(onClick = { onDismiss(); onMessage() }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Chat, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Message")
+                        Text(t("message", "Message"))
                     }
                 }
 
                 !isPremium -> {
                     Text(
-                        "An active membership with contact access is required. The server checks your entitlement and quota before returning any phone number.",
+t("contact_membership_required", "An active membership with contact access is required. The server checks your entitlement and quota before returning any phone number."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -134,17 +139,27 @@ fun ContactUnlockSheet(
                     Button(onClick = { onDismiss(); onUpgrade() }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Star, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("View membership plans", fontWeight = FontWeight.Bold)
+                        Text(t("view_membership_plans", "View membership plans"), fontWeight = FontWeight.Bold)
                     }
                 }
 
                 else -> {
                     Text(
-                        "Reveal $matchName's shared phone number? This uses your membership contact allowance. Reopening the same contact does not consume another slot.",
+t("reveal_shared_phone", mapOf("name" to matchName), "Reveal {name}'s shared phone number? This uses your membership contact allowance. Reopening the same contact does not consume another slot."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+                    requestMessage?.let { key ->
+                        val text = when (key) {
+                            "contact_request_pending" -> t("contact_request_pending", "Contact request sent. Waiting for approval.")
+                            "contact_request_approved" -> t("contact_request_approved", "Contact sharing is approved. You can reveal the shared number if your membership allows it.")
+                            "contact_request_sent" -> t("contact_request_sent", "Contact request sent.")
+                            "contact_request_failed" -> t("contact_request_failed", "Contact request could not be sent.")
+                            else -> key
+                        }
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                    }
                     errorMessage?.takeIf { it.isNotBlank() }?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
                     }
@@ -159,9 +174,28 @@ fun ContactUnlockSheet(
                             Icon(Icons.Filled.Phone, null, modifier = Modifier.size(18.dp))
                         }
                         Spacer(Modifier.width(8.dp))
-                        Text(if (isLoading) "Checking eligibility…" else "Reveal contact")
+                        Text(if (isLoading) t("checking_eligibility", "Checking eligibility…") else t("reveal_contact", "Reveal contact"))
                     }
-                    TextButton(onClick = onDismiss, enabled = !isLoading) { Text("Cancel") }
+                    OutlinedButton(
+                        onClick = onRequestAccess,
+                        enabled = !isLoading && !requestLoading && requestStatus != "PENDING",
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (requestLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.PersonAdd, null, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when {
+                                requestLoading -> t("sending_request", "Sending request…")
+                                requestStatus == "PENDING" -> t("request_pending", "Request pending")
+                                else -> t("request_contact_access", "Request contact access")
+                            }
+                        )
+                    }
+                    TextButton(onClick = onDismiss, enabled = !isLoading && !requestLoading) { Text(t("cancel", "Cancel")) }
                 }
             }
         }
