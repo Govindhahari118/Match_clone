@@ -348,7 +348,7 @@ export const onContactRequestPending = functions.firestore
         body: "A mutual match requested permission to reveal your contact. Open Privacy & visibility to respond.",
         entityType: "profile",
         entityId: requesterUid,
-        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+        deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
         fromFirebaseUid: requesterUid,
       }
     );
