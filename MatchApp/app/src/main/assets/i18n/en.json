@@ -431,5 +431,17 @@
   "report_message": "Report message",
   "report_message_body": "Choose why this received message should be reviewed. The server preserves the original message evidence for moderation.",
   "message_report_submitted": "Message report submitted for moderation.",
-  "message_report_failed": "Message report could not be submitted. Check your connection and try again."
+  "message_report_failed": "Message report could not be submitted. Check your connection and try again.",
+  "request_call_time": "Request a call time",
+  "request_call_time_hint": "Choose a convenient time. Your match can accept or decline before live calling is enabled.",
+  "in_30_minutes": "In 30 min",
+  "in_1_hour": "In 1 hour",
+  "in_3_hours": "In 3 hours",
+  "tomorrow_same_time": "Tomorrow",
+  "call_request_accepted": "Call time accepted",
+  "call_request_pending": "Call request pending",
+  "proposed_call_time": "Proposed time: {time}",
+  "cancel_call_request": "Cancel request",
+  "call_request": "Call request",
+  "review_call_request": "Review call request"
 }
