@@ -376,7 +376,7 @@ export const onNewMessage = functions.firestore
         body: "Open the app to view your message.",
         entityType: "chat",
         entityId: context.params.threadId,
-        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+        deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
         fromFirebaseUid,
       }
     );

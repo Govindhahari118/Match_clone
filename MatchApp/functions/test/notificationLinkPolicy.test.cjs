@@ -15,6 +15,10 @@ test("notification deep links prefer verified HTTPS host", () => {
     notificationDeepLink("matches", "MATCH.EXAMPLE.COM"),
     "https://match.example.com/app/matches"
   );
+  assert.equal(
+    notificationDeepLink("messages", "match.example.com"),
+    "https://match.example.com/app/messages"
+  );
 });
 
 test("notification deep links fail safely to compatibility scheme without a valid production host", () => {

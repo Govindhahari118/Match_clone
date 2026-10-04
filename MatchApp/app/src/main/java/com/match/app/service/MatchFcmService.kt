@@ -39,7 +39,7 @@ class MatchFcmService : FirebaseMessagingService() {
 
     companion object {
         const val CHANNEL_ID = "match_default_channel"
-        const val CHANNEL_NAME = "MatrimonyConnect"
+        const val CHANNEL_NAME = "Matree"
         private const val CH_MESSAGES = "match_messages"
         private const val CH_INTERESTS = "match_interests"
         private const val CH_MATCHES = "match_matches"
@@ -107,7 +107,7 @@ class MatchFcmService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val type = message.data["type"] ?: "general"
-        val title = message.data["title"] ?: message.notification?.title ?: "MatrimonyConnect"
+        val title = message.data["title"] ?: message.notification?.title ?: "Matree"
         val body = message.data["body"] ?: message.notification?.body ?: "Open the app for details"
         val fromFirebaseUid = message.data["peer_uid"] ?: message.data["user_id"]
         val intendedRecipientUid = message.data["recipient_uid"]?.trim()?.takeIf { it.isNotEmpty() }
