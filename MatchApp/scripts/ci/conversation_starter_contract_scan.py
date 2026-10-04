@@ -14,6 +14,7 @@ CHAT = ROOT / "app/src/main/java/com/match/app/ui/chat/ChatScreen.kt"
 def main() -> int:
     failures: list[str] = []
     text = CHAT.read_text(encoding="utf-8")
+    compact = "".join(text.split())
 
     required = (
         'testTag("conversation_starters")',
@@ -27,7 +28,9 @@ def main() -> int:
         'testTag("conversation_starter_$index")',
     )
     for needle in required:
-        if needle not in text:
+        haystack = compact if needle.startswith('t("conversation_') else text
+        normalized = "".join(needle.split()) if haystack is compact else needle
+        if normalized not in haystack:
             failures.append(f"missing conversation-starter contract: {needle}")
 
     if "vm.send(starter)" in text or "vm.send(draft)" in text:
