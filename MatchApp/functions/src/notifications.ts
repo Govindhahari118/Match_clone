@@ -324,6 +324,7 @@ export const onContactRequestPending = functions.firestore
     const beforeStatus = change.before.exists ? String(change.before.data()?.status || "") : "";
     if (!change.after.exists) return;
     const data = change.after.data();
+    if (!data) return;
     const status = String(data.status || "");
     if (status !== "PENDING" || beforeStatus === "PENDING") return;
 
