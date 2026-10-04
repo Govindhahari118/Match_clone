@@ -9,6 +9,7 @@ import {
   usageAllowed,
 } from "./abusePolicy";
 import { normalizeReportReason } from "./reportReasonPolicy";
+import { canonicalChatThreadId } from "./chatIdentityPolicy";
 
 const MAX_UID_LENGTH = 128;
 
@@ -165,27 +166,8 @@ export const submitChatMessageReport = functions.https.onCall(async (data, conte
     throw new functions.https.HttpsError("invalid-argument", "Choose a valid report reason");
   }
 
-  const threadId = stableId(...[reporterUid, targetUid].sort()).slice(0, 40);
-  const canonicalThreadRef = db.collection("chats").doc(threadId);
-  const fallbackThreadRef = db.collection("chats").doc(
-    crypto.createHash("sha256").update([reporterUid, targetUid].sort().join("|")).digest("hex").slice(0, 40)
-  );
-
-  // Chat thread ids are generated independently in chat.ts. Resolve the actual thread by
-  // participant membership so reporting remains compatible if the canonical hash implementation
-  // changes in a future schema version.
-  const threadQuery = await db.collection("chats")
-    .where("participantUids", "array-contains", reporterUid)
-    .limit(100)
-    .get();
-  const thread = threadQuery.docs.find((doc) => {
-    const participants = Array.isArray(doc.data().participantUids) ? doc.data().participantUids : [];
-    return participants.length === 2 && participants.includes(reporterUid) && participants.includes(targetUid);
-  });
-  const threadRef = thread?.ref || (await canonicalThreadRef.get()).exists ?
-    canonicalThreadRef :
-    fallbackThreadRef;
-
+  const threadId = canonicalChatThreadId(reporterUid, targetUid);
+  const threadRef = db.collection("chats").doc(threadId);
   const messageRef = threadRef.collection("messages").doc(messageId);
   const day = dayKey();
   const reportRef = db.collection("chatMessageReports")
