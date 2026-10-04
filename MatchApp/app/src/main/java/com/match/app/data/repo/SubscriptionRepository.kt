@@ -167,15 +167,10 @@ class SubscriptionRepository @Inject constructor(
         return boostUntil
     }
 
-    fun observeIncomingContactRequests(): Flow<List<ContactAccessRequest>> = callbackFlow {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid.isNullOrBlank()) {
-            trySend(emptyList())
-            close()
-            return@callbackFlow
-        }
+    fun observeIncomingContactRequests(targetUid: String): Flow<List<ContactAccessRequest>> = callbackFlow {
+        require(targetUid.isNotBlank()) { "Missing account identity" }
         val reg = db.collection("contactRequests")
-            .whereEqualTo("targetUid", uid)
+            .whereEqualTo("targetUid", targetUid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())
