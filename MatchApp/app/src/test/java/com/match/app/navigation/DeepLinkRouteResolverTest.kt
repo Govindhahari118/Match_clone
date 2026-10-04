@@ -12,6 +12,7 @@ class DeepLinkRouteResolverTest {
             "notifications" to "notifications",
             "interests" to "interests",
             "matches" to "matches",
+            "messages" to "chat_list",
             "who_viewed" to "who_viewed",
             "pricing" to "pricing",
             "verification" to "verification",
@@ -81,6 +82,10 @@ class DeepLinkRouteResolverTest {
         assertEquals(
             "matches",
             DeepLinkRouteResolver.fromUri("HTTPS", null, "LINKS.MATREE.EXAMPLE", listOf("app", "matches"), false, "links.matree.example")
+        )
+        assertEquals(
+            "chat_list",
+            DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("app", "messages"), false, "links.matree.example")
         )
         assertNull(DeepLinkRouteResolver.fromUri("https", null, "evil.example", listOf("app", "matches"), false, "links.matree.example"))
         assertNull(DeepLinkRouteResolver.fromUri("https", null, "links.matree.example", listOf("matches"), false, "links.matree.example"))
