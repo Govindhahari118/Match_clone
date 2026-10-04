@@ -176,3 +176,19 @@ test('photo grants and requests are readable only by participants and never clie
   await assertFails(getDoc(doc(charlie, 'photoRequests/bob_alice')));
   await assertFails(updateDoc(doc(alice, 'photoRequests/bob_alice'), { status: 'APPROVED' }));
 });
+
+
+test('owner cannot delete privacySettings and reset protected photo visibility', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'privacySettings/alice'), {
+      contactVisibility: 'mutual_matches',
+      onlineVisibility: 'mutual',
+      lastActiveVisibility: 'mutual',
+      photoVisibility: 'HIDDEN',
+      updatedAt: Date.now(),
+    });
+  });
+  const alice = env.authenticatedContext('alice').firestore();
+  const { deleteDoc } = await import('firebase/firestore');
+  await assertFails(deleteDoc(doc(alice, 'privacySettings/alice')));
+});
