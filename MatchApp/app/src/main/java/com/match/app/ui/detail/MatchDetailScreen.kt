@@ -83,6 +83,9 @@ data class DetailUi(
     val contactsUsed: Int = 0,
     val contactsLimit: Int = 0,
     val contactLoading: Boolean = false,
+    val contactRequestLoading: Boolean = false,
+    val contactRequestStatus: String = "",
+    val contactRequestMessage: String? = null,
     val contactError: String? = null,
     val showReportDialog: Boolean = false,
     val reportSubmitting: Boolean = false,
@@ -310,7 +313,41 @@ class MatchDetailViewModel @Inject constructor(
         }
     }
 
-    fun dismissContactUnlock() = _ui.update { it.copy(showContactUnlock = false, contactError = null) }
+    fun dismissContactUnlock() = _ui.update {
+        it.copy(showContactUnlock = false, contactError = null, contactRequestMessage = null)
+    }
+
+    fun requestContactAccess() = viewModelScope.launch {
+        val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
+        if (!_ui.value.isMutual || targetUid.isBlank() || _ui.value.contactRequestLoading) return@launch
+        _ui.update {
+            it.copy(contactRequestLoading = true, contactRequestMessage = null, contactError = null)
+        }
+        subscriptionRepo.requestContactAccess(targetUid)
+            .onSuccess { result ->
+                val message = when (result.status) {
+                    "PENDING" -> "contact_request_pending"
+                    "APPROVED", "AUTO_SHARE_ALLOWED" -> "contact_request_approved"
+                    else -> "contact_request_sent"
+                }
+                _ui.update {
+                    it.copy(
+                        contactRequestLoading = false,
+                        contactRequestStatus = result.status,
+                        contactRequestMessage = message
+                    )
+                }
+            }
+            .onFailure { error ->
+                _ui.update {
+                    it.copy(
+                        contactRequestLoading = false,
+                        contactRequestMessage = "contact_request_failed",
+                        contactError = error.message?.take(180)
+                    )
+                }
+            }
+    }
 
     fun revealContact() = viewModelScope.launch {
         val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
@@ -406,8 +443,12 @@ fun MatchDetailScreen(
             contactsUsed = ui.contactsUsed,
             contactsLimit = ui.contactsLimit,
             isLoading = ui.contactLoading,
+            requestLoading = ui.contactRequestLoading,
+            requestStatus = ui.contactRequestStatus,
+            requestMessage = ui.contactRequestMessage,
             errorMessage = ui.contactError,
             onReveal = vm::revealContact,
+            onRequestAccess = vm::requestContactAccess,
             onUpgrade = onPricing,
             onMessage = onChat,
             onDismiss = vm::dismissContactUnlock
