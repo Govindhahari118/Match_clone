@@ -576,7 +576,12 @@ fun MainShell(vm: MainShellViewModel = hiltViewModel()) {
                 }
                 composable(MainRoutes.CHAT, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
                     val peerId = backStack.arguments?.getLong("peerId") ?: return@composable
-                    ChatScreen(peerId = peerId, onBack = { nav.popBackStack() }, onUpgrade = { nav.navigate(MainRoutes.PRICING) })
+                    ChatScreen(
+                        peerId = peerId,
+                        onBack = { nav.popBackStack() },
+                        onSecureCall = { nav.navigate(MainRoutes.secureCall(peerId)) },
+                        onUpgrade = { nav.navigate(MainRoutes.PRICING) }
+                    )
                 }
                 composable(MainRoutes.SECURE_CALL, arguments = listOf(navArgument("peerId") { type = NavType.LongType })) { backStack ->
                     val peerId = backStack.arguments?.getLong("peerId") ?: return@composable
