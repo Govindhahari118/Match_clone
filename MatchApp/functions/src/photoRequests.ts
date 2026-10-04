@@ -8,9 +8,12 @@ import {
 } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
 import { notificationActionFor, notificationDeepLink } from "./notificationLinkPolicy";
-
-const PHOTO_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-const PHOTO_REQUEST_DAILY_LIMIT = 20;
+import {
+  PHOTO_REQUEST_COOLDOWN_MS,
+  photoRequestCooldownRemaining,
+  photoRequestDailyAllowed,
+  publicPhotoAvailable,
+} from "./photoRequestPolicy";
 
 function cleanUid(value: unknown): string {
   const uid = typeof value === "string" ? value.trim() : "";
@@ -34,10 +37,6 @@ function rateId(requesterUid: string, day: string): string {
 
 function dayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
-}
-
-function publicPhotoAvailable(data: FirebaseFirestore.DocumentData | undefined): boolean {
-  return typeof data?.photoUrl === "string" && data.photoUrl.trim().length > 0;
 }
 
 /**
@@ -82,7 +81,7 @@ export const getPhotoRequestStatus = functions.https.onCall(async (data, context
       (target.data()?.stealthMode === true && !targetInterest.exists)) {
     return { status: "UNAVAILABLE", requestedAtMillis: 0, retryAfterMillis: 0 };
   }
-  if (publicPhotoAvailable(target.data())) {
+  if (publicPhotoAvailable(target.data()?.photoUrl)) {
     return { status: "PHOTO_AVAILABLE", requestedAtMillis: 0, retryAfterMillis: 0 };
   }
   if (!request.exists) {
@@ -93,8 +92,11 @@ export const getPhotoRequestStatus = functions.https.onCall(async (data, context
   const requestedAtMillis = value.requestedAt instanceof admin.firestore.Timestamp ?
     value.requestedAt.toMillis() : Number(value.requestedAtMillis || 0);
   const status = String(value.status || "NONE").toUpperCase();
-  const retryAfterMillis = status === "PENDING" ?
-    Math.max(0, requestedAtMillis + PHOTO_REQUEST_COOLDOWN_MS - Date.now()) : 0;
+  const retryAfterMillis = photoRequestCooldownRemaining(
+    status,
+    requestedAtMillis,
+    Date.now()
+  );
 
   return { status, requestedAtMillis, retryAfterMillis };
 });
@@ -163,7 +165,7 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
     if (target.data()?.stealthMode === true && !targetInterest.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not currently available for a photo request");
     }
-    if (publicPhotoAvailable(target.data())) {
+    if (publicPhotoAvailable(target.data()?.photoUrl)) {
       return { status: "PHOTO_AVAILABLE", requestedAtMillis: 0, retryAfterMillis: 0 };
     }
 
@@ -172,17 +174,21 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
       existingData.requestedAt.toMillis() : Number(existingData.requestedAtMillis || 0);
     const existingStatus = String(existingData.status || "").toUpperCase();
 
-    if (existing.exists && existingStatus === "PENDING" &&
-        requestedAtMillis > now - PHOTO_REQUEST_COOLDOWN_MS) {
+    const retryAfterMillis = photoRequestCooldownRemaining(
+      existingStatus,
+      requestedAtMillis,
+      now
+    );
+    if (existing.exists && retryAfterMillis > 0) {
       return {
         status: "PENDING",
         requestedAtMillis,
-        retryAfterMillis: Math.max(0, requestedAtMillis + PHOTO_REQUEST_COOLDOWN_MS - now),
+        retryAfterMillis,
       };
     }
 
     const count = Number(rate.data()?.count || 0);
-    if (count >= PHOTO_REQUEST_DAILY_LIMIT) {
+    if (!photoRequestDailyAllowed(count)) {
       throw new functions.https.HttpsError(
         "resource-exhausted",
         "Daily photo request limit reached. Try again tomorrow."
@@ -236,7 +242,7 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
 export const onPublicProfilePhotoAvailable = functions.firestore
   .document("users/{uid}")
   .onUpdate(async (change, context) => {
-    if (publicPhotoAvailable(change.before.data()) || !publicPhotoAvailable(change.after.data())) return;
+    if (publicPhotoAvailable(change.before.data()?.photoUrl) || !publicPhotoAvailable(change.after.data()?.photoUrl)) return;
     const targetUid = context.params.uid;
     const pending = await db.collection("photoRequests")
       .where("targetUid", "==", targetUid)
