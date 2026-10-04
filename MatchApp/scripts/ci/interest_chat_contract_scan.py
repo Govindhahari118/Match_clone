@@ -20,6 +20,19 @@ CONTRACTS = {
         '"mutual_match"',
         "export const onNewMessage",
     ),
+    "functions/src/calls.ts": (
+        "export const requestSecureCall",
+        "export const getSecureCallRequest",
+        "export const respondSecureCallRequest",
+        "export const cancelSecureCallRequest",
+        "persistAndSendNotification",
+    ),
+    "app/src/main/java/com/match/app/data/repo/SecureCallRepository.kt": (
+        'getHttpsCallable("requestSecureCall")',
+        'getHttpsCallable("getSecureCallRequest")',
+        'getHttpsCallable("respondSecureCallRequest")',
+        'getHttpsCallable("cancelSecureCallRequest")',
+    ),
     "functions/src/chat.ts": (
         "export const prepareChatThread",
         "export const sendChatMessage",
