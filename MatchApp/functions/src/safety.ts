@@ -8,23 +8,7 @@ import {
   safeUsageCount,
   usageAllowed,
 } from "./abusePolicy";
-
-const REPORT_REASONS = new Set([
-  "Fake identity",
-  "Fake profile",
-  "Already married",
-  "Scam or money request",
-  "Spam or scam",
-  "Harassment",
-  "Offensive content",
-  "Inappropriate content",
-  "Wrong information",
-  "Stolen photo",
-  "Underage concern",
-  "Under age",
-  "Spam",
-  "Other",
-]);
+import { normalizeReportReason } from "./reportReasonPolicy";
 
 const MAX_UID_LENGTH = 128;
 
@@ -103,12 +87,12 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
   if (!reporterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
 
   const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
-  const reason = typeof data?.reason === "string" ? data.reason.trim() : "";
+  const reason = normalizeReportReason(data?.reason);
   const details = typeof data?.details === "string" ? data.details.trim().slice(0, 1000) : "";
   if (!targetUid || targetUid === reporterUid) {
     throw new functions.https.HttpsError("invalid-argument", "Invalid profile to report");
   }
-  if (!REPORT_REASONS.has(reason)) {
+  if (!reason) {
     throw new functions.https.HttpsError("invalid-argument", "Choose a valid report reason");
   }
 
@@ -153,6 +137,133 @@ export const submitProfileReport = functions.https.onCall(async (data, context) 
 
   if (created) {
     functions.logger.info("Profile report submitted", { reporterUid, targetUid, reason });
+  }
+  return { success: true, alreadySubmitted: !created };
+});
+
+
+/**
+ * Report a specific message while preserving immutable server-side moderation evidence.
+ *
+ * The reporter must be the recipient of the reported message and a participant in the canonical
+ * thread. Client-provided message text/media is never trusted; the evidence snapshot is copied
+ * from the server-owned message document.
+ */
+export const submitChatMessageReport = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const reporterUid = context.auth?.uid;
+  if (!reporterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const targetUid = requireTargetUid(data?.targetUid, reporterUid);
+  const messageId = typeof data?.messageId === "string" ? data.messageId.trim() : "";
+  const reason = normalizeReportReason(data?.reason);
+  const details = typeof data?.details === "string" ? data.details.trim().slice(0, 1000) : "";
+  if (!messageId || !/^[A-Za-z0-9_-]{16,128}$/.test(messageId)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid message to report");
+  }
+  if (!reason) {
+    throw new functions.https.HttpsError("invalid-argument", "Choose a valid report reason");
+  }
+
+  const threadId = stableId(...[reporterUid, targetUid].sort()).slice(0, 40);
+  const canonicalThreadRef = db.collection("chats").doc(threadId);
+  const fallbackThreadRef = db.collection("chats").doc(
+    crypto.createHash("sha256").update([reporterUid, targetUid].sort().join("|")).digest("hex").slice(0, 40)
+  );
+
+  // Chat thread ids are generated independently in chat.ts. Resolve the actual thread by
+  // participant membership so reporting remains compatible if the canonical hash implementation
+  // changes in a future schema version.
+  const threadQuery = await db.collection("chats")
+    .where("participantUids", "array-contains", reporterUid)
+    .limit(100)
+    .get();
+  const thread = threadQuery.docs.find((doc) => {
+    const participants = Array.isArray(doc.data().participantUids) ? doc.data().participantUids : [];
+    return participants.length === 2 && participants.includes(reporterUid) && participants.includes(targetUid);
+  });
+  const threadRef = thread?.ref || (await canonicalThreadRef.get()).exists ?
+    canonicalThreadRef :
+    fallbackThreadRef;
+
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const day = dayKey();
+  const reportRef = db.collection("chatMessageReports")
+    .doc(stableId(reporterUid, threadRef.id, messageId));
+  const activityRef = db.collection("riskActivity").doc(reporterUid).collection("days").doc(day);
+
+  const created = await db.runTransaction(async (tx) => {
+    const [threadSnap, messageSnap, existing, activity] = await Promise.all([
+      tx.get(threadRef),
+      tx.get(messageRef),
+      tx.get(reportRef),
+      tx.get(activityRef),
+    ]);
+    if (!threadSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Conversation not found");
+    }
+    const participants = Array.isArray(threadSnap.data()?.participantUids) ?
+      threadSnap.data()?.participantUids : [];
+    if (participants.length !== 2 ||
+        !participants.includes(reporterUid) ||
+        !participants.includes(targetUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Conversation unavailable");
+    }
+    if (!messageSnap.exists) {
+      throw new functions.https.HttpsError("not-found", "Message not found");
+    }
+    const message = messageSnap.data() || {};
+    if (message.fromFirebaseUid !== targetUid || message.toFirebaseUid !== reporterUid) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Only received messages can be reported from this conversation"
+      );
+    }
+    if (existing.exists) return false;
+
+    const reportCount = safeUsageCount(activity.data()?.reportCount);
+    if (!usageAllowed(reportCount, MAX_DAILY_REPORTS)) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Daily report safety limit reached. Use Block for immediate protection or contact support."
+      );
+    }
+
+    tx.create(reportRef, {
+      reporterUid,
+      targetUid,
+      threadId: threadRef.id,
+      messageId,
+      reason,
+      details: details || null,
+      status: "OPEN",
+      evidence: {
+        fromFirebaseUid: String(message.fromFirebaseUid || ""),
+        toFirebaseUid: String(message.toFirebaseUid || ""),
+        body: typeof message.body === "string" ? message.body.slice(0, 3000) : "",
+        imageUri: typeof message.imageUri === "string" ? message.imageUri : null,
+        voiceUri: typeof message.voiceUri === "string" ? message.voiceUri : null,
+        voiceDurationMs: Number(message.voiceDurationMs || 0),
+        sentAt: Number(message.sentAt || 0),
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.set(activityRef, {
+      reportCount: reportCount + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+
+  if (created) {
+    functions.logger.info("Chat message report submitted", {
+      reporterUid,
+      targetUid,
+      threadId: threadRef.id,
+      messageId,
+      reason,
+    });
   }
   return { success: true, alreadySubmitted: !created };
 });
