@@ -57,6 +57,7 @@ REQUIRED = (
     "functions/src/chatIdentityPolicy.ts",
     "functions/src/reportReasonPolicy.ts",
     "functions/src/callSessionPolicy.ts",
+    "functions/src/callRequestPolicy.ts",
     "functions/src/communicationProvider.ts",
     "functions/src/notificationLinkPolicy.ts",
     "firestore.rules",
