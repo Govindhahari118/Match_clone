@@ -15,6 +15,8 @@ CRITICAL_TELUGU_KEYS = {
     "secure_call", "shortlist", "report_profile", "profile_unavailable",
     "online_now", "last_active", "private_match_conversation", "typing",
     "private_chat_safety_notice", "chat_safety_full", "replying_to", "voice_message",
+    "conversation_starters_title", "conversation_starters_body", "conversation_starter_1",
+    "conversation_starter_2", "conversation_starter_3",
     "what_they_are_looking_for", "trust_and_verification", "compatibility",
     "profile_details", "marital_status", "education", "profession", "mother_tongue",
 }
