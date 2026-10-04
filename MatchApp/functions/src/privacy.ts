@@ -3,6 +3,11 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import {
+  canRequestPhotoAccess,
+  canViewPublishedPhoto,
+  normalizeProfilePhotoVisibility,
+} from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
   SILVER_3M: 75,
@@ -12,6 +17,7 @@ const CONTACT_LIMITS: Record<string, number> = {
 
 const CONTACT_TYPES = new Set(["phone", "whatsapp"]);
 const CONTACT_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const PHOTO_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("privacyRelations").doc(ownerUid).collection("members").doc(memberUid);
@@ -23,6 +29,18 @@ function grantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.Docume
 
 function contactRequestRef(requesterUid: string, targetUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("contactRequests").doc(`${requesterUid}_${targetUid}`);
+}
+
+function photoGrantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("photoGrants").doc(ownerUid).collection("viewers").doc(viewerUid);
+}
+
+function photoRequestRef(requesterUid: string, targetUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("photoRequests").doc(`${requesterUid}_${targetUid}`);
+}
+
+function interestRef(fromUid: string, toUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("interests").doc(`${fromUid}_${toUid}`);
 }
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
