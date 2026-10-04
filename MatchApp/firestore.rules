@@ -241,6 +241,9 @@ service cloud.firestore {
       allow write: if false;
     }
     match /presencePrivate/{uid} { allow read, write: if false; }
+    match /photoRequests/{requestId} { allow read, write: if false; }
+    match /photoRequestRateLimits/{rateId} { allow read, write: if false; }
+
 
     match /interests/{interestId} {
       allow read: if isSignedIn() &&
