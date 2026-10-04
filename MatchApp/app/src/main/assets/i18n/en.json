@@ -420,5 +420,12 @@
   "request_contact_access": "Request contact access",
   "contact_requests": "Contact requests",
   "contact_requests_body": "Approve only members you are comfortable sharing your phone number with. Membership still controls whether they can reveal it.",
-  "approve": "Approve"
+  "approve": "Approve",
+  "request_photo": "Request photo",
+  "requesting_photo": "Requesting…",
+  "photo_requested": "Photo requested",
+  "photo_request_sent": "Photo request sent.",
+  "photo_now_available": "A profile photo is now available.",
+  "photo_request_failed": "Photo request could not be sent. Please try again.",
+  "photo_request_privacy_note": "This asks the member to add a profile photo. It does not reveal hidden photos or change their privacy settings."
 }
