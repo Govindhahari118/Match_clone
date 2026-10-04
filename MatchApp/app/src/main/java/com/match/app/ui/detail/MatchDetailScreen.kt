@@ -267,8 +267,7 @@ class MatchDetailViewModel @Inject constructor(
                 _ui.update {
                     it.copy(
                         photoRequestLoading = false,
-                        photoRequestMessage = "photo_request_failed",
-                        interestError = error.message?.take(180)
+                        photoRequestMessage = "photo_request_failed"
                     )
                 }
             }
@@ -435,6 +434,8 @@ class MatchDetailViewModel @Inject constructor(
             }
     }
 
+    fun consumePhotoRequestMessage() = _ui.update { it.copy(photoRequestMessage = null) }
+
     fun showReportDialog() = _ui.update { it.copy(showReportDialog = true, reportMessage = null) }
     fun dismissReportDialog() = _ui.update { it.copy(showReportDialog = false) }
     fun consumeReportMessage() = _ui.update { it.copy(reportMessage = null) }
@@ -488,6 +489,20 @@ fun MatchDetailScreen(
         ui.reportMessage?.let {
             snackbar.showSnackbar(it)
             vm.consumeReportMessage()
+        }
+    }
+
+    val photoRequestFeedback = when (ui.photoRequestMessage) {
+        "photo_request_pending" -> t("photo_request_pending_feedback", "Photo request sent. Waiting for this member's decision.")
+        "photo_request_approved" -> t("photo_request_approved_feedback", "Photo access is available.")
+        "photo_request_sent" -> t("photo_request_sent_feedback", "Photo request sent.")
+        "photo_request_failed" -> t("photo_request_failed_feedback", "Photo request could not be sent. Please try again.")
+        else -> null
+    }
+    LaunchedEffect(photoRequestFeedback) {
+        photoRequestFeedback?.let {
+            snackbar.showSnackbar(it)
+            vm.consumePhotoRequestMessage()
         }
     }
 
