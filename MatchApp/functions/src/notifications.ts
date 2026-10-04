@@ -183,6 +183,46 @@ async function contactRequestNotificationStillAllowed(
     String(targetSettings.data()?.contactVisibility || "selected_people") !== "nobody";
 }
 
+async function photoRequestNotificationStillAllowed(
+  requestRef: FirebaseFirestore.DocumentReference,
+  requesterUid: string,
+  targetUid: string
+): Promise<boolean> {
+  const [
+    request,
+    requester,
+    target,
+    interest,
+    blockAB,
+    blockBA,
+    privacyAB,
+    privacyBA,
+    settings,
+  ] = await Promise.all([
+    requestRef.get(),
+    db.collection("users").doc(requesterUid).get(),
+    db.collection("users").doc(targetUid).get(),
+    db.collection("interests").doc(`${requesterUid}_${targetUid}`).get(),
+    db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
+    db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
+    db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+    db.collection("privacySettings").doc(targetUid).get(),
+  ]);
+  return request.exists &&
+    request.data()?.status === "PENDING" &&
+    requester.exists &&
+    target.exists &&
+    accountIsActive(requester.data()?.accountStatus) &&
+    accountIsActive(target.data()?.accountStatus) &&
+    interest.exists &&
+    !blockAB.exists &&
+    !blockBA.exists &&
+    privacyAB.data()?.profileHidden !== true &&
+    privacyBA.data()?.profileHidden !== true &&
+    String(settings.data()?.photoVisibility || "PUBLIC") === "ACCEPTED_ONLY";
+}
+
 async function chatNotificationStillAllowed(
   threadId: string,
   fromUid: string,
@@ -346,6 +386,43 @@ export const onContactRequestPending = functions.firestore
         type: "CONTACT_REQUEST",
         title: "Contact access request",
         body: "A mutual match requested permission to reveal your contact. Open Privacy & visibility to respond.",
+        entityType: "profile",
+        entityId: requesterUid,
+        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+        fromFirebaseUid: requesterUid,
+      }
+    );
+  });
+
+export const onPhotoRequestPending = functions.firestore
+  .document("photoRequests/{requestId}")
+  .onWrite(async (change, context) => {
+    const beforeStatus = change.before.exists ? String(change.before.data()?.status || "") : "";
+    if (!change.after.exists) return;
+    const data = change.after.data();
+    if (!data) return;
+    const status = String(data.status || "");
+    if (status !== "PENDING" || beforeStatus === "PENDING") return;
+
+    const requesterUid = String(data.requesterUid || "");
+    const targetUid = String(data.targetUid || "");
+    if (!requesterUid || !targetUid || requesterUid === targetUid) return;
+    if (!await photoRequestNotificationStillAllowed(
+      change.after.ref,
+      requesterUid,
+      targetUid
+    )) return;
+
+    const updatedAt = data.updatedAt instanceof admin.firestore.Timestamp
+      ? data.updatedAt.toMillis()
+      : 0;
+    await deliverPersistedNotification(
+      `photo_request_${context.params.requestId}_${targetUid}_${updatedAt}`,
+      {
+        userId: targetUid,
+        type: "PHOTO_REQUEST",
+        title: "Photo access request",
+        body: "A member who expressed interest requested access to your protected profile photo. Open Privacy & visibility to respond.",
         entityType: "profile",
         entityId: requesterUid,
         deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),

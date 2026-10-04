@@ -3,6 +3,11 @@ import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import {
+  canRequestPhotoAccess,
+  canViewPublishedPhoto,
+  normalizeProfilePhotoVisibility,
+} from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
   SILVER_3M: 75,
@@ -12,6 +17,7 @@ const CONTACT_LIMITS: Record<string, number> = {
 
 const CONTACT_TYPES = new Set(["phone", "whatsapp"]);
 const CONTACT_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const PHOTO_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function relationRef(ownerUid: string, memberUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("privacyRelations").doc(ownerUid).collection("members").doc(memberUid);
@@ -23,6 +29,18 @@ function grantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.Docume
 
 function contactRequestRef(requesterUid: string, targetUid: string): FirebaseFirestore.DocumentReference {
   return db.collection("contactRequests").doc(`${requesterUid}_${targetUid}`);
+}
+
+function photoGrantRef(ownerUid: string, viewerUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("photoGrants").doc(ownerUid).collection("viewers").doc(viewerUid);
+}
+
+function photoRequestRef(requesterUid: string, targetUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("photoRequests").doc(`${requesterUid}_${targetUid}`);
+}
+
+function interestRef(fromUid: string, toUid: string): FirebaseFirestore.DocumentReference {
+  return db.collection("interests").doc(`${fromUid}_${toUid}`);
 }
 
 async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
@@ -363,6 +381,303 @@ export const respondContactAccess = functions.https.onCall(async (data, context)
   });
 });
 
+
+/**
+ * Returns current published-photo access for one viewer without exposing another member's raw
+ * privacySettings document. Storage Rules remain the byte-level authority.
+ */
+export const getProfilePhotoAccess = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const viewerUid = context.auth?.uid;
+  if (!viewerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+  if (!targetUid || targetUid === viewerUid || targetUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+
+  const [
+    viewer,
+    target,
+    outgoingBlock,
+    incomingBlock,
+    viewerRelation,
+    targetRelation,
+    targetSettings,
+    viewerInterest,
+    targetInterest,
+    grant,
+    request,
+  ] = await Promise.all([
+    db.collection("users").doc(viewerUid).get(),
+    db.collection("users").doc(targetUid).get(),
+    db.collection("blocks").doc(viewerUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(viewerUid).get(),
+    relationRef(viewerUid, targetUid).get(),
+    relationRef(targetUid, viewerUid).get(),
+    db.collection("privacySettings").doc(targetUid).get(),
+    interestRef(viewerUid, targetUid).get(),
+    interestRef(targetUid, viewerUid).get(),
+    photoGrantRef(targetUid, viewerUid).get(),
+    photoRequestRef(viewerUid, targetUid).get(),
+  ]);
+
+  if (!viewer.exists || !target.exists ||
+      !accountIsActive(viewer.data()?.accountStatus) ||
+      !accountIsActive(target.data()?.accountStatus)) {
+    throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable");
+  }
+  if (outgoingBlock.exists || incomingBlock.exists ||
+      viewerRelation.data()?.profileHidden === true ||
+      targetRelation.data()?.profileHidden === true) {
+    throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
+  }
+
+  const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
+  const mutualInterest = viewerInterest.exists && targetInterest.exists;
+  const explicitGrant = grant.exists;
+  const requesterInterested = viewerInterest.exists;
+  return {
+    visibility,
+    canView: canViewPublishedPhoto(visibility, mutualInterest, explicitGrant),
+    canRequest: canRequestPhotoAccess(
+      visibility,
+      requesterInterested,
+      mutualInterest,
+      explicitGrant
+    ),
+    requestStatus: request.exists ? String(request.data()?.status || "") : "",
+  };
+});
+
+/**
+ * Owner-only profile-level privacy for the currently published primary photo.
+ * HIDDEN revokes every explicit grant immediately. Existing object paths never bypass Storage Rules.
+ */
+export const setProfilePhotoVisibility = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const ownerUid = context.auth?.uid;
+  if (!ownerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const raw = typeof data?.visibility === "string" ? data.visibility.trim().toUpperCase() : "";
+  if (!["PUBLIC", "ACCEPTED_ONLY", "HIDDEN"].includes(raw)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid profile photo visibility");
+  }
+  const visibility = normalizeProfilePhotoVisibility(raw);
+
+  const owner = await db.collection("users").doc(ownerUid).get();
+  if (!owner.exists || !accountIsActive(owner.data()?.accountStatus)) {
+    throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable");
+  }
+
+  await db.collection("privacySettings").doc(ownerUid).set({
+    photoVisibility: visibility,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  if (visibility === "HIDDEN") {
+    await deleteQuery(db.collection("photoGrants").doc(ownerUid).collection("viewers"));
+  }
+  return { success: true, visibility };
+});
+
+/**
+ * Request access to an ACCEPTED_ONLY published photo. The requester must already have expressed
+ * interest. Mutual-interest pairs and explicit grants already have access and do not need a request.
+ */
+export const requestProfilePhotoAccess = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const requesterUid = context.auth?.uid;
+  if (!requesterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const targetUid = typeof data?.targetUid === "string" ? data.targetUid.trim() : "";
+  if (!targetUid || targetUid === requesterUid || targetUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid target profile");
+  }
+
+  const requestRef = photoRequestRef(requesterUid, targetUid);
+  return db.runTransaction(async (tx) => {
+    const [
+      requester,
+      target,
+      outgoingBlock,
+      incomingBlock,
+      requesterRelation,
+      targetRelation,
+      targetSettings,
+      forwardInterest,
+      reverseInterest,
+      existingGrant,
+      existingRequest,
+    ] = await Promise.all([
+      tx.get(db.collection("users").doc(requesterUid)),
+      tx.get(db.collection("users").doc(targetUid)),
+      tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
+      tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
+      tx.get(relationRef(requesterUid, targetUid)),
+      tx.get(relationRef(targetUid, requesterUid)),
+      tx.get(db.collection("privacySettings").doc(targetUid)),
+      tx.get(interestRef(requesterUid, targetUid)),
+      tx.get(interestRef(targetUid, requesterUid)),
+      tx.get(photoGrantRef(targetUid, requesterUid)),
+      tx.get(requestRef),
+    ]);
+
+    if (!requester.exists || !target.exists) {
+      throw new functions.https.HttpsError("not-found", "Profile not found");
+    }
+    if (!accountIsActive(requester.data()?.accountStatus) ||
+        !accountIsActive(target.data()?.accountStatus)) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Photo request is unavailable while an account is not active"
+      );
+    }
+    if (outgoingBlock.exists || incomingBlock.exists ||
+        requesterRelation.data()?.profileHidden === true ||
+        targetRelation.data()?.profileHidden === true) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Photo request is unavailable for this privacy relationship"
+      );
+    }
+
+    const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
+    const mutualInterest = forwardInterest.exists && reverseInterest.exists;
+    const explicitGrant = existingGrant.exists;
+    if (canViewPublishedPhoto(visibility, mutualInterest, explicitGrant)) {
+      return { status: "ALREADY_ALLOWED", canView: true };
+    }
+    if (!canRequestPhotoAccess(
+      visibility,
+      forwardInterest.exists,
+      mutualInterest,
+      explicitGrant
+    )) {
+      if (visibility === "HIDDEN") {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "This member is not accepting photo requests"
+        );
+      }
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Express interest before requesting photo access"
+      );
+    }
+
+    const existing = existingRequest.data() || {};
+    const status = String(existing.status || "");
+    if (status === "PENDING") return { status: "PENDING", canView: false };
+    if (status === "APPROVED") {
+      return { status: "APPROVED", canView: existingGrant.exists };
+    }
+    if (status === "DECLINED") {
+      const updatedAt = existing.updatedAt instanceof admin.firestore.Timestamp
+        ? existing.updatedAt.toMillis()
+        : 0;
+      if (updatedAt > Date.now() - PHOTO_REQUEST_COOLDOWN_MS) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "Please wait before sending another photo request to this member"
+        );
+      }
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    tx.set(requestRef, {
+      requesterUid,
+      targetUid,
+      status: "PENDING",
+      createdAt: status ? existing.createdAt || now : now,
+      updatedAt: now,
+      respondedAt: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    return { status: "PENDING", canView: false };
+  });
+});
+
+/** Owner approves or declines an incoming profile-photo request. */
+export const respondProfilePhotoAccess = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const targetUid = context.auth?.uid;
+  if (!targetUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  const requesterUid = typeof data?.requesterUid === "string" ? data.requesterUid.trim() : "";
+  const approve = data?.approve === true;
+  if (!requesterUid || requesterUid === targetUid || requesterUid.length > 128) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid requester profile");
+  }
+
+  const requestRef = photoRequestRef(requesterUid, targetUid);
+  const grantRef = photoGrantRef(targetUid, requesterUid);
+  return db.runTransaction(async (tx) => {
+    const [
+      owner,
+      requester,
+      request,
+      outgoingBlock,
+      incomingBlock,
+      ownerRelation,
+      requesterRelation,
+      settings,
+    ] = await Promise.all([
+      tx.get(db.collection("users").doc(targetUid)),
+      tx.get(db.collection("users").doc(requesterUid)),
+      tx.get(requestRef),
+      tx.get(db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid)),
+      tx.get(db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid)),
+      tx.get(relationRef(targetUid, requesterUid)),
+      tx.get(relationRef(requesterUid, targetUid)),
+      tx.get(db.collection("privacySettings").doc(targetUid)),
+    ]);
+
+    if (!owner.exists || !requester.exists ||
+        !accountIsActive(owner.data()?.accountStatus) ||
+        !accountIsActive(requester.data()?.accountStatus)) {
+      throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable");
+    }
+    if (!request.exists ||
+        request.data()?.requesterUid !== requesterUid ||
+        request.data()?.targetUid !== targetUid) {
+      throw new functions.https.HttpsError("not-found", "Photo request not found");
+    }
+    if (String(request.data()?.status || "") !== "PENDING") {
+      return { status: String(request.data()?.status || "UNKNOWN") };
+    }
+    if (outgoingBlock.exists || incomingBlock.exists ||
+        ownerRelation.data()?.profileHidden === true ||
+        requesterRelation.data()?.profileHidden === true) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Photo request is unavailable for this privacy relationship"
+      );
+    }
+    const visibility = normalizeProfilePhotoVisibility(settings.data()?.photoVisibility);
+    if (approve && visibility !== "ACCEPTED_ONLY") {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Photo approval is unavailable for the current visibility setting"
+      );
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    tx.update(requestRef, {
+      status: approve ? "APPROVED" : "DECLINED",
+      updatedAt: now,
+      respondedAt: now,
+    });
+    if (approve) {
+      tx.set(grantRef, {
+        viewerUid: requesterUid,
+        grantedAt: now,
+        updatedAt: now,
+        source: "photo_request",
+      }, { merge: false });
+    } else {
+      tx.delete(grantRef);
+    }
+    return { status: approve ? "APPROVED" : "DECLINED" };
+  });
+});
+
 /** Remove owner settings/grants and references to a deleted account from other users' privacy lists. */
 export const cleanupPrivacyOnUserDelete = functions.firestore
   .document("users/{uid}")
@@ -372,11 +687,15 @@ export const cleanupPrivacyOnUserDelete = functions.firestore
       deleteQuery(db.collection("privacyRelations").doc(uid).collection("members")),
       deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid)),
       deleteQuery(db.collection("contactGrants").doc(uid).collection("viewers")),
+      deleteQuery(db.collection("photoGrants").doc(uid).collection("viewers")),
       deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid)),
+      deleteQuery(db.collection("photoRequests").where("requesterUid", "==", uid)),
+      deleteQuery(db.collection("photoRequests").where("targetUid", "==", uid)),
       db.collection("privacySettings").doc(uid).delete(),
     ]);
     await Promise.all([
       db.collection("privacyRelations").doc(uid).delete().catch(() => undefined),
       db.collection("contactGrants").doc(uid).delete().catch(() => undefined),
+      db.collection("photoGrants").doc(uid).delete().catch(() => undefined),
     ]);
   });

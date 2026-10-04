@@ -122,3 +122,73 @@ test('client cannot read or write server-only presence', async () => {
   await assertFails(getDoc(doc(alice, 'presencePrivate/alice')));
   await assertFails(setDoc(doc(alice, 'presencePrivate/alice'), { lastActiveAt: Date.now() }));
 });
+
+
+test('photo visibility is server-controlled while owner can still update other privacy settings', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'privacySettings/alice'), {
+      contactVisibility: 'mutual_matches',
+      onlineVisibility: 'mutual',
+      lastActiveVisibility: 'mutual',
+      photoVisibility: 'ACCEPTED_ONLY',
+      updatedAt: Date.now(),
+    });
+  });
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertSucceeds(updateDoc(doc(alice, 'privacySettings/alice'), {
+    onlineVisibility: 'nobody',
+  }));
+  await assertFails(updateDoc(doc(alice, 'privacySettings/alice'), {
+    photoVisibility: 'PUBLIC',
+  }));
+});
+
+test('photo grants and requests are readable only by participants and never client-writable', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'photoGrants/alice/viewers/bob'), {
+      viewerUid: 'bob',
+      grantedAt: Date.now(),
+      updatedAt: Date.now(),
+      source: 'photo_request',
+    });
+    await setDoc(doc(db, 'photoRequests/bob_alice'), {
+      requesterUid: 'bob',
+      targetUid: 'alice',
+      status: 'PENDING',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  const bob = env.authenticatedContext('bob').firestore();
+  const charlie = env.authenticatedContext('charlie').firestore();
+
+  await assertSucceeds(getDoc(doc(alice, 'photoGrants/alice/viewers/bob')));
+  await assertFails(getDoc(doc(bob, 'photoGrants/alice/viewers/bob')));
+  await assertFails(setDoc(doc(alice, 'photoGrants/alice/viewers/charlie'), {
+    viewerUid: 'charlie',
+  }));
+
+  await assertSucceeds(getDoc(doc(alice, 'photoRequests/bob_alice')));
+  await assertSucceeds(getDoc(doc(bob, 'photoRequests/bob_alice')));
+  await assertFails(getDoc(doc(charlie, 'photoRequests/bob_alice')));
+  await assertFails(updateDoc(doc(alice, 'photoRequests/bob_alice'), { status: 'APPROVED' }));
+});
+
+
+test('owner cannot delete privacySettings and reset protected photo visibility', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'privacySettings/alice'), {
+      contactVisibility: 'mutual_matches',
+      onlineVisibility: 'mutual',
+      lastActiveVisibility: 'mutual',
+      photoVisibility: 'HIDDEN',
+      updatedAt: Date.now(),
+    });
+  });
+  const alice = env.authenticatedContext('alice').firestore();
+  const { deleteDoc } = await import('firebase/firestore');
+  await assertFails(deleteDoc(doc(alice, 'privacySettings/alice')));
+});

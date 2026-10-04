@@ -171,3 +171,97 @@ test('profile media upload MIME types are narrow', async () => {
     { contentType: 'video/webm', customMetadata: { ownerUid: 'alice' } },
   ));
 });
+
+
+test('published photo obeys PUBLIC ACCEPTED_ONLY grant and HIDDEN visibility', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+
+  await uploadBytes(
+    ref(aliceStorage, 'photos/alice/protected.jpg'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
+  );
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await updateDoc(doc(db, 'users/alice'), { photoUrl: 'photos/alice/protected.jpg' });
+    await setDoc(doc(db, 'privacySettings/alice'), { photoVisibility: 'PUBLIC' });
+  });
+
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/protected.jpg')));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'privacySettings/alice'), {
+      photoVisibility: 'ACCEPTED_ONLY',
+    });
+  });
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/protected.jpg')));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'photoGrants/alice/viewers/bob'), {
+      viewerUid: 'bob',
+      source: 'photo_request',
+    });
+  });
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/protected.jpg')));
+
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'privacySettings/alice'), { photoVisibility: 'HIDDEN' });
+  });
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/protected.jpg')));
+  await assertSucceeds(getBytes(ref(aliceStorage, 'photos/alice/protected.jpg')));
+});
+
+test('ACCEPTED_ONLY published photo allows mutual interest and rejects one-way interest', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+
+  await uploadBytes(
+    ref(aliceStorage, 'photos/alice/mutual.jpg'),
+    new Uint8Array([9]),
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
+  );
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await updateDoc(doc(db, 'users/alice'), { photoUrl: 'photos/alice/mutual.jpg' });
+    await setDoc(doc(db, 'privacySettings/alice'), { photoVisibility: 'ACCEPTED_ONLY' });
+    await setDoc(doc(db, 'interests/bob_alice'), { fromUid: 'bob', toUid: 'alice' });
+  });
+
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/mutual.jpg')));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'interests/alice_bob'), {
+      fromUid: 'alice',
+      toUid: 'bob',
+    });
+  });
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/mutual.jpg')));
+});
+
+test('block and profile-hide override explicit photo grants', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+
+  await uploadBytes(
+    ref(aliceStorage, 'photos/alice/granted.jpg'),
+    new Uint8Array([4]),
+    { contentType: 'image/jpeg', customMetadata: { ownerUid: 'alice' } },
+  );
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await updateDoc(doc(db, 'users/alice'), { photoUrl: 'photos/alice/granted.jpg' });
+    await setDoc(doc(db, 'privacySettings/alice'), { photoVisibility: 'ACCEPTED_ONLY' });
+    await setDoc(doc(db, 'photoGrants/alice/viewers/bob'), { viewerUid: 'bob' });
+  });
+  await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/granted.jpg')));
+
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'privacyRelations/alice/members/bob'), {
+      memberUid: 'bob',
+      profileHidden: true,
+    });
+  });
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/granted.jpg')));
+});

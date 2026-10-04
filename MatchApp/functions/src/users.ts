@@ -437,6 +437,8 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("matches").where("users", "array-contains", uid));
         await deleteQuery(db.collection("contactRequests").where("requesterUid", "==", uid));
         await deleteQuery(db.collection("contactRequests").where("targetUid", "==", uid));
+        await deleteQuery(db.collection("photoRequests").where("requesterUid", "==", uid));
+        await deleteQuery(db.collection("photoRequests").where("targetUid", "==", uid));
       });
 
       await runDeletionPhase(requestRef, completed, "ACTIVITY_AND_SERVICES", async () => {
@@ -487,6 +489,7 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("familyAccessAudit").where("actorUid", "==", uid));
         await deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid));
         await deleteCollection(`contactGrants/${uid}/viewers`);
+        await deleteCollection(`photoGrants/${uid}/viewers`);
         await deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid));
         await deleteCollection(`subscriptions/${uid}/usage`);
         await deleteCollection(`profileAnalytics/${uid}/weekly`);
@@ -532,6 +535,7 @@ export const deleteUserAccount = functions
           db.collection("privacyRelations").doc(uid),
           db.collection("privacySettings").doc(uid),
           db.collection("contactGrants").doc(uid),
+          db.collection("photoGrants").doc(uid),
           db.collection("subscriptions").doc(uid),
           db.collection("profileAnalytics").doc(uid),
           db.collection("notificationPrefs").doc(uid),
