@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
-import * as crypto from "crypto";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
+import { canonicalChatThreadId } from "./chatIdentityPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import {
   MAX_DAILY_MESSAGES_SAFETY,
@@ -27,11 +27,6 @@ function cleanMessageId(value: unknown): string {
     throw new functions.https.HttpsError("invalid-argument", "Invalid message id");
   }
   return id;
-}
-
-function canonicalThreadId(uidA: string, uidB: string): string {
-  const canonical = [uidA, uidB].sort().join("\n");
-  return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 function dayKey(): string {
@@ -108,7 +103,7 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
   }
 
   const pair = [senderUid, recipientUid].sort();
-  const threadId = canonicalThreadId(senderUid, recipientUid);
+  const threadId = canonicalChatThreadId(senderUid, recipientUid);
   const senderRef = db.collection("users").doc(senderUid);
   const recipientRef = db.collection("users").doc(recipientUid);
   const matchRef = db.collection("matches").doc(pair.join("_"));
@@ -212,7 +207,7 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", "Message is too long");
   }
 
-  const threadId = canonicalThreadId(senderUid, recipientUid);
+  const threadId = canonicalChatThreadId(senderUid, recipientUid);
   const imagePath = await validateChatMedia(
     data?.imagePath,
     `chat-media/${threadId}/${clientMessageId}.jpg`,
@@ -372,7 +367,7 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", "Cannot type to yourself");
   }
   const typing = data?.typing === true;
-  const threadId = canonicalThreadId(senderUid, recipientUid);
+  const threadId = canonicalChatThreadId(senderUid, recipientUid);
   const pair = [senderUid, recipientUid].sort();
 
   const senderRef = db.collection("users").doc(senderUid);
