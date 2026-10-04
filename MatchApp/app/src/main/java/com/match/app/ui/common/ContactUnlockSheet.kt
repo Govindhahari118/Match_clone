@@ -141,6 +141,25 @@ t("contact_membership_required", "An active membership with contact access is re
                         Spacer(Modifier.width(8.dp))
                         Text(t("view_membership_plans", "View membership plans"), fontWeight = FontWeight.Bold)
                     }
+                    OutlinedButton(
+                        onClick = onRequestAccess,
+                        enabled = !requestLoading && requestStatus != "PENDING",
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (requestLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.PersonAdd, null, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when {
+                                requestLoading -> t("sending_request", "Sending request…")
+                                requestStatus == "PENDING" -> t("request_pending", "Request pending")
+                                else -> t("request_contact_access", "Request contact access")
+                            }
+                        )
+                    }
                 }
 
                 else -> {
