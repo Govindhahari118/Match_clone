@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
+import * as crypto from "crypto";
 import {
   db,
   persistAndSendNotification,
@@ -19,8 +20,16 @@ function cleanUid(value: unknown): string {
   return uid;
 }
 
+function stableId(...parts: string[]): string {
+  return crypto.createHash("sha256").update(parts.join("\u0000"), "utf8").digest("hex");
+}
+
 function requestId(requesterUid: string, targetUid: string): string {
-  return `${requesterUid}_${targetUid}`;
+  return stableId("photo-request", requesterUid, targetUid);
+}
+
+function rateId(requesterUid: string, day: string): string {
+  return stableId("photo-request-rate", requesterUid, day);
 }
 
 function dayKey(now: number): string {
@@ -44,12 +53,33 @@ export const getPhotoRequestStatus = functions.https.onCall(async (data, context
     throw new functions.https.HttpsError("invalid-argument", "Cannot request your own photo");
   }
 
-  const [target, request] = await Promise.all([
+  const [
+    requester,
+    target,
+    request,
+    requesterBlock,
+    targetBlock,
+    requesterPrivacy,
+    targetPrivacy,
+    targetInterest,
+  ] = await Promise.all([
+    db.collection("users").doc(requesterUid).get(),
     db.collection("users").doc(targetUid).get(),
     db.collection("photoRequests").doc(requestId(requesterUid, targetUid)).get(),
+    db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
+    db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
+    db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+    db.collection("interests").doc(`${targetUid}_${requesterUid}`).get(),
   ]);
 
-  if (!target.exists || !accountIsActive(target.data()?.accountStatus)) {
+  if (!requester.exists || !target.exists ||
+      !accountIsActive(requester.data()?.accountStatus) ||
+      !accountIsActive(target.data()?.accountStatus) ||
+      requesterBlock.exists || targetBlock.exists ||
+      requesterPrivacy.data()?.profileHidden === true ||
+      targetPrivacy.data()?.profileHidden === true ||
+      (target.data()?.stealthMode === true && !targetInterest.exists)) {
     return { status: "UNAVAILABLE", requestedAtMillis: 0, retryAfterMillis: 0 };
   }
   if (publicPhotoAvailable(target.data())) {
@@ -86,7 +116,7 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
 
   const now = Date.now();
   const reqRef = db.collection("photoRequests").doc(requestId(requesterUid, targetUid));
-  const rateRef = db.collection("photoRequestRateLimits").doc(`${requesterUid}_${dayKey(now)}`);
+  const rateRef = db.collection("photoRequestRateLimits").doc(rateId(requesterUid, dayKey(now)));
   const requesterRef = db.collection("users").doc(requesterUid);
   const targetRef = db.collection("users").doc(targetUid);
   const requesterBlockRef = db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid);
@@ -180,7 +210,7 @@ export const requestProfilePhoto = functions.https.onCall(async (data, context) 
   });
 
   if (result.status === "PENDING" && result.requestedAtMillis === now) {
-    const notificationId = `photo_request_${requesterUid}_${targetUid}_${now}`;
+    const notificationId = `photo_request_${requestId(requesterUid, targetUid)}_${now}`;
     await persistAndSendNotification({
       notificationId,
       userId: targetUid,
@@ -210,22 +240,23 @@ export const onPublicProfilePhotoAvailable = functions.firestore
     const targetUid = context.params.uid;
     const pending = await db.collection("photoRequests")
       .where("targetUid", "==", targetUid)
-      .limit(250)
       .get();
-    if (pending.empty) return;
+    const docs = pending.docs
+      .filter((doc) => String(doc.data()?.status || "").toUpperCase() === "PENDING");
+    if (docs.length === 0) return;
 
-    const batch = db.batch();
     const stamp = admin.firestore.FieldValue.serverTimestamp();
-    pending.docs
-      .filter((doc) => String(doc.data()?.status || "").toUpperCase() === "PENDING")
-      .forEach((doc) => {
-      batch.update(doc.ref, {
-        status: "FULFILLED",
-        fulfilledAt: stamp,
-        updatedAt: stamp,
+    for (let offset = 0; offset < docs.length; offset += 450) {
+      const batch = db.batch();
+      docs.slice(offset, offset + 450).forEach((doc) => {
+        batch.update(doc.ref, {
+          status: "FULFILLED",
+          fulfilledAt: stamp,
+          updatedAt: stamp,
+        });
       });
-    });
-    await batch.commit();
+      await batch.commit();
+    }
   });
 
 /** Remove photo-request state tied to a deleted account. */
@@ -233,14 +264,17 @@ export const cleanupPhotoRequestsOnUserDelete = functions.firestore
   .document("users/{uid}")
   .onDelete(async (_snap, context) => {
     const uid = context.params.uid;
-    const [sent, received] = await Promise.all([
-      db.collection("photoRequests").where("requesterUid", "==", uid).limit(250).get(),
-      db.collection("photoRequests").where("targetUid", "==", uid).limit(250).get(),
+    const [sent, received, rates] = await Promise.all([
+      db.collection("photoRequests").where("requesterUid", "==", uid).get(),
+      db.collection("photoRequests").where("targetUid", "==", uid).get(),
+      db.collection("photoRequestRateLimits").where("requesterUid", "==", uid).get(),
     ]);
     const refs = new Map<string, FirebaseFirestore.DocumentReference>();
-    [...sent.docs, ...received.docs].forEach((doc) => refs.set(doc.ref.path, doc.ref));
-    if (refs.size === 0) return;
-    const batch = db.batch();
-    refs.forEach((ref) => batch.delete(ref));
-    await batch.commit();
+    [...sent.docs, ...received.docs, ...rates.docs].forEach((doc) => refs.set(doc.ref.path, doc.ref));
+    const all = [...refs.values()];
+    for (let offset = 0; offset < all.length; offset += 450) {
+      const batch = db.batch();
+      all.slice(offset, offset + 450).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
   });
