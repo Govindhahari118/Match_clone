@@ -28,9 +28,8 @@ def main() -> int:
         'testTag("conversation_starter_$index")',
     )
     for needle in required:
-        haystack = compact if needle.startswith('t("conversation_') else text
-        normalized = "".join(needle.split()) if haystack is compact else needle
-        if normalized not in haystack:
+        normalized = "".join(needle.split())
+        if normalized not in compact:
             failures.append(f"missing conversation-starter contract: {needle}")
 
     if "vm.send(starter)" in text or "vm.send(draft)" in text:
