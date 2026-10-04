@@ -687,11 +687,15 @@ export const cleanupPrivacyOnUserDelete = functions.firestore
       deleteQuery(db.collection("privacyRelations").doc(uid).collection("members")),
       deleteQuery(db.collectionGroup("members").where("memberUid", "==", uid)),
       deleteQuery(db.collection("contactGrants").doc(uid).collection("viewers")),
+      deleteQuery(db.collection("photoGrants").doc(uid).collection("viewers")),
       deleteQuery(db.collectionGroup("viewers").where("viewerUid", "==", uid)),
+      deleteQuery(db.collection("photoRequests").where("requesterUid", "==", uid)),
+      deleteQuery(db.collection("photoRequests").where("targetUid", "==", uid)),
       db.collection("privacySettings").doc(uid).delete(),
     ]);
     await Promise.all([
       db.collection("privacyRelations").doc(uid).delete().catch(() => undefined),
       db.collection("contactGrants").doc(uid).delete().catch(() => undefined),
+      db.collection("photoGrants").doc(uid).delete().catch(() => undefined),
     ]);
   });
