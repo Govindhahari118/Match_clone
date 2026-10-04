@@ -46,6 +46,8 @@ import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.common.ReportReasonOption
+import com.match.app.ui.common.reportReasonOptions
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
@@ -530,15 +532,8 @@ fun MatchDetailScreen(
     }
 
     if (ui.showReportDialog) {
-        val reasons = listOf(
-            t("fake_profile", "Fake profile"),
-            t("inappropriate_content", "Inappropriate content"),
-            t("harassment", "Harassment"),
-            t("spam_or_scam", "Spam or scam"),
-            t("under_age", "Under age"),
-            t("other", "Other")
-        )
-        var selected by remember { mutableStateOf<String?>(null) }
+        val reasons = reportReasonOptions()
+        var selected by remember { mutableStateOf<ReportReasonOption?>(null) }
         AlertDialog(
             onDismissRequest = { if (!ui.reportSubmitting) vm.dismissReportDialog() },
             title = { Text(t("report_profile", "Report profile")) },
@@ -547,14 +542,18 @@ fun MatchDetailScreen(
                     Text(t("report_choose_reason", "Choose the reason that best describes the issue."))
                     reasons.forEach { reason ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = selected == reason, onClick = { selected = reason }, enabled = !ui.reportSubmitting)
-                            Text(reason)
+                            RadioButton(
+                                selected = selected?.code == reason.code,
+                                onClick = { selected = reason },
+                                enabled = !ui.reportSubmitting
+                            )
+                            Text(reason.label)
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = { selected?.let(vm::submitReport) }, enabled = selected != null && !ui.reportSubmitting) {
+                Button(onClick = { selected?.code?.let(vm::submitReport) }, enabled = selected != null && !ui.reportSubmitting) {
                     if (ui.reportSubmitting) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(6.dp))
