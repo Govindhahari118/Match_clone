@@ -540,16 +540,73 @@ fun ChatScreen(
                     Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
                     contentAlignment = Alignment.Center
                 ) {
-                    MatreeStatePanel(
-                        title = if (state.isMutual) t("start_your_conversation", "Start your conversation") else t("mutual_interest_required", "Mutual interest required"),
-                        message = if (state.isMutual) {
-                            t("chat_respect_notice", "Be respectful and avoid sharing sensitive information too early.")
-                        } else {
-                            t("both_accept_before_messages", "Both members must accept each other's interest before messages can be sent.")
-                        },
-                        icon = Icons.Filled.Forum,
-                        tone = if (state.isMutual) MatreeStatusTone.NEUTRAL else MatreeStatusTone.WARNING
-                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.md),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        MatreeStatePanel(
+                            title = if (state.isMutual) t("start_your_conversation", "Start your conversation") else t("mutual_interest_required", "Mutual interest required"),
+                            message = if (state.isMutual) {
+                                t("chat_respect_notice", "Be respectful and avoid sharing sensitive information too early.")
+                            } else {
+                                t("both_accept_before_messages", "Both members must accept each other's interest before messages can be sent.")
+                            },
+                            icon = Icons.Filled.Forum,
+                            tone = if (state.isMutual) MatreeStatusTone.NEUTRAL else MatreeStatusTone.WARNING
+                        )
+                        if (state.isMutual && !state.isBlocked) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().testTag("conversation_starters"),
+                                shape = RoundedCornerShape(MatreeDesign.radii.card),
+                                tonalElevation = 1.dp
+                            ) {
+                                Column(
+                                    Modifier.padding(MatreeDesign.spacing.md),
+                                    verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
+                                ) {
+                                    Text(
+                                        t("conversation_starters_title", "Need a starting point?"),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        t(
+                                            "conversation_starters_body",
+                                            "Choose a respectful starter. It only fills your message box—you can edit it before sending."
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    listOf(
+                                        t(
+                                            "conversation_starter_1",
+                                            "Hi! It’s nice to connect. I’d love to know more about you and your family."
+                                        ),
+                                        t(
+                                            "conversation_starter_2",
+                                            "Would you like to talk about our work, interests and what we’re looking for in a partner?"
+                                        ),
+                                        t(
+                                            "conversation_starter_3",
+                                            "I’m happy to continue chatting here first. We can share contact details only when we’re both comfortable."
+                                        )
+                                    ).forEachIndexed { index, starter ->
+                                        OutlinedButton(
+                                            onClick = { draft = starter },
+                                            modifier = Modifier.fillMaxWidth()
+                                                .testTag("conversation_starter_$index")
+                                        ) {
+                                            Text(
+                                                starter,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             else -> {
