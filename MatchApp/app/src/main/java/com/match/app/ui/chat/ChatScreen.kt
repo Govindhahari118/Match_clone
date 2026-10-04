@@ -258,6 +258,7 @@ class ChatViewModel @Inject constructor(
 fun ChatScreen(
     peerId: Long,
     onBack: () -> Unit,
+    onSecureCall: () -> Unit = {},
     onUpgrade: () -> Unit = {},
     vm: ChatViewModel = hiltViewModel()
 ) {
@@ -424,6 +425,17 @@ fun ChatScreen(
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
+                    if (state.isMutual && !state.isBlocked) {
+                        IconButton(
+                            onClick = onSecureCall,
+                            modifier = Modifier.testTag("chat_secure_call")
+                        ) {
+                            Icon(
+                                Icons.Filled.Call,
+                                contentDescription = t("secure_call", "Secure Call")
+                            )
+                        }
+                    }
                     Box {
                         IconButton(onClick = { showMenu = true }) { Icon(Icons.Filled.MoreVert, "More options") }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
@@ -536,9 +548,9 @@ fun ChatScreen(
                 )
             }
             state.messages.isEmpty() -> {
-                Box(
+                Column(
                     Modifier.padding(padding).fillMaxSize().padding(MatreeDesign.spacing.xl),
-                    contentAlignment = Alignment.Center
+                    verticalArrangement = Arrangement.Center
                 ) {
                     MatreeStatePanel(
                         title = if (state.isMutual) t("start_your_conversation", "Start your conversation") else t("mutual_interest_required", "Mutual interest required"),
@@ -550,6 +562,57 @@ fun ChatScreen(
                         icon = Icons.Filled.Forum,
                         tone = if (state.isMutual) MatreeStatusTone.NEUTRAL else MatreeStatusTone.WARNING
                     )
+                    if (state.isMutual && !state.isBlocked) {
+                        Spacer(Modifier.height(MatreeDesign.spacing.md))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("conversation_starters"),
+                            verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+                        ) {
+                            Text(
+                                t("conversation_starters_title", "Start respectfully"),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                t(
+                                    "conversation_starters_body",
+                                    "Choose a starter, edit it if you want, then send it yourself."
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val starters = listOf(
+                                t(
+                                    "conversation_starter_1",
+                                    "Hi! I’m glad we matched. What would you like me to know about you first?"
+                                ),
+                                t(
+                                    "conversation_starter_2",
+                                    "Hello! I enjoyed reading your profile. What matters most to you in a life partner?"
+                                ),
+                                t(
+                                    "conversation_starter_3",
+                                    "Hi! Would you like to start by talking about family, work, interests, or something else?"
+                                )
+                            )
+                            starters.forEachIndexed { index, starter ->
+                                OutlinedButton(
+                                    onClick = { draft = starter },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("conversation_starter_$index")
+                                ) {
+                                    Text(
+                                        starter,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
             else -> {
