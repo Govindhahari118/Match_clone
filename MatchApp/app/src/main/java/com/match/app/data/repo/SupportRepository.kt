@@ -29,6 +29,30 @@ class SupportRepository @Inject constructor() {
         data["success"] as? Boolean ?: false
     }
 
+    suspend fun submitChatMessageReport(
+        targetUid: String,
+        messageId: String,
+        reasonCode: String,
+        details: String = ""
+    ): Result<Boolean> = runCatching {
+        require(targetUid.isNotBlank())
+        require(messageId.matches(Regex("[A-Za-z0-9_-]{16,128}")))
+        require(reasonCode.isNotBlank())
+        val response = functions.getHttpsCallable("submitChatMessageReport")
+            .call(
+                mapOf(
+                    "targetUid" to targetUid,
+                    "messageId" to messageId,
+                    "reason" to reasonCode,
+                    "details" to details.take(1000)
+                )
+            )
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val data = response.data as? Map<String, Any?> ?: error("Invalid message report response")
+        data["success"] as? Boolean ?: false
+    }
+
     suspend fun listMySupportTickets(): Result<List<SupportTicketSummary>> = runCatching {
         val response = functions.getHttpsCallable("listMySupportTickets")
             .call()
