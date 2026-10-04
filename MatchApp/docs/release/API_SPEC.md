@@ -139,3 +139,11 @@ from the client as truth.
 - `startSecureCallSession` — server-authoritative provider-session allocation boundary. Requires an active mutual match, current block/privacy eligibility, configured provider adapter, rollout flag, per-account/per-pair rate limits, and returns only short-lived client allocation material. The default adapter fails closed.
 
 - `setChatTyping` — App Check/authenticated, mutual-match-only ephemeral typing signal. Re-checks active accounts, both-direction blocks and profile privacy; writes only short-lived server-owned typing state under the authorized chat thread. Clients cannot write typing documents directly.
+
+
+## Photo request
+
+- `getPhotoRequestStatus` — returns the authenticated member's current server-owned request state for a target profile. Re-checks active-account, block, profile-visibility and stealth eligibility before revealing status; returns `PHOTO_AVAILABLE`, `NONE`, `PENDING`, `FULFILLED`, or `UNAVAILABLE`.
+- `requestProfilePhoto` — asks an eligible member to add a public approved profile photo when none is currently published. It never reveals hidden/private media and never mutates the target's privacy settings. The backend enforces a seven-day pair cooldown and a per-requester daily ceiling, persists the request as trusted-server state, and sends a minimal data notification.
+- `onPublicProfilePhotoAvailable` — trusted trigger that marks outstanding requests fulfilled when `users.photoUrl` transitions from blank to a published approved photo.
+- `cleanupPhotoRequestsOnUserDelete` — removes photo-request and rate-limit state tied to a deleted account.
