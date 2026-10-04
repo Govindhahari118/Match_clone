@@ -24,7 +24,7 @@ def main() -> int:
         't("conversation_starter_3"',
         "if (state.isMutual && !state.isBlocked)",
         "onClick = { draft = starter }",
-        'testTag("conversation_starter_${index}")',
+        'testTag("conversation_starter_$index")',
     )
     for needle in required:
         if needle not in text:
