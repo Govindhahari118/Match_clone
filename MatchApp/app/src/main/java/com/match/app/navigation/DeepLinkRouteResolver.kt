@@ -45,7 +45,7 @@ object DeepLinkRouteResolver {
     ): String? = when (type) {
         "message" -> positiveId(chatPeerId)?.let { "chat/$it" } ?: "chat_list"
         "interest_received" -> positiveId(fromUserId)?.let { "detail/$it" } ?: "interests"
-        "photo_request" -> positiveId(fromUserId)?.let { "detail/$it" } ?: "notifications"
+        "photo_request" -> "profile"
         "new_match", "mutual_match" -> positiveId(fromUserId)?.let { "detail/$it" } ?: "matches"
         "profile_viewed" -> "who_viewed"
         "profile_incomplete" -> "profile"
