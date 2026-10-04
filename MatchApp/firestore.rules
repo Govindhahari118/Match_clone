@@ -419,6 +419,7 @@ service cloud.firestore {
     match /otpLog/{hash} { allow read, write: if false; }
     match /supportTickets/{ticketId} { allow read, write: if false; }
     match /profileReports/{reportId} { allow read, write: if false; }
+    match /chatMessageReports/{reportId} { allow read, write: if false; }
     match /opsAuditLog/{auditId} { allow read, write: if false; }
     match /opsBootstrapAudit/{auditId} { allow read, write: if false; }
     match /adminAudit/{auditId} { allow read, write: if false; }
