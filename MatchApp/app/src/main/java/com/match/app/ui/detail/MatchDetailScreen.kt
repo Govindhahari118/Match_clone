@@ -31,6 +31,7 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
+import com.match.app.data.repo.PhotoRequestRepository
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferenceSummary
 import com.match.app.data.repo.PartnerPreferenceMode
@@ -66,6 +67,9 @@ import javax.inject.Inject
 data class DetailUi(
     val profile: UserProfile? = null,
     val photos: List<PhotoEntity> = emptyList(),
+    val photoRequestStatus: String = "NONE",
+    val photoRequestLoading: Boolean = false,
+    val photoRequestMessage: String? = null,
     val liked: Boolean = false,
     val blocked: Boolean = false,
     val shortlisted: Boolean = false,
@@ -109,6 +113,7 @@ class MatchDetailViewModel @Inject constructor(
     private val qDao: QuestionnaireDao,
     private val kundliRepo: KundliRepository,
     private val photoRepo: PhotoRepository,
+    private val photoRequestRepository: PhotoRequestRepository,
     private val analytics: AnalyticsManager,
     private val noteRepo: NoteRepository,
     private val subscriptionRepo: SubscriptionRepository,
@@ -140,12 +145,17 @@ class MatchDetailViewModel @Inject constructor(
         val preferenceSummary = profile.firebaseUid
             .takeIf { it.isNotBlank() }
             ?.let { uid -> runCatching { partnerPreferenceRepository.loadPublicSummary(uid) }.getOrNull() }
+        val photoRequestStatus = profile.firebaseUid
+            .takeIf { it.isNotBlank() && profile.photoUrl.isBlank() }
+            ?.let { uid -> photoRequestRepository.status(uid).getOrNull()?.status }
+            ?: if (profile.photoUrl.isNotBlank()) "PHOTO_AVAILABLE" else "NONE"
         val meLiked = social.isLiked(meId, userId)
         val theyLiked = social.isLiked(userId, meId)
         val me = auth.currentProfile(meId)
         _ui.value = _ui.value.copy(
             profile = profile,
             photos = photos,
+            photoRequestStatus = photoRequestStatus,
             liked = meLiked,
             blocked = social.isBlocked(meId, userId),
             shortlisted = shortlistRepo.isSaved(meId, userId),
@@ -280,6 +290,43 @@ class MatchDetailViewModel @Inject constructor(
             }
         }
     }
+
+    fun requestPhoto() = viewModelScope.launch {
+        val current = _ui.value
+        val targetUid = current.profile?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || current.blocked || current.photoRequestLoading ||
+            current.profile?.photoUrl?.isNotBlank() == true ||
+            current.photoRequestStatus == "PENDING" ||
+            current.photoRequestStatus == "PHOTO_AVAILABLE" ||
+            current.photoRequestStatus == "UNAVAILABLE") return@launch
+
+        _ui.update { it.copy(photoRequestLoading = true, photoRequestMessage = null) }
+        photoRequestRepository.request(targetUid)
+            .onSuccess { result ->
+                val message = when (result.status) {
+                    "PENDING" -> "photo_request_sent"
+                    "PHOTO_AVAILABLE" -> "photo_now_available"
+                    else -> null
+                }
+                _ui.update {
+                    it.copy(
+                        photoRequestLoading = false,
+                        photoRequestStatus = result.status,
+                        photoRequestMessage = message
+                    )
+                }
+            }
+            .onFailure {
+                _ui.update {
+                    it.copy(
+                        photoRequestLoading = false,
+                        photoRequestMessage = "photo_request_failed"
+                    )
+                }
+            }
+    }
+
+    fun consumePhotoRequestMessage() = _ui.update { it.copy(photoRequestMessage = null) }
 
     fun toggleShortlist() = viewModelScope.launch {
         if (_ui.value.blocked) return@launch
@@ -433,6 +480,20 @@ fun MatchDetailScreen(
             vm.consumeReportMessage()
         }
     }
+
+    LaunchedEffect(ui.photoRequestMessage) {
+        val message = when (ui.photoRequestMessage) {
+            "photo_request_sent" -> t("photo_request_sent", "Photo request sent.")
+            "photo_now_available" -> t("photo_now_available", "A profile photo is now available.")
+            "photo_request_failed" -> t("photo_request_failed", "Photo request could not be sent. Please try again.")
+            else -> null
+        }
+        message?.let {
+            snackbar.showSnackbar(it)
+            vm.consumePhotoRequestMessage()
+        }
+    }
+
 
     if (ui.showContactUnlock && p != null) {
         ContactUnlockSheet(
@@ -611,6 +672,33 @@ fun MatchDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
                 ProfileHero(p, ui.photos)
+
+                if (p.photoUrl.isBlank() &&
+                    ui.photoRequestStatus != "PHOTO_AVAILABLE" &&
+                    ui.photoRequestStatus != "UNAVAILABLE") {
+                    MatreeSecondaryButton(
+                        text = when {
+                            ui.photoRequestLoading -> t("requesting_photo", "Requesting…")
+                            ui.photoRequestStatus == "PENDING" -> t("photo_requested", "Photo requested")
+                            else -> t("request_photo", "Request photo")
+                        },
+                        icon = if (ui.photoRequestStatus == "PENDING") Icons.Filled.CheckCircle else Icons.Filled.AddAPhoto,
+                        onClick = vm::requestPhoto,
+                        enabled = !ui.blocked && !ui.photoRequestLoading && ui.photoRequestStatus != "PENDING",
+                        modifier = Modifier.fillMaxWidth().testTag("profile_request_photo")
+                    )
+                    if (ui.photoRequestStatus == "PENDING") {
+                        Text(
+                            t(
+                                "photo_request_privacy_note",
+                                "This asks the member to add a profile photo. It does not reveal hidden photos or change their privacy settings."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
 
                 if (ui.blocked) {
                     MatreeInlineNotice(
