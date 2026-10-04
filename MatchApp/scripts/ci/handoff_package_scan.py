@@ -41,6 +41,7 @@ REQUIRED = (
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/i18n_catalog_scan.py",
     "scripts/ci/reporting_contract_scan.py",
+    "scripts/ci/photo_privacy_contract_scan.py",
     "scripts/ci/chat_localization_scan.py",
     "scripts/ci/discovery_preferences_localization_scan.py",
     "scripts/ci/screen_classification_scan.py",
