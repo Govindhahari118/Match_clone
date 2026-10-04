@@ -6,6 +6,8 @@ import {
 } from "./notificationLinkPolicy";
 import {
   db,
+  normalizeNotificationLocale,
+  NotificationCopyByLocale,
   persistAndSendNotification,
   requireAppCheck,
 } from "./shared";
@@ -21,6 +23,7 @@ type NotificationPayload = {
   entityId: string;
   deepLink: string;
   fromFirebaseUid?: string;
+  localizedCopy?: NotificationCopyByLocale;
 };
 
 function requireDeviceId(value: unknown): string {
@@ -51,6 +54,7 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
 
   const deviceId = requireDeviceId(data?.deviceId);
   const token = requireFcmToken(data?.token);
+  const locale = normalizeNotificationLocale(data?.locale);
   const appVersion = typeof data?.appVersion === "string" ?
     data.appVersion.trim().slice(0, 64) : "";
 
@@ -75,6 +79,7 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
       token,
       platform: "android",
       appVersion,
+      locale,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     tx.set(ownerRef, {
@@ -229,6 +234,38 @@ async function chatNotificationStillAllowed(
     privacyBA.data()?.profileHidden !== true;
 }
 
+
+function localizedNotificationCopy(type: string): NotificationCopyByLocale {
+  switch (type) {
+  case "INTEREST":
+    return {
+      en: { title: "New interest", body: "Someone is interested in your profile. Open the app to view it." },
+      te: { title: "కొత్త ఆసక్తి", body: "ఎవరైనా మీ ప్రొఫైల్‌పై ఆసక్తి చూపించారు. చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नई रुचि", body: "किसी ने आपकी प्रोफ़ाइल में रुचि दिखाई है। देखने के लिए ऐप खोलें।" },
+    };
+  case "MATCH":
+    return {
+      en: { title: "New mutual match", body: "You have a new mutual match. Open the app to view the profile." },
+      te: { title: "కొత్త పరస్పర మ్యాచ్", body: "మీకు కొత్త పరస్పర మ్యాచ్ వచ్చింది. ప్రొఫైల్ చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नया पारस्परिक मैच", body: "आपका नया पारस्परिक मैच हुआ है। प्रोफ़ाइल देखने के लिए ऐप खोलें।" },
+    };
+  case "MESSAGE":
+    return {
+      en: { title: "New message", body: "Open the app to view your message." },
+      te: { title: "కొత్త సందేశం", body: "మీ సందేశాన్ని చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नया संदेश", body: "अपना संदेश देखने के लिए ऐप खोलें।" },
+    };
+  case "CONTACT_REQUEST":
+    return {
+      en: { title: "Contact access request", body: "A mutual match requested permission to reveal your contact. Open Privacy & visibility to respond." },
+      te: { title: "సంప్రదింపు అనుమతి అభ్యర్థన", body: "ఒక పరస్పర మ్యాచ్ మీ సంప్రదింపు వివరాలను చూడటానికి అనుమతి కోరారు. స్పందించడానికి గోప్యత & కనిపించే విధానాన్ని తెరవండి." },
+      hi: { title: "संपर्क अनुमति अनुरोध", body: "एक पारस्परिक मैच ने आपका संपर्क देखने की अनुमति माँगी है। जवाब देने के लिए गोपनीयता और दृश्यता खोलें।" },
+    };
+  default:
+    return {};
+  }
+}
+
 async function deliverPersistedNotification(
   notificationId: string,
   payload: NotificationPayload
@@ -251,6 +288,7 @@ async function deliverPersistedNotification(
     preferenceKey: preferenceFor(payload.type),
     priority: "high",
     fromFirebaseUid: payload.fromFirebaseUid,
+    localizedCopy: payload.localizedCopy,
   });
 }
 
@@ -274,6 +312,7 @@ export const onInterestCreated = functions.firestore
         entityId: fromUid,
         deepLink: notificationDeepLink("interests", functions.config().app_links?.host),
         fromFirebaseUid: fromUid,
+        localizedCopy: localizedNotificationCopy("INTEREST"),
       }
     );
   });
@@ -299,6 +338,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid2,
           deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid2,
+          localizedCopy: localizedNotificationCopy("MATCH"),
         }
       ),
       deliverPersistedNotification(
@@ -312,6 +352,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid1,
           deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid1,
+          localizedCopy: localizedNotificationCopy("MATCH"),
         }
       ),
     ]);
@@ -350,6 +391,7 @@ export const onContactRequestPending = functions.firestore
         entityId: requesterUid,
         deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
         fromFirebaseUid: requesterUid,
+        localizedCopy: localizedNotificationCopy("CONTACT_REQUEST"),
       }
     );
   });
@@ -378,6 +420,7 @@ export const onNewMessage = functions.firestore
         entityId: context.params.threadId,
         deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
         fromFirebaseUid,
+        localizedCopy: localizedNotificationCopy("MESSAGE"),
       }
     );
   });
