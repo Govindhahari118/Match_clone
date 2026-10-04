@@ -134,6 +134,8 @@ class DeepLinkRouteResolverTest {
         assertEquals("chat/9", DeepLinkRouteResolver.fromNotification("message", null, 9))
         assertEquals("chat_list", DeepLinkRouteResolver.fromNotification("message", null, -1))
         assertEquals("detail/4", DeepLinkRouteResolver.fromNotification("interest_received", 4, null))
+        assertEquals("detail/6", DeepLinkRouteResolver.fromNotification("photo_request", 6, null))
+        assertEquals("notifications", DeepLinkRouteResolver.fromNotification("photo_request", null, null))
         assertEquals("interests", DeepLinkRouteResolver.fromNotification("interest_received", 0, null))
         assertEquals("detail/5", DeepLinkRouteResolver.fromNotification("mutual_match", 5, null))
         assertEquals("matches", DeepLinkRouteResolver.fromNotification("new_match", null, null))
