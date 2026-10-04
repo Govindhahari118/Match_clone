@@ -53,6 +53,8 @@ REQUIRED = (
     "scripts/perf/discovery-load.mjs",
     "functions/src/health.ts",
     "functions/src/chatMediaOrphanPolicy.ts",
+    "functions/src/chatIdentityPolicy.ts",
+    "functions/src/reportReasonPolicy.ts",
     "functions/src/callSessionPolicy.ts",
     "functions/src/communicationProvider.ts",
     "functions/src/notificationLinkPolicy.ts",
