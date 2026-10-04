@@ -63,6 +63,7 @@ fun NotificationsScreen(
     onBack: () -> Unit = {},
     onOpenInterests: () -> Unit = {},
     onOpenProfile: (Long) -> Unit = {},
+    onOpenOwnProfile: () -> Unit = {},
     onOpenChat: (Long) -> Unit = {},
     vm: NotificationsViewModel = hiltViewModel()
 ) {
@@ -117,6 +118,7 @@ fun NotificationsScreen(
                                 NotificationCardDestination.INTERESTS -> onOpenInterests()
                                 NotificationCardDestination.CHAT -> n.fromUserId?.let(onOpenChat)
                                 NotificationCardDestination.PROFILE -> n.fromUserId?.let(onOpenProfile)
+                                NotificationCardDestination.OWN_PROFILE -> onOpenOwnProfile()
                                 NotificationCardDestination.NONE -> Unit
                             }
                         })
@@ -138,6 +140,7 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
         "MATCH" -> Icons.Filled.Stars to semantic.premium
         "VIEW" -> Icons.Filled.Visibility to semantic.verified
         "MESSAGE" -> Icons.Filled.Forum to MaterialTheme.colorScheme.primary
+        "PHOTO_REQUEST" -> Icons.Filled.AddAPhoto to MaterialTheme.colorScheme.primary
         else -> Icons.Filled.Notifications to MaterialTheme.colorScheme.primary
     }
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("notif_${n.id}"), shape = RoundedCornerShape(MatreeDesign.radii.card), colors = CardDefaults.elevatedCardColors(containerColor = if (!n.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface)) {
@@ -152,6 +155,7 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
                     "LIKE", "INTEREST" -> t("review_interest", "Review interest")
                     "MATCH", "MESSAGE" -> t("open_chat", "Open chat")
                     "VIEW" -> t("view_profile", "View profile")
+                    "PHOTO_REQUEST" -> t("add_profile_photo", "Add profile photo")
                     else -> null
                 }
                 actionLabel?.let {
