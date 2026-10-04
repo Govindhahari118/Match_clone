@@ -50,6 +50,7 @@ import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreeStatePanel
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.common.reportReasonOptions
 import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -221,13 +222,42 @@ class ChatViewModel @Inject constructor(
 
     fun clearReportMessage() = _state.update { it.copy(reportMessage = null) }
 
-    fun reportMember(reason: String) = viewModelScope.launch {
-        val targetUid = _state.value.peer?.firebaseUid.orEmpty()
-        if (targetUid.isBlank() || reason.isBlank() || _state.value.reportSubmitting) return@launch
+    fun reportMessage(message: MessageEntity, reasonCode: String) = viewModelScope.launch {
+        val current = _state.value
+        val targetUid = current.peer?.firebaseUid.orEmpty()
+        val messageId = message.clientMessageId
+        if (
+            targetUid.isBlank() ||
+            reasonCode.isBlank() ||
+            message.fromUserId == current.meId ||
+            !messageId.matches(Regex("[A-Za-z0-9_-]{16,128}")) ||
+            current.reportSubmitting
+        ) return@launch
+
         _state.update { it.copy(reportSubmitting = true, reportMessage = null) }
-        supportRepository.submitProfileReport(targetUid, reason, "Reported from private match conversation")
+        supportRepository.submitChatMessageReport(
+            targetUid = targetUid,
+            messageId = messageId,
+            reasonCode = reasonCode,
+            details = "Reported from private match conversation"
+        ).onSuccess {
+            _state.update {
+                it.copy(reportSubmitting = false, reportMessage = "message_report_submitted")
+            }
+        }.onFailure {
+            _state.update {
+                it.copy(reportSubmitting = false, reportMessage = "message_report_failed")
+            }
+        }
+    }
+
+    fun reportMember(reasonCode: String) = viewModelScope.launch {
+        val targetUid = _state.value.peer?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || reasonCode.isBlank() || _state.value.reportSubmitting) return@launch
+        _state.update { it.copy(reportSubmitting = true, reportMessage = null) }
+        supportRepository.submitProfileReport(targetUid, reasonCode, "Reported from private match conversation")
             .onSuccess {
-                analytics.logProfileReported(reason)
+                analytics.logProfileReported(reasonCode)
                 _state.update {
                     it.copy(reportSubmitting = false, reportMessage = "report_submitted")
                 }
@@ -272,6 +302,8 @@ fun ChatScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showBlockDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
+    var messageActions by remember { mutableStateOf<MessageEntity?>(null) }
+    var messageToReport by remember { mutableStateOf<MessageEntity?>(null) }
 
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
@@ -365,6 +397,8 @@ fun ChatScreen(
     val reportFeedback = when (state.reportMessage) {
         "report_submitted" -> t("report_submitted", "Report submitted for moderation.")
         "report_failed" -> t("report_failed", "Report could not be submitted. Check your connection and try again.")
+        "message_report_submitted" -> t("message_report_submitted", "Message report submitted for moderation.")
+        "message_report_failed" -> t("message_report_failed", "Message report could not be submitted. Check your connection and try again.")
         else -> null
     }
     LaunchedEffect(reportFeedback) {
@@ -634,7 +668,7 @@ fun ChatScreen(
                             message = message,
                             mine = message.fromUserId == state.meId,
                             repliedMessage = message.replyToId?.let { id -> state.messages.firstOrNull { it.id == id } },
-                            onLongPress = { vm.setReplyTo(message) },
+                            onLongPress = { messageActions = message },
                             onRetry = { vm.retryFailed(message) }
                         )
                     }
@@ -644,14 +678,7 @@ fun ChatScreen(
     }
 
     if (showReportDialog) {
-        val reasons = listOf(
-            t("fake_profile", "Fake profile"),
-            t("inappropriate_content", "Inappropriate content"),
-            t("harassment", "Harassment"),
-            t("spam_or_scam", "Spam or scam"),
-            t("under_age", "Under age"),
-            t("other", "Other")
-        )
+        val reasons = reportReasonOptions()
         AlertDialog(
             onDismissRequest = { if (!state.reportSubmitting) showReportDialog = false },
             title = { Text(t("report_profile", "Report profile")) },
@@ -662,11 +689,11 @@ fun ChatScreen(
                         TextButton(
                             onClick = {
                                 showReportDialog = false
-                                vm.reportMember(reason)
+                                vm.reportMember(reason.code)
                             },
                             enabled = !state.reportSubmitting,
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(reason) }
+                        ) { Text(reason.label) }
                     }
                 }
             },
@@ -676,6 +703,85 @@ fun ChatScreen(
                     onClick = { showReportDialog = false },
                     enabled = !state.reportSubmitting
                 ) { Text(t("cancel", "Cancel")) }
+            }
+        )
+    }
+
+    messageActions?.let { message ->
+        val mine = message.fromUserId == state.meId
+        AlertDialog(
+            onDismissRequest = { messageActions = null },
+            title = { Text(t("message_actions", "Message actions")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    TextButton(
+                        onClick = {
+                            vm.setReplyTo(message)
+                            messageActions = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(t("reply", "Reply"))
+                    }
+                    if (!mine && message.clientMessageId.matches(Regex("[A-Za-z0-9_-]{16,128}"))) {
+                        TextButton(
+                            onClick = {
+                                messageToReport = message
+                                messageActions = null
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(t("report_message", "Report message"))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { messageActions = null }) {
+                    Text(t("cancel", "Cancel"))
+                }
+            }
+        )
+    }
+
+    messageToReport?.let { message ->
+        val reasons = reportReasonOptions()
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.reportSubmitting) messageToReport = null
+            },
+            title = { Text(t("report_message", "Report message")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    Text(
+                        t(
+                            "report_message_body",
+                            "Choose why this received message should be reviewed. The server preserves the original message evidence for moderation."
+                        )
+                    )
+                    reasons.forEach { reason ->
+                        TextButton(
+                            onClick = {
+                                messageToReport = null
+                                vm.reportMessage(message, reason.code)
+                            },
+                            enabled = !state.reportSubmitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(reason.label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { messageToReport = null },
+                    enabled = !state.reportSubmitting
+                ) {
+                    Text(t("cancel", "Cancel"))
+                }
             }
         )
     }
