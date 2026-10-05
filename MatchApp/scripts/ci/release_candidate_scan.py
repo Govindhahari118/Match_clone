@@ -337,6 +337,29 @@ def main() -> int:
     require("match /chatMessageReports/{reportId} { allow read, write: if false; }" in firestore_rules,
             "chat-message moderation evidence must remain client-inaccessible", failures)
 
+    # Profile-photo requests are server-authoritative and must never bypass moderation/privacy.
+    photo_requests = text(ROOT / "functions/src/photoRequests.ts")
+    notification_functions = text(ROOT / "functions/src/notifications.ts")
+    photo_request_repo = text(APP / "src/main/java/com/match/app/data/repo/PhotoRequestRepository.kt")
+    match_detail = text(APP / "src/main/java/com/match/app/ui/detail/MatchDetailScreen.kt")
+    require("PHOTO_REQUEST_COOLDOWN_MS" in text(ROOT / "functions/src/photoRequestPolicy.ts") and
+            "photoRequestCoolingDown" in photo_requests,
+            "photo requests must retain the server-enforced pair cooldown", failures)
+    require("requestProfilePhoto" in photo_requests and
+            "getProfilePhotoRequestStatus" in photo_requests,
+            "photo request callable/status contract missing", failures)
+    require("onProfilePhotoRequested" in notification_functions and
+            'pushType: "photo_request"' in notification_functions,
+            "photo requests must notify the profile owner through durable notifications", failures)
+    require('match /photoRequests/{requestId} { allow read, write: if false; }' in firestore_rules,
+            "photo request state must remain server-owned", failures)
+    require("requestProfilePhoto" in photo_request_repo and
+            '"profile_request_photo"' in match_detail,
+            "Android request-photo experience missing", failures)
+    require('photoRequests").where("requesterUid", "==", uid)' in users_functions and
+            'photoRequests").where("targetUid", "==", uid)' in users_functions,
+            "account deletion must erase photo requests in both directions", failures)
+
     # Family-assisted profiles are a first-class matrimony contract, not a UI-only label.
     user_entity = text(APP / "src/main/java/com/match/app/data/local/entity/UserEntity.kt")
     profile_service = text(APP / "src/main/java/com/match/app/data/remote/FirestoreProfileService.kt")
