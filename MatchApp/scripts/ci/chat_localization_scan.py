@@ -17,11 +17,14 @@ REQUIRED = {
         "mutual_interest_required", "chat_respect_notice",
         "both_accept_before_messages", "tap_to_retry", "voice_message",
         "online_now", "last_active", "typing", "report_profile",
+        "mute_chat", "unmute_chat", "archive_chat", "unarchive_chat",
+        "chat_muted_confirmation", "chat_archived_confirmation",
     },
     LIST: {
         "messages", "unread_messages", "search_chat_placeholder",
         "messaging_mutual_hint", "chat_safety_full", "no_matching_conversations",
         "no_conversations_search", "conversation_started",
+        "active_chats", "archived_chats", "no_archived_conversations", "muted_chat",
     },
 }
 
