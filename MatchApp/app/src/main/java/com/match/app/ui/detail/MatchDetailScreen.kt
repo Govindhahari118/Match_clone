@@ -46,6 +46,8 @@ import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.common.ProtectedVideoPlayer
+import com.match.app.ui.common.rememberSecureMediaUri
 import com.match.app.ui.common.ReportReasonOption
 import com.match.app.ui.common.reportReasonOptions
 import com.match.app.ui.components.MatreeInlineNotice
@@ -683,6 +685,10 @@ fun MatchDetailScreen(
                     )
                 }
 
+                if (!ui.blocked && p.videoUrl.isNotBlank()) {
+                    ProfileVideoSection(p.videoUrl)
+                }
+
                 PartnerExpectationCard(ui.partnerPreferenceSummary)
                 TrustSummaryCard(ui.trustSummary)
                 ActualCompatibilityCard(ui)
@@ -714,6 +720,39 @@ fun MatchDetailScreen(
                 }
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
+        }
+    }
+}
+
+@Composable
+private fun ProfileVideoSection(videoSource: String) {
+    val playbackUri = rememberSecureMediaUri(videoSource)
+    SectionCard(t("profile_video", "Profile video")) {
+        if (playbackUri != null) {
+            Text(
+                t(
+                    "profile_video_intro",
+                    "A short member-submitted video approved for profile display. Playback starts only when you choose."
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(MatreeDesign.spacing.xs))
+            ProtectedVideoPlayer(
+                playbackUri = playbackUri,
+                modifier = Modifier.testTag("match_profile_video"),
+                minHeightDp = 200,
+                playerHeightDp = 240
+            )
+        } else {
+            MatreeInlineNotice(
+                message = t(
+                    "profile_video_unavailable",
+                    "This profile video is temporarily unavailable or your current access no longer allows it."
+                ),
+                icon = Icons.Filled.VideocamOff,
+                tone = MatreeStatusTone.WARNING
+            )
         }
     }
 }

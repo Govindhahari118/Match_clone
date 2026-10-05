@@ -444,5 +444,8 @@
   "chat_unmuted_confirmation": "Conversation unmuted.",
   "chat_archived_confirmation": "Conversation archived.",
   "chat_unarchived_confirmation": "Conversation restored to Active.",
-  "chat_preference_failed": "Conversation preference could not be updated. Try again."
+  "chat_preference_failed": "Conversation preference could not be updated. Try again.",
+  "profile_video": "Profile video",
+  "profile_video_intro": "A short member-submitted video approved for profile display. Playback starts only when you choose.",
+  "profile_video_unavailable": "This profile video is temporarily unavailable or your current access no longer allows it."
 }
