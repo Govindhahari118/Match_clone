@@ -278,6 +278,15 @@ service cloud.firestore {
     }
     match /blocks/{blockerUid} { allow read: if isOwner(blockerUid); allow write: if false; }
 
+    match /chatPreferences/{ownerUid}/threads/{threadId} {
+      allow read: if isOwner(ownerUid);
+      allow create, update, delete: if false;
+    }
+    match /chatPreferences/{ownerUid} {
+      allow read: if isOwner(ownerUid);
+      allow write: if false;
+    }
+
     match /chats/{threadId} {
       allow read: if isSignedIn() &&
         request.auth.uid in resource.data.participantUids &&
