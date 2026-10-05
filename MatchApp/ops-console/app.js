@@ -16,6 +16,8 @@
     risk: ["moderator", "ops_admin"],
     verification: ["kyc_reviewer", "ops_admin"],
     photos: ["moderator", "ops_admin"],
+    videos: ["moderator", "ops_admin"],
+    voicebios: ["moderator", "ops_admin"],
     payments: ["payment_ops", "ops_admin"],
   };
 
@@ -436,6 +438,48 @@
     if (!(data.items || []).length) root.appendChild(text("p", "No pending videos.", "muted"));
   }
 
+  async function loadVoiceBios() {
+    const data = await call("listPendingVoiceBioModeration", { limit: 100 });
+    const root = el("voiceBioList");
+    clear(root);
+    (data.items || []).forEach((voiceBio) => {
+      const row = item(
+        `Voice bio • ${voiceBio.uid}`,
+        `${voiceBio.contentType || ""} • ${Number(voiceBio.size || 0)} bytes • ${formatTime(voiceBio.createdAtMillis)}`
+      );
+      const reason = input("Moderation reason (required)");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      actions.appendChild(button("Open voice bio", async () => {
+        const review = await call("getVoiceBioModerationReviewCase", { moderationId: voiceBio.id });
+        window.open(review.documentUrl, "_blank", "noopener,noreferrer");
+        setStatus("Short-lived voice bio review link opened and audited.");
+      }));
+      actions.append(reason);
+      actions.appendChild(button("Approve", async () => {
+        await call("reviewProfileVoiceBio", {
+          moderationId: voiceBio.id,
+          decision: "APPROVED",
+          reason: reason.value,
+        });
+        setStatus("Voice bio approved.");
+        await loadVoiceBios();
+      }));
+      actions.appendChild(button("Reject", async () => {
+        await call("reviewProfileVoiceBio", {
+          moderationId: voiceBio.id,
+          decision: "REJECTED",
+          reason: reason.value,
+        });
+        setStatus("Voice bio rejected.");
+        await loadVoiceBios();
+      }, "danger"));
+      row.appendChild(actions);
+      root.appendChild(row);
+    });
+    if (!(data.items || []).length) root.appendChild(text("p", "No pending voice bios.", "muted"));
+  }
+
   async function lookupPayment(paymentId) {
     const data = await call("getPaymentReconciliationCase", { paymentId });
     el("paymentOutput").textContent = JSON.stringify(data, null, 2);
@@ -482,6 +526,7 @@
         if (action === "verification") await loadVerification();
         if (action === "photos") await loadPhotos();
         if (action === "videos") await loadVideos();
+        if (action === "voicebios") await loadVoiceBios();
       } catch (error) {
         setStatus(errorMessage(error), true);
       } finally {
