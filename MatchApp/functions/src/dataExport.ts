@@ -151,6 +151,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     submittedReports,
     photoModeration,
     videoModeration,
+    voiceBioModeration,
     supportTickets,
     assistedRequest,
     familyDelegates,
@@ -187,6 +188,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     queryAll(db.collection("profileReports").where("reporterUid", "==", uid)),
     queryAll(db.collection("photoModeration").where("uid", "==", uid)),
     queryAll(db.collection("videoModeration").where("uid", "==", uid)),
+    queryAll(db.collection("voiceBioModeration").where("uid", "==", uid)),
     queryAll(db.collection("supportTickets").where("uid", "==", uid)),
     singleDoc("rmRequests", uid),
     childCollection(`familyDelegates/${uid}/members`),
@@ -276,6 +278,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
       mediaModeration: {
         photos: photoModeration.map(mediaModerationExport),
         videos: videoModeration.map(mediaModerationExport),
+        voiceBios: voiceBioModeration.map(mediaModerationExport),
       },
       chats,
       supportTickets,
