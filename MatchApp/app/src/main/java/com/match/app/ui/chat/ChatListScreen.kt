@@ -50,7 +50,9 @@ data class ConversationItem(
     val lastAt: Long,
     val lastActiveAt: Long,
     val showLastActive: Boolean,
-    val isVerified: Boolean
+    val isVerified: Boolean,
+    val muted: Boolean = false,
+    val archived: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,9 +67,13 @@ class ChatListViewModel @Inject constructor(
     /** Firestore thread list is authoritative so a new device sees existing conversations. */
     val conversations: StateFlow<List<ConversationItem>> = session.firebaseUid.filterNotNull()
         .flatMapLatest { myUid ->
-            firestoreChat.observeThreads(myUid).map { threads ->
+            combine(
+                firestoreChat.observeThreads(myUid),
+                firestoreChat.observeThreadPreferences(myUid)
+            ) { threads, preferences ->
                 threads.mapNotNull { thread ->
                     val peer = hydratePeer(thread.peerFirebaseUid) ?: return@mapNotNull null
+                    val preference = preferences[FirestoreChatService.threadId(myUid, thread.peerFirebaseUid)]
                     ConversationItem(
                         peerId = peer.id,
                         peerFirebaseUid = peer.firebaseUid,
@@ -77,7 +83,9 @@ class ChatListViewModel @Inject constructor(
                         lastAt = thread.lastSentAt,
                         lastActiveAt = peer.lastActiveAt,
                         showLastActive = peer.showLastActive,
-                        isVerified = peer.isVerified
+                        isVerified = peer.isVerified,
+                        muted = preference?.muted == true,
+                        archived = preference?.archived == true
                     )
                 }.sortedByDescending { it.lastAt }
             }.catch { emit(emptyList()) }
@@ -112,10 +120,15 @@ fun ChatListScreen(
     val conversations by vm.conversations.collectAsState()
     val unread by vm.unreadCount.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    val filtered = remember(conversations, searchQuery) {
+    var showArchived by rememberSaveable { mutableStateOf(false) }
+    val archivedCount = remember(conversations) { conversations.count { it.archived } }
+    val filtered = remember(conversations, searchQuery, showArchived) {
         val q = searchQuery.trim().removePrefix("@")
-        if (q.isBlank()) conversations else conversations.filter {
-            it.peerName.contains(q, ignoreCase = true) || it.username.contains(q, ignoreCase = true)
+        conversations.filter { conversation ->
+            conversation.archived == showArchived &&
+                (q.isBlank() ||
+                    conversation.peerName.contains(q, ignoreCase = true) ||
+                    conversation.username.contains(q, ignoreCase = true))
         }
     }
 
@@ -149,6 +162,28 @@ fun ChatListScreen(
                 shape = RoundedCornerShape(MatreeDesign.radii.large)
             )
 
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = MatreeDesign.spacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)
+            ) {
+                FilterChip(
+                    selected = !showArchived,
+                    onClick = { showArchived = false },
+                    label = { Text(t("active_chats", "Active")) },
+                    leadingIcon = if (!showArchived) {
+                        { Icon(Icons.Filled.ChatBubble, null, Modifier.size(16.dp)) }
+                    } else null
+                )
+                FilterChip(
+                    selected = showArchived,
+                    onClick = { showArchived = true },
+                    label = { Text(t("archived_chats", mapOf("count" to archivedCount), "Archived ({count})")) },
+                    leadingIcon = if (showArchived) {
+                        { Icon(Icons.Filled.Archive, null, Modifier.size(16.dp)) }
+                    } else null
+                )
+            }
+
             if (conversations.isEmpty()) {
                 Column(
                     Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
@@ -173,7 +208,11 @@ fun ChatListScreen(
                 ) {
                     MatreeStatePanel(
                         title = t("no_matching_conversations", "No matching conversations"),
-                        message = t("no_conversations_search", "No conversations match your current search."),
+                        message = if (showArchived) {
+                            t("no_archived_conversations", "No archived conversations.")
+                        } else {
+                            t("no_conversations_search", "No conversations match your current search.")
+                        },
                         icon = Icons.Filled.SearchOff
                     )
                 }
@@ -232,7 +271,8 @@ private fun ConversationRow(conv: ConversationItem, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(conv.peerName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (conv.isVerified) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.Verified, "Verified", Modifier.size(15.dp), tint = MatreeDesign.colors.verified) }
+                    if (conv.isVerified) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.Verified, t("verified", "Verified"), Modifier.size(15.dp), tint = MatreeDesign.colors.verified) }
+                    if (conv.muted) { Spacer(Modifier.width(MatreeDesign.spacing.xxs)); Icon(Icons.Filled.NotificationsOff, t("muted_chat", "Muted"), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     if (time.isNotBlank()) { Spacer(Modifier.width(8.dp)); Text(time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
                 if (conv.username.isNotBlank()) Text("@${conv.username}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
