@@ -431,5 +431,18 @@
   "report_message": "Report message",
   "report_message_body": "Choose why this received message should be reviewed. The server preserves the original message evidence for moderation.",
   "message_report_submitted": "Message report submitted for moderation.",
-  "message_report_failed": "Message report could not be submitted. Check your connection and try again."
+  "message_report_failed": "Message report could not be submitted. Check your connection and try again.",
+  "active_chats": "Active",
+  "archived_chats": "Archived ({count})",
+  "no_archived_conversations": "No archived conversations.",
+  "muted_chat": "Muted",
+  "mute_chat": "Mute conversation",
+  "unmute_chat": "Unmute conversation",
+  "archive_chat": "Archive conversation",
+  "unarchive_chat": "Move to Active",
+  "chat_muted_confirmation": "Conversation muted.",
+  "chat_unmuted_confirmation": "Conversation unmuted.",
+  "chat_archived_confirmation": "Conversation archived.",
+  "chat_unarchived_confirmation": "Conversation restored to Active.",
+  "chat_preference_failed": "Conversation preference could not be updated. Try again."
 }
