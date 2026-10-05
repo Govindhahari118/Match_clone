@@ -8,6 +8,7 @@ import {
   fileSignatureMatchesMime,
   PROFILE_PHOTO_MIME_TYPES,
   PROFILE_VIDEO_MIME_TYPES,
+  PROFILE_VOICE_BIO_MIME_TYPES,
 } from "./fileSignaturePolicy";
 import {
   CHAT_MEDIA_ORPHAN_TTL_MS,
@@ -17,8 +18,11 @@ import {
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024;
+const MAX_PROFILE_VOICE_BIO_BYTES = 5 * 1024 * 1024;
 const PROFILE_VIDEO_ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
 const PROFILE_VIDEO_ORPHAN_BATCH = 200;
+const PROFILE_VOICE_BIO_ORPHAN_TTL_MS = 6 * 60 * 60 * 1000;
+const PROFILE_VOICE_BIO_ORPHAN_BATCH = 200;
 
 function moderationIdForPath(path: string): string {
   return crypto.createHash("sha256").update(path).digest("hex");
@@ -38,6 +42,15 @@ function profileVideoPath(value: unknown, uid: string): string {
   const prefix = `videos/${uid}/`;
   if (!path.startsWith(prefix) || path.length <= prefix.length || path.length > 512 || path.includes("..")) {
     throw new functions.https.HttpsError("invalid-argument", "Invalid profile video path");
+  }
+  return path;
+}
+
+function profileVoiceBioPath(value: unknown, uid: string): string {
+  const path = typeof value === "string" ? value.trim() : "";
+  const prefix = `voicebios/${uid}/`;
+  if (!path.startsWith(prefix) || path.length <= prefix.length || path.length > 512 || path.includes("..")) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid profile voice bio path");
   }
   return path;
 }
