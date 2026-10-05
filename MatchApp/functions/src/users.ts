@@ -478,6 +478,8 @@ export const deleteUserAccount = functions
         await deleteCollection(`blocks/${uid}/blocked`);
         await deleteQuery(db.collectionGroup("blocked").where("blockedUid", "==", uid));
         await deleteCollection(`privacyRelations/${uid}/members`);
+        await deleteCollection(`chatPreferences/${uid}/threads`);
+        await deleteQuery(db.collectionGroup("threads").where("peerUid", "==", uid));
         await deleteCollection(`familyDelegates/${uid}/members`);
         await deleteQuery(db.collectionGroup("members").where("delegateUid", "==", uid));
         await deleteQuery(db.collection("familyInvites").where("ownerUid", "==", uid));
@@ -530,6 +532,7 @@ export const deleteUserAccount = functions
           db.collection("shortlists").doc(uid),
           db.collection("blocks").doc(uid),
           db.collection("privacyRelations").doc(uid),
+          db.collection("chatPreferences").doc(uid),
           db.collection("privacySettings").doc(uid),
           db.collection("contactGrants").doc(uid),
           db.collection("subscriptions").doc(uid),
