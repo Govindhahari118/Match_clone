@@ -46,6 +46,7 @@ import com.match.app.domain.model.CompatibilityFactor
 import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
+import com.match.app.ui.common.ProtectedAudioPlayer
 import com.match.app.ui.common.ProtectedVideoPlayer
 import com.match.app.ui.common.rememberSecureMediaUri
 import com.match.app.ui.common.ReportReasonOption
@@ -688,6 +689,9 @@ fun MatchDetailScreen(
                 if (!ui.blocked && p.videoUrl.isNotBlank()) {
                     ProfileVideoSection(p.videoUrl)
                 }
+                if (!ui.blocked && p.voiceBioUrl.isNotBlank()) {
+                    ProfileVoiceBioSection(p.voiceBioUrl)
+                }
 
                 PartnerExpectationCard(ui.partnerPreferenceSummary)
                 TrustSummaryCard(ui.trustSummary)
@@ -721,6 +725,24 @@ fun MatchDetailScreen(
                 Spacer(Modifier.height(MatreeDesign.spacing.lg))
             }
         }
+    }
+}
+
+@Composable
+private fun ProfileVoiceBioSection(source: String) {
+    SectionCard(t("voice_bio", "Voice introduction")) {
+        Text(
+            t(
+                "voice_bio_intro",
+                "Listen to this member’s approved optional voice introduction."
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ProtectedAudioPlayer(
+            source = source,
+            modifier = Modifier.fillMaxWidth().testTag("match_profile_voice_bio")
+        )
     }
 }
 
