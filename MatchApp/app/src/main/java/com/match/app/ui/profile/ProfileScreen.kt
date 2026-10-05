@@ -55,6 +55,7 @@ import com.match.app.ui.components.MatreeProgressCard
 import com.match.app.ui.components.MatreeSecondaryButton
 import com.match.app.ui.components.MatreeProfileSection
 import com.match.app.ui.components.MatreeStatusTone
+import com.match.app.ui.i18n.t
 import com.match.app.ui.theme.MatreeDesign
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -316,9 +317,9 @@ fun ProfileScreen(
         ProfileStats(viewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
         TrustAndVerificationCard(p, photos.isNotEmpty(), trustSummary, onGoVerification)
 
-        ProfileSection("Voice introduction") {
+        ProfileSection(t("voice_bio", "Voice introduction")) {
             Text(
-                "Add a short optional audio introduction. It is published only after moderation and can be removed at any time.",
+                t("voice_bio_owner_help", "Add a short optional audio introduction. It is published only after moderation and can be removed at any time."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -331,11 +332,11 @@ fun ProfileScreen(
                     onClick = vm::removeVoiceBio,
                     enabled = !voiceBioDeleting && !voiceBioUploading
                 ) {
-                    Text(if (voiceBioDeleting) "Removing…" else "Remove voice introduction")
+                    Text(if (voiceBioDeleting) t("removing", "Removing…") else t("remove_voice_bio", "Remove voice introduction"))
                 }
             }
             MatreeSecondaryButton(
-                text = if (voiceBioUploading) "Uploading…" else if (p.voiceBioUrl.isBlank()) "Add voice introduction" else "Replace voice introduction",
+                text = if (voiceBioUploading) t("uploading", "Uploading…") else if (p.voiceBioUrl.isBlank()) t("add_voice_bio", "Add voice introduction") else t("replace_voice_bio", "Replace voice introduction"),
                 icon = Icons.Filled.RecordVoiceOver,
                 onClick = { voiceBioPicker.launch("audio/*") },
                 enabled = mediaConsentCurrent && !voiceBioUploading && !voiceBioDeleting,
@@ -343,24 +344,24 @@ fun ProfileScreen(
             )
             if (!mediaConsentCurrent) {
                 MatreeInlineNotice(
-                    message = "Enable media processing below before uploading a voice introduction.",
+                    message = t("voice_bio_consent_help", "Enable media processing below before uploading a voice introduction."),
                     icon = Icons.Filled.Policy
                 )
             }
             voiceBioMessage?.let { code ->
                 val message = when (code) {
-                    "voice_bio_pending" -> "Voice introduction submitted for moderation."
-                    "voice_bio_removed" -> "Voice introduction removed."
-                    "voice_bio_consent_required" -> "Enable media processing before uploading."
-                    "voice_bio_remove_failed" -> "Could not remove the voice introduction. Try again."
-                    else -> "Voice introduction upload failed. Check the file and try again."
+                    "voice_bio_pending" -> t("voice_bio_pending", "Voice introduction submitted for moderation.")
+                    "voice_bio_removed" -> t("voice_bio_removed", "Voice introduction removed.")
+                    "voice_bio_consent_required" -> t("voice_bio_consent_required", "Enable media processing before uploading.")
+                    "voice_bio_remove_failed" -> t("voice_bio_remove_failed", "Could not remove the voice introduction. Try again.")
+                    else -> t("voice_bio_upload_failed", "Voice introduction upload failed. Check the file and try again.")
                 }
                 MatreeInlineNotice(
                     message = message,
                     icon = if (code == "voice_bio_pending" || code == "voice_bio_removed") Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
                     tone = if (code == "voice_bio_pending" || code == "voice_bio_removed") MatreeStatusTone.NEUTRAL else MatreeStatusTone.ERROR
                 )
-                TextButton(onClick = vm::clearVoiceBioMessage) { Text("Dismiss") }
+                TextButton(onClick = vm::clearVoiceBioMessage) { Text(t("dismiss", "Dismiss")) }
             }
         }
 
