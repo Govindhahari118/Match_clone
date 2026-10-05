@@ -139,3 +139,5 @@ from the client as truth.
 - `startSecureCallSession` — server-authoritative provider-session allocation boundary. Requires an active mutual match, current block/privacy eligibility, configured provider adapter, rollout flag, per-account/per-pair rate limits, and returns only short-lived client allocation material. The default adapter fails closed.
 
 - `setChatTyping` — App Check/authenticated, mutual-match-only ephemeral typing signal. Re-checks active accounts, both-direction blocks and profile privacy; writes only short-lived server-owned typing state under the authorized chat thread. Clients cannot write typing documents directly.
+
+- `setChatThreadPreferences` — authenticated, App Check-aware per-user conversation preference update. Requires the caller to be a participant in the existing canonical thread; stores only that user's `muted`/`archived` state. Clients may read only their own preference documents and cannot write them directly. Muted threads suppress new-message notification delivery; archived threads are hidden from the default inbox and automatically return to Active on a new incoming message.

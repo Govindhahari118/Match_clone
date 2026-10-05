@@ -69,6 +69,69 @@ class FirestoreChatService @Inject constructor() {
         check(payload["success"] == true) { "Typing state was not accepted by the server" }
     }
 
+
+    fun observeThreadPreferences(myUid: String): Flow<Map<String, ChatThreadPreference>> = callbackFlow {
+        require(myUid.isNotBlank())
+        val registration = db.collection("chatPreferences").document(myUid).collection("threads")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val preferences = snapshot?.documents.orEmpty().associate { doc ->
+                    doc.id to ChatThreadPreference(
+                        threadId = doc.id,
+                        peerFirebaseUid = doc.getString("peerUid").orEmpty(),
+                        muted = doc.getBoolean("muted") ?: false,
+                        archived = doc.getBoolean("archived") ?: false
+                    )
+                }
+                trySend(preferences)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    fun observeThreadPreference(myUid: String, peerUid: String): Flow<ChatThreadPreference> = callbackFlow {
+        val tid = threadId(myUid, peerUid)
+        val registration = db.collection("chatPreferences").document(myUid)
+            .collection("threads").document(tid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(
+                    ChatThreadPreference(
+                        threadId = tid,
+                        peerFirebaseUid = peerUid,
+                        muted = snapshot?.getBoolean("muted") ?: false,
+                        archived = snapshot?.getBoolean("archived") ?: false
+                    )
+                )
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun setThreadPreferences(
+        peerUid: String,
+        muted: Boolean,
+        archived: Boolean
+    ) {
+        require(peerUid.isNotBlank())
+        val result = functions.getHttpsCallable("setChatThreadPreferences")
+            .call(
+                mapOf(
+                    "targetUid" to peerUid,
+                    "muted" to muted,
+                    "archived" to archived
+                )
+            )
+            .await()
+        @Suppress("UNCHECKED_CAST")
+        val payload = result.data as? Map<String, Any?> ?: error("Invalid chat preference response")
+        check(payload["success"] == true) { "Chat preferences were not accepted by the server" }
+    }
+
     fun observeThreads(myUid: String): Flow<List<FirestoreChatThread>> = callbackFlow {
         require(myUid.isNotBlank())
         val registration = db.collection("chats")
@@ -229,6 +292,13 @@ class FirestoreChatService @Inject constructor() {
         awaitClose { reg.remove() }
     }
 }
+
+data class ChatThreadPreference(
+    val threadId: String,
+    val peerFirebaseUid: String = "",
+    val muted: Boolean = false,
+    val archived: Boolean = false
+)
 
 data class FirestoreChatThread(
     val peerFirebaseUid: String,

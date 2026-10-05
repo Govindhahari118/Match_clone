@@ -48,6 +48,12 @@ class ChatRepository @Inject constructor(
     suspend fun setTyping(peerUid: String, typing: Boolean) =
         firestoreChat.setTyping(peerUid, typing)
 
+    fun observeThreadPreference(myUid: String, peerUid: String) =
+        firestoreChat.observeThreadPreference(myUid, peerUid)
+
+    suspend fun setThreadPreferences(peerUid: String, muted: Boolean, archived: Boolean) =
+        firestoreChat.setThreadPreferences(peerUid, muted, archived)
+
     /** Kept for older UI callers. Messaging is not monetized client-side. */
     suspend fun isFreeLimitReached(me: Long, peer: Long): Boolean = false
 

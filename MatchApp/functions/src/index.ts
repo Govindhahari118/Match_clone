@@ -26,6 +26,7 @@ export * from "./health";
 export * from "./media";
 export * from "./messageSafety";
 export * from "./chat";
+export * from "./chatPreferences";
 export * from "./calls";
 export * from "./dataExport";
 export * from "./assisted";

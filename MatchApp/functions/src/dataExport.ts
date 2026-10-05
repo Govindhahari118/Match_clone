@@ -137,6 +137,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     shortlist,
     blocks,
     privacyRelations,
+    chatPreferences,
     contactGrants,
     notifications,
     outgoingInterests,
@@ -172,6 +173,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
     childCollection(`shortlists/${uid}/saved`),
     childCollection(`blocks/${uid}/blocked`),
     childCollection(`privacyRelations/${uid}/members`),
+    childCollection(`chatPreferences/${uid}/threads`),
     childCollection(`contactGrants/${uid}/viewers`),
     queryAll(db.collection("notifications").where("userId", "==", uid)),
     queryAll(db.collection("interests").where("fromUid", "==", uid)),
@@ -202,7 +204,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     accountUid: uid,
     scope: {
@@ -214,6 +216,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
         "consent state and history",
         "saved searches and shortlist",
         "blocks and per-member privacy choices",
+        "chat mute and archive preferences",
         "notifications",
         "interests and matches",
         "profile-view history involving this account",
@@ -252,6 +255,7 @@ async function buildExport(uid: string): Promise<Record<string, unknown>> {
       shortlist,
       blocks,
       privacyRelations,
+      chatPreferences,
       contactGrants,
       notifications,
       interests: {

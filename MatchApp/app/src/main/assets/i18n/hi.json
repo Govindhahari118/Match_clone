@@ -431,5 +431,18 @@
   "report_message": "संदेश रिपोर्ट करें",
   "report_message_body": "बताएँ कि इस प्राप्त संदेश की समीक्षा क्यों होनी चाहिए। मॉडरेशन के लिए सर्वर मूल संदेश का प्रमाण सुरक्षित रखता है।",
   "message_report_submitted": "संदेश रिपोर्ट मॉडरेशन के लिए जमा की गई।",
-  "message_report_failed": "संदेश रिपोर्ट जमा नहीं हो सकी। कनेक्शन जाँचकर फिर कोशिश करें।"
+  "message_report_failed": "संदेश रिपोर्ट जमा नहीं हो सकी। कनेक्शन जाँचकर फिर कोशिश करें।",
+  "active_chats": "सक्रिय",
+  "archived_chats": "संग्रहीत ({count})",
+  "no_archived_conversations": "कोई संग्रहीत बातचीत नहीं है।",
+  "muted_chat": "म्यूट",
+  "mute_chat": "बातचीत म्यूट करें",
+  "unmute_chat": "बातचीत अनम्यूट करें",
+  "archive_chat": "बातचीत संग्रहित करें",
+  "unarchive_chat": "सक्रिय में वापस लाएँ",
+  "chat_muted_confirmation": "बातचीत म्यूट कर दी गई।",
+  "chat_unmuted_confirmation": "बातचीत अनम्यूट कर दी गई।",
+  "chat_archived_confirmation": "बातचीत संग्रहित कर दी गई।",
+  "chat_unarchived_confirmation": "बातचीत सक्रिय सूची में वापस आ गई।",
+  "chat_preference_failed": "बातचीत की सेटिंग अपडेट नहीं हो सकी। फिर कोशिश करें।"
 }

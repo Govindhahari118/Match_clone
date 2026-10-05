@@ -197,6 +197,7 @@ async function chatNotificationStillAllowed(
     blockBA,
     privacyAB,
     privacyBA,
+    recipientChatPreference,
   ] = await Promise.all([
     db.collection("chats").doc(threadId).get(),
     db.collection("matches").doc(relationshipMatchId(fromUid, toUid)).get(),
@@ -206,6 +207,7 @@ async function chatNotificationStillAllowed(
     db.collection("blocks").doc(toUid).collection("blocked").doc(fromUid).get(),
     db.collection("privacyRelations").doc(fromUid).collection("members").doc(toUid).get(),
     db.collection("privacyRelations").doc(toUid).collection("members").doc(fromUid).get(),
+    db.collection("chatPreferences").doc(toUid).collection("threads").doc(threadId).get(),
   ]);
   const participants = thread.data()?.participantUids;
   const matchUsers = match.data()?.users;
@@ -226,7 +228,8 @@ async function chatNotificationStillAllowed(
     !blockAB.exists &&
     !blockBA.exists &&
     privacyAB.data()?.profileHidden !== true &&
-    privacyBA.data()?.profileHidden !== true;
+    privacyBA.data()?.profileHidden !== true &&
+    recipientChatPreference.data()?.muted !== true;
 }
 
 async function deliverPersistedNotification(
@@ -354,6 +357,19 @@ export const onContactRequestPending = functions.firestore
     );
   });
 
+async function restoreArchivedConversationOnIncoming(
+  threadId: string,
+  recipientUid: string
+): Promise<void> {
+  const prefRef = db.collection("chatPreferences").doc(recipientUid).collection("threads").doc(threadId);
+  const pref = await prefRef.get();
+  if (!pref.exists || pref.data()?.archived !== true) return;
+  await prefRef.set({
+    archived: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 export const onNewMessage = functions.firestore
   .document("chats/{threadId}/messages/{messageId}")
   .onCreate(async (snap, context) => {
@@ -361,6 +377,7 @@ export const onNewMessage = functions.firestore
     const fromFirebaseUid = data.fromFirebaseUid as string | undefined;
     const toFirebaseUid = data.toFirebaseUid as string | undefined;
     if (!fromFirebaseUid || !toFirebaseUid) return;
+    await restoreArchivedConversationOnIncoming(context.params.threadId, toFirebaseUid);
     if (!await chatNotificationStillAllowed(
       context.params.threadId,
       fromFirebaseUid,
