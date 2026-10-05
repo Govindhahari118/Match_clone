@@ -31,6 +31,7 @@ import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
+import com.match.app.data.repo.PhotoRequestRepository
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferenceSummary
 import com.match.app.data.repo.PartnerPreferenceMode
@@ -94,6 +95,9 @@ data class DetailUi(
     val showReportDialog: Boolean = false,
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
+    val photoRequestLoading: Boolean = false,
+    val photoRequested: Boolean = false,
+    val photoRequestMessageKey: String? = null,
     val trustSummary: TrustSummary? = null,
     val partnerPreferenceSummary: PartnerPreferenceSummary? = null,
     val showInterestDialog: Boolean = false,
@@ -118,7 +122,8 @@ class MatchDetailViewModel @Inject constructor(
     private val subscriptionRepo: SubscriptionRepository,
     private val supportRepo: SupportRepository,
     private val trustRepository: TrustRepository,
-    private val partnerPreferenceRepository: PartnerPreferenceRepository
+    private val partnerPreferenceRepository: PartnerPreferenceRepository,
+    private val photoRequestRepository: PhotoRequestRepository
 ) : ViewModel() {
     private val _ui = MutableStateFlow(DetailUi())
     val ui: StateFlow<DetailUi> = _ui.asStateFlow()
@@ -138,6 +143,12 @@ class MatchDetailViewModel @Inject constructor(
         }
 
         val photos = photoRepo.observe(userId).first()
+        val photoRequested = if (profile.photoUrl.isBlank() && profile.firebaseUid.isNotBlank()) {
+            photoRequestRepository.status(profile.firebaseUid)
+                .getOrNull()
+                ?.let { !it.canRequest && it.reason == "COOLDOWN" }
+                ?: false
+        } else false
         val trustSummary = profile.firebaseUid
             .takeIf { it.isNotBlank() }
             ?.let { uid -> runCatching { trustRepository.load(uid) }.getOrNull() }
@@ -157,6 +168,7 @@ class MatchDetailViewModel @Inject constructor(
             meIsPremium = me?.isPremium == true,
             trustSummary = trustSummary,
             partnerPreferenceSummary = preferenceSummary,
+            photoRequested = photoRequested,
             loading = false
         )
 
@@ -382,6 +394,32 @@ class MatchDetailViewModel @Inject constructor(
             }
     }
 
+    fun requestPhoto() = viewModelScope.launch {
+        val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || _ui.value.photoRequestLoading || _ui.value.photoRequested) return@launch
+        _ui.update { it.copy(photoRequestLoading = true, photoRequestMessageKey = null) }
+        photoRequestRepository.request(targetUid)
+            .onSuccess { result ->
+                _ui.update {
+                    it.copy(
+                        photoRequestLoading = false,
+                        photoRequested = result.requested || result.coolingDown,
+                        photoRequestMessageKey = if (result.requested) "photo_request_sent" else "photo_request_already_sent"
+                    )
+                }
+            }
+            .onFailure {
+                _ui.update {
+                    it.copy(
+                        photoRequestLoading = false,
+                        photoRequestMessageKey = "photo_request_failed"
+                    )
+                }
+            }
+    }
+
+    fun consumePhotoRequestMessage() = _ui.update { it.copy(photoRequestMessageKey = null) }
+
     fun showReportDialog() = _ui.update { it.copy(showReportDialog = true, reportMessage = null) }
     fun dismissReportDialog() = _ui.update { it.copy(showReportDialog = false) }
     fun consumeReportMessage() = _ui.update { it.copy(reportMessage = null) }
@@ -437,6 +475,19 @@ fun MatchDetailScreen(
             vm.consumeReportMessage()
         }
     }
+    val photoRequestFeedback = when (ui.photoRequestMessageKey) {
+        "photo_request_sent" -> t("photo_request_sent", "Photo request sent.")
+        "photo_request_already_sent" -> t("photo_request_already_sent", "You already requested a photo recently.")
+        "photo_request_failed" -> t("photo_request_failed", "Photo request could not be sent. Try again later.")
+        else -> null
+    }
+    LaunchedEffect(photoRequestFeedback) {
+        photoRequestFeedback?.let {
+            snackbar.showSnackbar(it)
+            vm.consumePhotoRequestMessage()
+        }
+    }
+
 
     if (ui.showContactUnlock && p != null) {
         ContactUnlockSheet(
@@ -638,6 +689,30 @@ fun MatchDetailScreen(
                         onClick = vm::toggleShortlist,
                         enabled = !ui.blocked,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (p.photoUrl.isBlank() && !ui.blocked) {
+                    MatreeSecondaryButton(
+                        text = if (ui.photoRequested) {
+                            t("photo_requested", "Photo requested")
+                        } else if (ui.photoRequestLoading) {
+                            t("requesting_photo", "Requesting photo…")
+                        } else {
+                            t("request_photo", "Request photo")
+                        },
+                        icon = if (ui.photoRequested) Icons.Filled.CheckCircle else Icons.Filled.AddAPhoto,
+                        onClick = vm::requestPhoto,
+                        enabled = !ui.photoRequested && !ui.photoRequestLoading,
+                        modifier = Modifier.fillMaxWidth().testTag("profile_request_photo")
+                    )
+                    Text(
+                        t(
+                            "request_photo_help",
+                            "Ask this member to add an approved profile photo. Requests are rate-limited and never bypass photo moderation or privacy."
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
