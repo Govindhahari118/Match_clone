@@ -59,6 +59,7 @@ REQUIRED = (
     "functions/src/chatPreferences.ts",
     "functions/src/reportReasonPolicy.ts",
     "functions/src/callSessionPolicy.ts",
+    "functions/src/callRequestPolicy.ts",
     "functions/src/communicationProvider.ts",
     "functions/src/notificationLinkPolicy.ts",
     "firestore.rules",
@@ -198,6 +199,10 @@ def main() -> int:
         "getTrustSummary",
         "getSecureCallCapability",
         "startSecureCallSession",
+        "requestSecureCall",
+        "getSecureCallRequest",
+        "respondSecureCallRequest",
+        "cancelSecureCallRequest",
         "deleteUserAccount",
         "healthReady",
     ):
