@@ -481,7 +481,6 @@ def main() -> int:
     obsolete_callable_names = [
         "requestBackgroundCheckByProfileId",
         "requestBackgroundCheck",
-        "requestSecureCall",
         "respondToSecureCall",
         "bookCounselling",
         "getRewardsState",

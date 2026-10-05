@@ -444,5 +444,17 @@
   "chat_unmuted_confirmation": "Conversation unmuted.",
   "chat_archived_confirmation": "Conversation archived.",
   "chat_unarchived_confirmation": "Conversation restored to Active.",
-  "chat_preference_failed": "Conversation preference could not be updated. Try again."
+  "chat_preference_failed": "Conversation preference could not be updated. Try again.",
+  "request_call_time": "Request a call time",
+  "request_call_time_hint": "Choose a convenient time. Your match can accept or decline before live calling is enabled.",
+  "in_30_minutes": "In 30 min",
+  "in_1_hour": "In 1 hour",
+  "in_3_hours": "In 3 hours",
+  "tomorrow_same_time": "Tomorrow",
+  "call_request_accepted": "Call time accepted",
+  "call_request_pending": "Call request pending",
+  "proposed_call_time": "Proposed time: {time}",
+  "cancel_call_request": "Cancel request",
+  "call_request": "Call request",
+  "review_call_request": "Review call request"
 }
