@@ -133,8 +133,7 @@ async function relationshipEventStillVisible(
     !blockAB.exists &&
     !blockBA.exists &&
     privacyAB.data()?.profileHidden !== true &&
-    privacyBA.data()?.profileHidden !== true &&
-    recipientChatPreference.data()?.muted !== true;
+    privacyBA.data()?.profileHidden !== true;
 }
 
 
