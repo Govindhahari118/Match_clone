@@ -18,6 +18,8 @@ def main() -> int:
     screen = read("app/src/main/java/com/match/app/ui/chat/ChatScreen.kt")
     inbox = read("app/src/main/java/com/match/app/ui/chat/ChatListScreen.kt")
     rules = read("firestore.rules")
+    users = read("functions/src/users.ts")
+    data_export = read("functions/src/dataExport.ts")
 
     required_server = (
         "export const setChatThreadPreferences",
@@ -73,6 +75,12 @@ def main() -> int:
         failures.append("Firestore rules missing chatPreferences owner-read boundary")
     if "allow create, update, delete: if false;" not in rules:
         failures.append("chatPreferences must remain server-write-only")
+    if 'deleteCollection(`chatPreferences/${uid}/threads`)' not in users or
+            'collectionGroup("threads").where("peerUid", "==", uid)' not in users:
+        failures.append("account deletion must remove owned and peer-referencing chat preferences")
+    if 'chatPreferences' not in data_export or
+            'childCollection(`chatPreferences/${uid}/threads`)' not in data_export:
+        failures.append("data export must include chat mute/archive preferences")
 
     if failures:
         print("Chat thread controls contract FAILED")
