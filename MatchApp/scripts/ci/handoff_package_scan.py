@@ -42,6 +42,7 @@ REQUIRED = (
     "scripts/ci/i18n_catalog_scan.py",
     "scripts/ci/reporting_contract_scan.py",
     "scripts/ci/chat_thread_controls_scan.py",
+    "scripts/ci/profile_video_contract_scan.py",
     "scripts/ci/chat_localization_scan.py",
     "scripts/ci/discovery_preferences_localization_scan.py",
     "scripts/ci/screen_classification_scan.py",
