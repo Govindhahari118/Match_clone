@@ -1,7 +1,6 @@
 package com.match.app.ui.videoprofile
 
 import android.net.Uri
-import android.view.ViewGroup
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -21,20 +20,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.match.app.data.local.dao.UserDao
 import com.match.app.data.remote.FirebaseStorageService
 import com.google.firebase.functions.FirebaseFunctions
 import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.session.SessionStore
 import com.match.app.ui.common.resolveSecureMediaModel
+import com.match.app.ui.common.ProtectedVideoPlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -583,37 +579,9 @@ fun VideoProfileScreen(
     }
 }
 
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun VideoPreview(playbackUri: Uri) {
-    val context = LocalContext.current
-    val player = remember(playbackUri) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(playbackUri))
-            prepare()
-        }
-    }
-    DisposableEffect(player) { onDispose { player.release() } }
-
-    ElevatedCard(
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp)
-    ) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = player
-                    useController = true
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { it.player = player },
-            modifier = Modifier.fillMaxWidth().height(260.dp)
-        )
-    }
+    ProtectedVideoPlayer(playbackUri = playbackUri)
 }
 
 @Composable
