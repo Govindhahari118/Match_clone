@@ -357,6 +357,64 @@ export const onContactRequestPending = functions.firestore
     );
   });
 
+
+async function photoRequestNotificationStillAllowed(
+  requestRef: FirebaseFirestore.DocumentReference,
+  requesterUid: string,
+  targetUid: string
+): Promise<boolean> {
+  const [request, requester, target, blockAB, blockBA, privacyAB, privacyBA] = await Promise.all([
+    requestRef.get(),
+    db.collection("users").doc(requesterUid).get(),
+    db.collection("users").doc(targetUid).get(),
+    db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
+    db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
+    db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+  ]);
+  return request.exists &&
+    requester.exists &&
+    target.exists &&
+    accountIsActive(requester.data()?.accountStatus) &&
+    accountIsActive(target.data()?.accountStatus) &&
+    !String(target.data()?.photoUrl || "").trim() &&
+    !blockAB.exists &&
+    !blockBA.exists &&
+    privacyAB.data()?.profileHidden !== true &&
+    privacyBA.data()?.profileHidden !== true;
+}
+
+export const onProfilePhotoRequested = functions.firestore
+  .document("photoRequests/{requestId}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return;
+    const after = change.after.data();
+    const beforeSequence = change.before.exists ? Number(change.before.data()?.requestSequence || 0) : 0;
+    const sequence = Number(after?.requestSequence || 0);
+    if (!sequence || sequence === beforeSequence) return;
+
+    const requesterUid = String(after?.requesterUid || "");
+    const targetUid = String(after?.targetUid || "");
+    if (!requesterUid || !targetUid || requesterUid === targetUid) return;
+    if (!await photoRequestNotificationStillAllowed(change.after.ref, requesterUid, targetUid)) return;
+
+    await persistAndSendNotification({
+      notificationId: `photo_request_${context.params.requestId}_${sequence}`,
+      userId: targetUid,
+      type: "PHOTO_REQUEST",
+      title: "Photo request",
+      body: "Someone viewing your profile requested a profile photo. Add an approved photo when you are comfortable.",
+      entityType: "profile",
+      entityId: requesterUid,
+      deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+      action: "NOTIFICATIONS",
+      pushType: "photo_request",
+      preferenceKey: "interests",
+      priority: "normal",
+      fromFirebaseUid: requesterUid,
+    });
+  });
+
 async function restoreArchivedConversationOnIncoming(
   threadId: string,
   recipientUid: string

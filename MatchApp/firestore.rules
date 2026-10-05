@@ -390,6 +390,7 @@ service cloud.firestore {
     match /photoFingerprints/{fingerprintId} { allow read, write: if false; }
     match /bioFingerprints/{fingerprintId} { allow read, write: if false; }
     match /photoModeration/{caseId} { allow read, write: if false; }
+    match /photoRequests/{requestId} { allow read, write: if false; }
     match /accountEnforcements/{uid} { allow read, write: if false; }
     match /securityEvents/{eventId} { allow read, write: if false; }
     match /notifications/{notifId} { allow read: if isSignedIn() && resource.data.userId == request.auth.uid; allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']); allow create, delete: if false; }

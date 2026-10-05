@@ -447,5 +447,12 @@
   "chat_preference_failed": "Conversation preference could not be updated. Try again.",
   "profile_video": "Profile video",
   "profile_video_intro": "A short member-submitted video approved for profile display. Playback starts only when you choose.",
-  "profile_video_unavailable": "This profile video is temporarily unavailable or your current access no longer allows it."
+  "profile_video_unavailable": "This profile video is temporarily unavailable or your current access no longer allows it.",
+  "request_photo": "Request photo",
+  "requesting_photo": "Requesting photo…",
+  "photo_requested": "Photo requested",
+  "photo_request_sent": "Photo request sent.",
+  "photo_request_already_sent": "You already requested a photo recently.",
+  "photo_request_failed": "Photo request could not be sent. Try again later.",
+  "request_photo_help": "Ask this member to add an approved profile photo. Requests are rate-limited and never bypass photo moderation or privacy."
 }

@@ -40,11 +40,18 @@ test('member cannot publish an unmoderated photoUrl', async () => {
   }));
 });
 
-test('photo moderation and account enforcement records are server-only', async () => {
+test('photo moderation, photo request and account enforcement records are server-only', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'photoModeration/case-1'), {
       uid: 'alice',
       status: 'PENDING',
+    });
+    await setDoc(doc(ctx.firestore(), 'photoRequests/alice_bob'), {
+      requesterUid: 'alice',
+      targetUid: 'bob',
+      status: 'PENDING',
+      requestSequence: 1,
+      requestedAtMillis: 1,
     });
     await setDoc(doc(ctx.firestore(), 'accountEnforcements/alice'), {
       targetUid: 'alice',
@@ -54,6 +61,14 @@ test('photo moderation and account enforcement records are server-only', async (
 
   const alice = env.authenticatedContext('alice').firestore();
   await assertFails(getDoc(doc(alice, 'photoModeration/case-1')));
+  await assertFails(getDoc(doc(alice, 'photoRequests/alice_bob')));
+  await assertFails(setDoc(doc(alice, 'photoRequests/alice_bob'), {
+    requesterUid: 'alice',
+    targetUid: 'bob',
+    status: 'PENDING',
+    requestSequence: 99,
+    requestedAtMillis: Date.now(),
+  }));
   await assertFails(getDoc(doc(alice, 'accountEnforcements/alice')));
   await assertFails(setDoc(doc(alice, 'photoModeration/forged'), {
     uid: 'alice',
