@@ -40,6 +40,7 @@ REQUIRED = (
     "scripts/ci/room_schema_evidence.py",
     "scripts/ci/truthfulness_scan.py",
     "scripts/ci/i18n_catalog_scan.py",
+    "scripts/ci/photo_request_contract_scan.py",
     "app/src/main/java/com/match/app/data/repo/PhotoRequestRepository.kt",
     "scripts/ci/reporting_contract_scan.py",
     "scripts/ci/chat_thread_controls_scan.py",
