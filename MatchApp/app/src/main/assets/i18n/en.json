@@ -447,5 +447,21 @@
   "chat_preference_failed": "Conversation preference could not be updated. Try again.",
   "profile_video": "Profile video",
   "profile_video_intro": "A short member-submitted video approved for profile display. Playback starts only when you choose.",
-  "profile_video_unavailable": "This profile video is temporarily unavailable or your current access no longer allows it."
+  "profile_video_unavailable": "This profile video is temporarily unavailable or your current access no longer allows it.",
+  "voice_bio": "Voice introduction",
+  "voice_bio_intro": "Listen to this member’s approved optional voice introduction.",
+  "voice_bio_unavailable": "Voice introduction unavailable",
+  "voice_bio_owner_help": "Add a short optional audio introduction. It is published only after moderation and can be removed at any time.",
+  "removing": "Removing…",
+  "remove_voice_bio": "Remove voice introduction",
+  "uploading": "Uploading…",
+  "add_voice_bio": "Add voice introduction",
+  "replace_voice_bio": "Replace voice introduction",
+  "voice_bio_consent_help": "Enable media processing below before uploading a voice introduction.",
+  "voice_bio_pending": "Voice introduction submitted for moderation.",
+  "voice_bio_removed": "Voice introduction removed.",
+  "voice_bio_consent_required": "Enable media processing before uploading.",
+  "voice_bio_remove_failed": "Could not remove the voice introduction. Try again.",
+  "voice_bio_upload_failed": "Voice introduction upload failed. Check the file and try again.",
+  "dismiss": "Dismiss"
 }
