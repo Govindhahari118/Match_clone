@@ -26,6 +26,7 @@ class FirebaseStorageService @Inject constructor(
         private const val MAX_PHOTO_BYTES = 500 * 1024L
         private const val MAX_DIMENSION = 1024
         private const val MAX_PROFILE_VIDEO_BYTES = 50 * 1024 * 1024L
+        private const val MAX_PROFILE_VOICE_BYTES = 5 * 1024 * 1024L
         private const val MAX_CHAT_IMAGE_BYTES = 8 * 1024 * 1024L
         private const val MAX_CHAT_VOICE_BYTES = 12 * 1024 * 1024L
     }
@@ -61,6 +62,25 @@ class FirebaseStorageService @Inject constructor(
         val ref = storage.reference.child("videos/$firebaseUid/" + UUID.randomUUID() + ".mp4")
         val metadata = StorageMetadata.Builder()
             .setContentType(contentType)
+            .setCustomMetadata("ownerUid", firebaseUid)
+            .build()
+        ref.putFile(uri, metadata).await()
+        ref.path
+    }
+
+    /**
+     * Upload a profile voice introduction to protected storage. Publication remains server-owned:
+     * peers cannot read the object until moderation writes users.voiceBioUrl.
+     */
+    suspend fun uploadProfileVoiceBio(firebaseUid: String, uri: Uri): Result<String> = runCatching {
+        require(firebaseUid.isNotBlank())
+        val descriptorLength = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (descriptorLength > 0L) {
+            require(descriptorLength <= MAX_PROFILE_VOICE_BYTES) { "Voice bio must be 5 MB or smaller" }
+        }
+        val ref = storage.reference.child("voicebios/$firebaseUid/" + UUID.randomUUID() + ".m4a")
+        val metadata = StorageMetadata.Builder()
+            .setContentType("audio/mp4")
             .setCustomMetadata("ownerUid", firebaseUid)
             .build()
         ref.putFile(uri, metadata).await()
