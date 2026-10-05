@@ -5,12 +5,14 @@ const {
   fileSignatureMatchesMime,
   PROFILE_PHOTO_MIME_TYPES,
   PROFILE_VIDEO_MIME_TYPES,
+  PROFILE_VOICE_BIO_MIME_TYPES,
   VERIFICATION_DOCUMENT_MIME_TYPES,
 } = require("../lib/fileSignaturePolicy");
 
 test("profile media allowlists are intentionally narrow", () => {
   assert.deepEqual([...PROFILE_PHOTO_MIME_TYPES], ["image/jpeg", "image/png", "image/webp"]);
   assert.deepEqual([...PROFILE_VIDEO_MIME_TYPES], ["video/mp4"]);
+  assert.deepEqual([...PROFILE_VOICE_BIO_MIME_TYPES], ["audio/mp4"]);
   assert.ok(VERIFICATION_DOCUMENT_MIME_TYPES.has("application/pdf"));
   assert.equal(PROFILE_PHOTO_MIME_TYPES.has("image/svg+xml"), false);
 });
