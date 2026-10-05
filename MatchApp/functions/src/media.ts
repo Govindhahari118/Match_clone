@@ -592,6 +592,317 @@ export const removeProfileVideo = functions.https.onCall(async (_data, context) 
   return { success: true };
 });
 
+
+/**
+ * Registers an owner-uploaded profile voice bio for moderation. Upload success never publishes the
+ * object; only reviewProfileVoiceBio may write users.voiceBioUrl.
+ */
+export const submitProfileVoiceBio = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  requireProductionFeature("voice_bios");
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+  await requireActiveConsent(uid, "media_processing");
+
+  const storagePath = profileVoiceBioPath(data?.storagePath, uid);
+  const file = admin.storage().bucket().file(storagePath);
+  let metadata: { size?: string | number; contentType?: string; metadata?: Record<string, string> };
+  try {
+    const [raw] = await file.getMetadata();
+    metadata = raw as typeof metadata;
+  } catch {
+    throw new functions.https.HttpsError("failed-precondition", "Uploaded voice bio was not found");
+  }
+
+  const ownerUid = metadata.metadata?.ownerUid || "";
+  const contentType = String(metadata.contentType || "").toLowerCase();
+  const size = Number(metadata.size || 0);
+  if (ownerUid !== uid || !PROFILE_VOICE_BIO_MIME_TYPES.has(contentType) ||
+      !Number.isFinite(size) || size <= 0 || size > MAX_PROFILE_VOICE_BIO_BYTES) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Uploaded voice bio does not satisfy the protected media contract"
+    );
+  }
+
+  const [prefix] = await file.download({ start: 0, end: 31 });
+  if (!fileSignatureMatchesMime(prefix, contentType)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Voice bio bytes do not match the declared file type"
+    );
+  }
+
+  const moderationId = moderationIdForPath(storagePath);
+  const moderationRef = db.collection("voiceBioModeration").doc(moderationId);
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(moderationRef);
+    if (existing.exists) {
+      const value = existing.data() || {};
+      if (value.uid !== uid || value.storagePath !== storagePath) {
+        throw new functions.https.HttpsError("permission-denied", "Voice bio ownership mismatch");
+      }
+      return;
+    }
+    tx.create(moderationRef, {
+      uid,
+      storagePath,
+      contentType,
+      size,
+      status: "PENDING",
+      source: "ANDROID",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  await db.collection("profileVoiceBioOrphans").doc(moderationId)
+    .delete()
+    .catch(() => undefined);
+  return { moderationId, status: "PENDING", storagePath };
+});
+
+export const listPendingVoiceBioModeration = functions.https.onCall(async (data, context) => {
+  requireOpsRole(context, ["moderator", "ops_admin"]);
+  const parsed = Number(data?.limit ?? 50);
+  const limit = Number.isFinite(parsed) ? Math.max(1, Math.min(100, Math.floor(parsed))) : 50;
+  const snapshot = await db.collection("voiceBioModeration")
+    .where("status", "==", "PENDING")
+    .limit(limit)
+    .get();
+  return {
+    items: snapshot.docs.map((doc) => {
+      const value = doc.data();
+      return {
+        id: doc.id,
+        uid: String(value.uid || ""),
+        storagePath: String(value.storagePath || ""),
+        contentType: String(value.contentType || ""),
+        size: Number(value.size || 0),
+        createdAtMillis: value.createdAt instanceof admin.firestore.Timestamp
+          ? value.createdAt.toMillis()
+          : null,
+      };
+    }),
+  };
+});
+
+export const getVoiceBioModerationReviewCase = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["moderator", "ops_admin"]);
+  const moderationId = typeof data?.moderationId === "string" ? data.moderationId.trim() : "";
+  if (!/^[a-f0-9]{64}$/.test(moderationId)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid voice bio moderation case");
+  }
+  const review = await db.collection("voiceBioModeration").doc(moderationId).get();
+  if (!review.exists || String(review.data()?.status || "") !== "PENDING") {
+    throw new functions.https.HttpsError("not-found", "Pending voice bio moderation case not found");
+  }
+  const value = review.data() || {};
+  const ownerUid = String(value.uid || "");
+  const storagePath = profileVoiceBioPath(value.storagePath, ownerUid);
+  const expiresAtMillis = Date.now() + 5 * 60 * 1000;
+  const [documentUrl] = await admin.storage().bucket().file(storagePath).getSignedUrl({
+    action: "read",
+    expires: expiresAtMillis,
+  });
+  await db.collection("opsAuditLog").add({
+    actorUid: actor.uid,
+    actorRole: actor.role,
+    requestId: actor.requestId,
+    action: "PROFILE_VOICE_BIO_ACCESSED",
+    targetCollection: "voiceBioModeration",
+    targetId: moderationId,
+    ownerUid,
+    reason: "VOICE_BIO_REVIEW",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { moderationId, uid: ownerUid, storagePath, documentUrl, expiresAtMillis };
+});
+
+export const reviewProfileVoiceBio = functions.https.onCall(async (data, context) => {
+  const actor = requireOpsRole(context, ["moderator", "ops_admin"]);
+  const moderationId = typeof data?.moderationId === "string" ? data.moderationId.trim() : "";
+  if (!/^[a-f0-9]{64}$/.test(moderationId)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invalid voice bio moderation case");
+  }
+  const decision = reviewDecision(data?.decision);
+  if (decision === "APPROVED") requireProductionFeature("voice_bios");
+  const reason = reviewReason(data?.reason);
+  const moderationRef = db.collection("voiceBioModeration").doc(moderationId);
+  const auditRef = db.collection("opsAuditLog").doc();
+  let ownerUid = "";
+  let storagePath = "";
+  let previousVoiceBioPath = "";
+
+  await db.runTransaction(async (tx) => {
+    const moderation = await tx.get(moderationRef);
+    if (!moderation.exists || String(moderation.data()?.status || "") !== "PENDING") {
+      throw new functions.https.HttpsError("failed-precondition", "Voice bio is not pending review");
+    }
+    ownerUid = String(moderation.data()?.uid || "");
+    storagePath = profileVoiceBioPath(moderation.data()?.storagePath, ownerUid);
+    const userRef = db.collection("users").doc(ownerUid);
+    const user = await tx.get(userRef);
+    if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+    previousVoiceBioPath = String(user.data()?.voiceBioUrl || "");
+
+    tx.update(moderationRef, {
+      status: decision,
+      reviewReason: reason,
+      reviewedBy: actor.uid,
+      reviewedRole: actor.role,
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    if (decision === "APPROVED") {
+      tx.update(userRef, {
+        voiceBioUrl: storagePath,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    tx.create(auditRef, {
+      actorUid: actor.uid,
+      actorRole: actor.role,
+      requestId: actor.requestId,
+      action: "PROFILE_VOICE_BIO_REVIEWED",
+      targetCollection: "voiceBioModeration",
+      targetId: moderationId,
+      before: { status: "PENDING", voiceBioUrl: previousVoiceBioPath },
+      after: {
+        status: decision,
+        voiceBioUrl: decision === "APPROVED" ? storagePath : previousVoiceBioPath,
+      },
+      reason,
+      ownerUid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  if (decision === "REJECTED") {
+    await admin.storage().bucket().file(storagePath).delete({ ignoreNotFound: true });
+  } else if (
+    previousVoiceBioPath &&
+    previousVoiceBioPath !== storagePath &&
+    previousVoiceBioPath.startsWith(`voicebios/${ownerUid}/`) &&
+    !previousVoiceBioPath.includes("..")
+  ) {
+    await admin.storage().bucket().file(previousVoiceBioPath).delete({ ignoreNotFound: true });
+  }
+
+  return { success: true, moderationId, status: decision };
+});
+
+export const removeProfileVoiceBio = functions.https.onCall(async (_data, context) => {
+  requireAppCheck(context);
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const userRef = db.collection("users").doc(uid);
+  const user = await userRef.get();
+  if (!user.exists) throw new functions.https.HttpsError("not-found", "Profile not found");
+  const current = String(user.data()?.voiceBioUrl || "");
+  await userRef.update({
+    voiceBioUrl: "",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  if (current.startsWith(`voicebios/${uid}/`) && !current.includes("..")) {
+    await admin.storage().bucket().file(current).delete({ ignoreNotFound: true });
+  }
+  return { success: true };
+});
+
+export const onProfileVoiceBioUploaded = functions.storage.object().onFinalize(async (object) => {
+  const storagePath = object.name || "";
+  const match = storagePath.match(/^voicebios\/([^/]+)\//);
+  if (!match) return;
+  const uid = match[1];
+
+  const enabled = productionFeatureEnabled(functions.config().features?.voice_bios);
+  const file = admin.storage().bucket(object.bucket).file(storagePath);
+  if (!enabled) {
+    await file.delete({ ignoreNotFound: true });
+    functions.logger.info("Removed profile voice bio upload while feature disabled", {
+      uid,
+      storagePath,
+    });
+    return;
+  }
+
+  const moderationId = moderationIdForPath(storagePath);
+  await db.collection("profileVoiceBioOrphans").doc(moderationId).set({
+    uid,
+    storagePath,
+    bucketName: object.bucket,
+    createdAtMillis: Date.now(),
+    expiresAtMillis: Date.now() + PROFILE_VOICE_BIO_ORPHAN_TTL_MS,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: false });
+});
+
+export const cleanupAbandonedProfileVoiceBios = functions.pubsub
+  .schedule("every 6 hours")
+  .onRun(async () => {
+    const now = Date.now();
+    for (let pass = 0; pass < 20; pass += 1) {
+      const stale = await db.collection("profileVoiceBioOrphans")
+        .where("expiresAtMillis", "<=", now)
+        .limit(PROFILE_VOICE_BIO_ORPHAN_BATCH)
+        .get();
+      if (stale.empty) break;
+
+      for (const orphan of stale.docs) {
+        const value = orphan.data() || {};
+        const uid = String(value.uid || "");
+        const storagePath = String(value.storagePath || "");
+        const bucketName = String(value.bucketName || "");
+        if (
+          !uid ||
+          !bucketName ||
+          !storagePath.startsWith(`voicebios/${uid}/`) ||
+          storagePath.includes("..")
+        ) {
+          await orphan.ref.delete();
+          continue;
+        }
+
+        const moderationId = moderationIdForPath(storagePath);
+        const [moderation, user] = await Promise.all([
+          db.collection("voiceBioModeration").doc(moderationId).get(),
+          db.collection("users").doc(uid).get(),
+        ]);
+        const published = user.exists && user.data()?.voiceBioUrl === storagePath;
+        if (!moderation.exists && !published) {
+          await admin.storage().bucket(bucketName).file(storagePath)
+            .delete({ ignoreNotFound: true });
+        }
+        await orphan.ref.delete();
+      }
+
+      if (stale.size < PROFILE_VOICE_BIO_ORPHAN_BATCH) break;
+    }
+    return null;
+  });
+
+export const onProfileVoiceBioDeleted = functions.storage.object().onDelete(async (object) => {
+  const storagePath = object.name || "";
+  const match = storagePath.match(/^voicebios\/([^/]+)\//);
+  if (!match) return;
+  const uid = match[1];
+  const moderationRef = db.collection("voiceBioModeration").doc(moderationIdForPath(storagePath));
+  const userRef = db.collection("users").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const [moderation, user] = await Promise.all([
+      tx.get(moderationRef),
+      tx.get(userRef),
+    ]);
+    if (moderation.exists) tx.delete(moderationRef);
+    tx.delete(db.collection("profileVoiceBioOrphans").doc(moderationIdForPath(storagePath)));
+    if (user.exists && user.data()?.voiceBioUrl === storagePath) {
+      tx.update(userRef, { voiceBioUrl: "" });
+    }
+  });
+});
+
 /**
  * Storage is writable by the signed-in owner so Android can upload before registering moderation.
  * The backend flag still owns launch authority: when disabled, uploaded video objects are removed
