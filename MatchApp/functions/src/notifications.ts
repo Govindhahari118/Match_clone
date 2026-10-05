@@ -133,7 +133,8 @@ async function relationshipEventStillVisible(
     !blockAB.exists &&
     !blockBA.exists &&
     privacyAB.data()?.profileHidden !== true &&
-    privacyBA.data()?.profileHidden !== true;
+    privacyBA.data()?.profileHidden !== true &&
+    recipientChatPreference.data()?.muted !== true;
 }
 
 
@@ -197,6 +198,7 @@ async function chatNotificationStillAllowed(
     blockBA,
     privacyAB,
     privacyBA,
+    recipientChatPreference,
   ] = await Promise.all([
     db.collection("chats").doc(threadId).get(),
     db.collection("matches").doc(relationshipMatchId(fromUid, toUid)).get(),
@@ -206,6 +208,7 @@ async function chatNotificationStillAllowed(
     db.collection("blocks").doc(toUid).collection("blocked").doc(fromUid).get(),
     db.collection("privacyRelations").doc(fromUid).collection("members").doc(toUid).get(),
     db.collection("privacyRelations").doc(toUid).collection("members").doc(fromUid).get(),
+    db.collection("chatPreferences").doc(toUid).collection("threads").doc(threadId).get(),
   ]);
   const participants = thread.data()?.participantUids;
   const matchUsers = match.data()?.users;
