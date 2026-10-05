@@ -29,6 +29,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.match.app.data.local.entity.PhotoEntity
+import com.google.firebase.functions.FirebaseFunctions
+import com.match.app.data.remote.FirebaseStorageService
 import com.match.app.data.remote.ProfileAnalyticsService
 import com.match.app.data.repo.AuthRepository
 import com.match.app.data.repo.ConsentRepository
@@ -42,6 +44,7 @@ import com.match.app.domain.model.ReligionCategory
 import com.match.app.domain.model.UserProfile
 import com.match.app.domain.profile.ReligionProfileSchemas
 import com.match.app.ui.common.ProfileCompletenessBar
+import com.match.app.ui.common.ProtectedAudioPlayer
 import com.match.app.ui.components.MatreeActionCard
 import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
@@ -57,6 +60,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.io.File
 import javax.inject.Inject
 
@@ -70,8 +74,10 @@ class ProfileViewModel @Inject constructor(
     private val shortlistRepo: ShortlistRepository,
     private val analyticsService: ProfileAnalyticsService,
     private val trustRepository: TrustRepository,
-    private val consentRepository: ConsentRepository
+    private val consentRepository: ConsentRepository,
+    private val storageService: FirebaseStorageService
 ) : ViewModel() {
+    private val functions = FirebaseFunctions.getInstance()
     private val _profile = MutableStateFlow<UserProfile?>(null)
     val profile: StateFlow<UserProfile?> = _profile.asStateFlow()
 
@@ -89,6 +95,15 @@ class ProfileViewModel @Inject constructor(
 
     private val _photoError = MutableStateFlow<String?>(null)
     val photoError: StateFlow<String?> = _photoError.asStateFlow()
+
+    private val _voiceBioUploading = MutableStateFlow(false)
+    val voiceBioUploading: StateFlow<Boolean> = _voiceBioUploading.asStateFlow()
+
+    private val _voiceBioDeleting = MutableStateFlow(false)
+    val voiceBioDeleting: StateFlow<Boolean> = _voiceBioDeleting.asStateFlow()
+
+    private val _voiceBioMessage = MutableStateFlow<String?>(null)
+    val voiceBioMessage: StateFlow<String?> = _voiceBioMessage.asStateFlow()
 
     val photos: StateFlow<List<PhotoEntity>> = session.userId.filterNotNull()
         .flatMapLatest { photoRepo.observe(it) }
@@ -179,6 +194,54 @@ class ProfileViewModel @Inject constructor(
         _photoError.value = null
     }
 
+    fun uploadVoiceBio(uri: Uri) = viewModelScope.launch {
+        if (!_mediaConsentCurrent.value) {
+            _voiceBioMessage.value = "voice_bio_consent_required"
+            return@launch
+        }
+        val profile = _profile.value ?: return@launch
+        val firebaseUid = profile.firebaseUid.takeIf { it.isNotBlank() } ?: return@launch
+        if (_voiceBioUploading.value) return@launch
+        _voiceBioUploading.value = true
+        _voiceBioMessage.value = null
+        runCatching {
+            val storagePath = storageService.uploadProfileVoiceBio(firebaseUid, uri).getOrThrow()
+            val response = functions.getHttpsCallable("submitProfileVoiceBio")
+                .call(mapOf("storagePath" to storagePath))
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val data = response.data as? Map<String, Any?> ?: error("Invalid moderation response")
+            check(data["status"] == "PENDING") { "Voice bio was not accepted for moderation" }
+        }.onSuccess {
+            _voiceBioMessage.value = "voice_bio_pending"
+        }.onFailure {
+            _voiceBioMessage.value = "voice_bio_upload_failed"
+        }
+        _voiceBioUploading.value = false
+    }
+
+    fun removeVoiceBio() = viewModelScope.launch {
+        if (_voiceBioDeleting.value) return@launch
+        _voiceBioDeleting.value = true
+        _voiceBioMessage.value = null
+        runCatching {
+            val response = functions.getHttpsCallable("removeProfileVoiceBio").call().await()
+            @Suppress("UNCHECKED_CAST")
+            val data = response.data as? Map<String, Any?> ?: error("Invalid remove response")
+            check(data["success"] == true)
+        }.onSuccess {
+            _profile.update { current -> current?.copy(voiceBioUrl = "") }
+            _voiceBioMessage.value = "voice_bio_removed"
+        }.onFailure {
+            _voiceBioMessage.value = "voice_bio_remove_failed"
+        }
+        _voiceBioDeleting.value = false
+    }
+
+    fun clearVoiceBioMessage() {
+        _voiceBioMessage.value = null
+    }
+
     fun setPrimary(photo: PhotoEntity) = viewModelScope.launch { photoRepo.setPrimary(photo.userId, photo.id) }
     fun delete(photo: PhotoEntity) = viewModelScope.launch { photoRepo.delete(photo) }
     fun signOut() = viewModelScope.launch { auth.signOut() }
@@ -217,7 +280,13 @@ fun ProfileScreen(
     val mediaConsentVersion by vm.mediaConsentVersion.collectAsState()
     val mediaConsentSaving by vm.mediaConsentSaving.collectAsState()
     val photoError by vm.photoError.collectAsState()
+    val voiceBioUploading by vm.voiceBioUploading.collectAsState()
+    val voiceBioDeleting by vm.voiceBioDeleting.collectAsState()
+    val voiceBioMessage by vm.voiceBioMessage.collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(vm::importPhoto) }
+    val voiceBioPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let(vm::uploadVoiceBio)
+    }
 
     val p = profile
     if (p == null) {
@@ -246,6 +315,54 @@ fun ProfileScreen(
 
         ProfileStats(viewCount, likeCount, savedCount, onGoWhoViewed, onGoInterests, onGoShortlists)
         TrustAndVerificationCard(p, photos.isNotEmpty(), trustSummary, onGoVerification)
+
+        ProfileSection("Voice introduction") {
+            Text(
+                "Add a short optional audio introduction. It is published only after moderation and can be removed at any time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (p.voiceBioUrl.isNotBlank()) {
+                ProtectedAudioPlayer(
+                    source = p.voiceBioUrl,
+                    modifier = Modifier.fillMaxWidth().testTag("profile_voice_bio_player")
+                )
+                TextButton(
+                    onClick = vm::removeVoiceBio,
+                    enabled = !voiceBioDeleting && !voiceBioUploading
+                ) {
+                    Text(if (voiceBioDeleting) "Removing…" else "Remove voice introduction")
+                }
+            }
+            MatreeSecondaryButton(
+                text = if (voiceBioUploading) "Uploading…" else if (p.voiceBioUrl.isBlank()) "Add voice introduction" else "Replace voice introduction",
+                icon = Icons.Filled.RecordVoiceOver,
+                onClick = { voiceBioPicker.launch("audio/*") },
+                enabled = mediaConsentCurrent && !voiceBioUploading && !voiceBioDeleting,
+                modifier = Modifier.fillMaxWidth().testTag("profile_voice_bio_upload")
+            )
+            if (!mediaConsentCurrent) {
+                MatreeInlineNotice(
+                    message = "Enable media processing below before uploading a voice introduction.",
+                    icon = Icons.Filled.Policy
+                )
+            }
+            voiceBioMessage?.let { code ->
+                val message = when (code) {
+                    "voice_bio_pending" -> "Voice introduction submitted for moderation."
+                    "voice_bio_removed" -> "Voice introduction removed."
+                    "voice_bio_consent_required" -> "Enable media processing before uploading."
+                    "voice_bio_remove_failed" -> "Could not remove the voice introduction. Try again."
+                    else -> "Voice introduction upload failed. Check the file and try again."
+                }
+                MatreeInlineNotice(
+                    message = message,
+                    icon = if (code == "voice_bio_pending" || code == "voice_bio_removed") Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                    tone = if (code == "voice_bio_pending" || code == "voice_bio_removed") MatreeStatusTone.NEUTRAL else MatreeStatusTone.ERROR
+                )
+                TextButton(onClick = vm::clearVoiceBioMessage) { Text("Dismiss") }
+            }
+        }
 
         ProfileSection("Personal details") {
             InfoRow(Icons.Filled.SupervisorAccount, p.profileCreatedFor.displayLabel)
