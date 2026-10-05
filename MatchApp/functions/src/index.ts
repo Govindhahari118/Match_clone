@@ -24,6 +24,7 @@ export * from "./recommendationFeedback";
 export * from "./analytics";
 export * from "./health";
 export * from "./media";
+export * from "./photoRequests";
 export * from "./messageSafety";
 export * from "./chat";
 export * from "./chatPreferences";
