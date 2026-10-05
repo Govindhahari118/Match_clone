@@ -106,9 +106,12 @@ service firebase.storage {
     }
     match /voicebios/{uid}/{fileName} {
       allow read: if publishedVoiceBioReadable(uid, fileName);
-      allow create, update: if signedIn() && request.auth.uid == uid &&
+      allow create: if signedIn() && request.auth.uid == uid &&
         request.resource.size > 0 && request.resource.size < 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('audio/.*');
+        request.resource.contentType == 'audio/mp4' &&
+        request.resource.metadata.keys().hasOnly(['ownerUid']) &&
+        request.resource.metadata.ownerUid == uid;
+      allow update: if false;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
     match /verifications/{uid}/{allPaths=**} {
