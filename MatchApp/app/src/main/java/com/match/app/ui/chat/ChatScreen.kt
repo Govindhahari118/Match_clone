@@ -72,6 +72,10 @@ data class ChatUi(
     val replyingTo: MessageEntity? = null,
     val presence: MemberPresence = MemberPresence(),
     val isPeerTyping: Boolean = false,
+    val threadMuted: Boolean = false,
+    val threadArchived: Boolean = false,
+    val threadPreferenceUpdating: Boolean = false,
+    val threadPreferenceMessage: String? = null,
     val reportSubmitting: Boolean = false,
     val reportMessage: String? = null,
     val loading: Boolean = true,
@@ -122,6 +126,26 @@ class ChatViewModel @Inject constructor(
                     _state.update { it.copy(presence = MemberPresence()) }
                 }
                 delay(60_000)
+            }
+        }
+
+        viewModelScope.launch {
+            val myUid = session.firebaseUid.filterNotNull().first()
+            val peerUid = auth.currentProfile(peerId)?.firebaseUid.orEmpty()
+            if (myUid.isNotBlank() && peerUid.isNotBlank()) {
+                chat.observeThreadPreference(myUid, peerUid)
+                    .catch { emit(com.match.app.data.remote.ChatThreadPreference(
+                        threadId = com.match.app.data.remote.FirestoreChatService.threadId(myUid, peerUid),
+                        peerFirebaseUid = peerUid
+                    )) }
+                    .collect { preference ->
+                        _state.update {
+                            it.copy(
+                                threadMuted = preference.muted,
+                                threadArchived = preference.archived
+                            )
+                        }
+                    }
             }
         }
 
@@ -221,6 +245,61 @@ class ChatViewModel @Inject constructor(
     }
 
     fun clearReportMessage() = _state.update { it.copy(reportMessage = null) }
+    fun clearThreadPreferenceMessage() = _state.update { it.copy(threadPreferenceMessage = null) }
+
+    fun toggleThreadMuted() = viewModelScope.launch {
+        val current = _state.value
+        val peerUid = current.peer?.firebaseUid.orEmpty()
+        if (peerUid.isBlank() || current.threadPreferenceUpdating) return@launch
+        val desired = !current.threadMuted
+        _state.update { it.copy(threadPreferenceUpdating = true, threadPreferenceMessage = null) }
+        runCatching {
+            chat.setThreadPreferences(
+                peerUid = peerUid,
+                muted = desired,
+                archived = current.threadArchived
+            )
+        }.onSuccess {
+            _state.update {
+                it.copy(
+                    threadMuted = desired,
+                    threadPreferenceUpdating = false,
+                    threadPreferenceMessage = if (desired) "chat_muted" else "chat_unmuted"
+                )
+            }
+        }.onFailure {
+            _state.update {
+                it.copy(threadPreferenceUpdating = false, threadPreferenceMessage = "chat_preference_failed")
+            }
+        }
+    }
+
+    fun toggleThreadArchived() = viewModelScope.launch {
+        val current = _state.value
+        val peerUid = current.peer?.firebaseUid.orEmpty()
+        if (peerUid.isBlank() || current.threadPreferenceUpdating) return@launch
+        val desired = !current.threadArchived
+        _state.update { it.copy(threadPreferenceUpdating = true, threadPreferenceMessage = null) }
+        runCatching {
+            chat.setThreadPreferences(
+                peerUid = peerUid,
+                muted = current.threadMuted,
+                archived = desired
+            )
+        }.onSuccess {
+            _state.update {
+                it.copy(
+                    threadArchived = desired,
+                    threadPreferenceUpdating = false,
+                    threadPreferenceMessage = if (desired) "chat_archived" else "chat_unarchived"
+                )
+            }
+        }.onFailure {
+            _state.update {
+                it.copy(threadPreferenceUpdating = false, threadPreferenceMessage = "chat_preference_failed")
+            }
+        }
+    }
 
     fun reportMessage(message: MessageEntity, reasonCode: String) = viewModelScope.launch {
         val current = _state.value
@@ -394,6 +473,21 @@ fun ChatScreen(
             vm.clearError()
         }
     }
+    val threadPreferenceFeedback = when (state.threadPreferenceMessage) {
+        "chat_muted" -> t("chat_muted_confirmation", "Conversation muted.")
+        "chat_unmuted" -> t("chat_unmuted_confirmation", "Conversation unmuted.")
+        "chat_archived" -> t("chat_archived_confirmation", "Conversation archived.")
+        "chat_unarchived" -> t("chat_unarchived_confirmation", "Conversation restored to Active.")
+        "chat_preference_failed" -> t("chat_preference_failed", "Conversation preference could not be updated. Try again.")
+        else -> null
+    }
+    LaunchedEffect(threadPreferenceFeedback) {
+        threadPreferenceFeedback?.let {
+            snackbar.showSnackbar(it)
+            vm.clearThreadPreferenceMessage()
+        }
+    }
+
     val reportFeedback = when (state.reportMessage) {
         "report_submitted" -> t("report_submitted", "Report submitted for moderation.")
         "report_failed" -> t("report_failed", "Report could not be submitted. Check your connection and try again.")
@@ -479,6 +573,50 @@ fun ChatScreen(
                                 onClick = {
                                     showMenu = false
                                     if (state.isBlocked) vm.unblockUser() else showBlockDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (state.threadMuted) {
+                                            t("unmute_chat", "Unmute conversation")
+                                        } else {
+                                            t("mute_chat", "Mute conversation")
+                                        }
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        if (state.threadMuted) Icons.Filled.NotificationsActive else Icons.Filled.NotificationsOff,
+                                        null
+                                    )
+                                },
+                                enabled = !state.threadPreferenceUpdating,
+                                onClick = {
+                                    showMenu = false
+                                    vm.toggleThreadMuted()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (state.threadArchived) {
+                                            t("unarchive_chat", "Move to Active")
+                                        } else {
+                                            t("archive_chat", "Archive conversation")
+                                        }
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        if (state.threadArchived) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                        null
+                                    )
+                                },
+                                enabled = !state.threadPreferenceUpdating,
+                                onClick = {
+                                    showMenu = false
+                                    vm.toggleThreadArchived()
                                 }
                             )
                             DropdownMenuItem(
