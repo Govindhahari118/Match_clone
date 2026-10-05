@@ -35,6 +35,10 @@ export function notificationActionFor(type: string): "INTERESTS" | "MATCHES" | "
   case "MATCH":
     return "MATCHES";
   case "MESSAGE":
+  case "CALL_REQUEST":
+  case "CALL_ACCEPTED":
+  case "CALL_DECLINED":
+  case "CALL_CANCELLED":
     return "CHAT";
   default:
     return "NOTIFICATIONS";
