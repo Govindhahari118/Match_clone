@@ -8,6 +8,10 @@ export const PROFILE_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
 ]);
 
+export const PROFILE_VOICE_BIO_MIME_TYPES = new Set([
+  "audio/mp4",
+]);
+
 export const VERIFICATION_DOCUMENT_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
