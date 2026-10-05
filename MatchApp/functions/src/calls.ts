@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck } from "./shared";
+import { db, persistAndSendNotification, requireAppCheck } from "./shared";
 import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import { evaluateCallEligibility } from "./callPolicy";
@@ -9,6 +9,14 @@ import {
   normalizeCallKind,
 } from "./callSessionPolicy";
 import { communicationProvider } from "./communicationProvider";
+import { notificationDeepLink } from "./notificationLinkPolicy";
+import {
+  canCancelCallRequest,
+  canReplaceCallRequest,
+  canRespondToCallRequest,
+  normalizeCallRequestStatus,
+  validProposedCallTime,
+} from "./callRequestPolicy";
 
 function cleanUid(value: unknown): string {
   const uid = typeof value === "string" ? value.trim() : "";
@@ -216,4 +224,233 @@ export const startSecureCallSession = functions.https.onCall(async (data, contex
       "Secure calling is temporarily unavailable"
     );
   }
+});
+
+
+function callRequestRef(uidA: string, uidB: string) {
+  return db.collection("callRequests").doc(pairId(uidA, uidB));
+}
+
+function callRequestUpdatedAtMs(data: FirebaseFirestore.DocumentData | undefined): number {
+  const raw = data?.updatedAt;
+  if (raw && typeof raw.toMillis === "function") return raw.toMillis();
+  return Number(data?.updatedAtMs || 0);
+}
+
+async function notifyCallRequest(
+  recipientUid: string,
+  actorUid: string,
+  pair: string,
+  type: "CALL_REQUEST" | "CALL_ACCEPTED" | "CALL_DECLINED" | "CALL_CANCELLED",
+  title: string,
+  body: string
+): Promise<void> {
+  await persistAndSendNotification({
+    notificationId: `call_${type.toLowerCase()}_${pair}_${recipientUid}`,
+    userId: recipientUid,
+    type,
+    title,
+    body,
+    entityType: "call_request",
+    entityId: pair,
+    deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
+    action: "CHAT",
+    pushType: type.toLowerCase(),
+    preferenceKey: "messages",
+    priority: "high",
+    fromFirebaseUid: actorUid,
+  });
+}
+
+/**
+ * Creates/replaces one active call-coordination request for a mutual match.
+ * This is provider-independent scheduling only; it never allocates a live call session.
+ */
+export const requestSecureCall = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const requesterUid = context.auth?.uid;
+  if (!requesterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const targetUid = cleanUid(data?.targetUid);
+  const kind = normalizeCallKind(data?.kind);
+  const proposedAtMs = Number(data?.proposedAtMs);
+  const now = Date.now();
+
+  const eligibility = await relationshipEligibility(requesterUid, targetUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+  if (!validProposedCallTime(now, proposedAtMs)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Choose a call time between 15 minutes and 14 days from now"
+    );
+  }
+
+  const pair = pairId(requesterUid, targetUid);
+  const ref = callRequestRef(requesterUid, targetUid);
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    const current = normalizeCallRequestStatus(existing.data()?.status);
+    const updatedAt = callRequestUpdatedAtMs(existing.data());
+    if (existing.exists && !canReplaceCallRequest(current, updatedAt, now)) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "An active call request already exists for this match"
+      );
+    }
+
+    tx.set(ref, {
+      pairId: pair,
+      requesterUid,
+      targetUid,
+      users: [requesterUid, targetUid].sort(),
+      kind,
+      proposedAtMs: Math.trunc(proposedAtMs),
+      status: "PENDING",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: false });
+  });
+
+  await notifyCallRequest(
+    targetUid,
+    requesterUid,
+    pair,
+    "CALL_REQUEST",
+    "Call request",
+    "Your match requested a secure call. Open Matree to review the proposed time."
+  );
+
+  return {
+    success: true,
+    pairId: pair,
+    status: "PENDING",
+    kind,
+    proposedAtMs: Math.trunc(proposedAtMs),
+  };
+});
+
+/** Returns the current participant-visible call coordination state for this matched pair. */
+export const getSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const viewerUid = context.auth?.uid;
+  if (!viewerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const targetUid = cleanUid(data?.targetUid);
+  const eligibility = await relationshipEligibility(viewerUid, targetUid);
+  if (!eligibility.eligible) {
+    return { exists: false, reason: eligibility.reason };
+  }
+
+  const snap = await callRequestRef(viewerUid, targetUid).get();
+  if (!snap.exists) return { exists: false, reason: "none" };
+  const value = snap.data() || {};
+  const users = Array.isArray(value.users) ? value.users : [];
+  if (!users.includes(viewerUid) || !users.includes(targetUid) || users.length !== 2) {
+    throw new functions.https.HttpsError("permission-denied", "Call request is unavailable");
+  }
+  return {
+    exists: true,
+    pairId: snap.id,
+    requesterUid: String(value.requesterUid || ""),
+    targetUid: String(value.targetUid || ""),
+    kind: normalizeCallKind(value.kind),
+    proposedAtMs: Number(value.proposedAtMs || 0),
+    status: normalizeCallRequestStatus(value.status) || "CANCELLED",
+  };
+});
+
+/** Target member accepts or declines a pending call request. */
+export const respondSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const actorUid = context.auth?.uid;
+  if (!actorUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const otherUid = cleanUid(data?.targetUid);
+  const response = String(data?.response || "").trim().toUpperCase();
+  if (response !== "ACCEPTED" && response !== "DECLINED") {
+    throw new functions.https.HttpsError("invalid-argument", "Response must be ACCEPTED or DECLINED");
+  }
+  const eligibility = await relationshipEligibility(actorUid, otherUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+
+  const ref = callRequestRef(actorUid, otherUid);
+  let requesterUid = "";
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
+    const value = snap.data() || {};
+    requesterUid = String(value.requesterUid || "");
+    const targetUid = String(value.targetUid || "");
+    const status = normalizeCallRequestStatus(value.status);
+    if (!canRespondToCallRequest(status, actorUid, targetUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request cannot be changed");
+    }
+    tx.update(ref, {
+      status: response,
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: Date.now(),
+    });
+  });
+
+  await notifyCallRequest(
+    requesterUid,
+    actorUid,
+    pairId(actorUid, otherUid),
+    response === "ACCEPTED" ? "CALL_ACCEPTED" : "CALL_DECLINED",
+    response === "ACCEPTED" ? "Call request accepted" : "Call request declined",
+    response === "ACCEPTED" ?
+      "Your match accepted the proposed secure-call time." :
+      "Your match declined the proposed secure-call time."
+  );
+
+  return { success: true, status: response };
+});
+
+/** Requesting member can withdraw a pending or accepted coordination request. */
+export const cancelSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const actorUid = context.auth?.uid;
+  if (!actorUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const otherUid = cleanUid(data?.targetUid);
+  const eligibility = await relationshipEligibility(actorUid, otherUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+
+  const ref = callRequestRef(actorUid, otherUid);
+  let targetUid = "";
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
+    const value = snap.data() || {};
+    targetUid = String(value.targetUid || "");
+    const requesterUid = String(value.requesterUid || "");
+    const status = normalizeCallRequestStatus(value.status);
+    if (!canCancelCallRequest(status, actorUid, requesterUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request cannot be cancelled");
+    }
+    tx.update(ref, {
+      status: "CANCELLED",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: Date.now(),
+    });
+  });
+
+  await notifyCallRequest(
+    targetUid,
+    actorUid,
+    pairId(actorUid, otherUid),
+    "CALL_CANCELLED",
+    "Call request cancelled",
+    "Your match cancelled the proposed secure-call time."
+  );
+
+  return { success: true, status: "CANCELLED" };
 });
