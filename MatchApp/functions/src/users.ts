@@ -458,6 +458,8 @@ export const deleteUserAccount = functions
         await deleteQuery(db.collection("photoModeration").where("uid", "==", uid));
         await deleteQuery(db.collection("videoModeration").where("uid", "==", uid));
         await deleteQuery(db.collection("profileVideoOrphans").where("uid", "==", uid));
+        await deleteQuery(db.collection("voiceBioModeration").where("uid", "==", uid));
+        await deleteQuery(db.collection("profileVoiceBioOrphans").where("uid", "==", uid));
         await deleteQuery(db.collection("chatMediaOrphans").where("senderUid", "==", uid));
         await deleteQuery(db.collection("chatMediaOrphans").where("recipientUid", "==", uid));
         await deleteQuery(db.collection("securityEvents").where("uid", "==", uid));
