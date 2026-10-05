@@ -98,3 +98,42 @@ test('video moderation records are server-only', async () => {
     status: 'APPROVED',
   }));
 });
+
+
+test('member cannot publish an unmoderated voiceBioUrl', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users/alice'), {
+      firebaseUid: 'alice',
+      displayName: 'Alice',
+      accountStatus: 'ACTIVE',
+      profileRevision: 0,
+      photoUrl: '',
+      videoUrl: '',
+      voiceBioUrl: '',
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(updateDoc(doc(alice, 'users/alice'), {
+    voiceBioUrl: 'voicebios/alice/unreviewed.m4a',
+    profileRevision: 1,
+  }));
+});
+
+test('voice bio moderation records are server-only', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'voiceBioModeration/case-1'), {
+      uid: 'alice',
+      storagePath: 'voicebios/alice/pending.m4a',
+      status: 'PENDING',
+    });
+  });
+
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(getDoc(doc(alice, 'voiceBioModeration/case-1')));
+  await assertFails(setDoc(doc(alice, 'voiceBioModeration/forged'), {
+    uid: 'alice',
+    storagePath: 'voicebios/alice/forged.m4a',
+    status: 'APPROVED',
+  }));
+});
