@@ -138,12 +138,12 @@ test('voice bio peer access is also limited to the published object', async () =
   await uploadBytes(
     ref(aliceStorage, 'voicebios/alice/current.m4a'),
     new Uint8Array([7]),
-    { contentType: 'audio/mp4' },
+    { contentType: 'audio/mp4', customMetadata: { ownerUid: 'alice' } },
   );
   await uploadBytes(
     ref(aliceStorage, 'voicebios/alice/draft.m4a'),
     new Uint8Array([8]),
-    { contentType: 'audio/mp4' },
+    { contentType: 'audio/mp4', customMetadata: { ownerUid: 'alice' } },
   );
   await env.withSecurityRulesDisabled(async context => {
     await updateDoc(doc(context.firestore(), 'users/alice'), {
@@ -169,5 +169,23 @@ test('profile media upload MIME types are narrow', async () => {
     ref(aliceStorage, 'videos/alice/not-allowed.webm'),
     new Uint8Array([1]),
     { contentType: 'video/webm', customMetadata: { ownerUid: 'alice' } },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'voicebios/alice/not-allowed.mp3'),
+    new Uint8Array([1]),
+    { contentType: 'audio/mpeg', customMetadata: { ownerUid: 'alice' } },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'voicebios/alice/missing-owner.m4a'),
+    new Uint8Array([1]),
+    { contentType: 'audio/mp4' },
+  ));
+
+  await assertFails(uploadBytes(
+    ref(aliceStorage, 'voicebios/alice/wrong-owner.m4a'),
+    new Uint8Array([1]),
+    { contentType: 'audio/mp4', customMetadata: { ownerUid: 'bob' } },
   ));
 });
