@@ -75,11 +75,15 @@ def main() -> int:
         failures.append("Firestore rules missing chatPreferences owner-read boundary")
     if "allow create, update, delete: if false;" not in rules:
         failures.append("chatPreferences must remain server-write-only")
-    if 'deleteCollection(`chatPreferences/${uid}/threads`)' not in users or
-            'collectionGroup("threads").where("peerUid", "==", uid)' not in users:
+    if (
+        'deleteCollection(`chatPreferences/${uid}/threads`)' not in users
+        or 'collectionGroup("threads").where("peerUid", "==", uid)' not in users
+    ):
         failures.append("account deletion must remove owned and peer-referencing chat preferences")
-    if 'chatPreferences' not in data_export or
-            'childCollection(`chatPreferences/${uid}/threads`)' not in data_export:
+    if (
+        'chatPreferences' not in data_export
+        or 'childCollection(`chatPreferences/${uid}/threads`)' not in data_export
+    ):
         failures.append("data export must include chat mute/archive preferences")
 
     if failures:
