@@ -206,7 +206,7 @@ fun SecureCallScreen(
         ) {
             when {
                 ui.loading -> CircularProgressIndicator()
-                ui.error != null -> MatreeInlineNotice(
+                ui.error != null && ui.capability == null -> MatreeInlineNotice(
                     message = ui.error.orEmpty(),
                     icon = Icons.Filled.Security
                 )
@@ -216,6 +216,8 @@ fun SecureCallScreen(
                     capability = ui.capability ?: SecureCallCapability(),
                     request = ui.request,
                     busy = ui.busy,
+                    feedback = ui.feedback,
+                    error = ui.error,
                     onRequest = vm::requestCall,
                     onAccept = { vm.respond(true) },
                     onDecline = { vm.respond(false) },
@@ -233,6 +235,8 @@ private fun SecureCallCapabilityCard(
     capability: SecureCallCapability,
     request: SecureCallRequest,
     busy: Boolean,
+    feedback: String?,
+    error: String?,
     onRequest: (Long) -> Unit,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
@@ -270,6 +274,15 @@ private fun SecureCallCapabilityCard(
                 textAlign = TextAlign.Center
             )
 
+            if (error != null) {
+                MatreeInlineNotice(message = error, icon = Icons.Filled.Security)
+            }
+            if (feedback != null) {
+                Text(
+                    t("call_request_updated", "Call request updated."),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             if (capability.eligible) {
                 CallRequestCoordinator(
                     currentUid = currentUid,
