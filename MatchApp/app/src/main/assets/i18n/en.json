@@ -466,5 +466,6 @@
   "proposed_call_time": "Proposed time: {time}",
   "cancel_call_request": "Cancel request",
   "call_request": "Call request",
-  "review_call_request": "Review call request"
+  "review_call_request": "Review call request",
+  "call_request_updated": "Call request updated."
 }
