@@ -395,6 +395,16 @@ export const respondSecureCallRequest = functions.https.onCall(async (data, cont
       value.users.length !== 2 || !value.users.includes(actorUid) || !value.users.includes(otherUid)) {
       throw new functions.https.HttpsError("permission-denied", "Call request participants mismatch");
     }
+    // Do not accept a proposed time that has already passed.
+    if (response === "ACCEPTED" && (
+      !Number.isFinite(Number(value.proposedAtMs)) ||
+      Number(value.proposedAtMs) <= Date.now()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The proposed call time has expired; request a new time"
+      );
+    }
     if (!canRespondToCallRequest(status, actorUid, targetUid)) {
       throw new functions.https.HttpsError("permission-denied", "Call request cannot be changed");
     }
