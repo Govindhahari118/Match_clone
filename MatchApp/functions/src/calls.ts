@@ -242,10 +242,11 @@ async function notifyCallRequest(
   pair: string,
   type: "CALL_REQUEST" | "CALL_ACCEPTED" | "CALL_DECLINED" | "CALL_CANCELLED",
   title: string,
-  body: string
+  body: string,
+  revision: number
 ): Promise<void> {
   await persistAndSendNotification({
-    notificationId: `call_${type.toLowerCase()}_${pair}_${recipientUid}`,
+    notificationId: `call_${type.toLowerCase()}_${pair}_${recipientUid}_${revision}`,
     userId: recipientUid,
     type,
     title,
@@ -288,7 +289,7 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
 
   const pair = pairId(requesterUid, targetUid);
   const ref = callRequestRef(requesterUid, targetUid);
-  await db.runTransaction(async (tx) => {
+  const revision = await db.runTransaction(async (tx) => {
     const existing = await tx.get(ref);
     const current = normalizeCallRequestStatus(existing.data()?.status);
     const updatedAt = callRequestUpdatedAtMs(existing.data());
@@ -299,7 +300,9 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
       );
     }
 
+    const nextRevision = Number(existing.data()?.revision || 0) + 1;
     tx.set(ref, {
+      revision: nextRevision,
       pairId: pair,
       requesterUid,
       targetUid,
@@ -311,6 +314,7 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAtMs: now,
     }, { merge: false });
+    return nextRevision;
   });
 
   await notifyCallRequest(
@@ -319,7 +323,8 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
     pair,
     "CALL_REQUEST",
     "Call request",
-    "Your match requested a secure call. Open Matree to review the proposed time."
+    "Your match requested a secure call. Open Matree to review the proposed time.",
+    revision
   );
 
   return {
@@ -379,7 +384,7 @@ export const respondSecureCallRequest = functions.https.onCall(async (data, cont
 
   const ref = callRequestRef(actorUid, otherUid);
   let requesterUid = "";
-  await db.runTransaction(async (tx) => {
+  const revision = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
     const value = snap.data() || {};
@@ -393,12 +398,15 @@ export const respondSecureCallRequest = functions.https.onCall(async (data, cont
     if (!canRespondToCallRequest(status, actorUid, targetUid)) {
       throw new functions.https.HttpsError("permission-denied", "Call request cannot be changed");
     }
+    const nextRevision = Number(value.revision || 0) + 1;
     tx.update(ref, {
+      revision: nextRevision,
       status: response,
       respondedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAtMs: Date.now(),
     });
+    return nextRevision;
   });
 
   await notifyCallRequest(
@@ -409,7 +417,8 @@ export const respondSecureCallRequest = functions.https.onCall(async (data, cont
     response === "ACCEPTED" ? "Call request accepted" : "Call request declined",
     response === "ACCEPTED" ?
       "Your match accepted the proposed secure-call time." :
-      "Your match declined the proposed secure-call time."
+      "Your match declined the proposed secure-call time.",
+    revision
   );
 
   return { success: true, status: response };
@@ -429,7 +438,7 @@ export const cancelSecureCallRequest = functions.https.onCall(async (data, conte
 
   const ref = callRequestRef(actorUid, otherUid);
   let targetUid = "";
-  await db.runTransaction(async (tx) => {
+  const revision = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
     const value = snap.data() || {};
@@ -443,11 +452,14 @@ export const cancelSecureCallRequest = functions.https.onCall(async (data, conte
     if (!canCancelCallRequest(status, actorUid, requesterUid)) {
       throw new functions.https.HttpsError("permission-denied", "Call request cannot be cancelled");
     }
+    const nextRevision = Number(value.revision || 0) + 1;
     tx.update(ref, {
+      revision: nextRevision,
       status: "CANCELLED",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAtMs: Date.now(),
     });
+    return nextRevision;
   });
 
   await notifyCallRequest(
@@ -456,7 +468,8 @@ export const cancelSecureCallRequest = functions.https.onCall(async (data, conte
     pairId(actorUid, otherUid),
     "CALL_CANCELLED",
     "Call request cancelled",
-    "Your match cancelled the proposed secure-call time."
+    "Your match cancelled the proposed secure-call time.",
+    revision
   );
 
   return { success: true, status: "CANCELLED" };
