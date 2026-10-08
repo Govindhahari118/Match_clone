@@ -25,11 +25,9 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: MatchApp/functions/package-lock.json
-      - name: Reconcile Firebase Admin and production dependencies
+      - name: Refresh compatible locked dependencies and validate
         working-directory: MatchApp/functions
         run: |
-          npm uninstall firebase-functions-test --save-dev --package-lock-only
-          npm install firebase-admin@^14 --save --package-lock-only
           npm audit fix --package-lock-only
           npm ci
           npm run lint
