@@ -1,0 +1,45 @@
+name: Prepare Functions dependency security remediation
+
+on:
+  push:
+    branches:
+      - gpt/matree-functions-audit-remediation-20261008
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-remediation:
+    if: github.repository == 'Govindhahari118/Match_clone'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: MatchApp/functions/package-lock.json
+      - name: Reconcile Firebase Admin and production dependencies
+        working-directory: MatchApp/functions
+        run: |
+          npm install firebase-admin@^14 --save --package-lock-only
+          npm audit fix --package-lock-only
+          npm ci
+          npm run lint
+          npm run build
+          npm test
+          npm audit --omit=dev --audit-level=high
+      - name: Commit dependency-only remediation after passing checks
+        run: |
+          git add MatchApp/functions/package.json MatchApp/functions/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'No dependency change was needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(functions): remediate audited production dependencies'
+          git push origin HEAD:gpt/matree-functions-audit-remediation-20261008
