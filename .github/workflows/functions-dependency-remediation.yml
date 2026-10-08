@@ -28,6 +28,7 @@ jobs:
       - name: Reconcile Firebase Admin and production dependencies
         working-directory: MatchApp/functions
         run: |
+          npm uninstall firebase-functions-test --save-dev --package-lock-only
           npm install firebase-admin@^14 --save --package-lock-only
           npm audit fix --package-lock-only
           npm ci
