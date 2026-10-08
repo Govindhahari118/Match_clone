@@ -28,7 +28,8 @@ jobs:
       - name: Refresh compatible locked dependencies and validate
         working-directory: MatchApp/functions
         run: |
-          npm audit fix --package-lock-only
+          # Audit fix can exit 1 if unfixable advisories remain; final audit below is mandatory.
+          npm audit fix --package-lock-only || echo "Audit fix left advisories; enforcing production audit after install"
           npm ci
           npm run lint
           npm run build
