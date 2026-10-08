@@ -466,5 +466,6 @@
   "proposed_call_time": "प्रस्तावित समय: {time}",
   "cancel_call_request": "अनुरोध रद्द करें",
   "call_request": "कॉल अनुरोध",
-  "review_call_request": "कॉल अनुरोध देखें"
+  "review_call_request": "कॉल अनुरोध देखें",
+  "call_request_updated": "कॉल अनुरोध अपडेट हो गया।"
 }
