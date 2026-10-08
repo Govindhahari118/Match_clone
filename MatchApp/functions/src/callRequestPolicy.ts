@@ -7,7 +7,7 @@ export function normalizeCallRequestStatus(value: unknown): CallRequestStatus | 
 }
 
 export function validProposedCallTime(nowMs: number, proposedAtMs: number): boolean {
-  return Number.isFinite(proposedAtMs) &&
+  return Number.isFinite(nowMs) && Number.isFinite(proposedAtMs) &&
     proposedAtMs >= nowMs + 15 * 60_000 &&
     proposedAtMs <= nowMs + 14 * 24 * 60 * 60_000;
 }
@@ -17,9 +17,11 @@ export function canReplaceCallRequest(
   existingUpdatedAtMs: number,
   nowMs: number
 ): boolean {
+  if (!Number.isFinite(nowMs)) return false;
   if (existingStatus == null) return true;
   if (existingStatus !== "PENDING" && existingStatus !== "ACCEPTED") return true;
-  return nowMs - existingUpdatedAtMs >= 6 * 60 * 60_000;
+  return Number.isFinite(existingUpdatedAtMs) &&
+    nowMs - existingUpdatedAtMs >= 6 * 60 * 60_000;
 }
 
 export function canRespondToCallRequest(
@@ -27,7 +29,7 @@ export function canRespondToCallRequest(
   actorUid: string,
   targetUid: string
 ): boolean {
-  return status === "PENDING" && actorUid === targetUid;
+  return status === "PENDING" && actorUid.length > 0 && actorUid === targetUid;
 }
 
 export function canCancelCallRequest(
@@ -35,5 +37,6 @@ export function canCancelCallRequest(
   actorUid: string,
   requesterUid: string
 ): boolean {
-  return (status === "PENDING" || status === "ACCEPTED") && actorUid === requesterUid;
+  return (status === "PENDING" || status === "ACCEPTED") &&
+    actorUid.length > 0 && actorUid === requesterUid;
 }
