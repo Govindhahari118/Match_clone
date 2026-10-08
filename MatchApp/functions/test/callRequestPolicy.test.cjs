@@ -40,3 +40,18 @@ test("status normalization rejects unknown states", () => {
   assert.equal(normalizeCallRequestStatus("accepted"), "ACCEPTED");
   assert.equal(normalizeCallRequestStatus("weird"), null);
 });
+
+test("invalid time inputs fail closed", () => {
+  const now = 1_000_000_000;
+  assert.equal(validProposedCallTime(Number.NaN, now + 60 * 60_000), false);
+  assert.equal(validProposedCallTime(Infinity, now + 60 * 60_000), false);
+  assert.equal(canReplaceCallRequest("PENDING", Number.NaN, now), false);
+  assert.equal(canReplaceCallRequest("ACCEPTED", Infinity, now), false);
+  assert.equal(canReplaceCallRequest(null, 0, Number.NaN), false);
+});
+
+test("empty participant identifiers never authorize transitions", () => {
+  assert.equal(canRespondToCallRequest("PENDING", "", ""), false);
+  assert.equal(canCancelCallRequest("PENDING", "", ""), false);
+  assert.equal(canCancelCallRequest("ACCEPTED", "", ""), false);
+});
