@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   prepare-remediation:
-    if: github.repository == 'Govindhahari118/Match_clone' && github.event.pull_request.head.repo.full_name != 'untrusted/fork'
+    if: github.repository == 'Govindhahari118/Match_clone' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
