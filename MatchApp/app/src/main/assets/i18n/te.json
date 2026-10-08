@@ -466,5 +466,6 @@
   "proposed_call_time": "ప్రతిపాదిత సమయం: {time}",
   "cancel_call_request": "అభ్యర్థన రద్దు చేయండి",
   "call_request": "కాల్ అభ్యర్థన",
-  "review_call_request": "కాల్ అభ్యర్థన చూడండి"
+  "review_call_request": "కాల్ అభ్యర్థన చూడండి",
+  "call_request_updated": "కాల్ అభ్యర్థన నవీకరించబడింది."
 }
