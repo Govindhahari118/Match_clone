@@ -130,7 +130,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Room schema export is a KSP side effect and is not reliably restored by Gradle task cache.\n          # Force execution so exact-SHA evidence never depends on a prior runner workspace/cache hit.\n          ./gradlew --no-daemon --rerun-tasks kspDebugKotlin\n          python3 scripts/ci/room_schema_evidence.py
+          # Room schema export is a KSP side effect and is not reliably restored by Gradle task cache.
+          # Force execution so exact-SHA evidence never depends on a prior runner workspace/cache hit.
+          ./gradlew --no-daemon --rerun-tasks kspDebugKotlin
+          python3 scripts/ci/room_schema_evidence.py
       - name: Android lint
         shell: bash
         run: |
