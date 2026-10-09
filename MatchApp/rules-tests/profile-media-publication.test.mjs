@@ -171,3 +171,28 @@ test('profile media upload MIME types are narrow', async () => {
     { contentType: 'video/webm', customMetadata: { ownerUid: 'alice' } },
   ));
 });
+
+
+test('profile media writes reject missing owner identity metadata', async () => {
+  const storage = env.authenticatedContext('alice').storage();
+  await assertFails(uploadBytes(
+    ref(storage, 'photos/alice/no-owner.jpg'),
+    new Uint8Array([1]),
+    { contentType: 'image/jpeg' },
+  ));
+  await assertFails(uploadBytes(
+    ref(storage, 'videos/alice/no-owner.mp4'),
+    new Uint8Array([1]),
+    { contentType: 'video/mp4' },
+  ));
+  await assertFails(uploadBytes(
+    ref(storage, 'verifications/alice/no-owner.pdf'),
+    new Uint8Array([1]),
+    { contentType: 'application/pdf', customMetadata: { docType: 'Passport' } },
+  ));
+  await assertFails(uploadBytes(
+    ref(storage, 'verifications/alice/no-doc-type.pdf'),
+    new Uint8Array([1]),
+    { contentType: 'application/pdf', customMetadata: { ownerUid: 'alice' } },
+  ));
+});
