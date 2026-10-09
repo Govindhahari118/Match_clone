@@ -208,3 +208,20 @@ test('chat media rejects broad MIME aliases and extension mismatches', async () 
     },
   ));
 });
+
+
+test('chat media upload requires every authorized metadata field', async () => {
+  const storage = env.authenticatedContext('alice').storage();
+  const base = {
+    senderUid: 'alice', recipientUid: 'bob', threadId: 'thread123', kind: 'image',
+  };
+  for (const missing of Object.keys(base)) {
+    const customMetadata = { ...base };
+    delete customMetadata[missing];
+    await assertFails(uploadBytes(
+      ref(storage, `chat-media/thread123/missing_${missing}_1234567890123456.jpg`),
+      new Uint8Array([1, 2, 3]),
+      { contentType: 'image/jpeg', customMetadata },
+    ));
+  }
+});
