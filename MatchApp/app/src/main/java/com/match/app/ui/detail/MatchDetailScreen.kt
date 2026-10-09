@@ -49,6 +49,7 @@ import com.match.app.domain.model.UserProfile
 import com.match.app.ui.common.ContactUnlockSheet
 import com.match.app.ui.common.ReportReasonOption
 import com.match.app.ui.common.reportReasonOptions
+import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
