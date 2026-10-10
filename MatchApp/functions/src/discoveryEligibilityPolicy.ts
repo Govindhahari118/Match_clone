@@ -81,8 +81,13 @@ export function profileFreshEnough(
   const active = Number.isFinite(lastActiveAtMillis) && lastActiveAtMillis > 0 ? lastActiveAtMillis : 0;
   // Activity records from imports or stale clocks must not predate a newer
   // profile creation event and incorrectly exclude a newly created account.
-  const anchor = Math.max(active, created);
-  if (anchor === 0) return true;
+  // Treat implausibly future-dated records as corrupt rather than as fresh activity.
+  // Allow one day of bounded clock skew across services.
+  const maxFutureSkewMillis = 86_400_000;
+  const validCreated = created <= now + maxFutureSkewMillis ? created : 0;
+  const validActive = active <= now + maxFutureSkewMillis ? active : 0;
+  const anchor = Math.max(validActive, validCreated);
+  if (anchor === 0) return created === 0 && active === 0;
 
   // Trusted clocks can still drift. Clamp a future anchor to "now" so bad data cannot create an
   // effectively permanent freshness exemption.
