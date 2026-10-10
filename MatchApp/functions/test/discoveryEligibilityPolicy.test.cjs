@@ -122,3 +122,14 @@ test("yes/no filters reject unknown choices instead of broadening discovery", ()
   assert.equal(boolFromAnyFilter("unsupported-value", true), false);
   assert.equal(boolFromAnyFilter("unsupported-value", false), false);
 });
+
+test("discovery refuses malformed age and height without truncating or coercing booleans", () => {
+  for (const age of [18.5, "18.5", "18years", true, " ", Number.POSITIVE_INFINITY]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, age }), false);
+  }
+  for (const heightCm of [170.5, "170.5", "170cm", true, " ", Number.NaN]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, heightCm }), false);
+  }
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: "29", heightCm: "170" }), true);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: 18, heightCm: 90 }), true);
+});
