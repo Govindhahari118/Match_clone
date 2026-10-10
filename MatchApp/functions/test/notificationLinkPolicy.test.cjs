@@ -40,5 +40,8 @@ test("notification actions are explicit and stable", () => {
   assert.equal(notificationActionFor("INTEREST"), "INTERESTS");
   assert.equal(notificationActionFor("MATCH"), "MATCHES");
   assert.equal(notificationActionFor("MESSAGE"), "CHAT");
+  for (const type of ["CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED"]) {
+    assert.equal(notificationActionFor(type), "CHAT");
+  }
   assert.equal(notificationActionFor("SYSTEM"), "NOTIFICATIONS");
 });

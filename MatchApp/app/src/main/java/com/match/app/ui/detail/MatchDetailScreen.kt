@@ -32,6 +32,7 @@ import com.match.app.data.repo.KundliRepository
 import com.match.app.data.repo.NoteRepository
 import com.match.app.data.repo.PhotoRepository
 import com.match.app.data.repo.PhotoRequestRepository
+import com.match.app.data.repo.ProfilePhotoAccess
 import com.match.app.data.repo.PartnerPreferenceRepository
 import com.match.app.data.repo.PartnerPreferenceSummary
 import com.match.app.data.repo.PartnerPreferenceMode
@@ -51,6 +52,7 @@ import com.match.app.ui.common.ProtectedVideoPlayer
 import com.match.app.ui.common.rememberSecureMediaUri
 import com.match.app.ui.common.ReportReasonOption
 import com.match.app.ui.common.reportReasonOptions
+import com.match.app.ui.components.MatreeInfoCard
 import com.match.app.ui.components.MatreeInlineNotice
 import com.match.app.ui.components.MatreeLoadingState
 import com.match.app.ui.components.MatreePrimaryButton
@@ -71,6 +73,9 @@ import javax.inject.Inject
 data class DetailUi(
     val profile: UserProfile? = null,
     val photos: List<PhotoEntity> = emptyList(),
+    val photoAccess: ProfilePhotoAccess = ProfilePhotoAccess(),
+    val photoAccessRequestLoading: Boolean = false,
+    val photoRequestMessage: String? = null,
     val liked: Boolean = false,
     val blocked: Boolean = false,
     val shortlisted: Boolean = false,
@@ -149,6 +154,10 @@ class MatchDetailViewModel @Inject constructor(
                 ?.let { !it.canRequest && it.reason == "COOLDOWN" }
                 ?: false
         } else false
+        val photoAccess = profile.firebaseUid
+            .takeIf { it.isNotBlank() }
+            ?.let { uid -> photoRepo.profilePhotoAccess(uid).getOrNull() }
+            ?: ProfilePhotoAccess()
         val trustSummary = profile.firebaseUid
             .takeIf { it.isNotBlank() }
             ?.let { uid -> runCatching { trustRepository.load(uid) }.getOrNull() }
@@ -161,6 +170,7 @@ class MatchDetailViewModel @Inject constructor(
         _ui.value = _ui.value.copy(
             profile = profile,
             photos = photos,
+            photoAccess = photoAccess,
             liked = meLiked,
             blocked = social.isBlocked(meId, userId),
             shortlisted = shortlistRepo.isSaved(meId, userId),
@@ -235,6 +245,50 @@ class MatchDetailViewModel @Inject constructor(
         }
     }
 
+    private suspend fun refreshPhotoAccess() {
+        val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || _ui.value.blocked) {
+            _ui.update { it.copy(photoAccess = ProfilePhotoAccess(canView = false)) }
+            return
+        }
+        photoRepo.profilePhotoAccess(targetUid)
+            .onSuccess { access -> _ui.update { it.copy(photoAccess = access) } }
+            .onFailure { _ui.update { it.copy(photoAccess = ProfilePhotoAccess(canView = false)) } }
+    }
+
+    fun requestPhotoAccess() = viewModelScope.launch {
+        val targetUid = _ui.value.profile?.firebaseUid.orEmpty()
+        if (targetUid.isBlank() || _ui.value.blocked || _ui.value.photoAccessRequestLoading) return@launch
+        _ui.update { it.copy(photoAccessRequestLoading = true, photoRequestMessage = null) }
+        photoRepo.requestProfilePhotoAccess(targetUid)
+            .onSuccess { result ->
+                _ui.update {
+                    it.copy(
+                        photoAccessRequestLoading = false,
+                        photoAccess = it.photoAccess.copy(
+                            canView = result.canView,
+                            canRequest = false,
+                            requestStatus = result.requestStatus
+                        ),
+                        photoRequestMessage = when (result.requestStatus) {
+                            "PENDING" -> "photo_request_pending"
+                            "APPROVED", "ALREADY_ALLOWED" -> "photo_request_approved"
+                            else -> "photo_request_sent"
+                        }
+                    )
+                }
+                if (result.canView) refreshPhotoAccess()
+            }
+            .onFailure { error ->
+                _ui.update {
+                    it.copy(
+                        photoAccessRequestLoading = false,
+                        photoRequestMessage = "photo_request_failed"
+                    )
+                }
+            }
+    }
+
     fun toggleLike() = viewModelScope.launch {
         if (_ui.value.blocked || _ui.value.interestSending) return@launch
         if (_ui.value.liked) {
@@ -248,6 +302,7 @@ class MatchDetailViewModel @Inject constructor(
                             interestError = null
                         )
                     }
+                    refreshPhotoAccess()
                 }
                 .onFailure { error ->
                     _ui.update {
@@ -287,6 +342,7 @@ class MatchDetailViewModel @Inject constructor(
                 )
             }
             analytics.logInterestSent(targetId)
+            refreshPhotoAccess()
         }.onFailure { error ->
             _ui.update {
                 it.copy(
@@ -418,7 +474,8 @@ class MatchDetailViewModel @Inject constructor(
             }
     }
 
-    fun consumePhotoRequestMessage() = _ui.update { it.copy(photoRequestMessageKey = null) }
+    fun consumeMissingPhotoRequestMessage() = _ui.update { it.copy(photoRequestMessageKey = null) }
+    fun consumePhotoAccessRequestMessage() = _ui.update { it.copy(photoRequestMessage = null) }
 
     fun showReportDialog() = _ui.update { it.copy(showReportDialog = true, reportMessage = null) }
     fun dismissReportDialog() = _ui.update { it.copy(showReportDialog = false) }
@@ -484,10 +541,24 @@ fun MatchDetailScreen(
     LaunchedEffect(photoRequestFeedback) {
         photoRequestFeedback?.let {
             snackbar.showSnackbar(it)
-            vm.consumePhotoRequestMessage()
+            vm.consumeMissingPhotoRequestMessage()
         }
     }
 
+
+    val photoAccessRequestFeedback = when (ui.photoRequestMessage) {
+        "photo_request_pending" -> t("photo_request_pending_feedback", "Photo request sent. Waiting for this member's decision.")
+        "photo_request_approved" -> t("photo_request_approved_feedback", "Photo access is available.")
+        "photo_request_sent" -> t("photo_request_sent_feedback", "Photo request sent.")
+        "photo_request_failed" -> t("photo_request_failed_feedback", "Photo request could not be sent. Please try again.")
+        else -> null
+    }
+    LaunchedEffect(photoAccessRequestFeedback) {
+        photoAccessRequestFeedback?.let {
+            snackbar.showSnackbar(it)
+            vm.consumePhotoAccessRequestMessage()
+        }
+    }
 
     if (ui.showContactUnlock && p != null) {
         ContactUnlockSheet(
@@ -662,7 +733,49 @@ fun MatchDetailScreen(
                     .testTag("match_detail_screen"),
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
-                ProfileHero(p, ui.photos)
+                ProfileHero(p, ui.photos, ui.photoAccess.canView)
+
+                if (!ui.blocked && !ui.photoAccess.canView) {
+                    MatreeInfoCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    t("protected_profile_photo", "Protected profile photo"),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    when {
+                                        ui.photoAccess.visibility == "HIDDEN" ->
+                                            t("photo_hidden_by_member", "This member keeps their published photo private.")
+                                        ui.photoAccess.requestStatus == "PENDING" ->
+                                            t("photo_request_pending_body", "Your photo access request is waiting for this member's decision.")
+                                        !ui.liked ->
+                                            t("photo_request_interest_first", "Express interest first to request access to this protected photo.")
+                                        else ->
+                                            t("photo_request_available_body", "This member shares their photo with mutual interests and approved requests.")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (ui.photoAccess.canRequest) {
+                            MatreeSecondaryButton(
+                                text = if (ui.photoAccessRequestLoading) {
+                                    t("requesting", "Requesting…")
+                                } else {
+                                    t("request_photo_access", "Request photo access")
+                                },
+                                icon = Icons.Filled.PhotoLibrary,
+                                onClick = vm::requestPhotoAccess,
+                                enabled = !ui.photoAccessRequestLoading,
+                                modifier = Modifier.fillMaxWidth().testTag("request_photo_access")
+                            )
+                        }
+                    }
+                }
 
                 if (ui.blocked) {
                     MatreeInlineNotice(
@@ -833,9 +946,15 @@ private fun ProfileVideoSection(videoSource: String) {
 }
 
 @Composable
-private fun ProfileHero(profile: UserProfile, photos: List<PhotoEntity>) {
-    val photoModels = remember(profile.id, profile.photoUrl, profile.primaryPhotoPath, photos) {
-        buildList<Any> {
+private fun ProfileHero(
+    profile: UserProfile,
+    photos: List<PhotoEntity>,
+    canViewPhoto: Boolean
+) {
+    val photoModels = remember(profile.id, profile.photoUrl, profile.primaryPhotoPath, photos, canViewPhoto) {
+        if (!canViewPhoto) {
+            emptyList()
+        } else buildList<Any> {
             photos
                 .sortedWith(compareByDescending<PhotoEntity> { it.isPrimary }.thenBy { it.id })
                 .forEach { photo ->

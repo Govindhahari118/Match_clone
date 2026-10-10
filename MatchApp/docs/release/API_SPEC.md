@@ -53,12 +53,18 @@ preference signal.
 - `sendChatMessage`
 - `submitProfilePhoto`
 - `setPrimaryApprovedPhoto`
+- `getProfilePhotoAccess` — returns relationship-aware access/request state without exposing raw privacy settings.
+- `setProfilePhotoVisibility` — owner-only server authority for PUBLIC / ACCEPTED_ONLY / HIDDEN published-photo visibility.
+- `requestProfilePhotoAccess` — interest-gated request for an ACCEPTED_ONLY published photo.
+- `respondProfilePhotoAccess` — owner approval/decline; approved access is persisted as a server-owned grant.
 - profile photo/video moderation/operator review callables
 - profile-video removal
 - chat-media Storage trigger and message-safety triggers
 
 Chat message creation is server-authoritative and rate-limited; Storage rules bind chat media to the
-authorized participant/thread contract.
+authorized participant/thread contract. Published profile-photo bytes are also re-authorized on every
+Storage read against the owner's current photo visibility, mutual-interest state, explicit photo grants,
+blocking and profile-hide restrictions.
 
 ## Secure communication
 

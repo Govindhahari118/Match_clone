@@ -216,12 +216,19 @@ service cloud.firestore {
     match /privacyRelations/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
     match /privacySettings/{ownerUid} {
       allow read: if isOwner(ownerUid);
-      allow create, update: if isOwner(ownerUid) &&
+      allow create: if isOwner(ownerUid) &&
         request.resource.data.keys().hasOnly(['contactVisibility','onlineVisibility','lastActiveVisibility','updatedAt']) &&
         (!('contactVisibility' in request.resource.data) || request.resource.data.contactVisibility in ['mutual_matches','selected_people','nobody']) &&
         (!('onlineVisibility' in request.resource.data) || request.resource.data.onlineVisibility in ['everyone','interests','mutual','nobody']) &&
         (!('lastActiveVisibility' in request.resource.data) || request.resource.data.lastActiveVisibility in ['everyone','interests','mutual','nobody']);
-      allow delete: if isOwner(ownerUid);
+      allow update: if isOwner(ownerUid) &&
+        request.resource.data.keys().hasOnly(['contactVisibility','onlineVisibility','lastActiveVisibility','photoVisibility','updatedAt']) &&
+        (!('contactVisibility' in request.resource.data) || request.resource.data.contactVisibility in ['mutual_matches','selected_people','nobody']) &&
+        (!('onlineVisibility' in request.resource.data) || request.resource.data.onlineVisibility in ['everyone','interests','mutual','nobody']) &&
+        (!('lastActiveVisibility' in request.resource.data) || request.resource.data.lastActiveVisibility in ['everyone','interests','mutual','nobody']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['contactVisibility','onlineVisibility','lastActiveVisibility','updatedAt']);
+      allow delete: if false;
     }
     match /contactGrants/{ownerUid}/viewers/{viewerUid} {
       allow read: if isOwner(ownerUid);
@@ -237,6 +244,19 @@ service cloud.firestore {
     match /contactRequests/{requestId} {
       allow read: if isSignedIn() &&
         (resource.data.requesterUid == request.auth.uid || resource.data.targetUid == request.auth.uid) &&
+        activePair(resource.data.requesterUid, resource.data.targetUid) &&
+        !blockedEitherWay(resource.data.requesterUid, resource.data.targetUid);
+      allow write: if false;
+    }
+    match /photoGrants/{ownerUid}/viewers/{viewerUid} {
+      allow read: if isOwner(ownerUid);
+      allow write: if false;
+    }
+    match /photoGrants/{ownerUid} { allow read: if isOwner(ownerUid); allow write: if false; }
+    match /photoAccessRequests/{requestId} {
+      allow read: if isSignedIn() &&
+        (resource.data.requesterUid == request.auth.uid || resource.data.targetUid == request.auth.uid) &&
+        activePair(resource.data.requesterUid, resource.data.targetUid) &&
         !blockedEitherWay(resource.data.requesterUid, resource.data.targetUid);
       allow write: if false;
     }
@@ -357,7 +377,14 @@ service cloud.firestore {
     match /referrals/{refId} { allow read: if isSignedIn() && resource.data.referrerUid == request.auth.uid; allow write: if false; }
     match /rmRequests/{reqId} { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
     match /backgroundChecks/{checkId} { allow read: if isSignedIn() && resource.data.requestedBy == request.auth.uid; allow write: if false; }
-    match /callRequests/{callId} { allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid); allow write: if false; }
+    match /callRequests/{callId} {
+      allow read: if isSignedIn() &&
+        resource.data.users is list && resource.data.users.size() == 2 &&
+        request.auth.uid in resource.data.users &&
+        activePair(resource.data.users[0], resource.data.users[1]) &&
+        !blockedEitherWay(resource.data.users[0], resource.data.users[1]);
+      allow write: if false;
+    }
     match /profileAnalytics/{uid} { allow read: if isOwner(uid); allow write: if false; match /weekly/{weekId} { allow read: if isOwner(uid); allow write: if false; } }
     match /communities/{communityId} { allow read: if isSignedIn(); allow write: if false; match /members/{memberId} { allow read: if isSignedIn(); allow write: if false; } }
     match /verifications/{uid} { allow read: if isOwner(uid); allow write: if false; }

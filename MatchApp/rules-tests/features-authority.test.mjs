@@ -42,7 +42,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'referrals/ref1'), { referrerUid: 'alice', referredEmail: 'friend@example.test', status: 'pending' });
     await setDoc(doc(db, 'rmRequests/rm1'), { uid: 'alice', status: 'pending' });
     await setDoc(doc(db, 'backgroundChecks/bg1'), { requestedBy: 'alice', targetUid: 'bob', status: 'submitted' });
-    await setDoc(doc(db, 'callRequests/call1'), { fromUid: 'alice', toUid: 'bob', status: 'requested', type: 'voice' });
+    await setDoc(doc(db, 'callRequests/call1'), { requesterUid: 'alice', targetUid: 'bob', users: ['alice', 'bob'], status: 'PENDING', kind: 'VOICE' });
     await setDoc(doc(db, 'communities/community1/members/alice'), { uid: 'alice' });
   });
 });

@@ -22,6 +22,9 @@ CRITICAL_TELUGU_KEYS = {
     "profile_details", "marital_status", "education", "profession", "mother_tongue",
     "request_contact_access", "contact_requests", "contact_request_pending", "approve",
     "profile_video", "profile_video_intro", "profile_video_unavailable",
+    "profile_photo_visibility", "photo_requests", "request_photo_access", "protected_profile_photo",
+    "new_interest_title", "new_interest_body", "new_mutual_match_title",
+    "new_mutual_match_body", "new_message_title", "new_message_body",
 }
 
 def load(code: str) -> dict[str, str]:

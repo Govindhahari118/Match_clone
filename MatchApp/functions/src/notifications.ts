@@ -6,6 +6,8 @@ import {
 } from "./notificationLinkPolicy";
 import {
   db,
+  normalizeNotificationLocale,
+  NotificationCopyByLocale,
   persistAndSendNotification,
   requireAppCheck,
 } from "./shared";
@@ -21,6 +23,7 @@ type NotificationPayload = {
   entityId: string;
   deepLink: string;
   fromFirebaseUid?: string;
+  localizedCopy?: NotificationCopyByLocale;
 };
 
 function requireDeviceId(value: unknown): string {
@@ -53,6 +56,7 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
   const token = requireFcmToken(data?.token);
   const appVersion = typeof data?.appVersion === "string" ?
     data.appVersion.trim().slice(0, 64) : "";
+  const locale = normalizeNotificationLocale(data?.locale);
 
   const deviceRef = db.collection("fcmTokens").doc(uid).collection("devices").doc(deviceId);
   const ownerRef = db.collection("fcmDeviceOwners").doc(deviceId);
@@ -75,6 +79,7 @@ export const registerFcmDevice = functions.https.onCall(async (data, context) =>
       token,
       platform: "android",
       appVersion,
+      locale,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     tx.set(ownerRef, {
@@ -183,6 +188,46 @@ async function contactRequestNotificationStillAllowed(
     String(targetSettings.data()?.contactVisibility || "selected_people") !== "nobody";
 }
 
+async function photoAccessRequestNotificationStillAllowed(
+  requestRef: FirebaseFirestore.DocumentReference,
+  requesterUid: string,
+  targetUid: string
+): Promise<boolean> {
+  const [
+    request,
+    requester,
+    target,
+    interest,
+    blockAB,
+    blockBA,
+    privacyAB,
+    privacyBA,
+    settings,
+  ] = await Promise.all([
+    requestRef.get(),
+    db.collection("users").doc(requesterUid).get(),
+    db.collection("users").doc(targetUid).get(),
+    db.collection("interests").doc(`${requesterUid}_${targetUid}`).get(),
+    db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
+    db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
+    db.collection("privacyRelations").doc(requesterUid).collection("members").doc(targetUid).get(),
+    db.collection("privacyRelations").doc(targetUid).collection("members").doc(requesterUid).get(),
+    db.collection("privacySettings").doc(targetUid).get(),
+  ]);
+  return request.exists &&
+    request.data()?.status === "PENDING" &&
+    requester.exists &&
+    target.exists &&
+    accountIsActive(requester.data()?.accountStatus) &&
+    accountIsActive(target.data()?.accountStatus) &&
+    interest.exists &&
+    !blockAB.exists &&
+    !blockBA.exists &&
+    privacyAB.data()?.profileHidden !== true &&
+    privacyBA.data()?.profileHidden !== true &&
+    String(settings.data()?.photoVisibility || "PUBLIC") === "ACCEPTED_ONLY";
+}
+
 async function chatNotificationStillAllowed(
   threadId: string,
   fromUid: string,
@@ -232,6 +277,31 @@ async function chatNotificationStillAllowed(
     recipientChatPreference.data()?.muted !== true;
 }
 
+function localizedNotificationCopy(type: string): NotificationCopyByLocale {
+  switch (type) {
+  case "INTEREST":
+    return {
+      en: { title: "New interest", body: "Someone is interested in your profile. Open the app to view it." },
+      te: { title: "కొత్త ఆసక్తి", body: "ఎవరైనా మీ ప్రొఫైల్‌పై ఆసక్తి చూపించారు. చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नई रुचि", body: "किसी ने आपकी प्रोफ़ाइल में रुचि दिखाई है। देखने के लिए ऐप खोलें।" },
+    };
+  case "MATCH":
+    return {
+      en: { title: "New mutual match", body: "You have a new mutual match. Open the app to view the profile." },
+      te: { title: "కొత్త పరస్పర మ్యాచ్", body: "మీకు కొత్త పరస్పర మ్యాచ్ వచ్చింది. ప్రొఫైల్ చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नया पारस्परिक मैच", body: "आपका नया पारस्परिक मैच हुआ है। प्रोफ़ाइल देखने के लिए ऐप खोलें।" },
+    };
+  case "MESSAGE":
+    return {
+      en: { title: "New message", body: "Open the app to view your message." },
+      te: { title: "కొత్త సందేశం", body: "మీ సందేశాన్ని చూడటానికి యాప్‌ను తెరవండి." },
+      hi: { title: "नया संदेश", body: "अपना संदेश देखने के लिए ऐप खोलें।" },
+    };
+  default:
+    return {};
+  }
+}
+
 async function deliverPersistedNotification(
   notificationId: string,
   payload: NotificationPayload
@@ -254,6 +324,7 @@ async function deliverPersistedNotification(
     preferenceKey: preferenceFor(payload.type),
     priority: "high",
     fromFirebaseUid: payload.fromFirebaseUid,
+    localizedCopy: payload.localizedCopy,
   });
 }
 
@@ -277,6 +348,7 @@ export const onInterestCreated = functions.firestore
         entityId: fromUid,
         deepLink: notificationDeepLink("interests", functions.config().app_links?.host),
         fromFirebaseUid: fromUid,
+        localizedCopy: localizedNotificationCopy("INTEREST"),
       }
     );
   });
@@ -302,6 +374,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid2,
           deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid2,
+          localizedCopy: localizedNotificationCopy("MATCH"),
         }
       ),
       deliverPersistedNotification(
@@ -315,6 +388,7 @@ export const onMatchCreated = functions.firestore
           entityId: uid1,
           deepLink: notificationDeepLink("matches", functions.config().app_links?.host),
           fromFirebaseUid: uid1,
+          localizedCopy: localizedNotificationCopy("MATCH"),
         }
       ),
     ]);
@@ -428,6 +502,43 @@ async function restoreArchivedConversationOnIncoming(
   }, { merge: true });
 }
 
+export const onPhotoRequestPending = functions.firestore
+  .document("photoAccessRequests/{requestId}")
+  .onWrite(async (change, context) => {
+    const beforeStatus = change.before.exists ? String(change.before.data()?.status || "") : "";
+    if (!change.after.exists) return;
+    const data = change.after.data();
+    if (!data) return;
+    const status = String(data.status || "");
+    if (status !== "PENDING" || beforeStatus === "PENDING") return;
+
+    const requesterUid = String(data.requesterUid || "");
+    const targetUid = String(data.targetUid || "");
+    if (!requesterUid || !targetUid || requesterUid === targetUid) return;
+    if (!await photoAccessRequestNotificationStillAllowed(
+      change.after.ref,
+      requesterUid,
+      targetUid
+    )) return;
+
+    const updatedAt = data.updatedAt instanceof admin.firestore.Timestamp
+      ? data.updatedAt.toMillis()
+      : 0;
+    await deliverPersistedNotification(
+      `photo_access_request_${context.params.requestId}_${targetUid}_${updatedAt}`,
+      {
+        userId: targetUid,
+        type: "PHOTO_REQUEST",
+        title: "Photo access request",
+        body: "A member who expressed interest requested access to your protected profile photo. Open Privacy & visibility to respond.",
+        entityType: "profile",
+        entityId: requesterUid,
+        deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
+        fromFirebaseUid: requesterUid,
+      }
+    );
+  });
+
 export const onNewMessage = functions.firestore
   .document("chats/{threadId}/messages/{messageId}")
   .onCreate(async (snap, context) => {
@@ -453,6 +564,7 @@ export const onNewMessage = functions.firestore
         entityId: context.params.threadId,
         deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
         fromFirebaseUid,
+        localizedCopy: localizedNotificationCopy("MESSAGE"),
       }
     );
   });

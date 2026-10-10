@@ -141,6 +141,9 @@ class DeepLinkRouteResolverTest {
         assertEquals("profile", DeepLinkRouteResolver.fromNotification("profile_incomplete", null, null))
         assertEquals("pricing", DeepLinkRouteResolver.fromNotification("subscription_expiry", null, null))
         assertEquals("verification", DeepLinkRouteResolver.fromNotification("verification_update", null, null))
+        assertEquals("chat/12", DeepLinkRouteResolver.fromNotification("call_request", 12, null))
+        assertEquals("chat/12", DeepLinkRouteResolver.fromNotification("call_accepted", 12, null))
+        assertEquals("chat_list", DeepLinkRouteResolver.fromNotification("call_declined", null, null))
         assertNull(DeepLinkRouteResolver.fromNotification("unknown", null, null))
     }
 }

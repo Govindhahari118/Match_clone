@@ -36,6 +36,7 @@ import com.match.app.data.repo.ConsentRepository
 import com.match.app.data.repo.DataExportLink
 import com.match.app.data.repo.ConsentState
 import com.match.app.data.repo.SubscriptionRepository
+import com.match.app.data.repo.PhotoRepository
 import com.match.app.ui.components.MatreeChoiceChip
 import com.match.app.ui.components.MatreeHero
 import com.match.app.ui.components.MatreeInfoCard
@@ -53,6 +54,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ContactRequestUi(
+    val requesterUid: String,
+    val displayName: String,
+    val city: String,
+    val requestedAtMillis: Long
+)
+
+data class PhotoRequestUi(
     val requesterUid: String,
     val displayName: String,
     val city: String,
@@ -77,6 +85,7 @@ class PrivacyViewModel @Inject constructor(
     private val firestoreProfile: FirestoreProfileService,
     private val privacy: FirestorePrivacyService,
     private val subscriptionRepository: SubscriptionRepository,
+    private val photoRepository: PhotoRepository,
     private val consentRepository: ConsentRepository,
     private val authRepository: AuthRepository
 ) : ViewModel() {
@@ -139,6 +148,29 @@ class PrivacyViewModel @Inject constructor(
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val incomingPhotoRequests = session.firebaseUid.filterNotNull()
+        .flatMapLatest(photoRepository::observeIncomingPhotoRequests)
+
+    val pendingPhotoRequests: StateFlow<List<PhotoRequestUi>> = combine(
+        candidateProfiles,
+        incomingPhotoRequests
+    ) { candidates, requests ->
+        val byUid = candidates.associateBy { it.firebaseUid }
+        requests.map { request ->
+            val profile = byUid[request.requesterUid]
+            PhotoRequestUi(
+                requesterUid = request.requesterUid,
+                displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: "Member",
+                city = profile?.city.orEmpty(),
+                requestedAtMillis = request.updatedAtMillis.takeIf { it > 0 } ?: request.createdAtMillis
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val photoVisibility: StateFlow<String> = session.firebaseUid.filterNotNull()
+        .flatMapLatest(photoRepository::observeProfilePhotoVisibility)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "PUBLIC")
 
     val contactVisibility: StateFlow<ContactVisibility> = session.firebaseUid.filterNotNull()
         .flatMapLatest(privacy::observeContactVisibility)
@@ -203,6 +235,28 @@ class PrivacyViewModel @Inject constructor(
             .onFailure { error ->
                 _error.value = error.message?.take(180)
                     ?: "Could not update this contact request. Please try again."
+            }
+        _saving.value = false
+    }
+
+    fun setPhotoVisibility(value: String) = viewModelScope.launch {
+        _saving.value = true
+        _error.value = null
+        photoRepository.setProfilePhotoVisibility(value)
+            .onFailure { error ->
+                _error.value = error.message?.take(180)
+                    ?: "Could not update profile photo visibility. Please try again."
+            }
+        _saving.value = false
+    }
+
+    fun respondPhotoRequest(requesterUid: String, approve: Boolean) = viewModelScope.launch {
+        _saving.value = true
+        _error.value = null
+        photoRepository.respondProfilePhotoAccess(requesterUid, approve)
+            .onFailure { error ->
+                _error.value = error.message?.take(180)
+                    ?: "Could not update this photo request. Please try again."
             }
         _saving.value = false
     }
@@ -299,7 +353,9 @@ fun PrivacyDashboardScreen(
     val user by vm.user.collectAsState()
     val members by vm.members.collectAsState()
     val pendingContactRequests by vm.pendingContactRequests.collectAsState()
+    val pendingPhotoRequests by vm.pendingPhotoRequests.collectAsState()
     val contactVisibility by vm.contactVisibility.collectAsState()
+    val photoVisibility by vm.photoVisibility.collectAsState()
     val activityPrivacy by vm.activityPrivacy.collectAsState()
     val saving by vm.saving.collectAsState()
     val error by vm.error.collectAsState()
@@ -417,6 +473,84 @@ fun PrivacyDashboardScreen(
                 }
             }
 
+            MatreeInfoCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.PhotoCamera, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                    Column(Modifier.weight(1f)) {
+                        Text(t("profile_photo_visibility", "Profile photo visibility"), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            t(
+                                "profile_photo_visibility_body",
+                                "Public allows eligible profile viewers. Accepted only allows mutual interests or people you explicitly approve. Hidden keeps the published photo owner-only."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
+                    listOf(
+                        "PUBLIC" to t("photo_visibility_public", "Public"),
+                        "ACCEPTED_ONLY" to t("photo_visibility_accepted_only", "Accepted only"),
+                        "HIDDEN" to t("photo_visibility_hidden", "Hidden")
+                    ).forEach { (value, label) ->
+                        MatreeChoiceChip(
+                            text = label,
+                            selected = photoVisibility == value,
+                            onClick = { vm.setPhotoVisibility(value) },
+                            enabled = !saving
+                        )
+                    }
+                }
+            }
+
+            if (pendingPhotoRequests.isNotEmpty()) {
+                MatreeInfoCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.PhotoLibrary, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(MatreeDesign.spacing.sm))
+                        Column(Modifier.weight(1f)) {
+                            Text(t("photo_requests", "Photo requests"), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                t(
+                                    "photo_requests_body",
+                                    "Approve only members you want to let view your protected published profile photo. Blocking or hiding your photo revokes access."
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    pendingPhotoRequests.forEach { request ->
+                        HorizontalDivider()
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = MatreeDesign.spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(request.displayName, fontWeight = FontWeight.Medium)
+                                if (request.city.isNotBlank()) {
+                                    Text(
+                                        request.city,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            TextButton(
+                                onClick = { vm.respondPhotoRequest(request.requesterUid, false) },
+                                enabled = !saving
+                            ) { Text(t("decline", "Decline")) }
+                            Button(
+                                onClick = { vm.respondPhotoRequest(request.requesterUid, true) },
+                                enabled = !saving
+                            ) { Text(t("approve", "Approve")) }
+                        }
+                    }
+                }
+            }
+
             if (pendingContactRequests.isNotEmpty()) {
                 MatreeInfoCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -530,7 +664,10 @@ fun PrivacyDashboardScreen(
             }
 
             MatreeInlineNotice(
-                message = "Profile photos follow profile visibility. A member excluded from your profile cannot fetch protected profile media through the app.",
+                message = t(
+                    "photo_privacy_enforced_notice",
+                    "Published profile photo access is re-checked by Storage Rules on every fetch. Profile hiding and blocking always override photo grants."
+                ),
                 icon = Icons.Filled.PhotoCamera
             )
 
