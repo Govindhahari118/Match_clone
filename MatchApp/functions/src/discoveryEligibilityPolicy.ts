@@ -3,8 +3,12 @@ function text(value: unknown): string {
 }
 
 function finiteInt(value: unknown): number {
+  // Permit finite integer numbers and legacy numeric strings, but not booleans,
+  // fractional values, blank strings or partially parsed garbage.
+  if (typeof value !== "number" &&
+      !(typeof value === "string" && /^\\d+$/.test(value.trim()))) return 0;
   const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : 0;
+  return Number.isSafeInteger(n) ? n : 0;
 }
 
 /**
