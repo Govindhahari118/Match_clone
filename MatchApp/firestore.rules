@@ -357,7 +357,15 @@ service cloud.firestore {
     match /referrals/{refId} { allow read: if isSignedIn() && resource.data.referrerUid == request.auth.uid; allow write: if false; }
     match /rmRequests/{reqId} { allow read: if isSignedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
     match /backgroundChecks/{checkId} { allow read: if isSignedIn() && resource.data.requestedBy == request.auth.uid; allow write: if false; }
-    match /callRequests/{callId} { allow read: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid); allow write: if false; }
+    match /callRequests/{callId} {
+      allow read: if isSignedIn() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid ||
+        (resource.data.users is list && resource.data.users.size() == 2 &&
+          request.auth.uid in resource.data.users)
+      );
+      allow write: if false;
+    }
     match /profileAnalytics/{uid} { allow read: if isOwner(uid); allow write: if false; match /weekly/{weekId} { allow read: if isOwner(uid); allow write: if false; } }
     match /communities/{communityId} { allow read: if isSignedIn(); allow write: if false; match /members/{memberId} { allow read: if isSignedIn(); allow write: if false; } }
     match /verifications/{uid} { allow read: if isOwner(uid); allow write: if false; }
