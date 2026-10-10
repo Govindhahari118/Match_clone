@@ -48,7 +48,7 @@ active users. A fresh full run on the final head is mandatory. Do not certify th
 | Stage | Owner | Required result | Current state |
 | --- | --- | --- | --- |
 | Source integration | Engineering | Current main plus consolidated changes; no lost security fixes | Implemented in draft |
-| Repository checks | CI / engineering | All four Production CI jobs PASS on exact final head | PASS, run `38053689535`, exact SHA `2aea8f4` |
+| Repository checks | CI / engineering | All four Production CI jobs PASS on exact final head | Three jobs PASS on run `38073785166`; Android/R8 in progress on exact SHA `2479d03` (prior code SHA `2aea8f4` had all four PASS) |
 | Independent review | Security / Android | Photo grants, transaction races, notifications and Kotlin review | Pending |
 | PR consolidation | Engineering | Feature parity documented before older PRs are superseded | Candidate #60; originals open |
 | Main governance | Repository admin | PRs, exact required checks, approval and no unchecked bypass | BLOCKED / unverified; GitHub integration returned 403 for branch-protection endpoint; prior issue #26 handoff says disabled |
