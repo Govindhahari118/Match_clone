@@ -45,4 +45,3 @@ export function localizedNotificationCopy(type: string): NotificationCopyByLocal
     return {};
   }
 }
-

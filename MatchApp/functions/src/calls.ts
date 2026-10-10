@@ -481,6 +481,7 @@ export const onSecureCallRequestChanged = functions.runWith({ failurePolicy: tru
     if (!current.exists || Number(current.data()?.revision) !== revision) return;
     const requester = String(value.requesterUid || "");
     const target = String(value.targetUid || "");
+    if (!requester || !target || requester === target) return;
     const eligibility = await relationshipEligibility(requester, target);
     if (!eligibility.eligible) return;
     const status = normalizeCallRequestStatus(value.status);

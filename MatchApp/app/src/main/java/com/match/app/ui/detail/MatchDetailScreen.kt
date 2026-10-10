@@ -366,12 +366,14 @@ class MatchDetailViewModel @Inject constructor(
         _ui.update {
             it.copy(
                 blocked = !wasBlocked,
+                photoAccess = if (!wasBlocked) ProfilePhotoAccess(canView = false) else it.photoAccess,
                 liked = if (!wasBlocked) false else it.liked,
                 isMutual = if (!wasBlocked) false else it.isMutual,
                 showContactUnlock = false,
                 revealedPhone = if (!wasBlocked) "" else it.revealedPhone
             )
         }
+        if (wasBlocked) refreshPhotoAccess()
         analytics.logBlockToggled(!wasBlocked)
     }
 
@@ -733,7 +735,7 @@ fun MatchDetailScreen(
                     .testTag("match_detail_screen"),
                 verticalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.sm)
             ) {
-                ProfileHero(p, ui.photos, ui.photoAccess.canView)
+                ProfileHero(p, ui.photos, ui.photoAccess.canView && !ui.blocked)
 
                 if (!ui.blocked && !ui.photoAccess.canView) {
                     MatreeInfoCard {
