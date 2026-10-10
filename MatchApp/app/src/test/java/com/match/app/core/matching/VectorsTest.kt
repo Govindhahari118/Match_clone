@@ -6,6 +6,32 @@ import org.junit.Test
 
 class VectorsTest {
 
+    @Test fun `cosine handles extreme finite magnitude without overflow`() {
+        val a = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE)
+        val b = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE)
+        assertEquals(1f, Vectors.cosine(a, b), 1e-5f)
+        assertEquals(-1f, Vectors.cosine(a, floatArrayOf(-Float.MAX_VALUE, -Float.MAX_VALUE)), 1e-5f)
+    }
+
+    @Test fun `cosine handles tiny nonzero values without underflow`() {
+        val a = floatArrayOf(Float.MIN_VALUE, 0f)
+        assertEquals(1f, Vectors.cosine(a, a), 1e-5f)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `cosine rejects nonfinite vector entries`() {
+        Vectors.cosine(floatArrayOf(Float.NaN), floatArrayOf(1f))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `cosine rejects mismatched lengths`() {
+        Vectors.cosine(floatArrayOf(1f), floatArrayOf(1f, 2f))
+    }
+
+    @Test fun `cosine handles empty vectors`() {
+        assertEquals(0f, Vectors.cosine(floatArrayOf(), floatArrayOf()), 0f)
+    }
+
     @Test fun `cosine is 1 for identical vectors`() {
         val v = floatArrayOf(1f, 2f, 3f)
         assertEquals(1f, Vectors.cosine(v, v), 1e-5f)
