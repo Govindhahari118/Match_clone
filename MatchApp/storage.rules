@@ -17,6 +17,22 @@ service firebase.storage {
       return firestore.exists(/databases/(default)/documents/users/$(uid)) &&
         firestore.get(/databases/(default)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
     }
+    function photoVisibility(uid) {
+      return firestore.exists(/databases/(default)/documents/privacySettings/$(uid))
+        ? firestore.get(/databases/(default)/documents/privacySettings/$(uid)).data.get('photoVisibility', 'PUBLIC')
+        : 'PUBLIC';
+    }
+    function mutualInterest(uidA, uidB) {
+      return explicitInterestFrom(uidA, uidB) && explicitInterestFrom(uidB, uidA);
+    }
+    function explicitPhotoGrant(ownerUid, viewerUid) {
+      return firestore.exists(/databases/(default)/documents/photoGrants/$(ownerUid)/viewers/$(viewerUid));
+    }
+    function profilePhotoAllowed(ownerUid, viewerUid) {
+      return photoVisibility(ownerUid) == 'PUBLIC' ||
+        (photoVisibility(ownerUid) == 'ACCEPTED_ONLY' &&
+          (mutualInterest(ownerUid, viewerUid) || explicitPhotoGrant(ownerUid, viewerUid)));
+    }
     function ownerCanReadOwnMedia(uid) {
       return signedIn() && request.auth.uid == uid && activeAccount(uid);
     }
@@ -33,6 +49,7 @@ service firebase.storage {
     function publishedPhotoReadable(uid, fileName) {
       return ownerCanReadOwnMedia(uid) ||
         (peerCanReadProfileMedia(uid) &&
+          profilePhotoAllowed(uid, request.auth.uid) &&
           firestore.get(/databases/(default)/documents/users/$(uid)).data.get('photoUrl', '') ==
             'photos/' + uid + '/' + fileName);
     }

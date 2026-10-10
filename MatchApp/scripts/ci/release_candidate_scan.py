@@ -504,7 +504,6 @@ def main() -> int:
     obsolete_callable_names = [
         "requestBackgroundCheckByProfileId",
         "requestBackgroundCheck",
-        "requestSecureCall",
         "respondToSecureCall",
         "bookCounselling",
         "getRewardsState",
@@ -513,6 +512,14 @@ def main() -> int:
         "registerForEvent",
         "joinCommunity",
     ]
+    # The matched-call scheduling callable is now implemented on the trusted backend.
+    # Keep obsolete provider and prototype callable bans, but verify this one is real.
+    secure_call_repo = text(APP / "src/main/java/com/match/app/data/repo/SecureCallRepository.kt")
+    call_backend = text(ROOT / "functions/src/calls.ts")
+    require('getHttpsCallable("requestSecureCall")' in secure_call_repo and
+            "export const requestSecureCall = functions.https.onCall" in call_backend,
+            "secure call request must resolve to a real server-authoritative callable",
+            failures)
     if app_source.exists():
         for source in app_source.rglob("*.kt"):
             data = text(source)

@@ -3,7 +3,9 @@ package com.match.app.data.remote
 import android.content.Context
 import com.google.firebase.functions.FirebaseFunctions
 import com.match.app.BuildConfig
+import com.match.app.data.session.SessionStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
@@ -18,7 +20,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class FcmDeviceRegistry @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val session: SessionStore
 ) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val functions = FirebaseFunctions.getInstance()
@@ -31,14 +34,19 @@ class FcmDeviceRegistry @Inject constructor(
             return generated
         }
 
-    suspend fun register(token: String) {
+    suspend fun register(token: String, locale: String? = null) {
         require(token.isNotBlank())
+        val normalizedLocale = (locale ?: session.uiLanguage.first())
+            .lowercase()
+            .takeIf { it in setOf("en", "te", "hi") }
+            ?: "en"
         functions.getHttpsCallable("registerFcmDevice")
             .call(
                 mapOf(
                     "deviceId" to deviceId,
                     "token" to token,
-                    "appVersion" to BuildConfig.VERSION_NAME
+                    "appVersion" to BuildConfig.VERSION_NAME,
+                    "locale" to normalizedLocale
                 )
             )
             .await()

@@ -140,17 +140,45 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
         "MESSAGE" -> Icons.Filled.Forum to MaterialTheme.colorScheme.primary
         else -> Icons.Filled.Notifications to MaterialTheme.colorScheme.primary
     }
+    val localizedTitle = when (n.type) {
+        "LIKE", "INTEREST" -> t("new_interest_title", "New interest")
+        "MATCH" -> t("new_mutual_match_title", "New mutual match")
+        "MESSAGE" -> t("new_message_title", "New message")
+        "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("call_notification_title", "Secure call request update")
+        "PHOTO_REQUEST" -> t("photo_notification_title", "Photo request")
+        "PHOTO_ACCESS_REQUEST" -> t("photo_access_notification_title", "Photo access request")
+        else -> n.title
+    }
+    val localizedBody = when (n.type) {
+        "LIKE", "INTEREST" -> t(
+            "new_interest_body",
+            "Someone is interested in your profile. Open the app to view it."
+        )
+        "MATCH" -> t(
+            "new_mutual_match_body",
+            "You have a new mutual match. Open the app to view the profile."
+        )
+        "MESSAGE" -> t(
+            "new_message_body",
+            "Open the app to view your message."
+        )
+        "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("call_notification_body", "Open Matree to review the secure-call request.")
+        "PHOTO_REQUEST" -> t("photo_notification_body", "A member requested a profile photo. Open Matree to review it.")
+        "PHOTO_ACCESS_REQUEST" -> t("photo_access_notification_body", "Open Privacy & visibility in Matree to review the photo access request.")
+        else -> n.body
+    }
+
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("notif_${n.id}"), shape = RoundedCornerShape(MatreeDesign.radii.card), colors = CardDefaults.elevatedCardColors(containerColor = if (!n.isRead) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface)) {
         Row(Modifier.padding(MatreeDesign.spacing.md), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.12f), modifier = Modifier.size(44.dp)) { Box(contentAlignment = Alignment.Center) { Icon(icon, null, tint = color, modifier = Modifier.size(22.dp)) } }
             Spacer(Modifier.width(MatreeDesign.spacing.sm))
             Column(Modifier.weight(1f)) {
-                Text(n.title, fontWeight = if (!n.isRead) FontWeight.SemiBold else FontWeight.Normal, style = MaterialTheme.typography.bodyMedium)
-                Text(n.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(localizedTitle, fontWeight = if (!n.isRead) FontWeight.SemiBold else FontWeight.Normal, style = MaterialTheme.typography.bodyMedium)
+                Text(localizedBody, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formattedTime, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 val actionLabel = when (n.type) {
                     "LIKE", "INTEREST" -> t("review_interest", "Review interest")
-                    "MATCH", "MESSAGE" -> t("open_chat", "Open chat")
+                    "MATCH", "MESSAGE", "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("open_chat", "Open chat")
                     "VIEW" -> t("view_profile", "View profile")
                     else -> null
                 }

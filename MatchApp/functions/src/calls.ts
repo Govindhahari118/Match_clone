@@ -1,6 +1,7 @@
+import { localizedNotificationCopy } from "./notificationCopyPolicy";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
-import { db, requireAppCheck } from "./shared";
+import { db, persistAndSendNotification, requireAppCheck } from "./shared";
 import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import { evaluateCallEligibility } from "./callPolicy";
@@ -9,6 +10,14 @@ import {
   normalizeCallKind,
 } from "./callSessionPolicy";
 import { communicationProvider } from "./communicationProvider";
+import { notificationDeepLink } from "./notificationLinkPolicy";
+import {
+  canCancelCallRequest,
+  canReplaceCallRequest,
+  canRespondToCallRequest,
+  normalizeCallRequestStatus,
+  validProposedCallTime,
+} from "./callRequestPolicy";
 
 function cleanUid(value: unknown): string {
   const uid = typeof value === "string" ? value.trim() : "";
@@ -28,7 +37,10 @@ function positiveLimit(value: unknown, fallback: number, max: number): number {
   return Math.max(1, Math.min(max, Math.trunc(parsed)));
 }
 
-async function relationshipEligibility(callerUid: string, targetUid: string) {
+async function relationshipEligibility(
+  callerUid: string, targetUid: string, tx?: FirebaseFirestore.Transaction
+) {
+  const read = (ref: FirebaseFirestore.DocumentReference) => tx ? tx.get(ref) : ref.get();
   const [
     caller,
     target,
@@ -38,13 +50,13 @@ async function relationshipEligibility(callerUid: string, targetUid: string) {
     callerPrivacy,
     targetPrivacy,
   ] = await Promise.all([
-    db.collection("users").doc(callerUid).get(),
-    db.collection("users").doc(targetUid).get(),
-    db.collection("matches").doc(pairId(callerUid, targetUid)).get(),
-    db.collection("blocks").doc(callerUid).collection("blocked").doc(targetUid).get(),
-    db.collection("blocks").doc(targetUid).collection("blocked").doc(callerUid).get(),
-    db.collection("privacyRelations").doc(callerUid).collection("members").doc(targetUid).get(),
-    db.collection("privacyRelations").doc(targetUid).collection("members").doc(callerUid).get(),
+    read(db.collection("users").doc(callerUid)),
+    read(db.collection("users").doc(targetUid)),
+    read(db.collection("matches").doc(pairId(callerUid, targetUid))),
+    read(db.collection("blocks").doc(callerUid).collection("blocked").doc(targetUid)),
+    read(db.collection("blocks").doc(targetUid).collection("blocked").doc(callerUid)),
+    read(db.collection("privacyRelations").doc(callerUid).collection("members").doc(targetUid)),
+    read(db.collection("privacyRelations").doc(targetUid).collection("members").doc(callerUid)),
   ]);
 
   return evaluateCallEligibility({
@@ -54,6 +66,7 @@ async function relationshipEligibility(callerUid: string, targetUid: string) {
     targetActive: target.exists && accountIsActive(target.data()?.accountStatus),
     mutualMatch: match.exists &&
       Array.isArray(match.data()?.users) &&
+      match.data()?.users.length === 2 &&
       match.data()?.users.includes(callerUid) &&
       match.data()?.users.includes(targetUid),
     blockedEitherWay: callerBlock.exists || targetBlock.exists,
@@ -217,3 +230,274 @@ export const startSecureCallSession = functions.https.onCall(async (data, contex
     );
   }
 });
+
+function callRequestRef(uidA: string, uidB: string) {
+  return db.collection("callRequests").doc(pairId(uidA, uidB));
+}
+
+function callRequestUpdatedAtMs(data: FirebaseFirestore.DocumentData | undefined): number {
+  const raw = data?.updatedAt;
+  if (raw && typeof raw.toMillis === "function") return raw.toMillis();
+  return Number(data?.updatedAtMs || 0);
+}
+
+async function notifyCallRequest(
+  recipientUid: string,
+  actorUid: string,
+  pair: string,
+  type: "CALL_REQUEST" | "CALL_ACCEPTED" | "CALL_DECLINED" | "CALL_CANCELLED",
+  title: string,
+  body: string,
+  revision: number
+): Promise<void> {
+  await persistAndSendNotification({
+    notificationId: `call_${type.toLowerCase()}_${pair}_${recipientUid}_${revision}`,
+    userId: recipientUid,
+    type,
+    title,
+    body,
+    entityType: "call_request",
+    entityId: pair,
+    deepLink: notificationDeepLink("messages", functions.config().app_links?.host),
+    action: "CHAT",
+    pushType: type.toLowerCase(),
+    preferenceKey: "messages",
+    priority: "high",
+    fromFirebaseUid: actorUid,
+    localizedCopy: localizedNotificationCopy(type),
+  });
+}
+
+/**
+ * Creates/replaces one active call-coordination request for a mutual match.
+ * This is provider-independent scheduling only; it never allocates a live call session.
+ */
+export const requestSecureCall = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const requesterUid = context.auth?.uid;
+  if (!requesterUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const targetUid = cleanUid(data?.targetUid);
+  const kind = normalizeCallKind(data?.kind);
+  const proposedAtMs = Number(data?.proposedAtMs);
+  const now = Date.now();
+
+  const eligibility = await relationshipEligibility(requesterUid, targetUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+  if (!validProposedCallTime(now, proposedAtMs)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Choose a call time between 15 minutes and 14 days from now"
+    );
+  }
+
+  const pair = pairId(requesterUid, targetUid);
+  const ref = callRequestRef(requesterUid, targetUid);
+  await db.runTransaction(async (tx) => {
+    const fresh = await relationshipEligibility(requesterUid, targetUid, tx);
+    if (!fresh.eligible) throw new functions.https.HttpsError("failed-precondition", fresh.reason);
+    const existing = await tx.get(ref);
+    const current = normalizeCallRequestStatus(existing.data()?.status);
+    const updatedAt = callRequestUpdatedAtMs(existing.data());
+    if (existing.exists && !canReplaceCallRequest(current, updatedAt, now)) {
+      throw new functions.https.HttpsError(
+        "already-exists",
+        "An active call request already exists for this match"
+      );
+    }
+
+    const nextRevision = Number(existing.data()?.revision || 0) + 1;
+    tx.set(ref, {
+      revision: nextRevision,
+      pairId: pair,
+      requesterUid,
+      targetUid,
+      users: [requesterUid, targetUid].sort(),
+      kind,
+      proposedAtMs: Math.trunc(proposedAtMs),
+      status: "PENDING",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: now,
+    }, { merge: false });
+    return nextRevision;
+  });
+
+
+  return {
+    success: true,
+    pairId: pair,
+    status: "PENDING",
+    kind,
+    proposedAtMs: Math.trunc(proposedAtMs),
+  };
+});
+
+/** Returns the current participant-visible call coordination state for this matched pair. */
+export const getSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const viewerUid = context.auth?.uid;
+  if (!viewerUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const targetUid = cleanUid(data?.targetUid);
+  const eligibility = await relationshipEligibility(viewerUid, targetUid);
+  if (!eligibility.eligible) {
+    return { exists: false, reason: eligibility.reason };
+  }
+
+  const snap = await callRequestRef(viewerUid, targetUid).get();
+  if (!snap.exists) return { exists: false, reason: "none" };
+  const value = snap.data() || {};
+  const users = Array.isArray(value.users) ? value.users : [];
+  if (!users.includes(viewerUid) || !users.includes(targetUid) || users.length !== 2) {
+    throw new functions.https.HttpsError("permission-denied", "Call request is unavailable");
+  }
+  return {
+    exists: true,
+    pairId: snap.id,
+    requesterUid: String(value.requesterUid || ""),
+    targetUid: String(value.targetUid || ""),
+    kind: normalizeCallKind(value.kind),
+    proposedAtMs: Number(value.proposedAtMs || 0),
+    status: normalizeCallRequestStatus(value.status) || "CANCELLED",
+  };
+});
+
+/** Target member accepts or declines a pending call request. */
+export const respondSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const actorUid = context.auth?.uid;
+  if (!actorUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const otherUid = cleanUid(data?.targetUid);
+  const response = String(data?.response || "").trim().toUpperCase();
+  if (response !== "ACCEPTED" && response !== "DECLINED") {
+    throw new functions.https.HttpsError("invalid-argument", "Response must be ACCEPTED or DECLINED");
+  }
+  const eligibility = await relationshipEligibility(actorUid, otherUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+
+  const ref = callRequestRef(actorUid, otherUid);
+  let requesterUid = "";
+  await db.runTransaction(async (tx) => {
+    const fresh = await relationshipEligibility(actorUid, otherUid, tx);
+    if (!fresh.eligible) throw new functions.https.HttpsError("failed-precondition", fresh.reason);
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
+    const value = snap.data() || {};
+    requesterUid = String(value.requesterUid || "");
+    const targetUid = String(value.targetUid || "");
+    const status = normalizeCallRequestStatus(value.status);
+    if (requesterUid !== otherUid || targetUid !== actorUid || !Array.isArray(value.users) ||
+      value.users.length !== 2 || !value.users.includes(actorUid) || !value.users.includes(otherUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request participants mismatch");
+    }
+    // Do not accept a proposed time that has already passed.
+    if (response === "ACCEPTED" && (
+      !Number.isFinite(Number(value.proposedAtMs)) ||
+      Number(value.proposedAtMs) <= Date.now()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "The proposed call time has expired; request a new time"
+      );
+    }
+    if (!canRespondToCallRequest(status, actorUid, targetUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request cannot be changed");
+    }
+    const nextRevision = Number(value.revision || 0) + 1;
+    tx.update(ref, {
+      revision: nextRevision,
+      status: response,
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: Date.now(),
+    });
+    return nextRevision;
+  });
+
+
+  return { success: true, status: response };
+});
+
+/** Requesting member can withdraw a pending or accepted coordination request. */
+export const cancelSecureCallRequest = functions.https.onCall(async (data, context) => {
+  requireAppCheck(context);
+  const actorUid = context.auth?.uid;
+  if (!actorUid) throw new functions.https.HttpsError("unauthenticated", "Sign in required");
+
+  const otherUid = cleanUid(data?.targetUid);
+  const eligibility = await relationshipEligibility(actorUid, otherUid);
+  if (!eligibility.eligible) {
+    throw new functions.https.HttpsError("failed-precondition", eligibility.reason);
+  }
+
+  const ref = callRequestRef(actorUid, otherUid);
+  let targetUid = "";
+  await db.runTransaction(async (tx) => {
+    const fresh = await relationshipEligibility(actorUid, otherUid, tx);
+    if (!fresh.eligible) throw new functions.https.HttpsError("failed-precondition", fresh.reason);
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new functions.https.HttpsError("not-found", "Call request not found");
+    const value = snap.data() || {};
+    targetUid = String(value.targetUid || "");
+    const requesterUid = String(value.requesterUid || "");
+    const status = normalizeCallRequestStatus(value.status);
+    if (targetUid !== otherUid || requesterUid !== actorUid || !Array.isArray(value.users) ||
+      value.users.length !== 2 || !value.users.includes(actorUid) || !value.users.includes(otherUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request participants mismatch");
+    }
+    if (!canCancelCallRequest(status, actorUid, requesterUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request cannot be cancelled");
+    }
+    const nextRevision = Number(value.revision || 0) + 1;
+    tx.update(ref, {
+      revision: nextRevision,
+      status: "CANCELLED",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: Date.now(),
+    });
+    return nextRevision;
+  });
+
+
+  return { success: true, status: "CANCELLED" };
+});
+
+/** Retryable delivery; suppress stale events and re-check current relationship eligibility. */
+export const onSecureCallRequestChanged = functions.runWith({ failurePolicy: true }).firestore
+  .document("callRequests/{pairId}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return;
+    const value = change.after.data() || {};
+    const revision = Number(value.revision || 0);
+    if (!Number.isSafeInteger(revision) || revision < 1 ||
+        revision === Number(change.before.data()?.revision || 0)) return;
+    const current = await change.after.ref.get();
+    if (!current.exists || Number(current.data()?.revision) !== revision) return;
+    const requester = String(value.requesterUid || "");
+    const target = String(value.targetUid || "");
+    if (!requester || !target || requester === target) return;
+    const eligibility = await relationshipEligibility(requester, target);
+    if (!eligibility.eligible) return;
+    const status = normalizeCallRequestStatus(value.status);
+    const types = {
+      PENDING: "CALL_REQUEST", ACCEPTED: "CALL_ACCEPTED",
+      DECLINED: "CALL_DECLINED", CANCELLED: "CALL_CANCELLED",
+    } as const;
+    if (!status) return;
+    const requesterEvent = status === "PENDING" || status === "CANCELLED";
+    await notifyCallRequest(
+      requesterEvent ? target : requester,
+      requesterEvent ? requester : target,
+      context.params.pairId,
+      types[status],
+      status === "PENDING" ? "Call request" : `Call request ${status.toLowerCase()}`,
+      "Open Matree to review the secure-call request.",
+      revision
+    );
+  });
