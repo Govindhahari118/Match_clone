@@ -1,3 +1,4 @@
+import { localizedNotificationCopy } from "./notificationCopyPolicy";
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
 import {
@@ -277,30 +278,6 @@ async function chatNotificationStillAllowed(
     recipientChatPreference.data()?.muted !== true;
 }
 
-function localizedNotificationCopy(type: string): NotificationCopyByLocale {
-  switch (type) {
-  case "INTEREST":
-    return {
-      en: { title: "New interest", body: "Someone is interested in your profile. Open the app to view it." },
-      te: { title: "కొత్త ఆసక్తి", body: "ఎవరైనా మీ ప్రొఫైల్‌పై ఆసక్తి చూపించారు. చూడటానికి యాప్‌ను తెరవండి." },
-      hi: { title: "नई रुचि", body: "किसी ने आपकी प्रोफ़ाइल में रुचि दिखाई है। देखने के लिए ऐप खोलें।" },
-    };
-  case "MATCH":
-    return {
-      en: { title: "New mutual match", body: "You have a new mutual match. Open the app to view the profile." },
-      te: { title: "కొత్త పరస్పర మ్యాచ్", body: "మీకు కొత్త పరస్పర మ్యాచ్ వచ్చింది. ప్రొఫైల్ చూడటానికి యాప్‌ను తెరవండి." },
-      hi: { title: "नया पारस्परिक मैच", body: "आपका नया पारस्परिक मैच हुआ है। प्रोफ़ाइल देखने के लिए ऐप खोलें।" },
-    };
-  case "MESSAGE":
-    return {
-      en: { title: "New message", body: "Open the app to view your message." },
-      te: { title: "కొత్త సందేశం", body: "మీ సందేశాన్ని చూడటానికి యాప్‌ను తెరవండి." },
-      hi: { title: "नया संदेश", body: "अपना संदेश देखने के लिए ऐप खोलें।" },
-    };
-  default:
-    return {};
-  }
-}
 
 async function deliverPersistedNotification(
   notificationId: string,
@@ -486,6 +463,7 @@ export const onProfilePhotoRequested = functions.firestore
       preferenceKey: "interests",
       priority: "normal",
       fromFirebaseUid: requesterUid,
+      localizedCopy: localizedNotificationCopy("PHOTO_REQUEST"),
     });
   });
 
@@ -528,13 +506,14 @@ export const onPhotoRequestPending = functions.firestore
       `photo_access_request_${context.params.requestId}_${targetUid}_${updatedAt}`,
       {
         userId: targetUid,
-        type: "PHOTO_REQUEST",
+        type: "PHOTO_ACCESS_REQUEST",
         title: "Photo access request",
         body: "A member who expressed interest requested access to your protected profile photo. Open Privacy & visibility to respond.",
         entityType: "profile",
         entityId: requesterUid,
         deepLink: notificationDeepLink("notifications", functions.config().app_links?.host),
         fromFirebaseUid: requesterUid,
+        localizedCopy: localizedNotificationCopy("PHOTO_ACCESS_REQUEST"),
       }
     );
   });

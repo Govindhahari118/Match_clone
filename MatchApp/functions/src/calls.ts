@@ -1,3 +1,4 @@
+import { localizedNotificationCopy } from "./notificationCopyPolicy";
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, persistAndSendNotification, requireAppCheck } from "./shared";
@@ -263,6 +264,7 @@ async function notifyCallRequest(
     preferenceKey: "messages",
     priority: "high",
     fromFirebaseUid: actorUid,
+    localizedCopy: localizedNotificationCopy(type),
   });
 }
 

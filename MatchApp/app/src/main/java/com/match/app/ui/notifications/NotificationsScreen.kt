@@ -144,6 +144,9 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
         "LIKE", "INTEREST" -> t("new_interest_title", "New interest")
         "MATCH" -> t("new_mutual_match_title", "New mutual match")
         "MESSAGE" -> t("new_message_title", "New message")
+        "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("call_notification_title", "Secure call request update")
+        "PHOTO_REQUEST" -> t("photo_notification_title", "Photo request")
+        "PHOTO_ACCESS_REQUEST" -> t("photo_access_notification_title", "Photo access request")
         else -> n.title
     }
     val localizedBody = when (n.type) {
@@ -159,6 +162,9 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
             "new_message_body",
             "Open the app to view your message."
         )
+        "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("call_notification_body", "Open Matree to review the secure-call request.")
+        "PHOTO_REQUEST" -> t("photo_notification_body", "A member requested a profile photo. Open Matree to review it.")
+        "PHOTO_ACCESS_REQUEST" -> t("photo_access_notification_body", "Open Privacy & visibility in Matree to review the photo access request.")
         else -> n.body
     }
 
@@ -172,7 +178,7 @@ private fun NotificationCard(n: NotificationEntity, onClick: () -> Unit) {
                 Text(formattedTime, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 val actionLabel = when (n.type) {
                     "LIKE", "INTEREST" -> t("review_interest", "Review interest")
-                    "MATCH", "MESSAGE" -> t("open_chat", "Open chat")
+                    "MATCH", "MESSAGE", "CALL_REQUEST", "CALL_ACCEPTED", "CALL_DECLINED", "CALL_CANCELLED" -> t("open_chat", "Open chat")
                     "VIEW" -> t("view_profile", "View profile")
                     else -> null
                 }

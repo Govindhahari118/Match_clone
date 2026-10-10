@@ -4,6 +4,14 @@
 
 This file is the durable continuation point if the development conversation is deleted. GitHub and exact-SHA CI evidence are authoritative; never use this document to claim a run passed without checking its actual conclusion.
 
+## Current integration work — 10 October 2026
+
+Draft PR #60 consolidates #50/#56/#43 and missing call routing from #51/#53 onto current main.
+Read [IMPLEMENTATION_EXECUTION_2026-10-10.md](IMPLEMENTATION_EXECUTION_2026-10-10.md) first.
+Its status and exact-head CI supersede the historical engineering sequence below.
+Protected-photo access now uses `photoAccessRequests`, separately from missing-photo requests.
+Live voice/video and all production operator gates remain blocked.
+
 ## Repository identity and process
 
 - Repository: `Govindhahari118/Match_clone`; target branch: `main`.

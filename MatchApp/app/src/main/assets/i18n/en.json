@@ -492,5 +492,11 @@
   "new_mutual_match_title": "New mutual match",
   "new_mutual_match_body": "You have a new mutual match. Open the app to view the profile.",
   "new_message_title": "New message",
-  "new_message_body": "Open the app to view your message."
+  "new_message_body": "Open the app to view your message.",
+  "call_notification_title": "Secure call request update",
+  "call_notification_body": "Open Matree to review the secure-call request.",
+  "photo_notification_title": "Photo request",
+  "photo_notification_body": "A member requested a profile photo. Open Matree to review it.",
+  "photo_access_notification_title": "Photo access request",
+  "photo_access_notification_body": "Open Privacy & visibility in Matree to review the photo access request."
 }

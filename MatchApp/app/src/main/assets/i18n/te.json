@@ -492,5 +492,11 @@
   "new_mutual_match_title": "కొత్త పరస్పర మ్యాచ్",
   "new_mutual_match_body": "మీకు కొత్త పరస్పర మ్యాచ్ వచ్చింది. ప్రొఫైల్ చూడటానికి యాప్‌ను తెరవండి.",
   "new_message_title": "కొత్త సందేశం",
-  "new_message_body": "మీ సందేశాన్ని చూడటానికి యాప్‌ను తెరవండి."
+  "new_message_body": "మీ సందేశాన్ని చూడటానికి యాప్‌ను తెరవండి.",
+  "call_notification_title": "సురక్షిత కాల్ అభ్యర్థన నవీకరణ",
+  "call_notification_body": "సురక్షిత కాల్ అభ్యర్థనను చూడటానికి Matree తెరవండి.",
+  "photo_notification_title": "ఫోటో అభ్యర్థన",
+  "photo_notification_body": "ఒక సభ్యుడు ప్రొఫైల్ ఫోటో కోరారు. చూడటానికి Matree తెరవండి.",
+  "photo_access_notification_title": "ఫోటో యాక్సెస్ అభ్యర్థన",
+  "photo_access_notification_body": "ఫోటో యాక్సెస్ అభ్యర్థనను చూడటానికి Matreeలో గోప్యత సెట్టింగ్‌లను తెరవండి."
 }

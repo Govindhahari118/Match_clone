@@ -244,7 +244,6 @@ service cloud.firestore {
     match /contactRequests/{requestId} {
       allow read: if isSignedIn() &&
         (resource.data.requesterUid == request.auth.uid || resource.data.targetUid == request.auth.uid) &&
-        activePair(resource.data.requesterUid, resource.data.targetUid) &&
         !blockedEitherWay(resource.data.requesterUid, resource.data.targetUid);
       allow write: if false;
     }

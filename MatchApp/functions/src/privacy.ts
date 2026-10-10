@@ -567,9 +567,6 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
     const existing = existingRequest.data() || {};
     const status = String(existing.status || "");
     if (status === "PENDING") return { status: "PENDING", canView: false };
-    if (status === "APPROVED") {
-      return { status: "APPROVED", canView: existingGrant.exists };
-    }
     if (status === "DECLINED") {
       const updatedAt = existing.updatedAt instanceof admin.firestore.Timestamp
         ? existing.updatedAt.toMillis()

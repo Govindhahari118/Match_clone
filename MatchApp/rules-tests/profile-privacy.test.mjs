@@ -147,6 +147,8 @@ test('photo visibility is server-controlled while owner can still update other p
 test('photo grants and requests are readable only by participants and never client-writable', async () => {
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
+    await setDoc(doc(db, 'users/alice'), { accountStatus: 'ACTIVE' });
+    await setDoc(doc(db, 'users/bob'), { accountStatus: 'ACTIVE' });
     await setDoc(doc(db, 'photoGrants/alice/viewers/bob'), {
       viewerUid: 'bob',
       grantedAt: Date.now(),

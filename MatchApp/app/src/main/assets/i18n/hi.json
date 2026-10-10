@@ -492,5 +492,11 @@
   "new_mutual_match_title": "नया पारस्परिक मैच",
   "new_mutual_match_body": "आपका नया पारस्परिक मैच हुआ है। प्रोफ़ाइल देखने के लिए ऐप खोलें।",
   "new_message_title": "नया संदेश",
-  "new_message_body": "अपना संदेश देखने के लिए ऐप खोलें।"
+  "new_message_body": "अपना संदेश देखने के लिए ऐप खोलें।",
+  "call_notification_title": "सुरक्षित कॉल अनुरोध अपडेट",
+  "call_notification_body": "सुरक्षित कॉल अनुरोध देखने के लिए Matree खोलें।",
+  "photo_notification_title": "फ़ोटो अनुरोध",
+  "photo_notification_body": "एक सदस्य ने प्रोफ़ाइल फ़ोटो का अनुरोध किया है। देखने के लिए Matree खोलें।",
+  "photo_access_notification_title": "फ़ोटो पहुँच अनुरोध",
+  "photo_access_notification_body": "फ़ोटो पहुँच अनुरोध देखने के लिए Matree की गोपनीयता सेटिंग खोलें।"
 }

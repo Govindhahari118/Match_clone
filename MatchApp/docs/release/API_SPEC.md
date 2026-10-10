@@ -147,3 +147,13 @@ from the client as truth.
 - `setChatTyping` — App Check/authenticated, mutual-match-only ephemeral typing signal. Re-checks active accounts, both-direction blocks and profile privacy; writes only short-lived server-owned typing state under the authorized chat thread. Clients cannot write typing documents directly.
 
 - `setChatThreadPreferences` — authenticated, App Check-aware per-user conversation preference update. Requires the caller to be a participant in the existing canonical thread; stores only that user's `muted`/`archived` state. Clients may read only their own preference documents and cannot write them directly. Muted threads suppress new-message notification delivery; archived threads are hidden from the default inbox and automatically return to Active on a new incoming message.
+
+## Integrated photo/call request authority
+
+Protected-photo consent lives in `photoAccessRequests/{requesterUid}_{targetUid}`;
+`photoRequests` remains the separate missing-photo upload reminder workflow.
+Clients cannot write either collection or change/remove backend photo visibility.
+Call request mutations re-read relationship authorization in the state transaction.
+`onSecureCallRequestChanged` retries durable delivery using revision event IDs and
+suppresses superseded events; a push failure does not change mutation success.
+Live call sessions remain denied until the provider and rollout flag are ready.
