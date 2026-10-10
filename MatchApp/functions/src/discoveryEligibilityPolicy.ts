@@ -3,8 +3,12 @@ function text(value: unknown): string {
 }
 
 function finiteInt(value: unknown): number {
+  // Permit finite integer numbers and legacy numeric strings, but not booleans,
+  // fractional values, blank strings or partially parsed garbage.
+  if (typeof value !== "number" &&
+      !(typeof value === "string" && /^\d+$/.test(value.trim()))) return 0;
   const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : 0;
+  return Number.isSafeInteger(n) ? n : 0;
 }
 
 /**
@@ -52,6 +56,10 @@ export function normalizeStaleDiscoveryDays(
       Math.min(MAX_STALE_DISCOVERY_DAYS, Math.trunc(Number(fallback)))
     )
     : DEFAULT_STALE_DISCOVERY_DAYS;
+  // A missing or unset remote-config value must use the product default.
+  // Number(null) and Number("") equal zero, which would otherwise force 14 days.
+  if (value === null || value === undefined ||
+      (typeof value === "string" && value.trim() === "")) return fallbackDays;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallbackDays;
   return Math.max(
@@ -75,8 +83,15 @@ export function profileFreshEnough(
   const now = Number.isFinite(nowMillis) && nowMillis > 0 ? nowMillis : Date.now();
   const created = Number.isFinite(createdAtMillis) && createdAtMillis > 0 ? createdAtMillis : 0;
   const active = Number.isFinite(lastActiveAtMillis) && lastActiveAtMillis > 0 ? lastActiveAtMillis : 0;
-  const anchor = active || created;
-  if (anchor === 0) return true;
+  // Activity records from imports or stale clocks must not predate a newer
+  // profile creation event and incorrectly exclude a newly created account.
+  // Treat implausibly future-dated records as corrupt rather than as fresh activity.
+  // Allow one day of bounded clock skew across services.
+  const maxFutureSkewMillis = 86_400_000;
+  const validCreated = created <= now + maxFutureSkewMillis ? created : 0;
+  const validActive = active <= now + maxFutureSkewMillis ? active : 0;
+  const anchor = Math.max(validActive, validCreated);
+  if (anchor === 0) return created === 0 && active === 0;
 
   // Trusted clocks can still drift. Clamp a future anchor to "now" so bad data cannot create an
   // effectively permanent freshness exemption.
@@ -102,4 +117,13 @@ export function discoveryCandidateReady(
 ): boolean {
   return publicDiscoveryProfileReady(profile) &&
     partnerPreferencesReady(preferences);
+}
+
+/** Explicit yes/no filters fail closed for unknown input, never broadening discovery. */
+export function boolFromAnyFilter(value: string, actual: boolean): boolean {
+  const normalized = value.trim().toLocaleLowerCase("en-IN");
+  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
+  if (normalized.startsWith("yes")) return actual;
+  if (normalized.startsWith("no")) return !actual;
+  return false;
 }

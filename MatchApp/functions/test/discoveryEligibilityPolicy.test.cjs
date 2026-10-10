@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   publicDiscoveryProfileReady,
+  boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
   discoveryCandidateReady,
@@ -82,8 +83,10 @@ test("legacy/future freshness anchors fail safely", () => {
   const day = 86_400_000;
   const now = 200 * day;
   assert.equal(profileFreshEnough(0, 0, now), true);
-  assert.equal(profileFreshEnough(now + 365 * day, 0, now), true);
-  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), true);
+  assert.equal(profileFreshEnough(now + 365 * day, 0, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + day, now), true);
+  assert.equal(profileFreshEnough(now - 2 * day, now + 365 * day, now), true);
 });
 
 test("stale threshold is product-configurable but clamped to safe bounds", () => {
@@ -91,4 +94,42 @@ test("stale threshold is product-configurable but clamped to safe bounds", () =>
   assert.equal(normalizeStaleDiscoveryDays("45"), 45);
   assert.equal(normalizeStaleDiscoveryDays(1), 14);
   assert.equal(normalizeStaleDiscoveryDays(9999), 365);
+});
+
+test("unset stale discovery configuration uses the default", () => {
+  for (const value of [null, undefined, "", "   ", "not-a-number"]) {
+    assert.equal(normalizeStaleDiscoveryDays(value), DEFAULT_STALE_DISCOVERY_DAYS);
+  }
+  assert.equal(normalizeStaleDiscoveryDays(null, 45), 45);
+});
+
+test("new profile creation supersedes an older stale activity record", () => {
+  const day = 86_400_000;
+  const now = 500 * day;
+  assert.equal(profileFreshEnough(now - 2 * day, now - 200 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 2 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 150 * day, now), false);
+});
+
+test("yes/no filters reject unknown choices instead of broadening discovery", () => {
+  assert.equal(boolFromAnyFilter("", true), true);
+  assert.equal(boolFromAnyFilter("Any", false), true);
+  assert.equal(boolFromAnyFilter("Don't mind", true), true);
+  assert.equal(boolFromAnyFilter("yes", true), true);
+  assert.equal(boolFromAnyFilter("yes", false), false);
+  assert.equal(boolFromAnyFilter("no", false), true);
+  assert.equal(boolFromAnyFilter("no", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", false), false);
+});
+
+test("discovery refuses malformed age and height without truncating or coercing booleans", () => {
+  for (const age of [18.5, "18.5", "18years", true, " ", Number.POSITIVE_INFINITY]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, age }), false);
+  }
+  for (const heightCm of [170.5, "170.5", "170cm", true, " ", Number.NaN]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, heightCm }), false);
+  }
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: "29", heightCm: "170" }), true);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: 18, heightCm: 90 }), true);
 });
