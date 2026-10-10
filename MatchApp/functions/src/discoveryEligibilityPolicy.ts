@@ -109,3 +109,12 @@ export function discoveryCandidateReady(
   return publicDiscoveryProfileReady(profile) &&
     partnerPreferencesReady(preferences);
 }
+
+/** Explicit yes/no filters fail closed for unknown input, never broadening discovery. */
+export function boolFromAnyFilter(value: string, actual: boolean): boolean {
+  const normalized = value.trim().toLocaleLowerCase("en-IN");
+  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
+  if (normalized.startsWith("yes")) return actual;
+  if (normalized.startsWith("no")) return !actual;
+  return false;
+}
