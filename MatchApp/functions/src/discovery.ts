@@ -20,6 +20,7 @@ import {
   recentImpressionAdjustment,
 } from "./recommendationPolicy";
 import {
+  boolFromAnyFilter,
   discoveryActorReady,
   discoveryCandidateReady,
   normalizeStaleDiscoveryDays,
@@ -88,15 +89,6 @@ function filterInt(data: unknown, key: string, min: number, max: number): number
 
 function equalsFilter(expected: string, actual: unknown): boolean {
   return !expected || normalizedSearchValue(actual) === expected.toLocaleLowerCase("en-IN");
-}
-
-function boolFromAnyFilter(value: string, actual: boolean): boolean {
-  const normalized = value.toLocaleLowerCase("en-IN");
-  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
-  if (normalized.startsWith("yes")) return actual;
-  if (normalized.startsWith("no")) return !actual;
-  // Unknown values must not silently turn an explicit filter into "Any".
-  return false;
 }
 
 function matchesServerFilters(
