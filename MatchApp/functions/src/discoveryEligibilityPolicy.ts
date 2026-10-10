@@ -52,6 +52,10 @@ export function normalizeStaleDiscoveryDays(
       Math.min(MAX_STALE_DISCOVERY_DAYS, Math.trunc(Number(fallback)))
     )
     : DEFAULT_STALE_DISCOVERY_DAYS;
+  // A missing or unset remote-config value must use the product default.
+  // Number(null) and Number("") equal zero, which would otherwise force 14 days.
+  if (value === null || value === undefined ||
+      (typeof value === "string" && value.trim() === "")) return fallbackDays;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallbackDays;
   return Math.max(
@@ -75,7 +79,9 @@ export function profileFreshEnough(
   const now = Number.isFinite(nowMillis) && nowMillis > 0 ? nowMillis : Date.now();
   const created = Number.isFinite(createdAtMillis) && createdAtMillis > 0 ? createdAtMillis : 0;
   const active = Number.isFinite(lastActiveAtMillis) && lastActiveAtMillis > 0 ? lastActiveAtMillis : 0;
-  const anchor = active || created;
+  // Activity records from imports or stale clocks must not predate a newer
+  // profile creation event and incorrectly exclude a newly created account.
+  const anchor = Math.max(active, created);
   if (anchor === 0) return true;
 
   // Trusted clocks can still drift. Clamp a future anchor to "now" so bad data cannot create an
