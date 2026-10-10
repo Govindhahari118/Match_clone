@@ -83,8 +83,10 @@ test("legacy/future freshness anchors fail safely", () => {
   const day = 86_400_000;
   const now = 200 * day;
   assert.equal(profileFreshEnough(0, 0, now), true);
-  assert.equal(profileFreshEnough(now + 365 * day, 0, now), true);
-  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), true);
+  assert.equal(profileFreshEnough(now + 365 * day, 0, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + day, now), true);
+  assert.equal(profileFreshEnough(now - 2 * day, now + 365 * day, now), true);
 });
 
 test("stale threshold is product-configurable but clamped to safe bounds", () => {
