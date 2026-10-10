@@ -95,7 +95,8 @@ function boolFromAnyFilter(value: string, actual: boolean): boolean {
   if (!normalized || normalized === "any" || normalized === "don't mind") return true;
   if (normalized.startsWith("yes")) return actual;
   if (normalized.startsWith("no")) return !actual;
-  return true;
+  // Unknown values must not silently turn an explicit filter into "Any".
+  return false;
 }
 
 function matchesServerFilters(
