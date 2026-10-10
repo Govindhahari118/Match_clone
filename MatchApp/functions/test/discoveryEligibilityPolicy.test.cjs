@@ -92,3 +92,18 @@ test("stale threshold is product-configurable but clamped to safe bounds", () =>
   assert.equal(normalizeStaleDiscoveryDays(1), 14);
   assert.equal(normalizeStaleDiscoveryDays(9999), 365);
 });
+
+test("unset stale discovery configuration uses the default", () => {
+  for (const value of [null, undefined, "", "   ", "not-a-number"]) {
+    assert.equal(normalizeStaleDiscoveryDays(value), DEFAULT_STALE_DISCOVERY_DAYS);
+  }
+  assert.equal(normalizeStaleDiscoveryDays(null, 45), 45);
+});
+
+test("new profile creation supersedes an older stale activity record", () => {
+  const day = 86_400_000;
+  const now = 500 * day;
+  assert.equal(profileFreshEnough(now - 2 * day, now - 200 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 2 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 150 * day, now), false);
+});
