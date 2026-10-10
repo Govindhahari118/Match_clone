@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   publicDiscoveryProfileReady,
+  boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
   discoveryCandidateReady,
@@ -106,4 +107,16 @@ test("new profile creation supersedes an older stale activity record", () => {
   assert.equal(profileFreshEnough(now - 2 * day, now - 200 * day, now), true);
   assert.equal(profileFreshEnough(now - 200 * day, now - 2 * day, now), true);
   assert.equal(profileFreshEnough(now - 200 * day, now - 150 * day, now), false);
+});
+
+test("yes/no filters reject unknown choices instead of broadening discovery", () => {
+  assert.equal(boolFromAnyFilter("", true), true);
+  assert.equal(boolFromAnyFilter("Any", false), true);
+  assert.equal(boolFromAnyFilter("Don't mind", true), true);
+  assert.equal(boolFromAnyFilter("yes", true), true);
+  assert.equal(boolFromAnyFilter("yes", false), false);
+  assert.equal(boolFromAnyFilter("no", false), true);
+  assert.equal(boolFromAnyFilter("no", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", false), false);
 });
