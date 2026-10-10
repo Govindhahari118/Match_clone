@@ -48,21 +48,22 @@ active users. A fresh full run on the final head is mandatory. Do not certify th
 | Stage | Owner | Required result | Current state |
 | --- | --- | --- | --- |
 | Source integration | Engineering | Current main plus consolidated changes; no lost security fixes | Implemented in draft |
-| Repository checks | CI / engineering | All four Production CI jobs PASS on exact final head | Pending final run |
+| Repository checks | CI / engineering | All four Production CI jobs PASS on exact final head | PASS, run `38053689535`, exact SHA `2aea8f4` |
 | Independent review | Security / Android | Photo grants, transaction races, notifications and Kotlin review | Pending |
 | PR consolidation | Engineering | Feature parity documented before older PRs are superseded | Candidate #60; originals open |
-| Main governance | Repository admin | PRs, exact required checks, approval and no unchecked bypass | Unverified; last handoff says disabled |
+| Main governance | Repository admin | PRs, exact required checks, approval and no unchecked bypass | BLOCKED / unverified; GitHub integration returned 403 for branch-protection endpoint; prior issue #26 handoff says disabled |
 | Production release | Release owner | All actual external evidence accepted on frozen SHA | Blocked |
 
 ## Step-by-step remaining execution
 
-1. **Validate integration.** Run all four CI jobs; inspect Android unit/lint/R8, Room/privacy
-   instrumentation, Functions tests/audit and every Firestore/Storage test. Fix failures and
-   rerun on each new head. Review photo grant revocation, cached-media behavior, repeated call
-   transitions, notification retries, background navigation and account/locale/token switching.
-2. **Review and consolidate.** Obtain independent review on #60. Compare its final diff with
-   #50/#56/#43 and #51/#53. Keep originals open until parity is demonstrated. Protect main,
-   merge only a qualified reviewed candidate, then verify all four jobs on new main.
+1. **Validate integration.** COMPLETE for PR #60 head `2aea8f4`: all four exact-head CI jobs
+   passed; Android unit/lint/R8, Room/privacy instrumentation, Functions tests/audit and
+   Firestore/Storage emulator tests are green. Re-run after any source change. Real-device checks
+   for cached-media behavior, account/locale/token switching and full user journey remain part of stages 8–9.
+2. **Review and consolidate.** PENDING independent security/Android review on #60. Feature changes
+   from #50/#56/#43 and missing routes/tests from #51/#53 are integrated, but originals remain
+   open until an independent parity review. Repository administrator must verify/protect main,
+   then merge only the qualified reviewed candidate and verify all four jobs on new main.
 3. **Confirm launch scope.** Live voice/video is a launch-parity requirement in KNOWN_ISSUES.md.
    Current external gates require real provider, webhook and device evidence. Keep transport
    disabled until a vetted provider is selected, server session allocation and authenticated,
