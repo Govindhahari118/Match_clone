@@ -5,6 +5,7 @@ import { db, persistAndSendNotification, requireAppCheck } from "./shared";
 import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import { evaluateCallEligibility } from "./callPolicy";
+import { bothParticipantsAdult } from "./communicationEligibilityPolicy";
 import {
   callInitiationAllowed,
   normalizeCallKind,
@@ -45,6 +46,8 @@ async function relationshipEligibility(
   const [
     caller,
     target,
+    callerPrivate,
+    targetPrivate,
     match,
     callerBlock,
     targetBlock,
@@ -53,6 +56,8 @@ async function relationshipEligibility(
   ] = await Promise.all([
     read(db.collection("users").doc(callerUid)),
     read(db.collection("users").doc(targetUid)),
+    read(db.collection("userPrivate").doc(callerUid)),
+    read(db.collection("userPrivate").doc(targetUid)),
     read(db.collection("matches").doc(pairId(callerUid, targetUid))),
     read(db.collection("blocks").doc(callerUid).collection("blocked").doc(targetUid)),
     read(db.collection("blocks").doc(targetUid).collection("blocked").doc(callerUid)),
@@ -65,6 +70,9 @@ async function relationshipEligibility(
     targetUid,
     callerActive: caller.exists && accountIsActive(caller.data()?.accountStatus),
     targetActive: target.exists && accountIsActive(target.data()?.accountStatus),
+    adultProfilesEligible: bothParticipantsAdult(
+      caller.data(), callerPrivate.data(), target.data(), targetPrivate.data()
+    ),
     mutualMatch: match.exists &&
       Array.isArray(match.data()?.users) &&
       match.data()?.users.length === 2 &&
