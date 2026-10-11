@@ -141,3 +141,12 @@ test("profile weight rejects coerced booleans, whitespace and malformed strings"
   assert.equal(publicDiscoveryProfileReady({ ...complete, weight: "68.5" }), true);
   assert.equal(publicDiscoveryProfileReady({ ...complete, weight: 68.5 }), true);
 });
+
+test("malformed remote freshness values retain configured fallback", () => {
+  for (const value of [true, false, {}, [], "30 days", "2.5", "-5", "0x20", "Infinity"]) {
+    assert.equal(normalizeStaleDiscoveryDays(value, 90), 90);
+  }
+  assert.equal(normalizeStaleDiscoveryDays("45", 90), 45);
+  assert.equal(normalizeStaleDiscoveryDays(45, 90), 45);
+  assert.equal(normalizeStaleDiscoveryDays(10000, 90), 365);
+});
