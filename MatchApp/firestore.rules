@@ -139,24 +139,28 @@ service cloud.firestore {
     // Legacy match IDs are underscore-delimited and can collide across UID pairs.
     // A document at the predicted path only confers chat authority when it records
     // exactly the two members. Check both path orders for legacy compatibility.
+    function exactPairInMembers(uidA, uidB, members) {
+      return members is list && members.size() == 2 &&
+        uidA in members && uidB in members;
+    }
     function matchRecordIsExact(uidA, uidB, matchId) {
-      return exists(/databases/$(database)/documents/matches/$(matchId)) &&
-        get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []).size() == 2 &&
-        uidA in get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []) &&
-        uidB in get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []);
+      let matchRef = /databases/$(database)/documents/matches/$(matchId);
+      return exists(matchRef) &&
+        exactPairInMembers(uidA, uidB, get(matchRef).data.get('users', []));
     }
     function exactMutualMatch(uidA, uidB) {
       return uidA != uidB &&
         (matchRecordIsExact(uidA, uidB, uidA + '_' + uidB) ||
          matchRecordIsExact(uidA, uidB, uidB + '_' + uidA));
     }
+    function threadPairIsMatched(members) {
+      return members is list && members.size() == 2 &&
+        exactMutualMatch(members[0], members[1]);
+    }
     function threadHasCurrentMatch(threadId) {
-      return exists(/databases/$(database)/documents/chats/$(threadId)) &&
-        get(/databases/$(database)/documents/chats/$(threadId)).data.get('participantUids', []).size() == 2 &&
-        exactMutualMatch(
-          get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
-          get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
-        );
+      let threadRef = /databases/$(database)/documents/chats/$(threadId);
+      return exists(threadRef) &&
+        threadPairIsMatched(get(threadRef).data.get('participantUids', []));
     }
     function chatAfterParticipants(threadId) {
       return getAfter(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
