@@ -87,6 +87,27 @@ test('request recipient can inspect stealth sender profile before accepting', as
   await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
 });
 
+test('colliding or forged interest key cannot reveal stealth profile', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await updateDoc(doc(db, 'users/alice'), { stealthMode: true });
+    // A document with the expected path but wrong embedded principals cannot
+    // count as an interest from alice to bob.
+    await setDoc(doc(db, 'interests/alice_bob'), {
+      fromUid: 'other_alice', toUid: 'bob',
+    });
+  });
+  const bobDb = env.authenticatedContext('bob').firestore();
+  await assertFails(getDoc(doc(bobDb, 'users/alice')));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'interests/alice_bob'), {
+      fromUid: 'alice', toUid: 'bob',
+    });
+  });
+  await assertSucceeds(getDoc(doc(bobDb, 'users/alice')));
+});
+
 test('private account data is owner-only', async () => {
   const aliceDb = env.authenticatedContext('alice').firestore();
   const bobDb = env.authenticatedContext('bob').firestore();
