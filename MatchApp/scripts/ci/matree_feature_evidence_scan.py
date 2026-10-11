@@ -21,7 +21,7 @@ REQUIRED_EVIDENCE = (
     "deviceEvidenceUrl", "securityReviewUrl", "qaSignoff", "lastVerifiedAt",
 )
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-ROW_ID_RE = re.compile(r"^MAT-\\d{3}$")
+ROW_ID_RE = re.compile(r"^MAT-\d{3}$")
 
 
 def parse_rows(tracker: str) -> list[tuple[str, str]]:
