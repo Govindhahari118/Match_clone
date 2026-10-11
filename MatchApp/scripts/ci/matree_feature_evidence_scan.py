@@ -69,8 +69,8 @@ def validate(tracker: str, evidence: object) -> list[str]:
         if status == "OUT_OF_SCOPE_APPROVED":
             # Deferred scope must be an explicit, accountable decision; it is never
             # equivalent to an implemented feature or permission to hide a P0/P1.
-            if item.get("priority") in {"P0", "P1"}:
-                errors.append(f"{key}: launch-critical feature cannot be out of scope")
+            if item.get("priority") != "P2":
+                errors.append(f"{key}: only explicitly P2 optional features may be out of scope")
             if not isinstance(item.get("scopeReason"), str) or not item["scopeReason"].strip():
                 errors.append(f"{key}: approved deferral needs a written scopeReason")
             if not isinstance(item.get("scopeApprovedBy"), str) or not item["scopeApprovedBy"].strip():
