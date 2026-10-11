@@ -13,6 +13,7 @@ import { communicationProvider } from "./communicationProvider";
 import { notificationDeepLink } from "./notificationLinkPolicy";
 import {
   canCancelCallRequest,
+  callRequestBelongsToPair,
   canReplaceCallRequest,
   canRespondToCallRequest,
   normalizeCallRequestStatus,
@@ -299,6 +300,9 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
     const fresh = await relationshipEligibility(requesterUid, targetUid, tx);
     if (!fresh.eligible) throw new functions.https.HttpsError("failed-precondition", fresh.reason);
     const existing = await tx.get(ref);
+    if (existing.exists && !callRequestBelongsToPair(existing.data(), requesterUid, targetUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request belongs to another match");
+    }
     const current = normalizeCallRequestStatus(existing.data()?.status);
     const updatedAt = callRequestUpdatedAtMs(existing.data());
     if (existing.exists && !canReplaceCallRequest(current, updatedAt, now)) {
@@ -350,8 +354,7 @@ export const getSecureCallRequest = functions.https.onCall(async (data, context)
   const snap = await callRequestRef(viewerUid, targetUid).get();
   if (!snap.exists) return { exists: false, reason: "none" };
   const value = snap.data() || {};
-  const users = Array.isArray(value.users) ? value.users : [];
-  if (!users.includes(viewerUid) || !users.includes(targetUid) || users.length !== 2) {
+  if (!callRequestBelongsToPair(value, viewerUid, targetUid)) {
     throw new functions.https.HttpsError("permission-denied", "Call request is unavailable");
   }
   return {
