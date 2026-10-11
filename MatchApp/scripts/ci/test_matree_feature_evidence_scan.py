@@ -27,6 +27,13 @@ class EvidenceScanTest(unittest.TestCase):
         self.assertTrue(any("qaSignoff" in e for e in errors))
         self.assertTrue(any("deviceEvidenceUrl" in e for e in errors))
 
+    def test_evidence_ledger_cannot_contain_extra_or_missing_entries(self):
+        rows = {f"MAT-{i:03d}": {"status": "AUDIT_REQUIRED"} for i in range(1, 101)}
+        rows["UNLISTED"] = {"status": "AUDIT_REQUIRED"}
+        errors = scan.validate(tracker(), rows)
+        self.assertTrue(any("exactly 100" in e for e in errors))
+        self.assertTrue(any("unknown evidence ID UNLISTED" in e for e in errors))
+
     def test_all_100_evidence_records_are_mandatory(self):
         errors = scan.validate(tracker(), {})
         self.assertTrue(any("missing evidence record MAT-001" in e for e in errors))
