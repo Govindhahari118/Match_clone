@@ -6,6 +6,7 @@ import { db, requireAppCheck } from "./shared";
 import { playAccountOwnershipMismatch } from "./riskSignalPolicy";
 import {
   isVoidedPaymentStatus,
+  previousPlayGrantRestorable,
   rebuildEntitlementLedger,
 } from "./billingEntitlementPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
@@ -274,6 +275,11 @@ function existingGrant(
 ): GrantResult {
   if (existing.uid !== uid || existing.productId !== productId) {
     throw new functions.https.HttpsError("already-exists", "Purchase token already used");
+  }
+  if (!previousPlayGrantRestorable(existing.status)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition", "This purchase is no longer eligible for restoration"
+    );
   }
   const storedType: EntitlementType = existing.entitlementType === "BOOST"
     ? "BOOST"
