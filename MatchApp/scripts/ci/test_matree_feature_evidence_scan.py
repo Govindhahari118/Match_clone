@@ -32,6 +32,27 @@ class EvidenceScanTest(unittest.TestCase):
         self.assertTrue(any("missing evidence record MAT-001" in e for e in errors))
         self.assertTrue(any("missing evidence record MAT-100" in e for e in errors))
 
+    def test_out_of_scope_requires_approval_and_cannot_hide_p0(self):
+        rows = {f"MAT-{i:03d}": {"status": "OUT_OF_SCOPE_APPROVED"} for i in range(1, 101)}
+        rows["MAT-001"]["priority"] = "P0"
+        errors = scan.validate(tracker("OUT_OF_SCOPE_APPROVED"), rows)
+        self.assertTrue(any("launch-critical" in e for e in errors))
+        self.assertTrue(any("scopeReason" in e for e in errors))
+        self.assertTrue(any("scopeApprovedBy" in e for e in errors))
+        self.assertTrue(any("scopeDecisionUrl" in e for e in errors))
+
+    def test_noncritical_explicit_scope_deferral_requires_no_false_done_evidence(self):
+        rows = {
+            f"MAT-{i:03d}": {
+                "status": "OUT_OF_SCOPE_APPROVED",
+                "priority": "P2",
+                "scopeReason": "Explicit deferred launch feature",
+                "scopeApprovedBy": "release-owner",
+                "scopeDecisionUrl": "https://github.com/example/repository/issues/123",
+            } for i in range(1, 101)
+        }
+        self.assertEqual([], scan.validate(tracker("OUT_OF_SCOPE_APPROVED"), rows))
+
     def test_mismatched_tracker_and_evidence_fail(self):
         self.assertTrue(any("disagreement" in e for e in scan.validate(tracker(), {"MAT-001": {"status": "CI_VERIFIED"}})))
 
