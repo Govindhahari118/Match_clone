@@ -4,6 +4,7 @@ import { db, requireAppCheck } from "./shared";
 import { canonicalChatThreadId, chatThreadMatchesPair } from "./chatIdentityPolicy";
 import { matchMembersExactly } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import { bothParticipantsAdult } from "./communicationEligibilityPolicy";
 import {
   MAX_DAILY_MESSAGES_SAFETY,
   safeUsageCount,
@@ -118,6 +119,8 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -127,6 +130,8 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -143,6 +148,13 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Messaging is unavailable while an account is not active"
+      );
+    }
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
       );
     }
     if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
@@ -257,6 +269,8 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -268,6 +282,8 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -286,6 +302,13 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Messaging is unavailable while an account is not active"
+      );
+    }
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
       );
     }
     if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
@@ -390,6 +413,8 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -399,6 +424,8 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -416,6 +443,13 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
       );
     }
 
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
+      );
+    }
     if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
