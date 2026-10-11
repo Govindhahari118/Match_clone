@@ -264,6 +264,7 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
       recipientPrivacy,
       existing,
       activity,
+      thread,
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
@@ -274,15 +275,8 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
       tx.get(recipientPrivacyRef),
       tx.get(messageRef),
       tx.get(activityRef),
+      tx.get(threadRef),
     ]);
-
-    if (existing.exists) {
-      const value = existing.data() || {};
-      if (value.fromFirebaseUid === senderUid && value.toFirebaseUid === recipientUid) {
-        return { success: true, alreadySent: true, sentAt: Number(value.sentAt || sentAt) };
-      }
-      throw new functions.https.HttpsError("already-exists", "Message id collision");
-    }
 
     if (!sender.exists || !recipient.exists) {
       throw new functions.https.HttpsError("not-found", "Profile not found");
@@ -306,6 +300,21 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
         "permission-denied",
         "Messaging is unavailable for this privacy relationship"
       );
+    }
+
+    if (thread.exists && !chatThreadMatchesPair(
+      thread.data()?.participantUids, senderUid, recipientUid
+    )) {
+      throw new functions.https.HttpsError(
+        "permission-denied", "Chat thread belongs to another member pair"
+      );
+    }
+    if (existing.exists) {
+      const value = existing.data() || {};
+      if (value.fromFirebaseUid === senderUid && value.toFirebaseUid === recipientUid) {
+        return { success: true, alreadySent: true, sentAt: Number(value.sentAt || sentAt) };
+      }
+      throw new functions.https.HttpsError("already-exists", "Message id collision");
     }
 
     const sendCount = safeUsageCount(activity.data()?.messageSendCount);
