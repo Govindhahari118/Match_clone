@@ -64,6 +64,10 @@ export function normalizeStaleDiscoveryDays(
   // Number(null) and Number("") equal zero, which would otherwise force 14 days.
   if (value === null || value === undefined ||
       (typeof value === "string" && value.trim() === "")) return fallbackDays;
+  // Remote config must be a finite numeric value, never a boolean, object or
+  // a string that JavaScript happens to coerce into a number.
+  if (typeof value !== "number" &&
+      !(typeof value === "string" && /^\\d+$/.test(value.trim()))) return fallbackDays;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallbackDays;
   return Math.max(
