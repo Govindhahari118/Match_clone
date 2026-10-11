@@ -20,12 +20,16 @@ import {
   recentImpressionAdjustment,
 } from "./recommendationPolicy";
 import {
+  astrologyFilterVisibilityAllows,
+  boolFromAnyFilter,
+  incomeFilterVisibilityAllows,
   discoveryActorReady,
   discoveryCandidateReady,
   normalizeStaleDiscoveryDays,
   profileFreshEnough,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import { discoveryRelationship } from "./discoveryRelationshipPolicy";
 import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
 import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 
@@ -90,14 +94,6 @@ function equalsFilter(expected: string, actual: unknown): boolean {
   return !expected || normalizedSearchValue(actual) === expected.toLocaleLowerCase("en-IN");
 }
 
-function boolFromAnyFilter(value: string, actual: boolean): boolean {
-  const normalized = value.toLocaleLowerCase("en-IN");
-  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
-  if (normalized.startsWith("yes")) return actual;
-  if (normalized.startsWith("no")) return !actual;
-  return true;
-}
-
 function matchesServerFilters(
   candidate: FirebaseFirestore.DocumentData,
   data: unknown,
@@ -141,7 +137,7 @@ function matchesServerFilters(
 
   const incomeMin = filterString(data, "incomeMin");
   const incomeMax = filterString(data, "incomeMax");
-  if ((incomeMin || incomeMax) && stringValue(candidate.incomeDisclosure).toLowerCase() === "hidden") {
+  if (!incomeFilterVisibilityAllows(Boolean(incomeMin || incomeMax), candidate.incomeDisclosure)) {
     return false;
   }
   if (incomeMin && !normalizedSearchValue(candidate.incomeBand).includes(incomeMin.toLocaleLowerCase("en-IN"))) {
@@ -151,8 +147,10 @@ function matchesServerFilters(
     return false;
   }
 
-  if (!boolFromAnyFilter(filterString(data, "hasChildren"), candidate.hasChildren === true)) return false;
-  if (!boolFromAnyFilter(filterString(data, "hasChildrenFilter"), candidate.hasChildren === true)) return false;
+  const childrenStatus = candidate.hasChildren === true ? true :
+    candidate.hasChildren === false ? false : undefined;
+  if (!boolFromAnyFilter(filterString(data, "hasChildren"), childrenStatus)) return false;
+  if (!boolFromAnyFilter(filterString(data, "hasChildrenFilter"), childrenStatus)) return false;
 
   const nriOnly = filterBoolean(data, "nriOnly");
   const isNri = candidate.isNRI === true ||
@@ -181,7 +179,7 @@ function matchesServerFilters(
     filterString(data, "manglik").length > 0 ||
     hasHoroscope === "yes" ||
     hasHoroscope === "no";
-  if (astrologyFilterRequested && candidate.showHoroscope === false) return false;
+  if (!astrologyFilterVisibilityAllows(astrologyFilterRequested, candidate.showHoroscope)) return false;
   const hasAstrology = stringValue(candidate.rasi).length > 0 && stringValue(candidate.nakshatra).length > 0;
   if (hasHoroscope === "yes" && !hasAstrology) return false;
   if (hasHoroscope === "no" && hasAstrology) return false;
@@ -232,17 +230,6 @@ function createdAtMillis(data: FirebaseFirestore.DocumentData): number {
   if (value instanceof admin.firestore.Timestamp) return value.toMillis();
   const numeric = Number(value || 0);
   return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function needsPrivateFilterData(data: unknown): boolean {
-  const horoscope = filterString(data, "hasHoroscope").toLocaleLowerCase("en-IN");
-  return filterString(data, "incomeMin").length > 0 ||
-    filterString(data, "incomeMax").length > 0 ||
-    filterString(data, "rasi").length > 0 ||
-    filterString(data, "nakshatra").length > 0 ||
-    filterString(data, "manglik").length > 0 ||
-    horoscope === "yes" ||
-    horoscope === "no";
 }
 
 function pairId(uidA: string, uidB: string): string {
@@ -380,11 +367,8 @@ export const discoverProfiles = functions
     const questionnaireRefs = includeQuestionnaireFit || requireQuestionnaireFit
       ? candidates.map((doc) => db.collection("questionnaires").doc(doc.id))
       : [];
-    const privateFilterRequested =
-      needsPrivateFilterData(data) ||
-      viewerPartnerPreferences.incomeBandMode !== "NO_PREFERENCE" ||
-      includeAstrologyFit ||
-      requireAstrologyFit;
+    // Read candidate private DOB for the mandatory adult-safety gate even
+    // without demographic filters. Never serialize it into public results.
     const personalizationActive = !keyword &&
       await hasActiveConsent(viewerUid, "personalization");
     const recommendationFeedbackRefs = personalizationActive
@@ -402,9 +386,9 @@ export const discoverProfiles = functions
         .get()
       : Promise.resolve(null);
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
-    const privateRefs = privateFilterRequested
-      ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
-      : [];
+    const privateRefs = candidates.map((doc) =>
+      db.collection("userPrivate").doc(doc.id)
+    );
     // Presence is always read by trusted discovery code so stale inventory can be suppressed.
     // Precise timestamps are still never returned unless the target's activity-visibility policy
     // permits the explicit last-active filter path below.
@@ -554,17 +538,13 @@ export const discoverProfiles = functions
     }
     if (lastActiveFilterDays > 0) {
       candidates.forEach((candidateDoc, index) => {
-        const relationship = {
-          interested:
-            outgoingInterestDocs[index]?.exists === true ||
-            incomingInterestDocs[index]?.exists === true,
-          mutual:
-            matchDocs[index]?.exists === true ||
-            (
-              outgoingInterestDocs[index]?.exists === true &&
-              incomingInterestDocs[index]?.exists === true
-            ),
-        };
+        const relationship = discoveryRelationship(
+          viewerUid,
+          candidateDoc.id,
+          outgoingInterestDocs[index]?.data(),
+          incomingInterestDocs[index]?.data(),
+          matchDocs[index]?.data()
+        );
         const lastActiveVisibility = normalizeActivityVisibility(
           activitySettingsDocs[index]?.data()?.lastActiveVisibility
         );
@@ -600,7 +580,12 @@ export const discoverProfiles = functions
       const candidate = doc.data() || {};
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
-      if (!discoveryCandidateReady(candidate, rawPartnerPreferencesByUid.get(doc.id))) continue;
+      if (!discoveryCandidateReady(
+        candidate,
+        privateFilterByUid.get(doc.id) || {},
+        rawPartnerPreferencesByUid.get(doc.id),
+        now
+      )) continue;
       if (!profileFreshEnough(
         createdAtMillis(candidate),
         privateLastActiveByUid.get(doc.id) || 0,

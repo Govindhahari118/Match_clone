@@ -43,6 +43,27 @@ class MatchScorerTest {
     )
 
     @Test
+    fun `nonfinite reciprocal preference values are ignored`() {
+        val a = profile(1, "Christian")
+        val b = profile(2, "Christian")
+        val baseline = MatchScorer.explain(a, b)
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { invalid ->
+            val result = MatchScorer.explain(a, b, bilateralPreferenceFit = invalid)
+            assertEquals(baseline.percentage, result.percentage)
+            assertFalse(result.factors.any { it.key == "bilateral_preferences" })
+        }
+    }
+
+    @Test
+    fun `finite reciprocal preferences remain bounded`() {
+        val a = profile(1, "Christian")
+        val b = profile(2, "Christian")
+        val result = MatchScorer.explain(a, b, bilateralPreferenceFit = 2f)
+        assertTrue(result.percentage in 0..100)
+        assertEquals(1f, result.factors.first { it.key == "bilateral_preferences" }.score, 0f)
+    }
+
+    @Test
     fun `combined score is symmetric for the same pair`() {
         val a = profile(1, "Christian", verification = 1)
         val b = profile(2, "Christian", verification = 5)

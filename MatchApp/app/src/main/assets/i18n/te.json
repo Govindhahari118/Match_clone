@@ -498,5 +498,7 @@
   "photo_notification_title": "ఫోటో అభ్యర్థన",
   "photo_notification_body": "ఒక సభ్యుడు ప్రొఫైల్ ఫోటో కోరారు. చూడటానికి Matree తెరవండి.",
   "photo_access_notification_title": "ఫోటో యాక్సెస్ అభ్యర్థన",
-  "photo_access_notification_body": "ఫోటో యాక్సెస్ అభ్యర్థనను చూడటానికి Matreeలో గోప్యత సెట్టింగ్‌లను తెరవండి."
+  "photo_access_notification_body": "ఫోటో యాక్సెస్ అభ్యర్థనను చూడటానికి Matreeలో గోప్యత సెట్టింగ్‌లను తెరవండి.",
+  "messages_load_failed": "సంభాషణలను లోడ్ చేయలేకపోయాం",
+  "check_connection_try_again": "మీ కనెక్షన్‌ని తనిఖీ చేసి మళ్లీ ప్రయత్నించండి."
 }

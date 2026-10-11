@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes } from 'firebase/storage';
 
 // Storage rules that read Firestore must run under the same Firebase project as the emulators.
@@ -34,6 +34,7 @@ beforeEach(async () => {
     });
     await setDoc(doc(db, 'interests/alice_bob'), { fromUid: 'alice', toUid: 'bob', createdAt: Date.now() });
     await setDoc(doc(db, 'interests/bob_alice'), { fromUid: 'bob', toUid: 'alice', createdAt: Date.now() });
+    await setDoc(doc(db, 'matches/alice_bob'), { users: ['alice', 'bob'] });
     await setDoc(doc(db, 'chats/thread123'), {
       participantUids: ['alice', 'bob'], lastMessage: '', lastSentAt: 0,
     });
@@ -49,6 +50,26 @@ const imageMetadata = {
     kind: 'image',
   },
 };
+
+test('chat media access is revoked when a match is removed or a colliding key has wrong users', async () => {
+  const aliceStorage = env.authenticatedContext('alice').storage();
+  const bobStorage = env.authenticatedContext('bob').storage();
+  const bobObject = ref(bobStorage, 'chat-media/thread123/message_1234567890123456.jpg');
+  await assertSucceeds(uploadBytes(
+    ref(aliceStorage, 'chat-media/thread123/message_1234567890123456.jpg'),
+    new Uint8Array([1, 2, 3]),
+    imageMetadata
+  ));
+  await assertSucceeds(getBytes(bobObject));
+  await env.withSecurityRulesDisabled(async context => {
+    await deleteDoc(doc(context.firestore(), 'matches/alice_bob'));
+  });
+  await assertFails(getBytes(bobObject));
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'matches/alice_bob'), { users: ['alice', 'mallory'] });
+  });
+  await assertFails(getBytes(bobObject));
+});
 
 test('chat participant can upload and both participants can read media', async () => {
   const aliceStorage = env.authenticatedContext('alice').storage();

@@ -5,6 +5,7 @@ import { db, persistAndSendNotification, requireAppCheck } from "./shared";
 import { productionFeatureEnabled } from "./featureFlagPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import { evaluateCallEligibility } from "./callPolicy";
+import { bothParticipantsAdult } from "./communicationEligibilityPolicy";
 import {
   callInitiationAllowed,
   normalizeCallKind,
@@ -13,6 +14,7 @@ import { communicationProvider } from "./communicationProvider";
 import { notificationDeepLink } from "./notificationLinkPolicy";
 import {
   canCancelCallRequest,
+  callRequestBelongsToPair,
   canReplaceCallRequest,
   canRespondToCallRequest,
   normalizeCallRequestStatus,
@@ -44,6 +46,8 @@ async function relationshipEligibility(
   const [
     caller,
     target,
+    callerPrivate,
+    targetPrivate,
     match,
     callerBlock,
     targetBlock,
@@ -52,6 +56,8 @@ async function relationshipEligibility(
   ] = await Promise.all([
     read(db.collection("users").doc(callerUid)),
     read(db.collection("users").doc(targetUid)),
+    read(db.collection("userPrivate").doc(callerUid)),
+    read(db.collection("userPrivate").doc(targetUid)),
     read(db.collection("matches").doc(pairId(callerUid, targetUid))),
     read(db.collection("blocks").doc(callerUid).collection("blocked").doc(targetUid)),
     read(db.collection("blocks").doc(targetUid).collection("blocked").doc(callerUid)),
@@ -64,6 +70,9 @@ async function relationshipEligibility(
     targetUid,
     callerActive: caller.exists && accountIsActive(caller.data()?.accountStatus),
     targetActive: target.exists && accountIsActive(target.data()?.accountStatus),
+    adultProfilesEligible: bothParticipantsAdult(
+      caller.data(), callerPrivate.data(), target.data(), targetPrivate.data()
+    ),
     mutualMatch: match.exists &&
       Array.isArray(match.data()?.users) &&
       match.data()?.users.length === 2 &&
@@ -154,6 +163,13 @@ export const startSecureCallSession = functions.https.onCall(async (data, contex
       tx.get(accountUsageRef),
       tx.get(pairUsageRef),
     ]);
+    // Eligibility may be revoked after the first capability check (block,
+    // account suspension, DOB correction, or match withdrawal). Re-read
+    // current authority transactionally before reserving provider capacity.
+    const fresh = await relationshipEligibility(callerUid, targetUid, tx);
+    if (!fresh.eligible) {
+      throw new functions.https.HttpsError("failed-precondition", fresh.reason);
+    }
     const accountStarts = Number(accountUsage.data()?.count || 0);
     const pairStarts = Number(pairUsage.data()?.count || 0);
     if (!callInitiationAllowed(accountStarts, pairStarts, accountLimit, pairLimit)) {
@@ -299,6 +315,9 @@ export const requestSecureCall = functions.https.onCall(async (data, context) =>
     const fresh = await relationshipEligibility(requesterUid, targetUid, tx);
     if (!fresh.eligible) throw new functions.https.HttpsError("failed-precondition", fresh.reason);
     const existing = await tx.get(ref);
+    if (existing.exists && !callRequestBelongsToPair(existing.data(), requesterUid, targetUid)) {
+      throw new functions.https.HttpsError("permission-denied", "Call request belongs to another match");
+    }
     const current = normalizeCallRequestStatus(existing.data()?.status);
     const updatedAt = callRequestUpdatedAtMs(existing.data());
     if (existing.exists && !canReplaceCallRequest(current, updatedAt, now)) {
@@ -350,8 +369,7 @@ export const getSecureCallRequest = functions.https.onCall(async (data, context)
   const snap = await callRequestRef(viewerUid, targetUid).get();
   if (!snap.exists) return { exists: false, reason: "none" };
   const value = snap.data() || {};
-  const users = Array.isArray(value.users) ? value.users : [];
-  if (!users.includes(viewerUid) || !users.includes(targetUid) || users.length !== 2) {
+  if (!callRequestBelongsToPair(value, viewerUid, targetUid)) {
     throw new functions.https.HttpsError("permission-denied", "Call request is unavailable");
   }
   return {

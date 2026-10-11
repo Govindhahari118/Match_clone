@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
-import { declinedInterestAllowsNewRequest } from "./interestPolicy";
+import { declinedInterestAllowsNewRequest, directedInterestMatches, matchMembersExactly } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import {
   discoveryActorReady,
@@ -99,6 +99,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       outgoingSnap,
       reverseSnap,
       responseSnap,
+      matchSnap,
       senderSubscriptionSnap,
       usageSnap,
       senderBlock,
@@ -116,6 +117,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(outgoingRef),
       tx.get(reverseRef),
       tx.get(responseRef),
+      tx.get(matchRef),
       tx.get(senderSubscriptionRef),
       tx.get(usageRef),
       tx.get(senderBlockRef),
@@ -152,7 +154,13 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
         "Complete your required profile and partner preferences before sending interests"
       );
     }
-    if (!discoveryCandidateReady(target, targetPreferencesSnap.data())) {
+    // Interest targets must also be adults with a private DOB consistent with
+    // public age. A forged public age can never make an underage target eligible.
+    if (!discoveryCandidateReady(
+      target,
+      targetPrivateSnap.data() || {},
+      targetPreferencesSnap.data()
+    )) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "This member is not yet available for interests"
@@ -180,6 +188,15 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
         "failed-precondition",
         "This profile is outside mutual strict partner preferences"
       );
+    }
+    // Legacy underscore-joined document IDs can collide for distinct UID pairs.
+    // Never infer relationship authority from a document's existence alone.
+    if ((outgoingSnap.exists && !directedInterestMatches(outgoingSnap.data(), senderUid, targetUid)) ||
+        (reverseSnap.exists && !directedInterestMatches(reverseSnap.data(), targetUid, senderUid)) ||
+        (responseSnap.exists && (responseSnap.data()?.senderUid !== senderUid ||
+          responseSnap.data()?.recipientUid !== targetUid)) ||
+        (matchSnap.exists && !matchMembersExactly(matchSnap.data(), senderUid, targetUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
@@ -279,8 +296,10 @@ export const withdrawInterest = functions.https.onCall(async (data, context) => 
       tx.get(matchRef),
     ]);
     if (!outgoing.exists) return;
-    if (outgoing.data()?.fromUid !== senderUid || outgoing.data()?.toUid !== targetUid) {
-      throw new functions.https.HttpsError("permission-denied", "Interest does not belong to this account");
+    if (!directedInterestMatches(outgoing.data(), senderUid, targetUid) ||
+        (reverse.exists && !directedInterestMatches(reverse.data(), targetUid, senderUid)) ||
+        (match.exists && !matchMembersExactly(match.data(), senderUid, targetUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (reverse.exists || match.exists) {
       throw new functions.https.HttpsError(
@@ -316,8 +335,10 @@ export const declineInterest = functions.https.onCall(async (data, context) => {
     ]);
 
     if (!incoming.exists) return;
-    if (incoming.data()?.toUid !== recipientUid || incoming.data()?.fromUid !== senderUid) {
-      throw new functions.https.HttpsError("permission-denied", "This request does not belong to you");
+    if (!directedInterestMatches(incoming.data(), senderUid, recipientUid) ||
+        (reverse.exists && !directedInterestMatches(reverse.data(), recipientUid, senderUid)) ||
+        (match.exists && !matchMembersExactly(match.data(), senderUid, recipientUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (reverse.exists || match.exists) {
       throw new functions.https.HttpsError("failed-precondition", "This request is already a mutual match");

@@ -19,6 +19,15 @@ export function isVoidedPaymentStatus(status: unknown): boolean {
 }
 
 /**
+ * An already-used Play purchase token is idempotent only while the recorded
+ * grant is still activated. A refunded, revoked, or malformed ledger entry
+ * must never be reported back to the Android client as restored premium access.
+ */
+export function previousPlayGrantRestorable(status: unknown): boolean {
+  return status === "ACTIVATED";
+}
+
+/**
  * Deterministically rebuilds a stacked one-time entitlement from its surviving grant
  * contributions. Sorting by grant time + id makes retries and out-of-order webhook delivery
  * converge to the same result.
@@ -31,7 +40,7 @@ export function rebuildEntitlementLedger(
     .filter((entry) => entry.id !== excludedPaymentId)
     .filter((entry) =>
       entry.provider === "GOOGLE_PLAY" &&
-      !isVoidedPaymentStatus(entry.status) &&
+      previousPlayGrantRestorable(entry.status) &&
       Number.isFinite(entry.durationMs) &&
       entry.durationMs > 0 &&
       Number.isFinite(entry.grantedAtMillis) &&

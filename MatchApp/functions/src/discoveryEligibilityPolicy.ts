@@ -3,8 +3,12 @@ function text(value: unknown): string {
 }
 
 function finiteInt(value: unknown): number {
+  // Permit finite integer numbers and legacy numeric strings, but not booleans,
+  // fractional values, blank strings or partially parsed garbage.
+  if (typeof value !== "number" &&
+      !(typeof value === "string" && /^\d+$/.test(value.trim()))) return 0;
   const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : 0;
+  return Number.isSafeInteger(n) ? n : 0;
 }
 
 /**
@@ -16,7 +20,11 @@ export function publicDiscoveryProfileReady(
 ): boolean {
   const age = finiteInt(profile.age);
   const height = finiteInt(profile.heightCm);
-  const weight = Number(profile.weight || 0);
+  // Avoid JS coercion of booleans and whitespace into plausible measurements.
+  const rawWeight = profile.weight;
+  const weight = typeof rawWeight === "number" ? rawWeight :
+    typeof rawWeight === "string" && /^\d+(?:\.\d+)?$/.test(rawWeight.trim())
+      ? Number(rawWeight.trim()) : NaN;
   return text(profile.username).length >= 3 &&
     text(profile.displayName).length >= 2 &&
     age >= 18 && age <= 99 &&
@@ -52,6 +60,14 @@ export function normalizeStaleDiscoveryDays(
       Math.min(MAX_STALE_DISCOVERY_DAYS, Math.trunc(Number(fallback)))
     )
     : DEFAULT_STALE_DISCOVERY_DAYS;
+  // A missing or unset remote-config value must use the product default.
+  // Number(null) and Number("") equal zero, which would otherwise force 14 days.
+  if (value === null || value === undefined ||
+      (typeof value === "string" && value.trim() === "")) return fallbackDays;
+  // Remote config must be a finite numeric value, never a boolean, object or
+  // a string that JavaScript happens to coerce into a number.
+  if (typeof value !== "number" &&
+      !(typeof value === "string" && /^\d+$/.test(value.trim()))) return fallbackDays;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallbackDays;
   return Math.max(
@@ -75,8 +91,15 @@ export function profileFreshEnough(
   const now = Number.isFinite(nowMillis) && nowMillis > 0 ? nowMillis : Date.now();
   const created = Number.isFinite(createdAtMillis) && createdAtMillis > 0 ? createdAtMillis : 0;
   const active = Number.isFinite(lastActiveAtMillis) && lastActiveAtMillis > 0 ? lastActiveAtMillis : 0;
-  const anchor = active || created;
-  if (anchor === 0) return true;
+  // Activity records from imports or stale clocks must not predate a newer
+  // profile creation event and incorrectly exclude a newly created account.
+  // Treat implausibly future-dated records as corrupt rather than as fresh activity.
+  // Allow one day of bounded clock skew across services.
+  const maxFutureSkewMillis = 86_400_000;
+  const validCreated = created <= now + maxFutureSkewMillis ? created : 0;
+  const validActive = active <= now + maxFutureSkewMillis ? active : 0;
+  const anchor = Math.max(validActive, validCreated);
+  if (anchor === 0) return created === 0 && active === 0;
 
   // Trusted clocks can still drift. Clamp a future anchor to "now" so bad data cannot create an
   // effectively permanent freshness exemption.
@@ -86,20 +109,88 @@ export function profileFreshEnough(
 }
 
 
+/**
+ * Date-of-birth is a required *private* discovery gate. The public age field alone is
+ * editable, so never treat a nonempty DOB string or a claimed public age as adult proof.
+ * UTC calendar comparisons avoid locale/timezone ambiguity in callable Functions.
+ * A one-year discrepancy is tolerated for profiles that have not refreshed their age
+ * since the last birthday, but larger inconsistencies fail closed.
+ */
+export function adultDobMatchesProfileAge(
+  dateOfBirth: unknown,
+  publicAge: unknown,
+  nowMillis: number = Date.now()
+): boolean {
+  if (typeof dateOfBirth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim()) ||
+      !Number.isFinite(nowMillis) || nowMillis <= 0) return false;
+  const [year, month, day] = dateOfBirth.trim().split("-").map(Number);
+  const birthday = new Date(Date.UTC(year, month - 1, day));
+  if (birthday.getUTCFullYear() !== year || birthday.getUTCMonth() + 1 !== month ||
+      birthday.getUTCDate() !== day || birthday.getTime() > nowMillis) return false;
+  const now = new Date(nowMillis);
+  let age = now.getUTCFullYear() - year;
+  if (now.getUTCMonth() + 1 < month ||
+      (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)) age--;
+  const ageClaim = finiteInt(publicAge);
+  return age >= 18 && age <= 99 && ageClaim >= 18 && ageClaim <= 99 &&
+    Math.abs(age - ageClaim) <= 1;
+}
+
 export function discoveryActorReady(
   profile: Record<string, unknown>,
   privateProfile: Record<string, unknown>,
-  preferences: Record<string, unknown> | undefined
+  preferences: Record<string, unknown> | undefined,
+  nowMillis: number = Date.now()
 ): boolean {
   return publicDiscoveryProfileReady(profile) &&
-    text(privateProfile.dateOfBirth).length > 0 &&
+    adultDobMatchesProfileAge(privateProfile.dateOfBirth, profile.age, nowMillis) &&
     partnerPreferencesReady(preferences);
 }
 
+/**
+ * A candidate must pass the same private DOB and public-age consistency gate as a viewer.
+ * Public age alone cannot authorize visibility or incoming interests.
+ * The private DOB is evaluated by trusted Functions only, never returned to clients.
+ */
 export function discoveryCandidateReady(
   profile: Record<string, unknown>,
-  preferences: Record<string, unknown> | undefined
+  privateProfile: Record<string, unknown>,
+  preferences: Record<string, unknown> | undefined,
+  nowMillis: number = Date.now()
 ): boolean {
-  return publicDiscoveryProfileReady(profile) &&
-    partnerPreferencesReady(preferences);
+  return discoveryActorReady(profile, privateProfile, preferences, nowMillis);
+}
+
+/**
+ * Income-band filtering can reveal a private band through who appears in a result.
+ * Only a member's explicit "Show range" disclosure permits such filtering.
+ */
+export function incomeFilterVisibilityAllows(
+  incomeFilterRequested: boolean,
+  incomeDisclosure: unknown
+): boolean {
+  return !incomeFilterRequested ||
+    (typeof incomeDisclosure === "string" &&
+      incomeDisclosure.trim().toLocaleLowerCase("en-IN") === "range");
+}
+
+/**
+ * Astrology preferences are private unless a member explicitly enables horoscope visibility.
+ * A legacy missing showHoroscope field must NOT reveal a person's private rasi/nakshatra
+ * through inclusion in filter results.
+ */
+export function astrologyFilterVisibilityAllows(
+  astrologyRequested: boolean,
+  showHoroscope: unknown
+): boolean {
+  return !astrologyRequested || showHoroscope === true;
+}
+
+/** Explicit yes/no filters fail closed for unknown input, never broadening discovery. */
+export function boolFromAnyFilter(value: string, actual: boolean | undefined): boolean {
+  const normalized = value.trim().toLocaleLowerCase("en-IN");
+  if (!normalized || normalized === "any" || normalized === "don't mind") return true;
+  if (/^yes(?:\b|$)/u.test(normalized)) return actual === true;
+  if (/^no(?:\b|$)/u.test(normalized)) return actual === false;
+  return false;
 }

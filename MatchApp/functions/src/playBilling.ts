@@ -6,9 +6,11 @@ import { db, requireAppCheck } from "./shared";
 import { playAccountOwnershipMismatch } from "./riskSignalPolicy";
 import {
   isVoidedPaymentStatus,
+  previousPlayGrantRestorable,
   rebuildEntitlementLedger,
 } from "./billingEntitlementPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import { accountIsActive } from "./accountStatusPolicy";
 
 const PACKAGE_NAME = "com.match.app";
 const ANDROID_PUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher";
@@ -275,6 +277,11 @@ function existingGrant(
   if (existing.uid !== uid || existing.productId !== productId) {
     throw new functions.https.HttpsError("already-exists", "Purchase token already used");
   }
+  if (!previousPlayGrantRestorable(existing.status)) {
+    throw new functions.https.HttpsError(
+      "failed-precondition", "This purchase is no longer eligible for restoration"
+    );
+  }
   const storedType: EntitlementType = existing.entitlementType === "BOOST"
     ? "BOOST"
     : "MEMBERSHIP";
@@ -361,6 +368,13 @@ export const verifyGooglePlayPurchase = functions
 
       if (!userSnap.exists) {
         throw new functions.https.HttpsError("not-found", "User profile not found");
+      }
+      // An existing purchase cannot be "restored" through a suspended/deleting
+      // account, and a new purchase must never grant access to that account.
+      if (!accountIsActive(userSnap.data()?.accountStatus)) {
+        throw new functions.https.HttpsError(
+          "failed-precondition", "Purchases are unavailable while your account is not active"
+        );
       }
       if (existingPurchase.exists) {
         return existingGrant(existingPurchase.data() || {}, product, uid, productId);

@@ -44,6 +44,10 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
       - name: Production truthfulness scan
         run: python3 scripts/ci/truthfulness_scan.py
+      - name: Matree 100-feature evidence truth gate
+        run: |
+          python3 -B -m unittest scripts/ci/test_matree_feature_evidence_scan.py
+          python3 scripts/ci/matree_feature_evidence_scan.py
       - name: Screen classification gate
         run: python3 scripts/ci/screen_classification_scan.py
       - name: Translation catalog gate

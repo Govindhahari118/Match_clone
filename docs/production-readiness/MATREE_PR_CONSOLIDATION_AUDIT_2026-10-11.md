@@ -1,0 +1,71 @@
+# Matrii PR consolidation audit — 2026-10-11
+
+**Scope:** development-side PR dependency, file overlap and merge readiness. This is an inventory of inspected GitHub PR file lists and exact-head CI/review metadata, **not** line-by-line independent security approval or runtime E2E sign-off.
+
+## Actual current PR state
+
+| PR | Role | Changed files | Head | Exact head 4 CI | GitHub reviews | Plan |
+|---|---|---:|---|---|---|---|
+| #43 | Device-locale FCM notifications | 13 | `992fbead` | not independently rechecked | not rechecked | Compare against #60 |
+| #50 | Server-authoritative protected photos | 22 | `43a4e411` | not independently rechecked | not rechecked | Compare against #60 |
+| #51 | Post-match call lifecycle and notification routes | 21 | `342efd1e` | not independently rechecked | not rechecked | Compare against #60 |
+| #53 | Alternative call coordination rebase | 16 | `00de7d8c` | not independently rechecked | not rechecked | Compare against #60 |
+| #56 | Matched secure-call scheduling | 15 | `1ccf6aad` | not independently rechecked | not rechecked | Compare against #60 |
+| #60 | Consolidated integration candidate for #43/#50/#51/#53/#56 | 45 | `714fb5d6` | **4/4 PASS** | **none** | First reviewed merge candidate into main |
+| #61 | Matching/discovery, production plan, evidence guard, CI | 15 | `c86d58f` | **4/4 PASS** | **none** | Second reviewed merge candidate; currently based on #60 branch |
+
+**Dependency order:** #60 → main; #61 → updated main. #61 is currently based on the *branch* for #60, so merging or retargeting #61 before #60 is unsafe. Fresh main-merge SHA CI must pass after each merge. At the time of inspection both PRs are draft and GitHub reports mergeable; this is not approval.
+
+## Actual path overlap inspected
+
+| Original | Overlap with consolidated #60 | Specific review obligations |
+|---|---|---|
+| #43 | `FcmDeviceRegistry.kt`, `MatchFcmService.kt`, language/notifications screens; `notifications.ts`, `shared.ts`; EN/HI/TE assets; notification scan | Validate token refresh, language change, old device cleanup, localization and deep-link routes |
+| #50 | `PhotoRepository.kt`, `MatchDetailScreen.kt`, `PrivacyDashboardScreen.kt`, `firestore.rules`, `storage.rules`, photo policy/Functions/tests | Preserve Storage metadata enforcement from merged #59; test PUBLIC/ACCEPTED_ONLY/HIDDEN, blocked users, grant/revoke and media cache |
+| #51 | `SecureCallRepository.kt`, notification deep link/action, call screen, `calls.ts`, policy and rules | Check routing and request lifecycle, reject stale revisions and inactive/blocked participants |
+| #53 | Same coordination/routing layer with alternative rebase, rules and tests | Diff original implementations, make parity checklist; do not blindly merge duplicate branch |
+| #56 | Call scheduling repository/screen/Functions, `firestore.rules`, policy, notification-link checks | Ensure call-request state is server-authoritative; scheduling is NOT voice/video media transport |
+
+PR #60 integration description records protected-photo request separation, transaction-based call relationship checks, per-device locales and notification retry triggers. That text alone is not independent verification. In each original PR, review **added unique files**, lines changed and tests not merely shared filenames, before closure.
+
+## Secure consolidation sequence
+
+1. Assign independent Android, Firebase rules and backend/security reviewers and record accountable engineer and product owner. Do not self-approve.
+2. Compare source diffs and tests for #43/#50/#51/#53/#56 against #60. Record individual behaviors confirmed covered, missing, incompatible, or intentionally deferred, with exact source/test paths and approval.
+3. Verify the origin of all relevant security rules and confirm #59 metadata rule cannot regress. Run cross-account storage/read/blocked/privacy permission-negative tests.
+4. Mark #60 ready only after complete review, successful exact-head 4 CI and accepted merge-diff parity matrix. Protect main first; merge #60, then check all four Production CI jobs on new main.
+5. Rebase or retarget #61 on merged main; ensure it introduces only intended matching/discovery/ledger changes, no regression of #60; run all four checks on new exact-head SHA; independent review; merge; verify new main.
+6. Close or supersede originals **only after** reviewers confirm parity and create a written comment linking merged canonical SHA. Do not close simply because #60 exists.
+7. Begin feature-by-feature MAT-001..MAT-100 evidence audit and screen inventory on integrated main. Do not award `IMPLEMENTED_VERIFIED` without source/test/device/merged evidence.
+
+## Current blocked authority and external steps
+
+GitHub integration returned 403 trying to read `main` protection; owner must confirm ruleset. No reviewers recorded for #60 or #61. No signed build, two-device test, real provider-backed live transport, production Play Billing test, Firebase production deployment, legal or 49+2 evidence is represented by the passing CI. These remain explicit release NO-GO until supplied by owners.
+
+## Permanent links
+
+- Integration: https://github.com/Govindhahari118/Match_clone/pull/60
+- Follow-up hardening: https://github.com/Govindhahari118/Match_clone/pull/61
+- Release gate: https://github.com/Govindhahari118/Match_clone/issues/26
+
+## File-diff exceptions requiring explicit parity review
+
+A second inspection compared the filename sets of #43/#50/#51/#53/#56 against #60's 45-file change list. The following original-PR changed files are **not** among PR #60's changed files:
+
+| Original PR | Path | PR #60 versus main | Required disposition |
+|---|---|---|---|
+| #43 | `MatchApp/app/src/main/java/com/match/app/service/MatchFcmService.kt` | Same blob SHA (`1779df97`) | Review #43 patch and determine whether current main's existing FCM service already satisfies locale/token handling or patch must be ported |
+| #51 and #53 | `MatchApp/scripts/ci/interest_chat_contract_scan.py` | Same blob SHA (`cb40b6bd`) | Examine whether omitted contract-scan checks were superseded by stronger existing CI or need porting |
+| #56 | `MatchApp/functions/package-lock.json` | Same blob SHA (`f0abc7e3`) | Compare exact dependency-lock changes, audited Functions production dependency graph and npm deterministic build; never copy an obsolete lockfile blindly |
+
+**Interpretation:** These are not proven missing runtime features. They are **review-required delta exceptions**; identical #60/main blobs show that PR #60 does not itself contain changes to these paths. #50's listed changed paths are fully represented in #60's changed-file list, but this is not proof of identical behavior. Close no historical PR until both file-exception and behavioral parity are signed off.
+
+
+## Development-side delta recovery on PR #61
+
+Source inspection confirmed that current `MatchFcmService.kt` already displays `Matree` in both the default notification channel name and title fallback, the exact two textual adjustments from #43. No extra service edit was necessary.
+
+PR #51/#53 previously added a secure-call contract to `interest_chat_contract_scan.py`, which PR #60 did not modify. This contract was **ported and adapted** to the actual #60 architecture in PR #61, commit `41267fb`: require all four client/backend secure-call callables and the `onSecureCallRequestChanged` durable notification trigger. The older original contract expected direct `persistAndSendNotification` in the call mutation, which would be incorrect for the consolidated retry-trigger implementation. CI must pass on exact new head before marking this verified.
+
+PR #56's `package-lock.json` change is still a review exception: production main/#60 use the audited lockfile with deterministic Functions CI and should not blindly restore an older 2,049-line diff.
+

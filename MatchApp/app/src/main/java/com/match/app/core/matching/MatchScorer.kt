@@ -41,7 +41,9 @@ object MatchScorer {
     ): Result {
         val factors = mutableListOf<Factor>()
 
-        bilateralPreferenceFit?.let {
+        // The server-provided aggregate is optional. Never let corrupt or non-finite
+        // values poison the score, or present them as a genuine preference factor.
+        bilateralPreferenceFit?.takeIf { it.isFinite() }?.let {
             factors += Factor("bilateral_preferences", it.coerceIn(0f, 1f), 0.35f)
         }
 

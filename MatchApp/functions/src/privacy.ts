@@ -2,11 +2,14 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
+import { directedInterestMatches } from "./interestPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
 import {
   canRequestPhotoAccess,
   canViewPublishedPhoto,
   normalizeProfilePhotoVisibility,
+  relationshipRequestMatchesParticipants,
+  mutualMatchRecordMatchesPair,
 } from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
@@ -124,7 +127,9 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     ) {
       throw new functions.https.HttpsError("failed-precondition", "Contact is unavailable while an account is not active");
     }
-    if (!matchSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    if (!matchSnap.exists || !mutualMatchRecordMatchesPair(matchSnap.data(), uid, targetUid)) {
+      throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    }
     if (outgoingBlock.exists || incomingBlock.exists) {
       throw new functions.https.HttpsError("permission-denied", "Contact is unavailable for this member");
     }
@@ -246,7 +251,7 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
     ) {
       throw new functions.https.HttpsError("failed-precondition", "Contact request is unavailable while an account is not active");
     }
-    if (!matchSnap.exists) {
+    if (!matchSnap.exists || !mutualMatchRecordMatchesPair(matchSnap.data(), requesterUid, targetUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
     if (outgoingBlock.exists || incomingBlock.exists) {
@@ -273,6 +278,11 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
       return { status: "APPROVED", canReveal: true };
     }
 
+    if (existingRequest.exists && !relationshipRequestMatchesParticipants(
+      existingRequest.data(), requesterUid, targetUid
+    )) {
+      throw new functions.https.HttpsError("permission-denied", "Contact request belongs to another relationship");
+    }
     const request = existingRequest.data() || {};
     const status = String(request.status || "");
     if (status === "PENDING") return { status: "PENDING", canReveal: false };
@@ -433,9 +443,12 @@ export const getProfilePhotoAccess = functions.https.onCall(async (data, context
   }
 
   const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
-  const mutualInterest = viewerInterest.exists && targetInterest.exists;
+  const requesterInterested = viewerInterest.exists &&
+    directedInterestMatches(viewerInterest.data(), viewerUid, targetUid);
+  const targetInterested = targetInterest.exists &&
+    directedInterestMatches(targetInterest.data(), targetUid, viewerUid);
+  const mutualInterest = requesterInterested && targetInterested;
   const explicitGrant = grant.exists;
-  const requesterInterested = viewerInterest.exists;
   return {
     visibility,
     canView: canViewPublishedPhoto(visibility, mutualInterest, explicitGrant),
@@ -445,7 +458,9 @@ export const getProfilePhotoAccess = functions.https.onCall(async (data, context
       mutualInterest,
       explicitGrant
     ),
-    requestStatus: request.exists ? String(request.data()?.status || "") : "",
+    requestStatus: request.exists &&
+      relationshipRequestMatchesParticipants(request.data(), viewerUid, targetUid)
+      ? String(request.data()?.status || "") : "",
   };
 });
 
@@ -541,14 +556,18 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
     }
 
     const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
-    const mutualInterest = forwardInterest.exists && reverseInterest.exists;
+    const forwardValid = forwardInterest.exists &&
+      directedInterestMatches(forwardInterest.data(), requesterUid, targetUid);
+    const reverseValid = reverseInterest.exists &&
+      directedInterestMatches(reverseInterest.data(), targetUid, requesterUid);
+    const mutualInterest = forwardValid && reverseValid;
     const explicitGrant = existingGrant.exists;
     if (canViewPublishedPhoto(visibility, mutualInterest, explicitGrant)) {
       return { status: "ALREADY_ALLOWED", canView: true };
     }
     if (!canRequestPhotoAccess(
       visibility,
-      forwardInterest.exists,
+      forwardValid,
       mutualInterest,
       explicitGrant
     )) {
@@ -564,6 +583,11 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
       );
     }
 
+    if (existingRequest.exists && !relationshipRequestMatchesParticipants(
+      existingRequest.data(), requesterUid, targetUid
+    )) {
+      throw new functions.https.HttpsError("permission-denied", "Photo request belongs to another relationship");
+    }
     const existing = existingRequest.data() || {};
     const status = String(existing.status || "");
     if (status === "PENDING") return { status: "PENDING", canView: false };

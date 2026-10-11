@@ -498,5 +498,7 @@
   "photo_notification_title": "Photo request",
   "photo_notification_body": "A member requested a profile photo. Open Matree to review it.",
   "photo_access_notification_title": "Photo access request",
-  "photo_access_notification_body": "Open Privacy & visibility in Matree to review the photo access request."
+  "photo_access_notification_body": "Open Privacy & visibility in Matree to review the photo access request.",
+  "messages_load_failed": "Unable to load conversations",
+  "check_connection_try_again": "Check your connection and try again."
 }

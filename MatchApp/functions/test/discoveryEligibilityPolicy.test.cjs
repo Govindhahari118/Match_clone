@@ -3,8 +3,12 @@ const assert = require("node:assert/strict");
 
 const {
   publicDiscoveryProfileReady,
+  astrologyFilterVisibilityAllows,
+  incomeFilterVisibilityAllows,
+  boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
+  adultDobMatchesProfileAge,
   discoveryCandidateReady,
   profileFreshEnough,
   normalizeStaleDiscoveryDays,
@@ -26,6 +30,50 @@ const complete = {
   heightCm: 170,
   weight: 68,
 };
+
+test("income filtering requires explicit show-range consent", () => {
+  assert.equal(incomeFilterVisibilityAllows(true, "range"), true);
+  assert.equal(incomeFilterVisibilityAllows(true, " RANGE "), true);
+  for (const visibility of ["hidden", "", "public", undefined, null, true, 1, [], {}]) {
+    assert.equal(incomeFilterVisibilityAllows(true, visibility), false);
+  }
+  assert.equal(incomeFilterVisibilityAllows(false, "hidden"), true);
+  assert.equal(incomeFilterVisibilityAllows(false, undefined), true);
+});
+
+test("astrology filtering requires an explicit opted-in horoscope visibility", () => {
+  assert.equal(astrologyFilterVisibilityAllows(true, true), true);
+  for (const visibility of [false, undefined, null, "true", 1, {}, []]) {
+    assert.equal(astrologyFilterVisibilityAllows(true, visibility), false);
+  }
+  assert.equal(astrologyFilterVisibilityAllows(false, undefined), true);
+  assert.equal(astrologyFilterVisibilityAllows(false, false), true);
+});
+
+test("private DOB must prove adult eligibility and agree with public profile age", () => {
+  const now = Date.UTC(2026, 9, 11);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29, now), true);
+  assert.equal(adultDobMatchesProfileAge("2008-10-11", 18, now), true);
+  assert.equal(adultDobMatchesProfileAge("2008-10-12", 18, now), false);
+  assert.equal(adultDobMatchesProfileAge("2007-10-12", 18, now), true);
+  for (const invalid of [
+    "", "not-a-date", "2008-02-30", "2007-13-01", "1999-00-01",
+    "2027-01-01", "2008-10-11T00:00:00Z", null, true, 20000101,
+  ]) {
+    assert.equal(adultDobMatchesProfileAge(invalid, 29, now), false);
+  }
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 18, now), false);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29.5, now), false);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29, Number.NaN), false);
+  assert.equal(
+    discoveryActorReady({ ...complete, age: 29 }, { dateOfBirth: "2008-10-12" }, { configured: true }, now),
+    false
+  );
+  assert.equal(
+    discoveryActorReady(complete, { dateOfBirth: "1997-01-01" }, { configured: true }, now),
+    true
+  );
+});
 
 test("public discovery profile gate requires all canonical profile fields", () => {
   assert.equal(publicDiscoveryProfileReady(complete), true);
@@ -51,15 +99,41 @@ test("discovery actor additionally requires DOB and configured preferences", () 
   );
 });
 
-test("candidate must have complete public profile and configured preferences", () => {
-  assert.equal(discoveryCandidateReady(complete, { configured: true }), true);
-  assert.equal(discoveryCandidateReady(complete, undefined), false);
+test("candidate must have complete public profile, configured preferences and private adult DOB", () => {
+  const now = Date.UTC(2026, 9, 11);
+  const adult = { dateOfBirth: "1997-01-01" };
+  const configured = { configured: true };
+  assert.equal(discoveryCandidateReady(complete, adult, configured, now), true);
+  assert.equal(discoveryCandidateReady(complete, adult, undefined, now), false);
+  assert.equal(discoveryCandidateReady({ ...complete, profession: "" }, adult, configured, now), false);
+  assert.equal(partnerPreferencesReady(configured), true);
+  assert.equal(partnerPreferencesReady(undefined), false);
+});
+
+test("candidate DOB cannot be bypassed with forged public age or absent filters", () => {
+  const now = Date.UTC(2026, 9, 11);
+  const configured = { configured: true };
+  const publiclyAdult = { ...complete, age: 29 };
+  for (const privateProfile of [
+    {}, { dateOfBirth: "" }, { dateOfBirth: null },
+    { dateOfBirth: "2008-10-12" }, // not yet 18
+    { dateOfBirth: "2008-10-11" }, // exactly 18 but public age is inconsistent
+    { dateOfBirth: "1997-02-30" }, { dateOfBirth: "2030-01-01" },
+  ]) {
+    assert.equal(discoveryCandidateReady(publiclyAdult, privateProfile, configured, now), false);
+  }
   assert.equal(
-    discoveryCandidateReady({ ...complete, profession: "" }, { configured: true }),
+    discoveryCandidateReady({ ...complete, age: 18 }, { dateOfBirth: "2008-10-11" }, configured, now),
+    true
+  );
+  assert.equal(
+    discoveryCandidateReady({ ...complete, age: 18 }, { dateOfBirth: "2008-10-12" }, configured, now),
     false
   );
-  assert.equal(partnerPreferencesReady({ configured: true }), true);
-  assert.equal(partnerPreferencesReady(undefined), false);
+  assert.equal(
+    discoveryCandidateReady(complete, { dateOfBirth: "1997-01-01" }, configured, now),
+    true
+  );
 });
 
 
@@ -82,8 +156,10 @@ test("legacy/future freshness anchors fail safely", () => {
   const day = 86_400_000;
   const now = 200 * day;
   assert.equal(profileFreshEnough(0, 0, now), true);
-  assert.equal(profileFreshEnough(now + 365 * day, 0, now), true);
-  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), true);
+  assert.equal(profileFreshEnough(now + 365 * day, 0, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + 365 * day, now), false);
+  assert.equal(profileFreshEnough(now - 400 * day, now + day, now), true);
+  assert.equal(profileFreshEnough(now - 2 * day, now + 365 * day, now), true);
 });
 
 test("stale threshold is product-configurable but clamped to safe bounds", () => {
@@ -91,4 +167,69 @@ test("stale threshold is product-configurable but clamped to safe bounds", () =>
   assert.equal(normalizeStaleDiscoveryDays("45"), 45);
   assert.equal(normalizeStaleDiscoveryDays(1), 14);
   assert.equal(normalizeStaleDiscoveryDays(9999), 365);
+});
+
+test("unset stale discovery configuration uses the default", () => {
+  for (const value of [null, undefined, "", "   ", "not-a-number"]) {
+    assert.equal(normalizeStaleDiscoveryDays(value), DEFAULT_STALE_DISCOVERY_DAYS);
+  }
+  assert.equal(normalizeStaleDiscoveryDays(null, 45), 45);
+});
+
+test("new profile creation supersedes an older stale activity record", () => {
+  const day = 86_400_000;
+  const now = 500 * day;
+  assert.equal(profileFreshEnough(now - 2 * day, now - 200 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 2 * day, now), true);
+  assert.equal(profileFreshEnough(now - 200 * day, now - 150 * day, now), false);
+});
+
+test("yes/no filters reject unknown choices instead of broadening discovery", () => {
+  assert.equal(boolFromAnyFilter("", true), true);
+  assert.equal(boolFromAnyFilter("Any", false), true);
+  assert.equal(boolFromAnyFilter("Don't mind", true), true);
+  assert.equal(boolFromAnyFilter("yes", true), true);
+  assert.equal(boolFromAnyFilter("yes", false), false);
+  assert.equal(boolFromAnyFilter("no", false), true);
+  assert.equal(boolFromAnyFilter("no", true), false);
+  assert.equal(boolFromAnyFilter("not sure", false), false);
+  assert.equal(boolFromAnyFilter("not sure", true), false);
+  assert.equal(boolFromAnyFilter("not applicable", false), false);
+  assert.equal(boolFromAnyFilter("yesplease", true), false);
+  assert.equal(boolFromAnyFilter("nope", false), false);
+  assert.equal(boolFromAnyFilter("no", undefined), false);
+  assert.equal(boolFromAnyFilter("yes", undefined), false);
+  assert.equal(boolFromAnyFilter("Any", undefined), true);
+  assert.equal(boolFromAnyFilter("no", false), true);
+  assert.equal(boolFromAnyFilter("no", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", true), false);
+  assert.equal(boolFromAnyFilter("unsupported-value", false), false);
+});
+
+test("discovery refuses malformed age and height without truncating or coercing booleans", () => {
+  for (const age of [18.5, "18.5", "18years", true, " ", Number.POSITIVE_INFINITY]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, age }), false);
+  }
+  for (const heightCm of [170.5, "170.5", "170cm", true, " ", Number.NaN]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, heightCm }), false);
+  }
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: "29", heightCm: "170" }), true);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, age: 18, heightCm: 90 }), true);
+});
+
+test("profile weight rejects coerced booleans, whitespace and malformed strings", () => {
+  for (const weight of [true, false, "", "  ", "68kg", "Infinity", -1, null]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, weight }), false);
+  }
+  assert.equal(publicDiscoveryProfileReady({ ...complete, weight: "68.5" }), true);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, weight: 68.5 }), true);
+});
+
+test("malformed remote freshness values retain configured fallback", () => {
+  for (const value of [true, false, {}, [], "30 days", "2.5", "-5", "0x20", "Infinity"]) {
+    assert.equal(normalizeStaleDiscoveryDays(value, 90), 90);
+  }
+  assert.equal(normalizeStaleDiscoveryDays("45", 90), 45);
+  assert.equal(normalizeStaleDiscoveryDays(45, 90), 45);
+  assert.equal(normalizeStaleDiscoveryDays(10000, 90), 365);
 });

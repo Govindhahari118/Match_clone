@@ -5,6 +5,8 @@ const {
   normalizeProfilePhotoVisibility,
   canViewPublishedPhoto,
   canRequestPhotoAccess,
+  relationshipRequestMatchesParticipants,
+  mutualMatchRecordMatchesPair,
 } = require("../lib/photoPrivacyPolicy");
 
 test("photo visibility normalization preserves safe supported values", () => {
@@ -30,4 +32,32 @@ test("photo access request is only available after requester interest and before
   assert.equal(canRequestPhotoAccess("ACCEPTED_ONLY", true, false, false), true);
   assert.equal(canRequestPhotoAccess("ACCEPTED_ONLY", true, true, false), false);
   assert.equal(canRequestPhotoAccess("ACCEPTED_ONLY", true, false, true), false);
+});
+
+test("colliding photo request keys cannot reveal status or overwrite another pair", () => {
+  const existing = {
+    requesterUid: "a_b",
+    targetUid: "c",
+    status: "PENDING",
+  };
+  // Both these UID pairs use the same legacy concatenated document ID: a_b_c.
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a_b", "c"), true);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a", "b_c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "c", "a_b"), false);
+  // The same request identity guard protects contact-access requests.
+  assert.equal(relationshipRequestMatchesParticipants({ ...existing, status: "APPROVED" }, "a", "b_c"), false);
+  assert.equal(relationshipRequestMatchesParticipants({ ...existing, requesterUid: "" }, "a_b", "c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(undefined, "a_b", "c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a_b", "a_b"), false);
+});
+
+test("mutual-match existence is not authority when a legacy UID key collides", () => {
+  const existing = { users: ["a_b", "c"] };
+  assert.equal(mutualMatchRecordMatchesPair(existing, "a_b", "c"), true);
+  assert.equal(mutualMatchRecordMatchesPair(existing, "c", "a_b"), true);
+  assert.equal(mutualMatchRecordMatchesPair(existing, "a", "b_c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "a_b"] }, "a_b", "c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "c", "extra"] }, "a_b", "c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "c"] }, "a_b", "a_b"), false);
+  assert.equal(mutualMatchRecordMatchesPair(undefined, "a_b", "c"), false);
 });

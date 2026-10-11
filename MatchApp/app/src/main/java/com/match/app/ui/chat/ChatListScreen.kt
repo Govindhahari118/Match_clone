@@ -56,6 +56,23 @@ data class ConversationItem(
     val archived: Boolean = false
 )
 
+data class ChatListUiState(
+    val accountUid: String? = null,
+    val items: List<ConversationItem> = emptyList(),
+    val loading: Boolean = true,
+    val failed: Boolean = false
+)
+
+data class UnreadChatState(
+    val accountUid: String? = null,
+    val count: Int = 0
+)
+
+/** Display only successful data belonging to the session currently on-screen. */
+fun ChatListUiState.visibleConversationsFor(activeUid: String?): List<ConversationItem> =
+    if (!activeUid.isNullOrBlank() && accountUid == activeUid && !loading && !failed) items
+    else emptyList()
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
@@ -65,37 +82,58 @@ class ChatListViewModel @Inject constructor(
     private val userDao: UserDao
 ) : ViewModel() {
 
-    /** Firestore thread list is authoritative so a new device sees existing conversations. */
-    val conversations: StateFlow<List<ConversationItem>> = session.firebaseUid.filterNotNull()
-        .flatMapLatest { myUid ->
-            combine(
-                firestoreChat.observeThreads(myUid),
-                firestoreChat.observeThreadPreferences(myUid)
-            ) { threads, preferences ->
-                threads.mapNotNull { thread ->
-                    val peer = hydratePeer(thread.peerFirebaseUid) ?: return@mapNotNull null
-                    val preference = preferences[FirestoreChatService.threadId(myUid, thread.peerFirebaseUid)]
-                    ConversationItem(
-                        peerId = peer.id,
-                        peerFirebaseUid = peer.firebaseUid,
-                        peerName = peer.displayName,
-                        username = peer.username,
-                        lastMessage = thread.lastMessage,
-                        lastAt = thread.lastSentAt,
-                        lastActiveAt = peer.lastActiveAt,
-                        showLastActive = peer.showLastActive,
-                        isVerified = peer.isVerified,
-                        muted = preference?.muted == true,
-                        archived = preference?.archived == true
-                    )
-                }.sortedByDescending { it.lastAt }
-            }.catch { emit(emptyList()) }
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** Server-authored threads; no prior account's results survive an auth change. */
+    private val reload = MutableStateFlow(0)
+    val sessionUid: Flow<String?> = session.firebaseUid
+    fun retry() { reload.value += 1 }
 
-    val unreadCount: StateFlow<Int> = session.firebaseUid.filterNotNull()
-        .flatMapLatest { firestoreChat.observeUnreadCount(it).catch { emit(0) } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val uiState: StateFlow<ChatListUiState> = combine(session.firebaseUid, reload) { uid, _ -> uid }
+        .flatMapLatest { myUid ->
+            if (myUid.isNullOrBlank()) {
+                flowOf(ChatListUiState(accountUid = null, loading = false))
+            } else {
+                combine(
+                    firestoreChat.observeThreads(myUid),
+                    firestoreChat.observeThreadPreferences(myUid)
+                ) { threads, preferences ->
+                    val items = threads.mapNotNull { thread ->
+                        val peer = hydratePeer(thread.peerFirebaseUid) ?: return@mapNotNull null
+                        val preference = preferences[FirestoreChatService.threadId(myUid, thread.peerFirebaseUid)]
+                        ConversationItem(
+                            peerId = peer.id,
+                            peerFirebaseUid = peer.firebaseUid,
+                            peerName = peer.displayName,
+                            username = peer.username,
+                            lastMessage = thread.lastMessage,
+                            lastAt = thread.lastSentAt,
+                            lastActiveAt = peer.lastActiveAt,
+                            showLastActive = peer.showLastActive,
+                            isVerified = peer.isVerified,
+                            muted = preference?.muted == true,
+                            archived = preference?.archived == true
+                        )
+                    }.sortedByDescending { it.lastAt }
+                    ChatListUiState(accountUid = myUid, items = items, loading = false)
+                }.onStart {
+                    // Immediately discard previous user's conversations on account switch/retry.
+                    emit(ChatListUiState(accountUid = myUid, loading = true))
+                }.catch {
+                    // A network/permission error must not be represented as "no conversations".
+                    emit(ChatListUiState(accountUid = myUid, loading = false, failed = true))
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ChatListUiState())
+
+    val unreadState: StateFlow<UnreadChatState> = session.firebaseUid
+        .flatMapLatest { uid ->
+            if (uid.isNullOrBlank()) flowOf(UnreadChatState())
+            else firestoreChat.observeUnreadCount(uid)
+                .map { UnreadChatState(accountUid = uid, count = it) }
+                .onStart { emit(UnreadChatState(accountUid = uid)) }
+                .catch { emit(UnreadChatState(accountUid = uid)) }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UnreadChatState())
 
     private suspend fun hydratePeer(firebaseUid: String): UserEntity? {
         userDao.findByFirebaseUid(firebaseUid)?.let { cached ->
@@ -118,8 +156,14 @@ fun ChatListScreen(
     onOpenChat: (Long) -> Unit = {},
     vm: ChatListViewModel = hiltViewModel()
 ) {
-    val conversations by vm.conversations.collectAsState()
-    val unread by vm.unreadCount.collectAsState()
+    val chatState by vm.uiState.collectAsState()
+    val activeAccountUid by vm.sessionUid.collectAsState(initial = null)
+    // Do not render cached previews for a different account during session transitions.
+    val accountStateMatches = chatState.accountUid == activeAccountUid
+    val conversations = chatState.visibleConversationsFor(activeAccountUid)
+    val unreadState by vm.unreadState.collectAsState()
+    val unread = if (!activeAccountUid.isNullOrBlank() &&
+        unreadState.accountUid == activeAccountUid) unreadState.count else 0
     var searchQuery by remember { mutableStateOf("") }
     var showArchived by rememberSaveable { mutableStateOf(false) }
     val archivedCount = remember(conversations) { conversations.count { it.archived } }
@@ -185,7 +229,28 @@ fun ChatListScreen(
                 )
             }
 
-            if (conversations.isEmpty()) {
+            if (chatState.loading || !accountStateMatches) {
+                Box(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (chatState.failed) {
+                Box(
+                    Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MatreeStatePanel(
+                        title = t("messages_load_failed", "Unable to load conversations"),
+                        message = t("check_connection_try_again", "Check your connection and try again."),
+                        icon = Icons.Filled.CloudOff,
+                        tone = MatreeStatusTone.ERROR,
+                        primaryActionLabel = t("retry", "Retry"),
+                        onPrimaryAction = { vm.retry() }
+                    )
+                }
+            } else if (conversations.isEmpty()) {
                 Column(
                     Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
                     horizontalAlignment = Alignment.CenterHorizontally,

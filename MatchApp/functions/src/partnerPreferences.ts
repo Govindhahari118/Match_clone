@@ -4,6 +4,7 @@ import { db, requireAppCheck } from "./shared";
 import { requireActiveConsent } from "./consent";
 import { accountIsActive } from "./accountStatusPolicy";
 import { discoveryCandidateReady } from "./discoveryEligibilityPolicy";
+import { directedInterestMatches } from "./interestPolicy";
 import {
   DEFAULT_PARTNER_PREFERENCES,
   normalizePartnerPreferences,
@@ -37,6 +38,7 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
   const [
     requester,
     target,
+    privateTarget,
     preferences,
     requesterBlock,
     targetBlock,
@@ -46,6 +48,7 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
   ] = await Promise.all([
     db.collection("users").doc(requesterUid).get(),
     db.collection("users").doc(targetUid).get(),
+    db.collection("userPrivate").doc(targetUid).get(),
     db.collection("partnerPreferences").doc(targetUid).get(),
     db.collection("blocks").doc(requesterUid).collection("blocked").doc(targetUid).get(),
     db.collection("blocks").doc(targetUid).collection("blocked").doc(requesterUid).get(),
@@ -57,10 +60,11 @@ export const getPartnerPreferenceSummary = functions.https.onCall(async (data, c
   if (!requester.exists || !target.exists ||
       !accountIsActive(requester.data()?.accountStatus) ||
       !accountIsActive(target.data()?.accountStatus) ||
-      !discoveryCandidateReady(target.data() || {}, preferences.data())) {
+      !discoveryCandidateReady(target.data() || {}, privateTarget.data() || {}, preferences.data())) {
     throw new functions.https.HttpsError("failed-precondition", "Profile is unavailable");
   }
-  if (target.data()?.stealthMode === true && !reverseInterest.exists) {
+  if (target.data()?.stealthMode === true &&
+      !directedInterestMatches(reverseInterest.data(), targetUid, requesterUid)) {
     throw new functions.https.HttpsError("permission-denied", "Profile is unavailable");
   }
   if (requesterBlock.exists || targetBlock.exists ||

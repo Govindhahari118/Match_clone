@@ -455,8 +455,8 @@ class FirestoreProfileService @Inject constructor(
         // Generic profile hydration has no authorized presence result. Keep activity hidden
         // until a caller explicitly resolves getMemberPresence for this viewer/target pair.
         showLastActive = false,
-        showHoroscope = data["showHoroscope"] as? Boolean ?: true,
-        incomeDisclosure = data["incomeDisclosure"] as? String ?: "range",
+        showHoroscope = data["showHoroscope"] as? Boolean ?: false,
+        incomeDisclosure = data["incomeDisclosure"] as? String ?: "hidden",
         subscriptionPlan = data["subscriptionPlan"] as? String ?: "FREE",
         subscriptionExpiry = (data["subscriptionExpiry"] as? Number)?.toLong() ?: 0L,
         // Compatibility is pairwise and recomputed; a historical public matchScore is ignored.

@@ -1,8 +1,10 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
-import { canonicalChatThreadId } from "./chatIdentityPolicy";
+import { canonicalChatThreadId, chatThreadMatchesPair } from "./chatIdentityPolicy";
+import { matchMembersExactly } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
+import { bothParticipantsAdult } from "./communicationEligibilityPolicy";
 import {
   MAX_DAILY_MESSAGES_SAFETY,
   safeUsageCount,
@@ -117,6 +119,8 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -126,6 +130,8 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -144,8 +150,14 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
         "Messaging is unavailable while an account is not active"
       );
     }
-    const matchUsers = Array.isArray(match.data()?.users) ? match.data()?.users : [];
-    if (!match.exists || !matchUsers.includes(senderUid) || !matchUsers.includes(recipientUid)) {
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
+      );
+    }
+    if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
     if (senderBlock.exists || recipientBlock.exists) {
@@ -162,9 +174,7 @@ export const prepareChatThread = functions.https.onCall(async (data, context) =>
     if (thread.exists) {
       const participants = Array.isArray(thread.data()?.participantUids) ?
         thread.data()?.participantUids : [];
-      if (participants.length !== 2 ||
-          !participants.includes(senderUid) ||
-          !participants.includes(recipientUid)) {
+      if (!chatThreadMatchesPair(participants, senderUid, recipientUid)) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Existing chat thread does not match this member pair"
@@ -259,6 +269,8 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -266,9 +278,12 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
       recipientPrivacy,
       existing,
       activity,
+      thread,
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -276,15 +291,8 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
       tx.get(recipientPrivacyRef),
       tx.get(messageRef),
       tx.get(activityRef),
+      tx.get(threadRef),
     ]);
-
-    if (existing.exists) {
-      const value = existing.data() || {};
-      if (value.fromFirebaseUid === senderUid && value.toFirebaseUid === recipientUid) {
-        return { success: true, alreadySent: true, sentAt: Number(value.sentAt || sentAt) };
-      }
-      throw new functions.https.HttpsError("already-exists", "Message id collision");
-    }
 
     if (!sender.exists || !recipient.exists) {
       throw new functions.https.HttpsError("not-found", "Profile not found");
@@ -296,8 +304,14 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
         "Messaging is unavailable while an account is not active"
       );
     }
-    const matchUsers = Array.isArray(match.data()?.users) ? match.data()?.users : [];
-    if (!match.exists || !matchUsers.includes(senderUid) || !matchUsers.includes(recipientUid)) {
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
+      );
+    }
+    if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
     if (senderBlock.exists || recipientBlock.exists) {
@@ -309,6 +323,21 @@ export const sendChatMessage = functions.https.onCall(async (data, context) => {
         "permission-denied",
         "Messaging is unavailable for this privacy relationship"
       );
+    }
+
+    if (thread.exists && !chatThreadMatchesPair(
+      thread.data()?.participantUids, senderUid, recipientUid
+    )) {
+      throw new functions.https.HttpsError(
+        "permission-denied", "Chat thread belongs to another member pair"
+      );
+    }
+    if (existing.exists) {
+      const value = existing.data() || {};
+      if (value.fromFirebaseUid === senderUid && value.toFirebaseUid === recipientUid) {
+        return { success: true, alreadySent: true, sentAt: Number(value.sentAt || sentAt) };
+      }
+      throw new functions.https.HttpsError("already-exists", "Message id collision");
     }
 
     const sendCount = safeUsageCount(activity.data()?.messageSendCount);
@@ -384,6 +413,8 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
     const [
       sender,
       recipient,
+      senderPrivate,
+      recipientPrivate,
       match,
       senderBlock,
       recipientBlock,
@@ -393,6 +424,8 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
       tx.get(senderRef),
       tx.get(recipientRef),
+      tx.get(db.collection("userPrivate").doc(senderUid)),
+      tx.get(db.collection("userPrivate").doc(recipientUid)),
       tx.get(matchRef),
       tx.get(senderBlockRef),
       tx.get(recipientBlockRef),
@@ -410,8 +443,14 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
       );
     }
 
-    const matchUsers = Array.isArray(match.data()?.users) ? match.data()?.users : [];
-    if (!match.exists || !matchUsers.includes(senderUid) || !matchUsers.includes(recipientUid)) {
+    if (!bothParticipantsAdult(
+      sender.data(), senderPrivate.data(), recipient.data(), recipientPrivate.data()
+    )) {
+      throw new functions.https.HttpsError(
+        "failed-precondition", "Both members must have eligible adult profiles to communicate"
+      );
+    }
+    if (!match.exists || !matchMembersExactly(match.data(), senderUid, recipientUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
     if (senderBlock.exists || recipientBlock.exists) {
@@ -427,8 +466,7 @@ export const setChatTyping = functions.https.onCall(async (data, context) => {
 
     const participants = Array.isArray(thread.data()?.participantUids) ?
       thread.data()?.participantUids : [];
-    if (!thread.exists || participants.length !== 2 ||
-        !participants.includes(senderUid) || !participants.includes(recipientUid)) {
+    if (!thread.exists || !chatThreadMatchesPair(participants, senderUid, recipientUid)) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "Private conversation is not available"
