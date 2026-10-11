@@ -20,7 +20,11 @@ export function publicDiscoveryProfileReady(
 ): boolean {
   const age = finiteInt(profile.age);
   const height = finiteInt(profile.heightCm);
-  const weight = Number(profile.weight || 0);
+  // Avoid JS coercion of booleans and whitespace into plausible measurements.
+  const rawWeight = profile.weight;
+  const weight = typeof rawWeight === "number" ? rawWeight :
+    typeof rawWeight === "string" && /^\d+(?:\.\d+)?$/.test(rawWeight.trim())
+      ? Number(rawWeight.trim()) : NaN;
   return text(profile.username).length >= 3 &&
     text(profile.displayName).length >= 2 &&
     age >= 18 && age <= 99 &&
