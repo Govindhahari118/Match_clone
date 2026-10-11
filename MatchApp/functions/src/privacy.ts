@@ -7,7 +7,7 @@ import {
   canRequestPhotoAccess,
   canViewPublishedPhoto,
   normalizeProfilePhotoVisibility,
-  photoAccessRequestMatchesParticipants,
+  relationshipRequestMatchesParticipants,
 } from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
@@ -274,6 +274,11 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
       return { status: "APPROVED", canReveal: true };
     }
 
+    if (existingRequest.exists && !relationshipRequestMatchesParticipants(
+      existingRequest.data(), requesterUid, targetUid
+    )) {
+      throw new functions.https.HttpsError("permission-denied", "Contact request belongs to another relationship");
+    }
     const request = existingRequest.data() || {};
     const status = String(request.status || "");
     if (status === "PENDING") return { status: "PENDING", canReveal: false };
