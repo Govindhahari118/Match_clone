@@ -89,7 +89,8 @@ data class UserEntity(
     val verificationLevel: Int = 0,
     val stealthMode: Boolean = false,
     val showLastActive: Boolean = true,
-    val showHoroscope: Boolean = true,
+    /** Never opt members into sharing sensitive horoscope data by default. */
+    val showHoroscope: Boolean = false,
     val incomeDisclosure: String = "range",
     val subscriptionPlan: String = "FREE",
     val subscriptionExpiry: Long = 0L,
