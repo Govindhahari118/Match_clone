@@ -232,17 +232,6 @@ function createdAtMillis(data: FirebaseFirestore.DocumentData): number {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function needsPrivateFilterData(data: unknown): boolean {
-  const horoscope = filterString(data, "hasHoroscope").toLocaleLowerCase("en-IN");
-  return filterString(data, "incomeMin").length > 0 ||
-    filterString(data, "incomeMax").length > 0 ||
-    filterString(data, "rasi").length > 0 ||
-    filterString(data, "nakshatra").length > 0 ||
-    filterString(data, "manglik").length > 0 ||
-    horoscope === "yes" ||
-    horoscope === "no";
-}
-
 function pairId(uidA: string, uidB: string): string {
   return [uidA, uidB].sort().join("_");
 }
