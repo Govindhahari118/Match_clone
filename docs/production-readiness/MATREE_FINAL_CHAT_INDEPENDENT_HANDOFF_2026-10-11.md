@@ -89,3 +89,15 @@ All work below is **OPEN** unless backed by exact evidence. Assign a responsible
 **PR discipline:** Do not mark any D task DONE solely for writing this board. Existing tested drafts remain unmerged. Keep historical PRs open until parity reviewed. Do not commit fake device/provider/legal evidence.
 
 **Prioritized immediate action:** D01 review and exact-diff disposition, then D02 and D03. In parallel inspect D04 by feature domain; implement confirmed missing code with tests, not merely more planning. Update MAT status ledger only with real source and review evidence.
+
+
+## Canonical 19-workstream end-to-end blueprint (added 2026-10-11)
+
+The detailed execution and acceptance artifact is:
+**docs/production-readiness/MATRII_19_WORKSTREAM_E2E_EXECUTION_BLUEPRINT_2026-10-11.md**.
+
+It expands **W01–W19**, directly maps all **MAT-001–MAT-100** requirements to responsible workstreams, enumerates **57 currently registered Android screens** and their inspection methodology, and assigns the **49 prelaunch + 2 postrollout production gates** to accountable lanes.
+
+**Refresh note:** Prior text in this handoff captures *historical* PR heads. At blueprint creation, #60 is ready for review (not draft), #61 is based on #60, and both code heads 714fb5d / 5c79ed3 had four passing CI jobs. The blueprint commit and this pointer commit each move the #61 head; recheck current exact-head CI and GitHub reviews before any merge or release claim.
+
+**Execution rule:** Finish code/PR parity and protection, then independent approval and #60 -> #61 merges; in parallel audit 100 features / 57 screens; implement verified gaps in domain PRs with regression tests; finish device/provider/legal evidence and the real 49+2 release checks. New planning alone is never completion.
