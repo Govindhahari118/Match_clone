@@ -11,7 +11,9 @@ service firebase.storage {
         firestore.exists(/databases/(default)/documents/blocks/$(uidB)/blocked/$(uidA));
     }
     function explicitInterestFrom(ownerUid, viewerUid) {
-      return firestore.exists(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid));
+      return firestore.exists(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid)) &&
+        firestore.get(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid)).data.get('fromUid', '') == ownerUid &&
+        firestore.get(/databases/(default)/documents/interests/$(ownerUid + '_' + viewerUid)).data.get('toUid', '') == viewerUid;
     }
     function activeAccount(uid) {
       return firestore.exists(/databases/(default)/documents/users/$(uid)) &&
