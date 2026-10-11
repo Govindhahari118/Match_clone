@@ -460,7 +460,7 @@ fun PrivacyDashboardScreen(
                         )
                     }
                 }
-                val current = user?.incomeDisclosure ?: "range"
+                val current = user?.incomeDisclosure ?: "hidden"
                 Row(horizontalArrangement = Arrangement.spacedBy(MatreeDesign.spacing.xs)) {
                     listOf("range" to "Show range", "hidden" to "Hide").forEach { (value, label) ->
                         MatreeChoiceChip(
