@@ -114,8 +114,10 @@ service cloud.firestore {
              publicDiscoveryProfileReady(data);
     }
     function activeAccount(uid) {
-      return exists(/databases/$(database)/documents/users/$(uid)) &&
-             get(/databases/$(database)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
+      // A missing user makes get(...).data invalid and is denied by Rules.
+      // Avoid an additional exists() call for each of the two chat participants;
+      // the extra Firestore accesses exhausted the rules evaluation budget.
+      return get(/databases/$(database)/documents/users/$(uid)).data.get('accountStatus', 'ACTIVE') == 'ACTIVE';
     }
     function activePair(uidA, uidB) {
       return activeAccount(uidA) && activeAccount(uidB);
