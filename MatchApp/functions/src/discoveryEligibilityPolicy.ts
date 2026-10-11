@@ -128,6 +128,19 @@ export function discoveryCandidateReady(
 }
 
 /**
+ * Income-band filtering can reveal a private band through who appears in a result.
+ * Only a member's explicit "Show range" disclosure permits such filtering.
+ */
+export function incomeFilterVisibilityAllows(
+  incomeFilterRequested: boolean,
+  incomeDisclosure: unknown
+): boolean {
+  return !incomeFilterRequested ||
+    (typeof incomeDisclosure === "string" &&
+      incomeDisclosure.trim().toLocaleLowerCase("en-IN") === "range");
+}
+
+/**
  * Astrology preferences are private unless a member explicitly enables horoscope visibility.
  * A legacy missing showHoroscope field must NOT reveal a person's private rasi/nakshatra
  * through inclusion in filter results.
