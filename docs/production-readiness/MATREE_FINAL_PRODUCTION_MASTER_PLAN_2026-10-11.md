@@ -103,3 +103,39 @@ Any P0 or unresolved launch P1; 1 of 4 CI jobs failed/missing; security/privacy 
 | YYYY-MM-DD / sha | MAT-xxx | n | n | counts + IDs | 4/4 links or pending | evidence | owner | NO-GO / GO |
 
 **Do not conflate the existence of tests, test execution, actual approval, successful merge or production rollout.**
+
+## 8. Screen-by-screen production acceptance register (mandatory)
+
+Each *actual* Android screen, modal, notification destination, permission state and admin surface must be counted from navigation declarations and the runtime build; do not guess an overall screen count. Inventory format:
+
+| Screen ID | Route / entry point | Role | Corresponding MAT IDs | UI states / accessibility / EN-HI-TE | API / security contract | Tests & screenshot proof | Owner | Status |
+|---|---|---|---|---|---|---|---|---|
+| _assign after source audit_ | _actual route_ | _member/guardian/admin_ | MAT-xxx | loading, empty, error, offline, completed, blocked; TalkBack/large text | function, rules, entitlement | CI + physical device + image evidence | named reviewer | AUDIT_REQUIRED |
+
+Require all visible controls, menu rows, pagination, filters, icons, toasts, system navigation, keyboard/IME, deep links and dialogs to have meaningful behavior and accessible labels. For each screen collect images at target handset widths, dark/light theme where supported, default and large font, and regional-language copy. Explicitly record differences in user-facing functionality across account roles. Never infer visual parity from Android compilation.
+
+### Screen completion gate
+
+A screen is **SCREEN_VERIFIED** only when its linked MAT features are accepted, interactions navigate correctly with no dead ends, unauthorized entry points fail closed, supported UI states render without clipping, accessibility and localization are signed off, and its device screenshot/video evidence links are recorded. A newly created mockup is not evidence of deployed functionality. Maintain a separate count of SCREEN_VERIFIED and IMPLEMENTED_VERIFIED; neither substitutes for the other.
+
+## 9. Authoritative evidence ledger and closeout automation specification
+
+At minimum, store one record per MAT ID and one per screen ID with fields:
+`id, description, scope, priority, owner, sourcePaths, testPaths, introducedSha, mergedMainSha, ciRunUrl, deviceEvidenceUrl, securityReviewUrl, qaSignoff, releaseDependency, status, lastVerifiedAt`.
+Feature states are `AUDIT_REQUIRED / MISSING / PARTIAL / DEFECTIVE / BLOCKED_EXTERNAL / CODE_COMPLETE / CI_VERIFIED / DEVICE_VERIFIED / IMPLEMENTED_VERIFIED / OUT_OF_SCOPE_APPROVED`.
+
+**Hard invariants:** An absent owner, evidence link or merged SHA cannot be marked IMPLEMENTED_VERIFIED. Required P0/P1 coverage cannot be waived through out-of-scope. No machine should mark real-device tests, signing, production deployments, billing purchases, legal reviews or human approvals successful from repository text alone. Invalid, unreachable or stale evidence blocks closure. Rebase, merge, rollback, or any code change invalidates exact-head CI and demands a new run.
+
+Dashboard must report `verifiedFeatures / 100`, `verifiedScreens / inventoriedScreens`, outstanding P0/P1, CI pass counts for the exact head and frozen release SHA, unresolved privacy/rules findings, provider gates, independent approvals, and 49 prelaunch + 2 full-release evidence fields. Calculate each from evidence, never manually assign 100%.
+
+## 10. Live rollout decision protocol
+
+- **Engineering GO:** Protected main, reviewed integration, 4/4 required production CI pass on exact merged SHA, no unaccepted P0/P1, all launch-scope MAT and screen states verified.
+- **Release candidate GO:** Validated production config, approved provider transport and payment lifecycle, signing proof, signed-device App Check, deep links, privacy terms and store disclosures, physical QA, security/QA/legal approvals.
+- **Prelaunch GO:** Actual evidence script `production_external_gate.py --mode prelaunch` passes on frozen SHA; all 49 required prelaunch fields verified.
+- **Full GO:** Approved staged rollout health, rollback rehearsal and actual two additional release fields; script `--mode full` passes. Close issue #26 only after this.
+- **NO-GO:** Any missing evidence, failing exact-SHA check, cross-account leak, P0/P1, unsigned or unverified AAB, unverifiable payment grant, provider disabled while described as live, or rollback unavailable.
+
+## 11. Baseline checkpoint (2026-10-11)
+
+PR #61 remains a draft based on PR #60's integration branch, not on merged main. As verified on 2026-10-11, latest PR #61 SHA `c9602e6eb3affe84a2c367066df9006536f760bf` has 4/4 GitHub Production CI jobs successful. This is **CI_VERIFIED code evidence**, not complete feature-by-feature acceptance, real-device sign-off, independently approved merging or production GO. Repository release issue #26 remains the governing launch blocker. Update this checkpoint on subsequent heads, never carry its passing status to later SHA.
