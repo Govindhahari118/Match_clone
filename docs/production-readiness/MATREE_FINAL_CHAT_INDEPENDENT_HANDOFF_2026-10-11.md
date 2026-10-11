@@ -62,3 +62,30 @@ Released = safe staged rollout AND 2 full-release checks PASS with logged eviden
 
 ## Resume instruction
 Use this file as the new starting point after the conversation is deleted. No need to reconstruct the plans. Inspect current head/CI and actual code before changes; implement the next verified gap, commit tests, then record truth. Do not assume planned work already happened. Do not fabricate manual evidence or ask for credentials in chat.
+
+## Next execution board — refreshed 2026-10-11
+
+All work below is **OPEN** unless backed by exact evidence. Assign a responsible developer/reviewer and link each completion to a PR, tests and merged SHA. Owner handles manual provider/release items; development team owns coding and automatable tests.
+
+| Order | Work package | Acceptance / definition of done | Dependency | Initial state |
+|---|---|---|---|---|
+| D01 | PR #60 integration parity | Line-by-line compare #43/#50/#51/#53/#56, including unique paths, Firebase rules, i18n and call request lifecycles; record coverage/disposition of every difference | Reviewers | OPEN |
+| D02 | Protected-main integration of #60 | Independent Android+Firebase security approvals, branch rules, exact-head 4/4 CI; merge and verify new main SHA | D01, repo admin | BLOCKED REVIEW/ADMIN |
+| D03 | Integrate PR #61 | Rebase onto merged main, fix conflicts, repeat 4/4 CI, approve and merge; verify post-merge main | D02 | BLOCKED DEPENDENCY |
+| D04 | Inventory feature implementations | For MAT-001..100 identify actual Android routes and states, Functions/rules/storage/config/test paths; assess implemented/partial/absent, record proof, priorities and owner | D03 preferred; audit can start earlier | OPEN |
+| D05 | Close identity/profile/privacy gaps | Auth, guardian/age gates, consent, verification, editing, protected photos, grants, blocking, deletion/export with positive and denial tests | D04 | OPEN |
+| D06 | Close matching/discovery gaps | Bilateral eligibility, filters, ranking, freshness, pagination, blocked/hidden profiles, edge cases and scorer numerical correctness with emulator/device tests | D04 | OPEN |
+| D07 | Close communication/safety gaps | Interest-to-mutual-match-to-chat, notifications, moderation, reporting, abuse prevention, secure call-request lifecycle and clear unavailable transport fallback | D04 | OPEN |
+| D08 | Close language/cultural/family gaps | EN/HI/TE completeness, accessibility, family/guardian flows, horoscope and custom preferences, timezone/time/date formatting | D04 | OPEN |
+| D09 | Complete server-authoritative billing | Purchase/restore, expiry, duplicate RTDN, wrong accounts, entitlement checks and billing security tests; live Play evidence is owner-provided | D04, Play owner | OPEN/EXTERNAL |
+| D10 | Real voice/video transport | Provider-approved architecture, sessions, expiry, mutual consent, webhooks, replay protection, call controls, two-device tests; distinguish from existing call scheduling | Provider account | BLOCKED EXTERNAL |
+| D11 | Admin and operational resilience | Moderator permissions, audit logs, migrations, queue retries, quotas, App Check failure paths, monitoring, backups, performance and offline handling | D04 | OPEN |
+| D12 | Screen-by-screen UX QA | Screen inventory, entry and exit routes, empty/loading/error/permission-denied, accessibility, EN/HI/TE, device sizes, visual review evidence; do not invent approvals | D05-D11 | OPEN |
+| D13 | Whole-app CI and security | Unit, integration, Firebase emulators, privacy-negative, migration, release build, SBOM/dependency audit; 4/4 on frozen merged main | D02-D12 | OPEN |
+| M01 | External production setup | GitHub rules, Firebase project, Play Console, signing, domain/App Links, provider credentials via secure workflows | Owner | MANUAL |
+| M02 | Real-device release acceptance | Signed AAB, authorized accounts/two-device E2E, security/privacy/legal reviews, 49 prelaunch gates | Owner + QA | MANUAL |
+| M03 | Launch and verification | Staged rollout, telemetry/rollback, 2 postlaunch full-release proofs; close release issue #26 only after actual PASS | M02 | MANUAL |
+
+**PR discipline:** Do not mark any D task DONE solely for writing this board. Existing tested drafts remain unmerged. Keep historical PRs open until parity reviewed. Do not commit fake device/provider/legal evidence.
+
+**Prioritized immediate action:** D01 review and exact-diff disposition, then D02 and D03. In parallel inspect D04 by feature domain; implement confirmed missing code with tests, not merely more planning. Update MAT status ledger only with real source and review evidence.
