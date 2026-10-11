@@ -378,11 +378,8 @@ export const discoverProfiles = functions
     const questionnaireRefs = includeQuestionnaireFit || requireQuestionnaireFit
       ? candidates.map((doc) => db.collection("questionnaires").doc(doc.id))
       : [];
-    const privateFilterRequested =
-      needsPrivateFilterData(data) ||
-      viewerPartnerPreferences.incomeBandMode !== "NO_PREFERENCE" ||
-      includeAstrologyFit ||
-      requireAstrologyFit;
+    // Read candidate private DOB for the mandatory adult-safety gate even
+    // without demographic filters. Never serialize it into public results.
     const personalizationActive = !keyword &&
       await hasActiveConsent(viewerUid, "personalization");
     const recommendationFeedbackRefs = personalizationActive
@@ -400,9 +397,9 @@ export const discoverProfiles = functions
         .get()
       : Promise.resolve(null);
     const lastActiveFilterDays = filterInt(data, "lastActiveWithinDays", 0, 3650);
-    const privateRefs = privateFilterRequested
-      ? candidates.map((doc) => db.collection("userPrivate").doc(doc.id))
-      : [];
+    const privateRefs = candidates.map((doc) =>
+      db.collection("userPrivate").doc(doc.id)
+    );
     // Presence is always read by trusted discovery code so stale inventory can be suppressed.
     // Precise timestamps are still never returned unless the target's activity-visibility policy
     // permits the explicit last-active filter path below.
@@ -594,7 +591,12 @@ export const discoverProfiles = functions
       const candidate = doc.data() || {};
       const accountStatus = stringValue(candidate.accountStatus).toUpperCase() || "ACTIVE";
       if (accountStatus !== "ACTIVE") continue;
-      if (!discoveryCandidateReady(candidate, rawPartnerPreferencesByUid.get(doc.id))) continue;
+      if (!discoveryCandidateReady(
+        candidate,
+        privateFilterByUid.get(doc.id) || {},
+        rawPartnerPreferencesByUid.get(doc.id),
+        now
+      )) continue;
       if (!profileFreshEnough(
         createdAtMillis(candidate),
         privateLastActiveByUid.get(doc.id) || 0,
