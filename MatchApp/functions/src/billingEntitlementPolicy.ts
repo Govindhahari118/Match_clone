@@ -40,7 +40,7 @@ export function rebuildEntitlementLedger(
     .filter((entry) => entry.id !== excludedPaymentId)
     .filter((entry) =>
       entry.provider === "GOOGLE_PLAY" &&
-      !isVoidedPaymentStatus(entry.status) &&
+      previousPlayGrantRestorable(entry.status) &&
       Number.isFinite(entry.durationMs) &&
       entry.durationMs > 0 &&
       Number.isFinite(entry.grantedAtMillis) &&
