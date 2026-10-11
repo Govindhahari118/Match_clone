@@ -124,6 +124,11 @@ test("yes/no filters reject unknown choices instead of broadening discovery", ()
   assert.equal(boolFromAnyFilter("not applicable", false), false);
   assert.equal(boolFromAnyFilter("yesplease", true), false);
   assert.equal(boolFromAnyFilter("nope", false), false);
+  assert.equal(boolFromAnyFilter("no", undefined), false);
+  assert.equal(boolFromAnyFilter("yes", undefined), false);
+  assert.equal(boolFromAnyFilter("Any", undefined), true);
+  assert.equal(boolFromAnyFilter("no", false), true);
+  assert.equal(boolFromAnyFilter("no", true), false);
   assert.equal(boolFromAnyFilter("unsupported-value", true), false);
   assert.equal(boolFromAnyFilter("unsupported-value", false), false);
 });
