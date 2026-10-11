@@ -4,6 +4,7 @@ const {
   normalizeCallRequestStatus,
   validProposedCallTime,
   canReplaceCallRequest,
+  callRequestBelongsToPair,
   canRespondToCallRequest,
   canCancelCallRequest,
 } = require("../lib/callRequestPolicy");
@@ -54,4 +55,24 @@ test("empty participant identifiers never authorize transitions", () => {
   assert.equal(canRespondToCallRequest("PENDING", "", ""), false);
   assert.equal(canCancelCallRequest("PENDING", "", ""), false);
   assert.equal(canCancelCallRequest("ACCEPTED", "", ""), false);
+});
+
+test("pair collision cannot read or overwrite another relationship's request", () => {
+  // Sorted, underscore-joined IDs collide: ["a_b", "c"] and ["a", "b_c"].
+  const document = {
+    requesterUid: "a_b",
+    targetUid: "c",
+    users: ["a_b", "c"],
+    status: "DECLINED",
+    updatedAtMs: 100,
+  };
+  assert.equal(callRequestBelongsToPair(document, "a_b", "c"), true);
+  assert.equal(callRequestBelongsToPair(document, "c", "a_b"), true);
+  assert.equal(callRequestBelongsToPair(document, "a", "b_c"), false);
+  assert.equal(callRequestBelongsToPair(document, "a_b", "b_c"), false);
+  assert.equal(callRequestBelongsToPair({ ...document, users: ["a_b", "a_b"] }, "a_b", "c"), false);
+  assert.equal(callRequestBelongsToPair({ ...document, targetUid: "other" }, "a_b", "c"), false);
+  assert.equal(callRequestBelongsToPair({ ...document, users: null }, "a_b", "c"), false);
+  assert.equal(callRequestBelongsToPair(undefined, "a_b", "c"), false);
+  assert.equal(callRequestBelongsToPair(document, "a_b", "a_b"), false);
 });
