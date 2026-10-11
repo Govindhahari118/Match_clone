@@ -3,6 +3,7 @@ export type CallEligibilityInput = {
   targetUid: string;
   callerActive: boolean;
   targetActive: boolean;
+  adultProfilesEligible: boolean;
   mutualMatch: boolean;
   blockedEitherWay: boolean;
   profileHiddenEitherWay: boolean;
@@ -15,6 +16,7 @@ export type CallEligibilityResult = {
     | "eligible"
     | "invalid_pair"
     | "inactive_account"
+    | "ineligible_adult_profiles"
     | "not_mutual_match"
     | "blocked"
     | "privacy_restricted";
@@ -32,6 +34,9 @@ export function evaluateCallEligibility(input: CallEligibilityInput): CallEligib
   }
   if (!input.callerActive || !input.targetActive) {
     return { eligible: false, reason: "inactive_account" };
+  }
+  if (!input.adultProfilesEligible) {
+    return { eligible: false, reason: "ineligible_adult_profiles" };
   }
   if (input.blockedEitherWay) {
     return { eligible: false, reason: "blocked" };
