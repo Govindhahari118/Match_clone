@@ -51,6 +51,9 @@ def validate(tracker: str, evidence: object) -> list[str]:
         return errors + ["evidence must be a JSON object keyed by feature ID"]
     for key in sorted(expected - set(evidence)):
         errors.append(f"missing evidence record {key}")
+    # Every expected entry must describe one tracker row; extras and omissions fail closed.
+    if len(evidence) != 100:
+        errors.append(f"evidence ledger must have exactly 100 entries, found {len(evidence)}")
 
     for key, item in evidence.items():
         if key not in expected:
