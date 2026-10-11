@@ -6,6 +6,7 @@ const {
   canViewPublishedPhoto,
   canRequestPhotoAccess,
   relationshipRequestMatchesParticipants,
+  mutualMatchRecordMatchesPair,
 } = require("../lib/photoPrivacyPolicy");
 
 test("photo visibility normalization preserves safe supported values", () => {
@@ -48,4 +49,15 @@ test("colliding photo request keys cannot reveal status or overwrite another pai
   assert.equal(relationshipRequestMatchesParticipants({ ...existing, requesterUid: "" }, "a_b", "c"), false);
   assert.equal(relationshipRequestMatchesParticipants(undefined, "a_b", "c"), false);
   assert.equal(relationshipRequestMatchesParticipants(existing, "a_b", "a_b"), false);
+});
+
+test("mutual-match existence is not authority when a legacy UID key collides", () => {
+  const existing = { users: ["a_b", "c"] };
+  assert.equal(mutualMatchRecordMatchesPair(existing, "a_b", "c"), true);
+  assert.equal(mutualMatchRecordMatchesPair(existing, "c", "a_b"), true);
+  assert.equal(mutualMatchRecordMatchesPair(existing, "a", "b_c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "a_b"] }, "a_b", "c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "c", "extra"] }, "a_b", "c"), false);
+  assert.equal(mutualMatchRecordMatchesPair({ users: ["a_b", "c"] }, "a_b", "a_b"), false);
+  assert.equal(mutualMatchRecordMatchesPair(undefined, "a_b", "c"), false);
 });
