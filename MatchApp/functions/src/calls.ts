@@ -163,6 +163,13 @@ export const startSecureCallSession = functions.https.onCall(async (data, contex
       tx.get(accountUsageRef),
       tx.get(pairUsageRef),
     ]);
+    // Eligibility may be revoked after the first capability check (block,
+    // account suspension, DOB correction, or match withdrawal). Re-read
+    // current authority transactionally before reserving provider capacity.
+    const fresh = await relationshipEligibility(callerUid, targetUid, tx);
+    if (!fresh.eligible) {
+      throw new functions.https.HttpsError("failed-precondition", fresh.reason);
+    }
     const accountStarts = Number(accountUsage.data()?.count || 0);
     const pairStarts = Number(pairUsage.data()?.count || 0);
     if (!callInitiationAllowed(accountStarts, pairStarts, accountLimit, pairLimit)) {
