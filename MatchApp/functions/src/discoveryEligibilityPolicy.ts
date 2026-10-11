@@ -121,7 +121,7 @@ export function adultDobMatchesProfileAge(
   publicAge: unknown,
   nowMillis: number = Date.now()
 ): boolean {
-  if (typeof dateOfBirth !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOfBirth.trim()) ||
+  if (typeof dateOfBirth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth.trim()) ||
       !Number.isFinite(nowMillis) || nowMillis <= 0) return false;
   const [year, month, day] = dateOfBirth.trim().split("-").map(Number);
   const birthday = new Date(Date.UTC(year, month - 1, day));
