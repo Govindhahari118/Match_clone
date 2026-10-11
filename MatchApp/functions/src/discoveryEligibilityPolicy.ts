@@ -147,12 +147,18 @@ export function discoveryActorReady(
     partnerPreferencesReady(preferences);
 }
 
+/**
+ * A candidate must pass the same private DOB and public-age consistency gate as a viewer.
+ * Public age alone cannot authorize visibility or incoming interests.
+ * The private DOB is evaluated by trusted Functions only, never returned to clients.
+ */
 export function discoveryCandidateReady(
   profile: Record<string, unknown>,
-  preferences: Record<string, unknown> | undefined
+  privateProfile: Record<string, unknown>,
+  preferences: Record<string, unknown> | undefined,
+  nowMillis: number = Date.now()
 ): boolean {
-  return publicDiscoveryProfileReady(profile) &&
-    partnerPreferencesReady(preferences);
+  return discoveryActorReady(profile, privateProfile, preferences, nowMillis);
 }
 
 /**
