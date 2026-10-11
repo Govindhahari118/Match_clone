@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   isVoidedPaymentStatus,
+  previousPlayGrantRestorable,
   rebuildEntitlementLedger,
 } = require("../lib/billingEntitlementPolicy");
 
@@ -11,6 +12,17 @@ test("voided status classification is stable", () => {
     assert.equal(isVoidedPaymentStatus(status), true);
   }
   assert.equal(isVoidedPaymentStatus("ACTIVATED"), false);
+});
+
+test("replaying a voided or malformed Play purchase never reports restored access", () => {
+  assert.equal(previousPlayGrantRestorable("ACTIVATED"), true);
+  for (const state of [
+    "VOIDED", "REFUNDED", "REVOKED", "CHARGEBACK",
+    "CANCELED", "PENDING", "PROCESSING", "FAILED",
+    "activated", "", null, undefined, true,
+  ]) {
+    assert.equal(previousPlayGrantRestorable(state), false);
+  }
 });
 
 test("stacked Play grants rebuild deterministically in grant order", () => {
