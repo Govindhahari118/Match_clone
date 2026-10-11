@@ -12,6 +12,28 @@ export function validProposedCallTime(nowMs: number, proposedAtMs: number): bool
     proposedAtMs <= nowMs + 14 * 24 * 60 * 60_000;
 }
 
+/**
+ * Pair IDs use legacy underscore-delimited Firebase UIDs, which are not collision-free.
+ * Never allow an existing document to be read or overwritten for a different two-person
+ * relationship, even when the request is expired or terminal.
+ */
+export function callRequestBelongsToPair(
+  value: Record<string, unknown> | undefined,
+  uidA: string,
+  uidB: string
+): boolean {
+  if (!value || !uidA || !uidB || uidA === uidB) return false;
+  const requester = value.requesterUid;
+  const target = value.targetUid;
+  const users = value.users;
+  return typeof requester === "string" && typeof target === "string" &&
+    ((requester === uidA && target === uidB) ||
+      (requester === uidB && target === uidA)) &&
+    Array.isArray(users) && users.length === 2 &&
+    users.filter((uid) => uid === uidA).length === 1 &&
+    users.filter((uid) => uid === uidB).length === 1;
+}
+
 export function canReplaceCallRequest(
   existingStatus: CallRequestStatus | null,
   existingUpdatedAtMs: number,
