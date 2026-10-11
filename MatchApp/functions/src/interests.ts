@@ -290,8 +290,10 @@ export const withdrawInterest = functions.https.onCall(async (data, context) => 
       tx.get(matchRef),
     ]);
     if (!outgoing.exists) return;
-    if (outgoing.data()?.fromUid !== senderUid || outgoing.data()?.toUid !== targetUid) {
-      throw new functions.https.HttpsError("permission-denied", "Interest does not belong to this account");
+    if (!directedInterestMatches(outgoing.data(), senderUid, targetUid) ||
+        (reverse.exists && !directedInterestMatches(reverse.data(), targetUid, senderUid)) ||
+        (match.exists && !matchMembersExactly(match.data(), senderUid, targetUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (reverse.exists || match.exists) {
       throw new functions.https.HttpsError(
@@ -327,8 +329,10 @@ export const declineInterest = functions.https.onCall(async (data, context) => {
     ]);
 
     if (!incoming.exists) return;
-    if (incoming.data()?.toUid !== recipientUid || incoming.data()?.fromUid !== senderUid) {
-      throw new functions.https.HttpsError("permission-denied", "This request does not belong to you");
+    if (!directedInterestMatches(incoming.data(), senderUid, recipientUid) ||
+        (reverse.exists && !directedInterestMatches(reverse.data(), recipientUid, senderUid)) ||
+        (match.exists && !matchMembersExactly(match.data(), senderUid, recipientUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (reverse.exists || match.exists) {
       throw new functions.https.HttpsError("failed-precondition", "This request is already a mutual match");
