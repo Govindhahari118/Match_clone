@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
-import { declinedInterestAllowsNewRequest } from "./interestPolicy";
+import { declinedInterestAllowsNewRequest, directedInterestMatches, matchMembersExactly } from "./interestPolicy";
 import { accountIsActive } from "./accountStatusPolicy";
 import {
   discoveryActorReady,
@@ -99,6 +99,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       outgoingSnap,
       reverseSnap,
       responseSnap,
+      matchSnap,
       senderSubscriptionSnap,
       usageSnap,
       senderBlock,
@@ -116,6 +117,7 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
       tx.get(outgoingRef),
       tx.get(reverseRef),
       tx.get(responseRef),
+      tx.get(matchRef),
       tx.get(senderSubscriptionRef),
       tx.get(usageRef),
       tx.get(senderBlockRef),
@@ -180,6 +182,15 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
         "failed-precondition",
         "This profile is outside mutual strict partner preferences"
       );
+    }
+    // Legacy underscore-joined document IDs can collide for distinct UID pairs.
+    // Never infer relationship authority from a document's existence alone.
+    if ((outgoingSnap.exists && !directedInterestMatches(outgoingSnap.data(), senderUid, targetUid)) ||
+        (reverseSnap.exists && !directedInterestMatches(reverseSnap.data(), targetUid, senderUid)) ||
+        (responseSnap.exists && (responseSnap.data()?.senderUid !== senderUid ||
+          responseSnap.data()?.recipientUid !== targetUid)) ||
+        (matchSnap.exists && !matchMembersExactly(matchSnap.data(), senderUid, targetUid))) {
+      throw new functions.https.HttpsError("permission-denied", "Interest relationship data is inconsistent");
     }
     if (target.stealthMode === true && !reverseSnap.exists) {
       throw new functions.https.HttpsError("permission-denied", "This profile is not accepting discovery interests");
