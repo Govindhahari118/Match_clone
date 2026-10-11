@@ -136,6 +136,28 @@ service cloud.firestore {
     function mutualInterest(uidA, uidB) {
       return explicitInterestFrom(uidA, uidB) && explicitInterestFrom(uidB, uidA);
     }
+    // Legacy match IDs are underscore-delimited and can collide across UID pairs.
+    // A document at the predicted path only confers chat authority when it records
+    // exactly the two members. Check both path orders for legacy compatibility.
+    function matchRecordIsExact(uidA, uidB, matchId) {
+      return exists(/databases/$(database)/documents/matches/$(matchId)) &&
+        get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []).size() == 2 &&
+        uidA in get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []) &&
+        uidB in get(/databases/$(database)/documents/matches/$(matchId)).data.get('users', []);
+    }
+    function exactMutualMatch(uidA, uidB) {
+      return uidA != uidB &&
+        (matchRecordIsExact(uidA, uidB, uidA + '_' + uidB) ||
+         matchRecordIsExact(uidA, uidB, uidB + '_' + uidA));
+    }
+    function threadHasCurrentMatch(threadId) {
+      return exists(/databases/$(database)/documents/chats/$(threadId)) &&
+        get(/databases/$(database)/documents/chats/$(threadId)).data.get('participantUids', []).size() == 2 &&
+        exactMutualMatch(
+          get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
+          get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
+        );
+    }
     function chatAfterParticipants(threadId) {
       return getAfter(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
     }
@@ -312,6 +334,7 @@ service cloud.firestore {
         request.auth.uid in resource.data.participantUids &&
         resource.data.participantUids.size() == 2 &&
         activePair(resource.data.participantUids[0], resource.data.participantUids[1]) &&
+        exactMutualMatch(resource.data.participantUids[0], resource.data.participantUids[1]) &&
         !blockedEitherWay(resource.data.participantUids[0], resource.data.participantUids[1]);
       // Thread creation/preview mutation is trusted-server authority through sendChatMessage.
       allow create, update: if false;
@@ -320,6 +343,7 @@ service cloud.firestore {
         allow read: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
           get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids.size() == 2 &&
+          threadHasCurrentMatch(threadId) &&
           activePair(
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
@@ -332,6 +356,9 @@ service cloud.firestore {
         allow create: if false;
         allow update: if isSignedIn() && resource.data.toFirebaseUid == request.auth.uid &&
           activePair(resource.data.fromFirebaseUid, resource.data.toFirebaseUid) &&
+          threadHasCurrentMatch(threadId) &&
+          resource.data.fromFirebaseUid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
+          resource.data.toFirebaseUid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
           !blockedEitherWay(resource.data.fromFirebaseUid, resource.data.toFirebaseUid) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead','deliveredAt','readAt']) &&
           (request.resource.data.isRead == resource.data.isRead ||
@@ -350,6 +377,7 @@ service cloud.firestore {
         allow read: if isSignedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids &&
           get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids.size() == 2 &&
+          threadHasCurrentMatch(threadId) &&
           activePair(
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[0],
             get(/databases/$(database)/documents/chats/$(threadId)).data.participantUids[1]
