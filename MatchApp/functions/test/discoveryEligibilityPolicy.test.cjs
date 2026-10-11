@@ -133,3 +133,11 @@ test("discovery refuses malformed age and height without truncating or coercing 
   assert.equal(publicDiscoveryProfileReady({ ...complete, age: "29", heightCm: "170" }), true);
   assert.equal(publicDiscoveryProfileReady({ ...complete, age: 18, heightCm: 90 }), true);
 });
+
+test("profile weight rejects coerced booleans, whitespace and malformed strings", () => {
+  for (const weight of [true, false, "", "  ", "68kg", "Infinity", -1, null]) {
+    assert.equal(publicDiscoveryProfileReady({ ...complete, weight }), false);
+  }
+  assert.equal(publicDiscoveryProfileReady({ ...complete, weight: "68.5" }), true);
+  assert.equal(publicDiscoveryProfileReady({ ...complete, weight: 68.5 }), true);
+});
