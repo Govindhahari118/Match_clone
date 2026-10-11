@@ -131,7 +131,7 @@ export function discoveryCandidateReady(
 export function boolFromAnyFilter(value: string, actual: boolean): boolean {
   const normalized = value.trim().toLocaleLowerCase("en-IN");
   if (!normalized || normalized === "any" || normalized === "don't mind") return true;
-  if (normalized.startsWith("yes")) return actual;
-  if (normalized.startsWith("no")) return !actual;
+  if (/^yes(?:\\b|$)/u.test(normalized)) return actual;
+  if (/^no(?:\\b|$)/u.test(normalized)) return !actual;
   return false;
 }
