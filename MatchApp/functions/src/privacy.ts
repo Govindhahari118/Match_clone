@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
 import { db, requireAppCheck } from "./shared";
 import { accountIsActive } from "./accountStatusPolicy";
+import { directedInterestMatches } from "./interestPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
 import {
   canRequestPhotoAccess,
@@ -442,9 +443,12 @@ export const getProfilePhotoAccess = functions.https.onCall(async (data, context
   }
 
   const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
-  const mutualInterest = viewerInterest.exists && targetInterest.exists;
+  const requesterInterested = viewerInterest.exists &&
+    directedInterestMatches(viewerInterest.data(), viewerUid, targetUid);
+  const targetInterested = targetInterest.exists &&
+    directedInterestMatches(targetInterest.data(), targetUid, viewerUid);
+  const mutualInterest = requesterInterested && targetInterested;
   const explicitGrant = grant.exists;
-  const requesterInterested = viewerInterest.exists;
   return {
     visibility,
     canView: canViewPublishedPhoto(visibility, mutualInterest, explicitGrant),
@@ -552,14 +556,18 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
     }
 
     const visibility = normalizeProfilePhotoVisibility(targetSettings.data()?.photoVisibility);
-    const mutualInterest = forwardInterest.exists && reverseInterest.exists;
+    const forwardValid = forwardInterest.exists &&
+      directedInterestMatches(forwardInterest.data(), requesterUid, targetUid);
+    const reverseValid = reverseInterest.exists &&
+      directedInterestMatches(reverseInterest.data(), targetUid, requesterUid);
+    const mutualInterest = forwardValid && reverseValid;
     const explicitGrant = existingGrant.exists;
     if (canViewPublishedPhoto(visibility, mutualInterest, explicitGrant)) {
       return { status: "ALREADY_ALLOWED", canView: true };
     }
     if (!canRequestPhotoAccess(
       visibility,
-      forwardInterest.exists,
+      forwardValid,
       mutualInterest,
       explicitGrant
     )) {
