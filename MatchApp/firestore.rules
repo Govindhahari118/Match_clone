@@ -128,12 +128,13 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)) &&
              get(/databases/$(database)/documents/privacyRelations/$(ownerUid)/members/$(viewerUid)).data.get('profileHidden', false) == true;
     }
-    function mutualInterest(uidA, uidB) {
-      return exists(/databases/$(database)/documents/interests/$(uidA + '_' + uidB)) &&
-             exists(/databases/$(database)/documents/interests/$(uidB + '_' + uidA));
-    }
     function explicitInterestFrom(profileOwnerUid, viewerUid) {
-      return exists(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid));
+      return exists(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid)) &&
+        get(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid)).data.get('fromUid', '') == profileOwnerUid &&
+        get(/databases/$(database)/documents/interests/$(profileOwnerUid + '_' + viewerUid)).data.get('toUid', '') == viewerUid;
+    }
+    function mutualInterest(uidA, uidB) {
+      return explicitInterestFrom(uidA, uidB) && explicitInterestFrom(uidB, uidA);
     }
     function chatAfterParticipants(threadId) {
       return getAfter(/databases/$(database)/documents/chats/$(threadId)).data.participantUids;
