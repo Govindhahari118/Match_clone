@@ -57,6 +57,7 @@ data class ConversationItem(
 )
 
 data class ChatListUiState(
+    val accountUid: String? = null,
     val items: List<ConversationItem> = emptyList(),
     val loading: Boolean = true,
     val failed: Boolean = false
@@ -73,12 +74,13 @@ class ChatListViewModel @Inject constructor(
 
     /** Server-authored threads; no prior account's results survive an auth change. */
     private val reload = MutableStateFlow(0)
+    val sessionUid: Flow<String?> = session.firebaseUid
     fun retry() { reload.value += 1 }
 
     val uiState: StateFlow<ChatListUiState> = combine(session.firebaseUid, reload) { uid, _ -> uid }
         .flatMapLatest { myUid ->
             if (myUid.isNullOrBlank()) {
-                flowOf(ChatListUiState(loading = false))
+                flowOf(ChatListUiState(accountUid = null, loading = false))
             } else {
                 combine(
                     firestoreChat.observeThreads(myUid),
@@ -101,13 +103,13 @@ class ChatListViewModel @Inject constructor(
                             archived = preference?.archived == true
                         )
                     }.sortedByDescending { it.lastAt }
-                    ChatListUiState(items = items, loading = false)
+                    ChatListUiState(accountUid = myUid, items = items, loading = false)
                 }.onStart {
                     // Immediately discard previous user's conversations on account switch/retry.
-                    emit(ChatListUiState(loading = true))
+                    emit(ChatListUiState(accountUid = myUid, loading = true))
                 }.catch {
                     // A network/permission error must not be represented as "no conversations".
-                    emit(ChatListUiState(loading = false, failed = true))
+                    emit(ChatListUiState(accountUid = myUid, loading = false, failed = true))
                 }
             }
         }
@@ -144,8 +146,12 @@ fun ChatListScreen(
     vm: ChatListViewModel = hiltViewModel()
 ) {
     val chatState by vm.uiState.collectAsState()
-    val conversations = chatState.items
-    val unread by vm.unreadCount.collectAsState()
+    val activeAccountUid by vm.sessionUid.collectAsState(initial = null)
+    // Do not render cached previews for a different account during session transitions.
+    val accountStateMatches = chatState.accountUid == activeAccountUid
+    val conversations = if (accountStateMatches) chatState.items else emptyList()
+    val unreadRaw by vm.unreadCount.collectAsState()
+    val unread = if (accountStateMatches) unreadRaw else 0
     var searchQuery by remember { mutableStateOf("") }
     var showArchived by rememberSaveable { mutableStateOf(false) }
     val archivedCount = remember(conversations) { conversations.count { it.archived } }
@@ -211,7 +217,7 @@ fun ChatListScreen(
                 )
             }
 
-            if (chatState.loading) {
+            if (chatState.loading || !accountStateMatches) {
                 Box(
                     Modifier.fillMaxSize().padding(MatreeDesign.spacing.xl),
                     contentAlignment = Alignment.Center
