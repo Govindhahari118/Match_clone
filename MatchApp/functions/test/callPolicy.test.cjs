@@ -8,6 +8,7 @@ const base = {
   targetUid: "b",
   callerActive: true,
   targetActive: true,
+  adultProfilesEligible: true,
   mutualMatch: true,
   blockedEitherWay: false,
   profileHiddenEitherWay: false,
@@ -35,4 +36,15 @@ test("blocks and member privacy override a mutual match", () => {
 test("self calls and malformed pairs are never eligible", () => {
   assert.equal(evaluateCallEligibility({ ...base, targetUid: "a" }).reason, "invalid_pair");
   assert.equal(evaluateCallEligibility({ ...base, callerUid: "" }).reason, "invalid_pair");
+});
+
+test("existing mutual calls stop when either adult profile becomes ineligible", () => {
+  assert.equal(
+    evaluateCallEligibility({ ...base, adultProfilesEligible: false }).reason,
+    "ineligible_adult_profiles"
+  );
+  assert.equal(
+    evaluateCallEligibility({ ...base, adultProfilesEligible: true }).eligible,
+    true
+  );
 });
