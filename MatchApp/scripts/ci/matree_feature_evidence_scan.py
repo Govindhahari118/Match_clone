@@ -66,6 +66,17 @@ def validate(tracker: str, evidence: object) -> list[str]:
         tracker_status = dict(records).get(key)
         if tracker_status != status:
             errors.append(f"{key}: tracker/evidence status disagreement")
+        if status == "OUT_OF_SCOPE_APPROVED":
+            # Deferred scope must be an explicit, accountable decision; it is never
+            # equivalent to an implemented feature or permission to hide a P0/P1.
+            if item.get("priority") in {"P0", "P1"}:
+                errors.append(f"{key}: launch-critical feature cannot be out of scope")
+            if not isinstance(item.get("scopeReason"), str) or not item["scopeReason"].strip():
+                errors.append(f"{key}: approved deferral needs a written scopeReason")
+            if not isinstance(item.get("scopeApprovedBy"), str) or not item["scopeApprovedBy"].strip():
+                errors.append(f"{key}: approved deferral needs a scopeApprovedBy")
+            if not str(item.get("scopeDecisionUrl", "")).startswith("https://"):
+                errors.append(f"{key}: approved deferral needs an HTTPS scopeDecisionUrl")
         if status != "IMPLEMENTED_VERIFIED":
             continue
         for field in REQUIRED_EVIDENCE:
