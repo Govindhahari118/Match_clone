@@ -99,15 +99,41 @@ test("discovery actor additionally requires DOB and configured preferences", () 
   );
 });
 
-test("candidate must have complete public profile and configured preferences", () => {
-  assert.equal(discoveryCandidateReady(complete, { configured: true }), true);
-  assert.equal(discoveryCandidateReady(complete, undefined), false);
+test("candidate must have complete public profile, configured preferences and private adult DOB", () => {
+  const now = Date.UTC(2026, 9, 11);
+  const adult = { dateOfBirth: "1997-01-01" };
+  const configured = { configured: true };
+  assert.equal(discoveryCandidateReady(complete, adult, configured, now), true);
+  assert.equal(discoveryCandidateReady(complete, adult, undefined, now), false);
+  assert.equal(discoveryCandidateReady({ ...complete, profession: "" }, adult, configured, now), false);
+  assert.equal(partnerPreferencesReady(configured), true);
+  assert.equal(partnerPreferencesReady(undefined), false);
+});
+
+test("candidate DOB cannot be bypassed with forged public age or absent filters", () => {
+  const now = Date.UTC(2026, 9, 11);
+  const configured = { configured: true };
+  const publiclyAdult = { ...complete, age: 29 };
+  for (const privateProfile of [
+    {}, { dateOfBirth: "" }, { dateOfBirth: null },
+    { dateOfBirth: "2008-10-12" }, // not yet 18
+    { dateOfBirth: "2008-10-11" }, // exactly 18 but public age is inconsistent
+    { dateOfBirth: "1997-02-30" }, { dateOfBirth: "2030-01-01" },
+  ]) {
+    assert.equal(discoveryCandidateReady(publiclyAdult, privateProfile, configured, now), false);
+  }
   assert.equal(
-    discoveryCandidateReady({ ...complete, profession: "" }, { configured: true }),
+    discoveryCandidateReady({ ...complete, age: 18 }, { dateOfBirth: "2008-10-11" }, configured, now),
+    true
+  );
+  assert.equal(
+    discoveryCandidateReady({ ...complete, age: 18 }, { dateOfBirth: "2008-10-12" }, configured, now),
     false
   );
-  assert.equal(partnerPreferencesReady({ configured: true }), true);
-  assert.equal(partnerPreferencesReady(undefined), false);
+  assert.equal(
+    discoveryCandidateReady(complete, { dateOfBirth: "1997-01-01" }, configured, now),
+    true
+  );
 });
 
 
