@@ -7,6 +7,7 @@ import {
   canRequestPhotoAccess,
   canViewPublishedPhoto,
   normalizeProfilePhotoVisibility,
+  photoAccessRequestMatchesParticipants,
 } from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
@@ -445,7 +446,9 @@ export const getProfilePhotoAccess = functions.https.onCall(async (data, context
       mutualInterest,
       explicitGrant
     ),
-    requestStatus: request.exists ? String(request.data()?.status || "") : "",
+    requestStatus: request.exists &&
+      photoAccessRequestMatchesParticipants(request.data(), viewerUid, targetUid)
+      ? String(request.data()?.status || "") : "",
   };
 });
 
@@ -564,6 +567,11 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
       );
     }
 
+    if (existingRequest.exists && !photoAccessRequestMatchesParticipants(
+      existingRequest.data(), requesterUid, targetUid
+    )) {
+      throw new functions.https.HttpsError("permission-denied", "Photo request belongs to another relationship");
+    }
     const existing = existingRequest.data() || {};
     const status = String(existing.status || "");
     if (status === "PENDING") return { status: "PENDING", canView: false };
