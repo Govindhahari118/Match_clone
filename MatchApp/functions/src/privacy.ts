@@ -8,6 +8,7 @@ import {
   canViewPublishedPhoto,
   normalizeProfilePhotoVisibility,
   relationshipRequestMatchesParticipants,
+  mutualMatchRecordMatchesPair,
 } from "./photoPrivacyPolicy";
 
 const CONTACT_LIMITS: Record<string, number> = {
@@ -125,7 +126,9 @@ export const consumeContactReveal = functions.https.onCall(async (data, context)
     ) {
       throw new functions.https.HttpsError("failed-precondition", "Contact is unavailable while an account is not active");
     }
-    if (!matchSnap.exists) throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    if (!matchSnap.exists || !mutualMatchRecordMatchesPair(matchSnap.data(), uid, targetUid)) {
+      throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
+    }
     if (outgoingBlock.exists || incomingBlock.exists) {
       throw new functions.https.HttpsError("permission-denied", "Contact is unavailable for this member");
     }
@@ -247,7 +250,7 @@ export const requestContactAccess = functions.https.onCall(async (data, context)
     ) {
       throw new functions.https.HttpsError("failed-precondition", "Contact request is unavailable while an account is not active");
     }
-    if (!matchSnap.exists) {
+    if (!matchSnap.exists || !mutualMatchRecordMatchesPair(matchSnap.data(), requesterUid, targetUid)) {
       throw new functions.https.HttpsError("failed-precondition", "Mutual match required");
     }
     if (outgoingBlock.exists || incomingBlock.exists) {
