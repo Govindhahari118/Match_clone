@@ -29,10 +29,10 @@ export function canRequestPhotoAccess(
 }
 
 /**
- * Legacy photo request IDs join two UIDs with underscores and may collide.
+ * Legacy contact/photo request IDs join two UIDs with underscores and may collide.
  * Validate stored participant identities before exposing request status or overwriting it.
  */
-export function photoAccessRequestMatchesParticipants(
+export function relationshipRequestMatchesParticipants(
   value: Record<string, unknown> | undefined,
   requesterUid: string,
   targetUid: string
