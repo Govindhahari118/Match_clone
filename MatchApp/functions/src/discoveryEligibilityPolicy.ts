@@ -127,6 +127,18 @@ export function discoveryCandidateReady(
     partnerPreferencesReady(preferences);
 }
 
+/**
+ * Astrology preferences are private unless a member explicitly enables horoscope visibility.
+ * A legacy missing showHoroscope field must NOT reveal a person's private rasi/nakshatra
+ * through inclusion in filter results.
+ */
+export function astrologyFilterVisibilityAllows(
+  astrologyRequested: boolean,
+  showHoroscope: unknown
+): boolean {
+  return !astrologyRequested || showHoroscope === true;
+}
+
 /** Explicit yes/no filters fail closed for unknown input, never broadening discovery. */
 export function boolFromAnyFilter(value: string, actual: boolean | undefined): boolean {
   const normalized = value.trim().toLocaleLowerCase("en-IN");
