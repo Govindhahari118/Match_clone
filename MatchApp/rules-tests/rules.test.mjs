@@ -295,6 +295,7 @@ test('chat creation is server-only while participant reads and recipient receipt
 
   await env.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    await setDoc(doc(db, 'matches/alice_bob'), { users: ['alice', 'bob'] });
     await setDoc(doc(db, threadPath), {
       participantUids: ['alice', 'bob'],
       lastMessage: 'hello',
@@ -328,6 +329,24 @@ test('chat creation is server-only while participant reads and recipient receipt
     deliveredAt: new Date(),
     readAt: new Date(),
   }));
+
+  // Match deletion must revoke the whole conversation, including read receipts.
+  await env.withSecurityRulesDisabled(async (context) => {
+    await deleteDoc(doc(context.firestore(), 'matches/alice_bob'));
+  });
+  await assertFails(getDoc(doc(bobDb, threadPath)));
+  await assertFails(getDoc(doc(bobDb, messagePath)));
+  await assertFails(updateDoc(doc(bobDb, messagePath), { deliveredAt: new Date() }));
+  // A colliding match key with the wrong two identities does not restore access.
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'matches/alice_bob'), { users: ['alice', 'mallory'] });
+  });
+  await assertFails(getDoc(doc(aliceDb, threadPath)));
+  await assertFails(getDoc(doc(bobDb, messagePath)));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'matches/alice_bob'), { users: ['alice', 'bob'] });
+  });
+  await assertSucceeds(getDoc(doc(bobDb, messagePath)));
 
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'blocks/bob/blocked/alice'), {
