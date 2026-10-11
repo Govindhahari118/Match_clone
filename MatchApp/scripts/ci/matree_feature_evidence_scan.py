@@ -21,7 +21,7 @@ REQUIRED_EVIDENCE = (
     "deviceEvidenceUrl", "securityReviewUrl", "qaSignoff", "lastVerifiedAt",
 )
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-FEATURE_RE = re.compile(r"^\\| (MAT-\\d{3}) \\|[^\\n]+?\\| (\\w+) \\|", re.MULTILINE)
+FEATURE_RE = re.compile(r"^\| (MAT-\d{3}) \|[^\n]+?\| (\w+) \|", re.MULTILINE)
 
 
 def validate(tracker: str, evidence: object) -> list[str]:
