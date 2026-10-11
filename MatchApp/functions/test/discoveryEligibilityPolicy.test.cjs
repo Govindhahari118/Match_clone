@@ -8,6 +8,7 @@ const {
   boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
+  adultDobMatchesProfileAge,
   discoveryCandidateReady,
   profileFreshEnough,
   normalizeStaleDiscoveryDays,
@@ -47,6 +48,31 @@ test("astrology filtering requires an explicit opted-in horoscope visibility", (
   }
   assert.equal(astrologyFilterVisibilityAllows(false, undefined), true);
   assert.equal(astrologyFilterVisibilityAllows(false, false), true);
+});
+
+test("private DOB must prove adult eligibility and agree with public profile age", () => {
+  const now = Date.UTC(2026, 9, 11);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29, now), true);
+  assert.equal(adultDobMatchesProfileAge("2008-10-11", 18, now), true);
+  assert.equal(adultDobMatchesProfileAge("2008-10-12", 18, now), false);
+  assert.equal(adultDobMatchesProfileAge("2007-10-12", 18, now), true);
+  for (const invalid of [
+    "", "not-a-date", "2008-02-30", "2007-13-01", "1999-00-01",
+    "2027-01-01", "2008-10-11T00:00:00Z", null, true, 20000101,
+  ]) {
+    assert.equal(adultDobMatchesProfileAge(invalid, 29, now), false);
+  }
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 18, now), false);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29.5, now), false);
+  assert.equal(adultDobMatchesProfileAge("1997-01-01", 29, Number.NaN), false);
+  assert.equal(
+    discoveryActorReady({ ...complete, age: 29 }, { dateOfBirth: "2008-10-12" }, { configured: true }, now),
+    false
+  );
+  assert.equal(
+    discoveryActorReady(complete, { dateOfBirth: "1997-01-01" }, { configured: true }, now),
+    true
+  );
 });
 
 test("public discovery profile gate requires all canonical profile fields", () => {
