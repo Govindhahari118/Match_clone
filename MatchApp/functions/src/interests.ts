@@ -154,7 +154,13 @@ export const sendInterest = functions.https.onCall(async (data, context) => {
         "Complete your required profile and partner preferences before sending interests"
       );
     }
-    if (!discoveryCandidateReady(target, targetPreferencesSnap.data())) {
+    // Interest targets must also be adults with a private DOB consistent with
+    // public age. A forged public age can never make an underage target eligible.
+    if (!discoveryCandidateReady(
+      target,
+      targetPrivateSnap.data() || {},
+      targetPreferencesSnap.data()
+    )) {
       throw new functions.https.HttpsError(
         "failed-precondition",
         "This member is not yet available for interests"
