@@ -20,6 +20,7 @@ import {
   recentImpressionAdjustment,
 } from "./recommendationPolicy";
 import {
+  astrologyFilterVisibilityAllows,
   boolFromAnyFilter,
   discoveryActorReady,
   discoveryCandidateReady,
@@ -176,7 +177,7 @@ function matchesServerFilters(
     filterString(data, "manglik").length > 0 ||
     hasHoroscope === "yes" ||
     hasHoroscope === "no";
-  if (astrologyFilterRequested && candidate.showHoroscope === false) return false;
+  if (!astrologyFilterVisibilityAllows(astrologyFilterRequested, candidate.showHoroscope)) return false;
   const hasAstrology = stringValue(candidate.rasi).length > 0 && stringValue(candidate.nakshatra).length > 0;
   if (hasHoroscope === "yes" && !hasAstrology) return false;
   if (hasHoroscope === "no" && hasAstrology) return false;
