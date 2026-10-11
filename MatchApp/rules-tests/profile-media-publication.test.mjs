@@ -262,6 +262,16 @@ test('ACCEPTED_ONLY published photo allows mutual interest and rejects one-way i
     });
   });
   await assertSucceeds(getBytes(ref(bobStorage, 'photos/alice/mutual.jpg')));
+
+  // Legacy underscore-joined interest IDs may collide for unrelated UID pairs.
+  // Existing documents are not consent unless their stored identities match the path.
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'interests/alice_bob'), {
+      fromUid: 'other_alice',
+      toUid: 'bob',
+    });
+  });
+  await assertFails(getBytes(ref(bobStorage, 'photos/alice/mutual.jpg')));
 });
 
 test('block and profile-hide override explicit photo grants', async () => {
