@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   publicDiscoveryProfileReady,
   astrologyFilterVisibilityAllows,
+  incomeFilterVisibilityAllows,
   boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
@@ -28,6 +29,16 @@ const complete = {
   heightCm: 170,
   weight: 68,
 };
+
+test("income filtering requires explicit show-range consent", () => {
+  assert.equal(incomeFilterVisibilityAllows(true, "range"), true);
+  assert.equal(incomeFilterVisibilityAllows(true, " RANGE "), true);
+  for (const visibility of ["hidden", "", "public", undefined, null, true, 1, [], {}]) {
+    assert.equal(incomeFilterVisibilityAllows(true, visibility), false);
+  }
+  assert.equal(incomeFilterVisibilityAllows(false, "hidden"), true);
+  assert.equal(incomeFilterVisibilityAllows(false, undefined), true);
+});
 
 test("astrology filtering requires an explicit opted-in horoscope visibility", () => {
   assert.equal(astrologyFilterVisibilityAllows(true, true), true);
