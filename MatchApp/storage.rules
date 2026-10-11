@@ -78,8 +78,26 @@ service firebase.storage {
         chatParticipants(threadId).size() == 2 &&
         uid in chatParticipants(threadId);
     }
+    function exactChatMatchAt(uidA, uidB, matchId) {
+      return firestore.exists(/databases/(default)/documents/matches/$(matchId)) &&
+        firestore.get(/databases/(default)/documents/matches/$(matchId)).data.get('users', []).size() == 2 &&
+        uidA in firestore.get(/databases/(default)/documents/matches/$(matchId)).data.get('users', []) &&
+        uidB in firestore.get(/databases/(default)/documents/matches/$(matchId)).data.get('users', []);
+    }
+    function chatHasMutualMatch(threadId) {
+      return chatExists(threadId) &&
+        chatParticipants(threadId).size() == 2 &&
+        chatParticipants(threadId)[0] != chatParticipants(threadId)[1] &&
+        (
+          exactChatMatchAt(chatParticipants(threadId)[0], chatParticipants(threadId)[1],
+            chatParticipants(threadId)[0] + '_' + chatParticipants(threadId)[1]) ||
+          exactChatMatchAt(chatParticipants(threadId)[0], chatParticipants(threadId)[1],
+            chatParticipants(threadId)[1] + '_' + chatParticipants(threadId)[0])
+        );
+    }
     function chatUsable(threadId) {
       return chatMember(threadId, request.auth.uid) &&
+        chatHasMutualMatch(threadId) &&
         activeAccount(chatParticipants(threadId)[0]) &&
         activeAccount(chatParticipants(threadId)[1]) &&
         !blockedEitherWay(chatParticipants(threadId)[0], chatParticipants(threadId)[1]);
