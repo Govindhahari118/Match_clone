@@ -60,3 +60,12 @@ A second inspection compared the filename sets of #43/#50/#51/#53/#56 against #6
 
 **Interpretation:** These are not proven missing runtime features. They are **review-required delta exceptions**; identical #60/main blobs show that PR #60 does not itself contain changes to these paths. #50's listed changed paths are fully represented in #60's changed-file list, but this is not proof of identical behavior. Close no historical PR until both file-exception and behavioral parity are signed off.
 
+
+## Development-side delta recovery on PR #61
+
+Source inspection confirmed that current `MatchFcmService.kt` already displays `Matree` in both the default notification channel name and title fallback, the exact two textual adjustments from #43. No extra service edit was necessary.
+
+PR #51/#53 previously added a secure-call contract to `interest_chat_contract_scan.py`, which PR #60 did not modify. This contract was **ported and adapted** to the actual #60 architecture in PR #61, commit `41267fb`: require all four client/backend secure-call callables and the `onSecureCallRequestChanged` durable notification trigger. The older original contract expected direct `persistAndSendNotification` in the call mutation, which would be incorrect for the consolidated retry-trigger implementation. CI must pass on exact new head before marking this verified.
+
+PR #56's `package-lock.json` change is still a review exception: production main/#60 use the audited lockfile with deterministic Functions CI and should not blindly restore an older 2,049-line diff.
+
