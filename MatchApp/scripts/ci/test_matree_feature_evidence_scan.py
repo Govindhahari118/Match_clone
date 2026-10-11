@@ -27,6 +27,11 @@ class EvidenceScanTest(unittest.TestCase):
         self.assertTrue(any("qaSignoff" in e for e in errors))
         self.assertTrue(any("deviceEvidenceUrl" in e for e in errors))
 
+    def test_all_100_evidence_records_are_mandatory(self):
+        errors = scan.validate(tracker(), {})
+        self.assertTrue(any("missing evidence record MAT-001" in e for e in errors))
+        self.assertTrue(any("missing evidence record MAT-100" in e for e in errors))
+
     def test_mismatched_tracker_and_evidence_fail(self):
         self.assertTrue(any("disagreement" in e for e in scan.validate(tracker(), {"MAT-001": {"status": "CI_VERIFIED"}})))
 
