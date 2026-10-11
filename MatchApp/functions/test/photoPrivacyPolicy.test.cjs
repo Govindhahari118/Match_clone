@@ -5,7 +5,7 @@ const {
   normalizeProfilePhotoVisibility,
   canViewPublishedPhoto,
   canRequestPhotoAccess,
-  photoAccessRequestMatchesParticipants,
+  relationshipRequestMatchesParticipants,
 } = require("../lib/photoPrivacyPolicy");
 
 test("photo visibility normalization preserves safe supported values", () => {
@@ -40,10 +40,12 @@ test("colliding photo request keys cannot reveal status or overwrite another pai
     status: "PENDING",
   };
   // Both these UID pairs use the same legacy concatenated document ID: a_b_c.
-  assert.equal(photoAccessRequestMatchesParticipants(existing, "a_b", "c"), true);
-  assert.equal(photoAccessRequestMatchesParticipants(existing, "a", "b_c"), false);
-  assert.equal(photoAccessRequestMatchesParticipants(existing, "c", "a_b"), false);
-  assert.equal(photoAccessRequestMatchesParticipants({ ...existing, requesterUid: "" }, "a_b", "c"), false);
-  assert.equal(photoAccessRequestMatchesParticipants(undefined, "a_b", "c"), false);
-  assert.equal(photoAccessRequestMatchesParticipants(existing, "a_b", "a_b"), false);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a_b", "c"), true);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a", "b_c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "c", "a_b"), false);
+  // The same request identity guard protects contact-access requests.
+  assert.equal(relationshipRequestMatchesParticipants({ ...existing, status: "APPROVED" }, "a", "b_c"), false);
+  assert.equal(relationshipRequestMatchesParticipants({ ...existing, requesterUid: "" }, "a_b", "c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(undefined, "a_b", "c"), false);
+  assert.equal(relationshipRequestMatchesParticipants(existing, "a_b", "a_b"), false);
 });
