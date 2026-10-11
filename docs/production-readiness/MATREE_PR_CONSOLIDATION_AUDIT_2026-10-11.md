@@ -47,3 +47,16 @@ GitHub integration returned 403 trying to read `main` protection; owner must con
 - Integration: https://github.com/Govindhahari118/Match_clone/pull/60
 - Follow-up hardening: https://github.com/Govindhahari118/Match_clone/pull/61
 - Release gate: https://github.com/Govindhahari118/Match_clone/issues/26
+
+## File-diff exceptions requiring explicit parity review
+
+A second inspection compared the filename sets of #43/#50/#51/#53/#56 against #60's 45-file change list. The following original-PR changed files are **not** among PR #60's changed files:
+
+| Original PR | Path | PR #60 versus main | Required disposition |
+|---|---|---|---|
+| #43 | `MatchApp/app/src/main/java/com/match/app/service/MatchFcmService.kt` | Same blob SHA (`1779df97`) | Review #43 patch and determine whether current main's existing FCM service already satisfies locale/token handling or patch must be ported |
+| #51 and #53 | `MatchApp/scripts/ci/interest_chat_contract_scan.py` | Same blob SHA (`cb40b6bd`) | Examine whether omitted contract-scan checks were superseded by stronger existing CI or need porting |
+| #56 | `MatchApp/functions/package-lock.json` | Same blob SHA (`f0abc7e3`) | Compare exact dependency-lock changes, audited Functions production dependency graph and npm deterministic build; never copy an obsolete lockfile blindly |
+
+**Interpretation:** These are not proven missing runtime features. They are **review-required delta exceptions**; identical #60/main blobs show that PR #60 does not itself contain changes to these paths. #50's listed changed paths are fully represented in #60's changed-file list, but this is not proof of identical behavior. Close no historical PR until both file-exception and behavioral parity are signed off.
+
