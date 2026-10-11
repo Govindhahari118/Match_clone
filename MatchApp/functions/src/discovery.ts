@@ -22,6 +22,7 @@ import {
 import {
   astrologyFilterVisibilityAllows,
   boolFromAnyFilter,
+  incomeFilterVisibilityAllows,
   discoveryActorReady,
   discoveryCandidateReady,
   normalizeStaleDiscoveryDays,
@@ -135,7 +136,7 @@ function matchesServerFilters(
 
   const incomeMin = filterString(data, "incomeMin");
   const incomeMax = filterString(data, "incomeMax");
-  if ((incomeMin || incomeMax) && stringValue(candidate.incomeDisclosure).toLowerCase() === "hidden") {
+  if (!incomeFilterVisibilityAllows(Boolean(incomeMin || incomeMax), candidate.incomeDisclosure)) {
     return false;
   }
   if (incomeMin && !normalizedSearchValue(candidate.incomeBand).includes(incomeMin.toLocaleLowerCase("en-IN"))) {
