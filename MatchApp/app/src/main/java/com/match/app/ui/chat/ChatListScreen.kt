@@ -63,6 +63,16 @@ data class ChatListUiState(
     val failed: Boolean = false
 )
 
+data class UnreadChatState(
+    val accountUid: String? = null,
+    val count: Int = 0
+)
+
+/** Display only successful data belonging to the session currently on-screen. */
+fun ChatListUiState.visibleConversationsFor(activeUid: String?): List<ConversationItem> =
+    if (!activeUid.isNullOrBlank() && accountUid == activeUid && !loading && !failed) items
+    else emptyList()
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChatListViewModel @Inject constructor(
@@ -115,14 +125,15 @@ class ChatListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ChatListUiState())
 
-    val unreadCount: StateFlow<Int> = session.firebaseUid
+    val unreadState: StateFlow<UnreadChatState> = session.firebaseUid
         .flatMapLatest { uid ->
-            if (uid.isNullOrBlank()) flowOf(0)
+            if (uid.isNullOrBlank()) flowOf(UnreadChatState())
             else firestoreChat.observeUnreadCount(uid)
-                .onStart { emit(0) }
-                .catch { emit(0) }
+                .map { UnreadChatState(accountUid = uid, count = it) }
+                .onStart { emit(UnreadChatState(accountUid = uid)) }
+                .catch { emit(UnreadChatState(accountUid = uid)) }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UnreadChatState())
 
     private suspend fun hydratePeer(firebaseUid: String): UserEntity? {
         userDao.findByFirebaseUid(firebaseUid)?.let { cached ->
@@ -149,9 +160,10 @@ fun ChatListScreen(
     val activeAccountUid by vm.sessionUid.collectAsState(initial = null)
     // Do not render cached previews for a different account during session transitions.
     val accountStateMatches = chatState.accountUid == activeAccountUid
-    val conversations = if (accountStateMatches) chatState.items else emptyList()
-    val unreadRaw by vm.unreadCount.collectAsState()
-    val unread = if (accountStateMatches) unreadRaw else 0
+    val conversations = chatState.visibleConversationsFor(activeAccountUid)
+    val unreadState by vm.unreadState.collectAsState()
+    val unread = if (!activeAccountUid.isNullOrBlank() &&
+        unreadState.accountUid == activeAccountUid) unreadState.count else 0
     var searchQuery by remember { mutableStateOf("") }
     var showArchived by rememberSaveable { mutableStateOf(false) }
     val archivedCount = remember(conversations) { conversations.count { it.archived } }
