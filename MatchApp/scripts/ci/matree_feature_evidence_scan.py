@@ -49,6 +49,8 @@ def validate(tracker: str, evidence: object) -> list[str]:
 
     if not isinstance(evidence, dict):
         return errors + ["evidence must be a JSON object keyed by feature ID"]
+    for key in sorted(expected - set(evidence)):
+        errors.append(f"missing evidence record {key}")
 
     for key, item in evidence.items():
         if key not in expected:
