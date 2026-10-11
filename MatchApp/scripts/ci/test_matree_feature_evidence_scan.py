@@ -36,10 +36,14 @@ class EvidenceScanTest(unittest.TestCase):
         rows = {f"MAT-{i:03d}": {"status": "OUT_OF_SCOPE_APPROVED"} for i in range(1, 101)}
         rows["MAT-001"]["priority"] = "P0"
         errors = scan.validate(tracker("OUT_OF_SCOPE_APPROVED"), rows)
-        self.assertTrue(any("launch-critical" in e for e in errors))
+        self.assertTrue(any("explicitly P2" in e for e in errors))
         self.assertTrue(any("scopeReason" in e for e in errors))
         self.assertTrue(any("scopeApprovedBy" in e for e in errors))
         self.assertTrue(any("scopeDecisionUrl" in e for e in errors))
+
+    def test_unknown_priority_cannot_bypass_launch_requirements(self):
+        rows = {f"MAT-{i:03d}": {"status": "OUT_OF_SCOPE_APPROVED", "scopeReason": "Deferred", "scopeApprovedBy": "owner", "scopeDecisionUrl": "https://example.org/decision"} for i in range(1, 101)}
+        self.assertTrue(any("MAT-001: only explicitly P2" in e for e in scan.validate(tracker("OUT_OF_SCOPE_APPROVED"), rows)))
 
     def test_noncritical_explicit_scope_deferral_requires_no_false_done_evidence(self):
         rows = {
