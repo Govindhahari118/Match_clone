@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   publicDiscoveryProfileReady,
+  astrologyFilterVisibilityAllows,
   boolFromAnyFilter,
   partnerPreferencesReady,
   discoveryActorReady,
@@ -27,6 +28,15 @@ const complete = {
   heightCm: 170,
   weight: 68,
 };
+
+test("astrology filtering requires an explicit opted-in horoscope visibility", () => {
+  assert.equal(astrologyFilterVisibilityAllows(true, true), true);
+  for (const visibility of [false, undefined, null, "true", 1, {}, []]) {
+    assert.equal(astrologyFilterVisibilityAllows(true, visibility), false);
+  }
+  assert.equal(astrologyFilterVisibilityAllows(false, undefined), true);
+  assert.equal(astrologyFilterVisibilityAllows(false, false), true);
+});
 
 test("public discovery profile gate requires all canonical profile fields", () => {
   assert.equal(publicDiscoveryProfileReady(complete), true);
