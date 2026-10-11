@@ -144,8 +144,10 @@ function matchesServerFilters(
     return false;
   }
 
-  if (!boolFromAnyFilter(filterString(data, "hasChildren"), candidate.hasChildren === true)) return false;
-  if (!boolFromAnyFilter(filterString(data, "hasChildrenFilter"), candidate.hasChildren === true)) return false;
+  const childrenStatus = candidate.hasChildren === true ? true :
+    candidate.hasChildren === false ? false : undefined;
+  if (!boolFromAnyFilter(filterString(data, "hasChildren"), childrenStatus)) return false;
+  if (!boolFromAnyFilter(filterString(data, "hasChildrenFilter"), childrenStatus)) return false;
 
   const nriOnly = filterBoolean(data, "nriOnly");
   const isNri = candidate.isNRI === true ||
