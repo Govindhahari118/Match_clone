@@ -109,13 +109,41 @@ export function profileFreshEnough(
 }
 
 
+/**
+ * Date-of-birth is a required *private* discovery gate. The public age field alone is
+ * editable, so never treat a nonempty DOB string or a claimed public age as adult proof.
+ * UTC calendar comparisons avoid locale/timezone ambiguity in callable Functions.
+ * A one-year discrepancy is tolerated for profiles that have not refreshed their age
+ * since the last birthday, but larger inconsistencies fail closed.
+ */
+export function adultDobMatchesProfileAge(
+  dateOfBirth: unknown,
+  publicAge: unknown,
+  nowMillis: number = Date.now()
+): boolean {
+  if (typeof dateOfBirth !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOfBirth.trim()) ||
+      !Number.isFinite(nowMillis) || nowMillis <= 0) return false;
+  const [year, month, day] = dateOfBirth.trim().split("-").map(Number);
+  const birthday = new Date(Date.UTC(year, month - 1, day));
+  if (birthday.getUTCFullYear() !== year || birthday.getUTCMonth() + 1 !== month ||
+      birthday.getUTCDate() !== day || birthday.getTime() > nowMillis) return false;
+  const now = new Date(nowMillis);
+  let age = now.getUTCFullYear() - year;
+  if (now.getUTCMonth() + 1 < month ||
+      (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)) age--;
+  const ageClaim = finiteInt(publicAge);
+  return age >= 18 && age <= 99 && ageClaim >= 18 && ageClaim <= 99 &&
+    Math.abs(age - ageClaim) <= 1;
+}
+
 export function discoveryActorReady(
   profile: Record<string, unknown>,
   privateProfile: Record<string, unknown>,
-  preferences: Record<string, unknown> | undefined
+  preferences: Record<string, unknown> | undefined,
+  nowMillis: number = Date.now()
 ): boolean {
   return publicDiscoveryProfileReady(profile) &&
-    text(privateProfile.dateOfBirth).length > 0 &&
+    adultDobMatchesProfileAge(privateProfile.dateOfBirth, profile.age, nowMillis) &&
     partnerPreferencesReady(preferences);
 }
 
