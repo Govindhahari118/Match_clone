@@ -40,3 +40,15 @@ export function relationshipRequestMatchesParticipants(
   return !!value && !!requesterUid && !!targetUid && requesterUid !== targetUid &&
     value.requesterUid === requesterUid && value.targetUid === targetUid;
 }
+
+/** A legacy pair-ID match exists only for the two exact members recorded on that document. */
+export function mutualMatchRecordMatchesPair(
+  value: Record<string, unknown> | undefined,
+  uidA: string,
+  uidB: string
+): boolean {
+  if (!value || !uidA || !uidB || uidA === uidB || !Array.isArray(value.users) ||
+      value.users.length !== 2) return false;
+  return value.users.filter((uid) => uid === uidA).length === 1 &&
+    value.users.filter((uid) => uid === uidB).length === 1;
+}
