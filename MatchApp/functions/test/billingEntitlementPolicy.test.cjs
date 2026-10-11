@@ -79,7 +79,7 @@ test("refund removal rebuilds later surviving entitlement from its own grant tim
   });
 });
 
-test("voided foreign and invalid contributions never extend entitlement", () => {
+test("voided pending foreign and malformed contributions never extend entitlement", () => {
   const result = rebuildEntitlementLedger([
     {
       id: "voided",
@@ -93,6 +93,22 @@ test("voided foreign and invalid contributions never extend entitlement", () => 
       id: "other-provider",
       provider: "OTHER",
       status: "ACTIVATED",
+      durationMs: 1000,
+      grantedAtMillis: 10,
+      entitlementId: "PLATINUM_12M",
+    },
+    {
+      id: "pending-grant",
+      provider: "GOOGLE_PLAY",
+      status: "PROCESSING",
+      durationMs: 1000,
+      grantedAtMillis: 10,
+      entitlementId: "PLATINUM_12M",
+    },
+    {
+      id: "unclassified-grant",
+      provider: "GOOGLE_PLAY",
+      status: undefined,
       durationMs: 1000,
       grantedAtMillis: 10,
       entitlementId: "PLATINUM_12M",
