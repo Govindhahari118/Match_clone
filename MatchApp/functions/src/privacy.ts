@@ -452,7 +452,7 @@ export const getProfilePhotoAccess = functions.https.onCall(async (data, context
       explicitGrant
     ),
     requestStatus: request.exists &&
-      photoAccessRequestMatchesParticipants(request.data(), viewerUid, targetUid)
+      relationshipRequestMatchesParticipants(request.data(), viewerUid, targetUid)
       ? String(request.data()?.status || "") : "",
   };
 });
@@ -572,7 +572,7 @@ export const requestProfilePhotoAccess = functions.https.onCall(async (data, con
       );
     }
 
-    if (existingRequest.exists && !photoAccessRequestMatchesParticipants(
+    if (existingRequest.exists && !relationshipRequestMatchesParticipants(
       existingRequest.data(), requesterUid, targetUid
     )) {
       throw new functions.https.HttpsError("permission-denied", "Photo request belongs to another relationship");
