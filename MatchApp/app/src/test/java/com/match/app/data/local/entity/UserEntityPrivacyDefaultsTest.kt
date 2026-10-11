@@ -21,6 +21,7 @@ class UserEntityPrivacyDefaultsTest {
     @Test
     fun newProfilesDoNotAutomaticallyShareHoroscope() {
         assertFalse(member().showHoroscope)
+        org.junit.Assert.assertEquals("hidden", member().incomeDisclosure)
     }
 
     @Test
@@ -28,5 +29,6 @@ class UserEntityPrivacyDefaultsTest {
         val optedIn = member().copy(showHoroscope = true)
         assertTrue(optedIn.showHoroscope)
         assertFalse(optedIn.copy(showHoroscope = false).showHoroscope)
+        org.junit.Assert.assertEquals("range", member().copy(incomeDisclosure = "range").incomeDisclosure)
     }
 }
