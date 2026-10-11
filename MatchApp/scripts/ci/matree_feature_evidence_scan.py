@@ -21,12 +21,21 @@ REQUIRED_EVIDENCE = (
     "deviceEvidenceUrl", "securityReviewUrl", "qaSignoff", "lastVerifiedAt",
 )
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-FEATURE_RE = re.compile(r"^\| (MAT-\d{3}) \|[^\n]+?\| (\w+) \|", re.MULTILINE)
+ROW_ID_RE = re.compile(r"^MAT-\\d{3}$")
+
+
+def parse_rows(tracker: str) -> list[tuple[str, str]]:
+    rows = []
+    for line in tracker.splitlines():
+        columns = [column.strip() for column in line.strip().split("|")]
+        if len(columns) >= 7 and ROW_ID_RE.fullmatch(columns[1]):
+            rows.append((columns[1], columns[4]))
+    return rows
 
 
 def validate(tracker: str, evidence: object) -> list[str]:
     errors: list[str] = []
-    records = FEATURE_RE.findall(tracker)
+    records = parse_rows(tracker)
     counts: dict[str, int] = {}
     for feature_id, status in records:
         counts[feature_id] = counts.get(feature_id, 0) + 1
