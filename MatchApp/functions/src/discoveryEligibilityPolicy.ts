@@ -67,7 +67,7 @@ export function normalizeStaleDiscoveryDays(
   // Remote config must be a finite numeric value, never a boolean, object or
   // a string that JavaScript happens to coerce into a number.
   if (typeof value !== "number" &&
-      !(typeof value === "string" && /^\\d+$/.test(value.trim()))) return fallbackDays;
+      !(typeof value === "string" && /^\d+$/.test(value.trim()))) return fallbackDays;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallbackDays;
   return Math.max(
