@@ -29,6 +29,7 @@ import {
   profileFreshEnough,
 } from "./discoveryEligibilityPolicy";
 import { resolveMembershipState } from "./membershipAuthority";
+import { discoveryRelationship } from "./discoveryRelationshipPolicy";
 import { horoscopeCompatibility } from "./horoscopeCompatibilityPolicy";
 import { questionnaireCompatibility } from "./questionnaireCompatibilityPolicy";
 
@@ -551,17 +552,13 @@ export const discoverProfiles = functions
     }
     if (lastActiveFilterDays > 0) {
       candidates.forEach((candidateDoc, index) => {
-        const relationship = {
-          interested:
-            outgoingInterestDocs[index]?.exists === true ||
-            incomingInterestDocs[index]?.exists === true,
-          mutual:
-            matchDocs[index]?.exists === true ||
-            (
-              outgoingInterestDocs[index]?.exists === true &&
-              incomingInterestDocs[index]?.exists === true
-            ),
-        };
+        const relationship = discoveryRelationship(
+          viewerUid,
+          candidateDoc.id,
+          outgoingInterestDocs[index]?.data(),
+          incomingInterestDocs[index]?.data(),
+          matchDocs[index]?.data()
+        );
         const lastActiveVisibility = normalizeActivityVisibility(
           activitySettingsDocs[index]?.data()?.lastActiveVisibility
         );
