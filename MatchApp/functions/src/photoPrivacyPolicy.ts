@@ -27,3 +27,16 @@ export function canRequestPhotoAccess(
     !mutualInterest &&
     !explicitGrant;
 }
+
+/**
+ * Legacy photo request IDs join two UIDs with underscores and may collide.
+ * Validate stored participant identities before exposing request status or overwriting it.
+ */
+export function photoAccessRequestMatchesParticipants(
+  value: Record<string, unknown> | undefined,
+  requesterUid: string,
+  targetUid: string
+): boolean {
+  return !!value && !!requesterUid && !!targetUid && requesterUid !== targetUid &&
+    value.requesterUid === requesterUid && value.targetUid === targetUid;
+}
